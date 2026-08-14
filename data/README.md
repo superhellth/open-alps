@@ -1,9 +1,10 @@
 # data/
 
-Offline precompute inputs/outputs for the hut-to-hut trail graph. Nothing here is committed to
-git (no `.gitignore` exists yet since this repo has no git initialized — add `data/` to one if/when
-it is). Rationale for the pipeline's design choices lives in `docs/osm-trail-pipeline.md`; this
-file is the practical "how to reproduce it" index.
+Offline precompute inputs/outputs for the hut-to-hut trail graph. The pipeline's source
+(`scripts/`, `pipeline.config.json`, this file) is tracked in git; the raw/generated data
+directories (`osm/`, `dem/`) are gitignored — regenerate them via `scripts/run_all.py` rather than
+expecting them to be present after a fresh clone. Rationale for the pipeline's design choices
+lives in `docs/osm-trail-pipeline.md`; this file is the practical "how to reproduce it" index.
 
 ## Config
 
@@ -16,12 +17,15 @@ All hyperparameters live in one place: **`data/pipeline.config.json`**.
     { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
   ],
-  "trailTagFilter": "w/highway=path,footway,track,steps",
+  "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
   "graph": { "maxEdgeKm": 10, "maxSnapM": 200 },
-  "dem": { "source": "copernicus-glo-30", "eleNoiseThresholdM": 4 },
+  "dem": { "provider": "composite", "providerConfig": { "regions": [ ... ] }, "eleNoiseThresholdM": 4 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }
 ```
+
+(`dem.providerConfig.regions` elided above for brevity — see the `dem` bullet below and the real
+`pipeline.config.json` for the full shape.)
 
 - `bbox` — filters the ArcGIS hut pull (script 05) to the pipeline's current scope.
 - `regions` — one Geofabrik extract per entry; scripts 01-03 loop over this list, so adding a
@@ -43,8 +47,41 @@ All hyperparameters live in one place: **`data/pipeline.config.json`**.
     capped at this distance, and candidate huts beyond `3 × maxEdgeKm` beeline are never queried at
     all, so raising it increases both edge count and runtime.
 - `dem` — inputs to step 07/08's elevation pass:
-  - **`source`** — informational only (`"copernicus-glo-30"`); step 07 always pulls Copernicus
-    GLO-30 tiles, this field isn't read to pick a different DEM.
+  - **`source`** — vestigial, no longer read by any script; `provider` is what actually selects
+    the DEM source now (kept only so old configs don't error on an unrecognized key).
+  - **`provider`** / **`providerConfig`** — which DEM source step 07 fetches from, and that
+    provider's own config. Every provider implements the contract in
+    `data/scripts/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `07-fetch-dem.py` is a
+    thin dispatcher over `dem_providers.get_provider(name)`. Registered providers:
+    - **`copernicus-glo-30`** — global 30m coverage (AWS Open Data, no auth). `providerConfig: {}`
+      (uses the top-level `bbox`). The safe default; systematically underestimates ascent/descent
+      on switchback-heavy alpine trails because 30m can't resolve terrain that narrow (see
+      `docs/osm-trail-pipeline.md`).
+    - **`at-bev-dgm`** — Austria's national 10m DGM (data.gv.at, CC-BY-4.0, Lambert/EPSG:31287).
+      `providerConfig: {"downloadUrl": "<confirmed direct .zip URL>"}` — single ~1.9GB national
+      file, not tiled, so `bbox` in its config is unused metadata (the whole file downloads
+      regardless).
+    - **`bavaria-dgm5`** — Bavaria's 5m DGM (geodaten.bayern.de, CC BY 4.0, UTM32N/EPSG:25832),
+      served as one small (~200KB) direct-download zip per 1km tile
+      (`https://download1.bayernwolke.de/a/dgm/dgm5xyz/{easting_km}_{northing_km}.zip`) - tile IDs
+      are computed from `providerConfig.bbox` (no tile-index file needed), so keeping that bbox
+      tight matters: see `bboxFromHuts` below.
+    - **`composite`** — meta-provider stitching per-sub-region VRTs from *different* providers
+      into one final `dem.vrt` (e.g. Austria via `at-bev-dgm`, Bavaria via `bavaria-dgm5`).
+      `providerConfig: {"regions": [{"provider": "...", "bbox": {...}, ...that provider's own
+      config keys}, ...]}`. Region order matters where two regions' bboxes overlap -
+      `gdalbuildvrt` keeps the first-listed source's pixels.
+  - **`bboxFromHuts`** (per-region, `composite` only, default false) — a region's `bbox` is
+    normally just a coarse political-boundary filter used to pick out which huts belong to that
+    region (`data/osm/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
+    `bboxFromHuts: true` tightens the box actually fetched down to those huts' real extent (+
+    `bufferDeg`, default 0.05°) instead of the full political box. This matters for
+    request-per-tile providers like `bavaria-dgm5`: Bavaria's full state bbox is ~80,000 1km
+    tiles, but huts only exist in the southern Alpine strip near the Austrian border - deriving
+    the fetch bbox from actual hut locations (`lib/pipeline.py`'s `bbox_from_huts`) cuts that down
+    to only the area the pipeline actually needs, without hand-tuning a smaller political box that
+    would go stale as huts are added/removed. Providers whose `fetch()` ignores `bbox` entirely
+    (e.g. `at-bev-dgm`'s single national file) are unaffected either way.
   - **`eleNoiseThresholdM`** (meters, default 2) — step 08's threshold-hysteresis cutoff: a
     direction change only counts toward ascent/descent once cumulative drift since the last
     counted point exceeds this, so per-sample DEM noise doesn't inflate totals. Lower = more
@@ -186,7 +223,7 @@ python data/scripts/05-fetch-huts.py              # -> data/osm/huts.geojson
 
 python data/scripts/06-build-hut-graph.py         # -> data/osm/hut-edges.geojson
 
-python data/scripts/07-fetch-dem.py               # -> data/dem/dem.vrt, Copernicus GLO-30 tiles for the bbox
+python data/scripts/07-fetch-dem.py               # -> data/dem/dem.vrt, via dem.provider (see Config)
 python data/scripts/08-add-elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
 
 python data/scripts/09-build-trail-tiles.py       # -> data/osm/trails.pmtiles

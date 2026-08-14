@@ -6,6 +6,26 @@
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
   "graph": { "maxEdgeKm": 10, "maxSnapM": 200 },
-  "dem": { "source": "copernicus-glo-30", "provider": "copernicus-glo-30", "providerConfig": {}, "eleNoiseThresholdM": 4, "profilePoints": 30 },
+  "dem": {
+    "source": "copernicus-glo-30",
+    "provider": "composite",
+    "providerConfig": {
+      "regions": [
+        {
+          "provider": "at-bev-dgm",
+          "bbox": { "minLng": 9.5, "maxLng": 17.2, "minLat": 46.3, "maxLat": 49.0 },
+          "downloadUrl": "https://gis.ktn.gv.at/OGD/Geographie_Planung/ogd-10m-at.zip"
+        },
+        {
+          "provider": "bavaria-dgm5",
+          "bbox": { "minLng": 8.9, "maxLng": 13.9, "minLat": 47.2, "maxLat": 50.6 },
+          "bboxFromHuts": true,
+          "bufferDeg": 0.05
+        }
+      ]
+    },
+    "eleNoiseThresholdM": 4,
+    "profilePoints": 30
+  },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }

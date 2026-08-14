@@ -99,6 +99,24 @@ Exits nonzero if the file is missing or empty (so `run_all.py` can gate on it), 
 `highway=*` ways; add `r/route=hiking` to `trailTagFilter` later if named-route relations like
 E4/E5 are wanted as an overlay).
 
+## DEM provider: why it's pluggable
+
+Step 08's `ascent_m`/`descent_m` are sampled from a DEM (`data/dem/dem.vrt`, built by step 07)
+along each edge's trail polyline. Copernicus GLO-30 — the default provider — is a 30m grid;
+alpine trails climb via switchbacks that are often narrower than 30m apart, so the DEM can't
+resolve them as distinct terrain and the sampled elevation profile comes out smoother than the
+real trail, undercounting ascent/descent versus sources like alpenvereinaktiv that use
+finer-grained regional DEMs or actual recorded GPS/barometric tracks.
+
+Austria's BEV DGM (10m, `at-bev-dgm`) and Bavaria's DGM5 (5m, `bavaria-dgm5`) are the regional
+fix — both resolve switchback-scale terrain, at the cost of being regional rather than global (no
+single provider covers this pipeline's whole AT+Bayern scope) and needing more
+download/storage/runtime than Copernicus's one flat global tileset. The `composite` meta-provider
+exists to combine them per sub-region without forcing one DEM source on the whole bbox — see
+`data/scripts/dem_providers/base.py` for the provider contract every source implements, and
+`data/README.md`'s Config section for the registered providers and how to select one via
+`pipeline.config.json`'s `dem.provider`/`dem.providerConfig`.
+
 ## Not done yet
 
 - Route-relation (`r/route=hiking`) pull for the named-trail overlay layer (E4/E5, Karnischer

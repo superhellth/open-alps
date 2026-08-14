@@ -18,9 +18,13 @@ missing an entire region. _normalize_colorinterp() below rewrites each region VR
 Gray band before the final merge so this can't happen."""
 
 import subprocess
+import sys
 from pathlib import Path
 
 from . import get_provider
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from lib.pipeline import OSM_DIR, bbox_from_huts  # noqa: E402
 
 
 def _normalize_colorinterp(region_vrt: Path) -> Path:
@@ -38,9 +42,28 @@ def _normalize_colorinterp(region_vrt: Path) -> Path:
     return normalized
 
 
+def _resolve_region_bbox(region_config: dict) -> dict:
+    """A region's configured "bbox" is the coarse political-boundary box used only to pick out
+    which huts belong to this region (huts.geojson covers the whole pipeline scope, both
+    countries) - not necessarily the box actually fetched. When "bboxFromHuts" is set, the real
+    fetch bbox is tightened to just those huts' extent (+ bufferDeg padding), so a
+    tile-per-request provider like bavaria_dgm.py doesn't pay for empty terrain the pipeline's
+    huts never cover. Providers whose fetch() ignores bbox entirely (e.g. at_bev.py, a single
+    national download) are unaffected either way."""
+    if not region_config.get("bboxFromHuts"):
+        return region_config["bbox"]
+    return bbox_from_huts(
+        OSM_DIR / "huts.geojson",
+        filter_bbox=region_config["bbox"],
+        buffer_deg=region_config.get("bufferDeg", 0.05),
+    )
+
+
 def fetch_and_build(provider_config: dict, dem_dir: Path) -> Path:
     region_vrts = []
     for i, region_config in enumerate(provider_config["regions"]):
+        if "bbox" in region_config:
+            region_config = {**region_config, "bbox": _resolve_region_bbox(region_config)}
         provider = get_provider(region_config["provider"])
         raw_dir = dem_dir / "raw" / f"region_{i}_{region_config['provider']}"
         region_vrt = dem_dir / f"region_{i}_{region_config['provider']}.vrt"
