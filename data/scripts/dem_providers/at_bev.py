@@ -17,8 +17,6 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-DEFAULT_DOWNLOAD_URL = "https://gis.ktn.gv.at/OGD/Geographie_Planung/ogd-10m-at.zip"
-
 
 def download_url(provider_config: dict) -> str:
     return provider_config["downloadUrl"]
