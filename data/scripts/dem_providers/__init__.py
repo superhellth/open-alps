@@ -1,11 +1,12 @@
 """Registry mapping a dem.provider config name to its provider module. See base.py for what every
 provider module must implement."""
 
-from . import at_bev, copernicus
+from . import at_bev, bavaria_dgm, copernicus
 
 _REGISTRY = {
     "copernicus-glo-30": copernicus,
     "at-bev-dgm": at_bev,
+    "bavaria-dgm5": bavaria_dgm,
 }
 
 PROVIDER_NAMES = list(_REGISTRY)
