@@ -19,3 +19,12 @@ def get_provider(name: str):
         raise KeyError(
             f"unknown DEM provider {name!r} - valid providers: {PROVIDER_NAMES}"
         ) from None
+
+
+# Imported after get_provider() is defined, not alongside the other providers above: composite.py
+# does `from . import get_provider` at module scope, which would be a circular import if composite
+# were imported while this package's own __init__ was still assembling get_provider.
+from . import composite  # noqa: E402
+
+_REGISTRY["composite"] = composite
+PROVIDER_NAMES = list(_REGISTRY)

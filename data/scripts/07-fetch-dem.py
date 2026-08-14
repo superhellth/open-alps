@@ -27,8 +27,13 @@ provider_config.setdefault("bbox", config["bbox"])
 raw_dir = DEM_DIR / "raw"
 vrt_path = DEM_DIR / "dem.vrt"
 
-print(f"fetching DEM tiles via provider {provider_name!r} ...")
-tile_paths = provider.fetch(provider_config, raw_dir)
-print(f"{len(tile_paths)} tiles present, building EPSG:4326 VRT ...")
-provider.to_4326_vrt(tile_paths, vrt_path)
-print(f"written {vrt_path}")
+if provider_name == "composite":
+    from dem_providers.composite import fetch_and_build  # noqa: E402
+    vrt_path = fetch_and_build(provider_config, DEM_DIR)
+    print(f"written {vrt_path}")
+else:
+    print(f"fetching DEM tiles via provider {provider_name!r} ...")
+    tile_paths = provider.fetch(provider_config, raw_dir)
+    print(f"{len(tile_paths)} tiles present, building EPSG:4326 VRT ...")
+    provider.to_4326_vrt(tile_paths, vrt_path)
+    print(f"written {vrt_path}")
