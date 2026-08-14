@@ -1,0 +1,73 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.6rem 1rem;
+  background: #1b5e20;
+  color: #fff;
+  font-family: system-ui, sans-serif;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+header span {
+  font-size: 0.85rem;
+  opacity: 0.85;
+}
+
+.nav-link {
+  color: #fff;
+  font-size: 0.85rem;
+  text-decoration: underline;
+}
+
+.layer-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+.map {
+  flex: 1;
+}
+
+.edge-hover-panel {
+  position: fixed;
+  z-index: 1000;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #bdbdbd;
+  border-radius: 4px;
+  padding: 0.4rem 0.6rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  max-width: 320px;
+}
+
+.edge-hover-row {
+  display: flex;
+  flex-direction: column;
+  padding: 0.15rem 0;
+}
+
+.edge-hover-row + .edge-hover-row {
+  border-top: 1px solid #e0e0e0;
+}
+
+.elevation-sparkline {
+  margin-top: 0.2rem;
+  display: block;
+}
