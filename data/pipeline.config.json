@@ -6,6 +6,6 @@
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
   "graph": { "maxEdgeKm": 10, "maxSnapM": 200 },
-  "dem": { "source": "copernicus-glo-30", "eleNoiseThresholdM": 4, "profilePoints": 30 },
+  "dem": { "source": "copernicus-glo-30", "provider": "copernicus-glo-30", "providerConfig": {}, "eleNoiseThresholdM": 4, "profilePoints": 30 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }
