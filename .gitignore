@@ -1,11 +1,18 @@
-# Offline precompute pipeline - large derived/downloaded data, not source
-data/
+# Offline precompute pipeline - large derived/downloaded outputs, not source.
+# Scripts/config (data/scripts/, data/pipeline.config.json, data/README.md) ARE source and
+# stay tracked - only the raw/generated data dirs below are excluded.
+data/osm/
+data/dem/
 
 # Generated pipeline output, copied here manually per data/README.md - regenerated, not source
 huts/public/data/
 
 # Reference network capture, not build input
 caa.alpenverein.at.har
+
+# Python
+__pycache__/
+*.pyc
 
 # OS/editor
 .DS_Store

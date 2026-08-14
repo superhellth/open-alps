@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""
+Runs the OSM hut-graph pipeline end to end, driven by ../pipeline.config.json.
+
+By default runs all steps 01-08, skipping any step whose output already exists and is newer
+than the config file (delete an output, or edit pipeline.config.json, to force it to rerun).
+
+Use --only to run just a subset of steps, e.g. while re-tuning one step at a time. Steps passed
+via --only always run (freshness check is skipped for them, since picking a step explicitly
+means you want it to run now).
+
+Usage:
+    python data/scripts/run_all.py                    # full pipeline, idempotent
+    python data/scripts/run_all.py --only 6            # just rebuild the graph
+    python data/scripts/run_all.py --only 5,6           # re-fetch huts + rebuild graph
+    python data/scripts/run_all.py --only 3-6           # merge onward
+    python data/scripts/run_all.py --only 6 -- --max-edge-km 15   # step 6 with its own flags
+
+Any args after a literal `--` are passed through to 06-build-hut-graph.py. Step 8's own flag
+(--ele-noise-threshold-m) isn't forwarded here to keep that unambiguous when both are selected
+at once - run `python data/scripts/08-add-elevation.py --ele-noise-threshold-m 3` directly for
+that.
+"""
+
+import argparse
+import subprocess
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib.pipeline import CONFIG_PATH, DEM_DIR, OSM_DIR, load_config  # noqa: E402
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+STEP_NAMES = {
+    1: "download extracts",
+    2: "filter trails",
+    3: "merge trails",
+    4: "verify merged trails",
+    5: "fetch huts",
+    6: "build hut graph",
+    7: "fetch DEM",
+    8: "add elevation",
+    9: "build trail vector tiles",
+}
+
+
+def parse_steps(spec: str) -> set[int]:
+    try:
+        steps = set()
+        for part in spec.split(","):
+            part = part.strip()
+            if "-" in part:
+                lo, hi = part.split("-", 1)
+                steps.update(range(int(lo), int(hi) + 1))
+            else:
+                steps.add(int(part))
+    except ValueError:
+        raise SystemExit(f"--only: can't parse {spec!r} (expected e.g. '6', '1,2', '3-6')")
+    unknown = steps - STEP_NAMES.keys()
+    if unknown:
+        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-9)")
+    return steps
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--only",
+    metavar="STEPS",
+    help="comma/range list of steps to run, e.g. '6' or '1,2' or '3-6' (default: all, 1-9)",
+)
+args, passthrough = parser.parse_known_args()
+if passthrough and passthrough[0] == "--":
+    passthrough = passthrough[1:]
+
+selected = parse_steps(args.only) if args.only else set(STEP_NAMES)
+forced = selected if args.only else set()
+
+config = load_config()
+config_mtime = CONFIG_PATH.stat().st_mtime
+
+
+def fresh(path: Path) -> bool:
+    return path.exists() and path.stat().st_mtime > config_mtime
+
+
+def run(script, *script_args):
+    subprocess.run([sys.executable, str(SCRIPT_DIR / script), *script_args], check=True)
+
+
+def step(n, already_fresh, do_run):
+    if n not in selected:
+        return
+    label = f"== {n:02d}: {STEP_NAMES[n]} =="
+    if n not in forced and already_fresh():
+        print(f"{label} skip (up to date) ==", flush=True)
+        return
+    print(label, flush=True)
+    do_run()
+
+
+region_names = [r["name"] for r in config["regions"]]
+
+step(1, lambda: all(fresh(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in region_names),
+     lambda: run("01-download-extracts.py"))
+
+step(2, lambda: all(fresh(OSM_DIR / f"{n}-trails.osm.pbf") for n in region_names),
+     lambda: run("02-filter-trails.py"))
+
+step(3, lambda: fresh(OSM_DIR / "trails.osm.pbf"),
+     lambda: run("03-merge-trails.py"))
+
+step(4, lambda: False,  # verify is a gate, not a cacheable output - always run when selected
+     lambda: run("04-verify-trails.py"))
+
+step(5, lambda: fresh(OSM_DIR / "huts.geojson"),
+     lambda: run("05-fetch-huts.py"))
+
+step(6, lambda: False,  # cheap enough, and usually run precisely to pick up new hyperparameters
+     lambda: run("06-build-hut-graph.py", *passthrough))
+
+step(7, lambda: fresh(DEM_DIR / "dem.vrt"),
+     lambda: run("07-fetch-dem.py"))
+
+step(8, lambda: False,  # cheap; usually run precisely to pick up a new elevation threshold
+     lambda: run("08-add-elevation.py"))
+
+step(9, lambda: fresh(OSM_DIR / "trails.pmtiles"),
+     lambda: run("09-build-trail-tiles.py"))
+
+if 8 in selected:
+    print(f"done -> {OSM_DIR / 'hut-edges.geojson'}", flush=True)
+elif 6 in selected:
+    print(f"done -> {OSM_DIR / 'hut-edges.geojson'} (no elevation - steps 7/8 not selected)", flush=True)
+if 9 in selected:
+    print(f"done -> {OSM_DIR / 'trails.pmtiles'}", flush=True)
