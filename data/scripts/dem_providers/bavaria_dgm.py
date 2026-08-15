@@ -273,8 +273,13 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
                 if warped_count % 500 == 0:
                     print(f"  warped {warped_count}/{len(tile_paths)} tiles")
 
+    # gdalbuildvrt's own argv, not a shell, so this isn't a shell-length limit - it's Windows'
+    # CreateProcess argv cap (~32KB total), which thousands of warped tile paths blow past.
+    # -input_file_list sidesteps that by reading paths from a file instead of argv.
+    file_list_path = warped_dir / "warped_files.txt"
+    file_list_path.write_text("\n".join(str(p) for p in warped_paths), encoding="utf-8")
     subprocess.run(
-        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(p) for p in warped_paths]],
+        ["gdalbuildvrt", "-overwrite", "-input_file_list", str(file_list_path), str(out_vrt_path)],
         check=True,
     )
     return out_vrt_path

@@ -56,8 +56,12 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
         )
         warped_paths.append(warped)
 
+    # -input_file_list reads paths from a file instead of argv - avoids Windows' ~32KB
+    # CreateProcess argv limit, which enough warped tile paths can blow past (see bavaria_dgm.py).
+    file_list_path = warped_dir / "warped_files.txt"
+    file_list_path.write_text("\n".join(str(p) for p in warped_paths), encoding="utf-8")
     subprocess.run(
-        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(p) for p in warped_paths]],
+        ["gdalbuildvrt", "-overwrite", "-input_file_list", str(file_list_path), str(out_vrt_path)],
         check=True,
     )
     return out_vrt_path
