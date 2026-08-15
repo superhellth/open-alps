@@ -6,3 +6,4 @@ Ideas:
  - filtering (big one)
  - Seilbahnen
  - Script performance
+ - Claude permissions

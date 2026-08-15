@@ -26,11 +26,20 @@ What this does instead:
        requested targets, so the cutoff actually bounds the work done, not just the traversal.
 
 Output: data/osm/hut-edges.geojson - FeatureCollection of LineStrings, one per kept hut pair,
-properties {from_hut_id, to_hut_id, distance_m, source: "osm"}. Each unordered pair appears once.
-Geometry is the real trail polyline walked (hut -> snapped trail node -> ... -> snapped trail
-node -> hut), not a straight line - see the "full path" pass below. Elevation (ascent_m/
-descent_m) is a separate step, 08-add-elevation.py, since it needs a DEM (07-fetch-dem.py) that
-this script has no reason to depend on.
+properties {from_hut_id, to_hut_id, distance_m, road_m, source: "osm"}. Each unordered pair
+appears once. Geometry is the real trail polyline walked (hut -> snapped trail node -> ... ->
+snapped trail node -> hut), not a straight line - see the "full path" pass below. Elevation
+(ascent_m/descent_m) is a separate step, 08-add-elevation.py, since it needs a DEM
+(07-fetch-dem.py) that this script has no reason to depend on.
+
+Road bias: every edge carries both a real distance ("dist") and a routing cost ("weight") that
+multiplies vehicle-oriented ways (graph.roadHighwayTags, e.g. residential/service/unclassified/
+tertiary) by graph.roadPenaltyFactor. Candidate hut pairs (pass 1) are filtered by --max-edge-km
+against real "dist", so the max-length guarantee is unaffected by the penalty. Path selection
+(pass 2) runs Dijkstra over the penalized "weight" so it prefers trail-type ways when a
+comparably-short road alternative exists; the reported distance_m is the real length of that
+chosen path (which can be slightly longer than the shortest possible route), and road_m is the
+portion of it that runs over a penalized way.
 
 Pass 1 (distance-only queries) and pass 2 (full-path fetch) run their per-hut/per-edge igraph
 calls across a ThreadPoolExecutor (--workers, default os.cpu_count()). This works because
@@ -71,6 +80,7 @@ parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"))
 parser.add_argument("--out", default=str(OSM_DIR / "hut-edges.geojson"))
 parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
 parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
+parser.add_argument("--road-penalty-factor", type=float, default=config["graph"]["roadPenaltyFactor"])
 parser.add_argument("--workers", type=int, default=os.cpu_count(),
                      help="thread pool size for pass 1/2 (igraph C calls release the GIL)")
 args = parser.parse_args()
@@ -100,13 +110,17 @@ def haversine_m_vec(lon1, lat1, lon2, lat2):
 class WayGraphHandler(osmium.SimpleHandler):
     """Streams ways, keeping only node coords/edges actually used by a hiking way."""
 
-    def __init__(self):
+    def __init__(self, road_tags, road_penalty_factor):
         super().__init__()
+        self.road_tags = set(road_tags)
+        self.road_penalty_factor = road_penalty_factor
         self.node_id_to_idx = {}
         self.coords = []  # index -> (lon, lat)
         self.edges_i = []
         self.edges_j = []
-        self.edges_w = []
+        self.edges_dist = []  # real haversine meters
+        self.edges_w = []  # routing cost: dist, penalized on road-type ways
+        self.edges_road = []  # bool, one per edge - is this a penalized (road-type) way
         self.way_count = 0
 
     def _idx_for(self, node_id, lon, lat):
@@ -133,13 +147,17 @@ class WayGraphHandler(osmium.SimpleHandler):
             lons[k] = lon
             lats[k] = lat
         dists = haversine_m_vec(lons[:-1], lats[:-1], lons[1:], lats[1:])
+        is_road = w.tags.get("highway", "") in self.road_tags
+        costs = dists * self.road_penalty_factor if is_road else dists
         self.edges_i.extend(idxs[:-1].tolist())
         self.edges_j.extend(idxs[1:].tolist())
-        self.edges_w.extend(dists.tolist())
+        self.edges_dist.extend(dists.tolist())
+        self.edges_w.extend(costs.tolist())
+        self.edges_road.extend([is_road] * (len(nodes) - 1))
 
 
 print(f"streaming {args.trails} ...")
-handler = WayGraphHandler()
+handler = WayGraphHandler(config["graph"]["roadHighwayTags"], args.road_penalty_factor)
 handler.apply_file(args.trails, locations=True)
 n_nodes = len(handler.coords)
 n_edges = len(handler.edges_i)
@@ -148,10 +166,17 @@ print(f"graph nodes: {n_nodes:,}, edges: {n_edges:,}")
 coords = np.array(handler.coords, dtype=np.float64)  # (lon, lat)
 i = np.array(handler.edges_i, dtype=np.int32)
 j = np.array(handler.edges_j, dtype=np.int32)
+dist_arr = np.array(handler.edges_dist, dtype=np.float64)
 w = np.array(handler.edges_w, dtype=np.float64)
+road_arr = np.array(handler.edges_road, dtype=bool)
 
 print("building igraph graph ...")
-graph = ig.Graph(n=n_nodes, edges=np.column_stack((i, j)), edge_attrs={"weight": w}, directed=False)
+graph = ig.Graph(
+    n=n_nodes,
+    edges=np.column_stack((i, j)),
+    edge_attrs={"weight": w, "dist": dist_arr, "is_road": road_arr},
+    directed=False,
+)
 
 print("building node KDTree for hut snapping ...")
 node_tree = cKDTree(coords)
@@ -235,10 +260,12 @@ def _distances_for(item):
     _, node, _, unique_target_nodes = item
     # target-limited query: only computes/returns distances to these specific nodes, unlike
     # scipy's dijkstra(..., limit=) which still allocates a full n_nodes-length array per call
-    return graph.distances(source=[node], target=unique_target_nodes, weights="weight")[0]
+    # weights="dist" (real distance, not the road-penalized "weight") so max-edge-km stays a
+    # guarantee about actual trail length, unaffected by the road penalty applied in pass 2.
+    return graph.distances(source=[node], target=unique_target_nodes, weights="dist")[0]
 
 
-kept_pairs = []  # (h, c, distance_m)
+kept_pairs = []  # (h, c)
 seen_pairs = set()
 with ThreadPoolExecutor(max_workers=args.workers) as pool:
     for done, (item, dists) in enumerate(zip(work_items, pool.map(_distances_for, work_items))):
@@ -252,7 +279,7 @@ with ThreadPoolExecutor(max_workers=args.workers) as pool:
             if not np.isfinite(d) or d > max_edge_m:
                 continue
             seen_pairs.add(pair)
-            kept_pairs.append((h, c, float(d)))
+            kept_pairs.append((h, c))
 
         if done % 100 == 0:
             print(f"  {done}/{len(work_items)} huts processed, {len(kept_pairs)} edges so far")
@@ -268,14 +295,30 @@ print(f"pass 2: fetching full paths for {len(kept_pairs)} kept edges, {args.work
 
 
 def _path_for(pair):
-    h, c, d = pair
+    h, c = pair
     src = int(snapped_node[h])
     tgt = int(snapped_node[c])
+    distance_m = 0.0
+    road_m = 0.0
     if src == tgt:
         trail_coords = [tuple(coords[src])]
     else:
-        vpath = graph.get_shortest_paths(src, to=tgt, weights="weight", output="vpath")[0]
-        trail_coords = [tuple(coords[v]) for v in vpath] if len(vpath) >= 2 else [tuple(coords[src]), tuple(coords[tgt])]
+        # output="epath" (not "vpath") so the real distance/road-length reported below is summed
+        # over the exact edges Dijkstra picked under the road-penalized "weight" - reconstructing
+        # it from just the node sequence would be ambiguous wherever parallel edges exist between
+        # the same two nodes (e.g. a path and a road running alongside each other).
+        epath = graph.get_shortest_paths(src, to=tgt, weights="weight", output="epath")[0]
+        vseq = [src]
+        cur = src
+        for eid in epath:
+            e = graph.es[eid]
+            nxt = e.target if e.source == cur else e.source
+            vseq.append(nxt)
+            distance_m += e["dist"]
+            if e["is_road"]:
+                road_m += e["dist"]
+            cur = nxt
+        trail_coords = [tuple(coords[v]) for v in vseq] if len(vseq) >= 2 else [tuple(coords[src]), tuple(coords[tgt])]
 
     path_coords = [tuple(hut_coords[h]), *trail_coords, tuple(hut_coords[c])]
     return {
@@ -283,7 +326,8 @@ def _path_for(pair):
         "properties": {
             "from_hut_id": hut_ids[h],
             "to_hut_id": hut_ids[c],
-            "distance_m": round(d, 1),
+            "distance_m": round(distance_m, 1),
+            "road_m": round(road_m, 1),
             "source": "osm",
         },
         "geometry": {

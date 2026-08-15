@@ -24,7 +24,18 @@ from pathlib import Path
 from . import get_provider
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib.pipeline import OSM_DIR, bbox_from_huts  # noqa: E402
+from lib.pipeline import OSM_DIR, bbox_from_huts, edge_points, hut_points  # noqa: E402
+
+
+def _points_for_region(filter_bbox: dict) -> list[list[float]]:
+    """Prefers real trail-polyline vertices (hut-edges.geojson, script 06's output) over bare hut
+    points - run_all.py always runs step 6 before step 7, so this is normally on disk. Falls back
+    to hut points for standalone/manual runs of this provider before step 6 has ever produced
+    hut-edges.geojson (e.g. `run_all.py --only 7`)."""
+    edges_path = OSM_DIR / "hut-edges.geojson"
+    if edges_path.exists():
+        return edge_points(edges_path, filter_bbox=filter_bbox)
+    return hut_points(OSM_DIR / "huts.geojson", filter_bbox=filter_bbox)
 
 
 def _normalize_colorinterp(region_vrt: Path) -> Path:
@@ -62,6 +73,8 @@ def _resolve_region_bbox(region_config: dict) -> dict:
 def fetch_and_build(provider_config: dict, dem_dir: Path) -> Path:
     region_vrts = []
     for i, region_config in enumerate(provider_config["regions"]):
+        if region_config.get("bboxFromHuts"):
+            region_config = {**region_config, "points": _points_for_region(region_config["bbox"])}
         if "bbox" in region_config:
             region_config = {**region_config, "bbox": _resolve_region_bbox(region_config)}
         provider = get_provider(region_config["provider"])

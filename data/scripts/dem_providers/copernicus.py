@@ -26,22 +26,23 @@ def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
     lat_range = range(math.floor(bbox["minLat"]), math.floor(bbox["maxLat"]) + 1)
     lon_range = range(math.floor(bbox["minLng"]), math.floor(bbox["maxLng"]) + 1)
 
+    names = [(lat, lon) for lat in lat_range for lon in lon_range]
     tile_paths = []
-    for lat in lat_range:
-        for lon in lon_range:
-            name = tile_name(lat, lon)
-            url = f"{BASE_URL}/{name}/{name}.tif"
-            out_path = raw_dir / f"{name}.tif"
-            if not out_path.exists():
-                print(f"downloading {name} ...")
-                try:
-                    urllib.request.urlretrieve(url, out_path)
-                except urllib.error.HTTPError as e:
-                    if e.code == 404:
-                        print(f"  no tile at {name} (likely no land coverage there), skipping")
-                        continue
-                    raise
-            tile_paths.append(out_path)
+    for i, (lat, lon) in enumerate(names):
+        name = tile_name(lat, lon)
+        url = f"{BASE_URL}/{name}/{name}.tif"
+        out_path = raw_dir / f"{name}.tif"
+        if not out_path.exists():
+            try:
+                urllib.request.urlretrieve(url, out_path)
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    continue
+                raise
+        tile_paths.append(out_path)
+        if (i + 1) % 500 == 0:
+            print(f"  {i + 1}/{len(names)} tiles checked, {len(tile_paths)} with coverage")
+    print(f"{len(tile_paths)}/{len(names)} tiles had coverage")
     return tile_paths
 
 

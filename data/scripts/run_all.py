@@ -41,6 +41,7 @@ STEP_NAMES = {
     7: "fetch DEM",
     8: "add elevation",
     9: "build trail vector tiles",
+    10: "fetch stations & parking",
 }
 
 
@@ -58,7 +59,7 @@ def parse_steps(spec: str) -> set[int]:
         raise SystemExit(f"--only: can't parse {spec!r} (expected e.g. '6', '1,2', '3-6')")
     unknown = steps - STEP_NAMES.keys()
     if unknown:
-        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-9)")
+        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-10)")
     return steps
 
 
@@ -66,7 +67,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--only",
     metavar="STEPS",
-    help="comma/range list of steps to run, e.g. '6' or '1,2' or '3-6' (default: all, 1-9)",
+    help="comma/range list of steps to run, e.g. '6' or '1,2' or '3-6' (default: all, 1-10)",
 )
 args, passthrough = parser.parse_known_args()
 if passthrough and passthrough[0] == "--":
@@ -126,6 +127,9 @@ step(8, lambda: False,  # cheap; usually run precisely to pick up a new elevatio
 
 step(9, lambda: fresh(OSM_DIR / "trails.pmtiles"),
      lambda: run("09-build-trail-tiles.py"))
+
+step(10, lambda: fresh(OSM_DIR / "stations.geojson") and fresh(OSM_DIR / "parking.geojson"),
+     lambda: run("05b-fetch-stations-parking.py"))
 
 if 8 in selected:
     print(f"done -> {OSM_DIR / 'hut-edges.geojson'}", flush=True)

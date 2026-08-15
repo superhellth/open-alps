@@ -5,7 +5,12 @@
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
-  "graph": { "maxEdgeKm": 10, "maxSnapM": 200 },
+  "graph": {
+    "maxEdgeKm": 30,
+    "maxSnapM": 100,
+    "roadPenaltyFactor": 1.6,
+    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"]
+  },
   "dem": {
     "source": "copernicus-glo-30",
     "provider": "composite",
@@ -20,7 +25,7 @@
           "provider": "bavaria-dgm5",
           "bbox": { "minLng": 8.9, "maxLng": 13.9, "minLat": 47.2, "maxLat": 50.6 },
           "bboxFromHuts": true,
-          "bufferDeg": 0.05
+          "bufferKm": 1.5
         }
       ]
     },
