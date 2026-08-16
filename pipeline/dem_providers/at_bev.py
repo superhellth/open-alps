@@ -41,17 +41,27 @@ def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
     return [dst]
 
 
+VRT_NODATA = -9999.0
+
+
 def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # Source is EPSG:31287 (Lambert) - gdalwarp reprojects each tile into a temp VRT in EPSG:4326
     # before the final mosaic, so 08-add-elevation.py never has to know the source CRS.
+    #
+    # -dstnodata: without it, gdalwarp fills the corner slivers outside a reprojected tile's
+    # (no-longer-axis-aligned) footprint with 0 instead of flagging them as nodata - see
+    # bavaria_dgm.py's to_4326_vrt() for the same issue there, where it silently injected fake
+    # sea-level DEM readings across the coverage. This provider is a single national tile so the
+    # blast radius is smaller (only the file's own outer boundary, not thousands of internal tile
+    # corners), but the fix is the same and free to apply here too.
     warped_dir = out_vrt_path.parent / "at_bev_warped"
     warped_dir.mkdir(exist_ok=True)
     warped_paths = []
     for tile in tile_paths:
         warped = warped_dir / f"{tile.stem}_4326.vrt"
         subprocess.run(
-            ["gdalwarp", "-t_srs", "EPSG:4326", "-of", "VRT", "-overwrite",
-             str(tile), str(warped)],
+            ["gdalwarp", "-t_srs", "EPSG:4326", "-of", "VRT", "-dstnodata", str(VRT_NODATA),
+             "-overwrite", str(tile), str(warped)],
             check=True,
         )
         warped_paths.append(warped)

@@ -1,10 +1,11 @@
 Ideas:
  - Show height profile (x)
+ - move to ssd
  - chain contraction for 6
- - time table
+ - time table (x)
  - train stations (x)
  - parking lots (x)
  - filtering (big one)
  - Seilbahnen
- - Script performance
- - Claude permissions
+ - Script performance (x)
+ - Claude permissions (x)

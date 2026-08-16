@@ -264,6 +264,16 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # a real elevation reading, so a gap here silently stomps valid data from other sources it's
     # merged with. -vrtnodata makes gdalbuildvrt fill gaps with VRT_NODATA instead, so they read
     # as proper NoData throughout the rest of the pipeline.
+    #
+    # Separately, warp_one() below reprojects each 1km UTM32N tile individually - a UTM square
+    # doesn't stay axis-aligned once reprojected to EPSG:4326 (it becomes a slightly rotated
+    # quadrilateral), but gdalwarp's output is always an axis-aligned rectangle. Without an
+    # explicit -dstnodata, gdalwarp fills the corner slivers outside that rotated footprint with
+    # 0 - inside *every* tile, not just at real coverage gaps, since it happens per-tile before
+    # any mosaicking. That silently injected thousands of fake sea-level readings across Bavaria's
+    # whole coverage (a trail edge sampling one shows up as a ~1500m round-trip to/from 0m, wildly
+    # inflating ascent_m/descent_m). -dstnodata VRT_NODATA on the per-tile warp fixes this at the
+    # source, using the same sentinel the outer gdalbuildvrt above already expects.
     warped_dir = out_vrt_path.parent / "bavaria_dgm_warped"
     warped_dir.mkdir(exist_ok=True)
 
@@ -271,7 +281,7 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
         warped = warped_dir / f"{tile.stem}_4326.vrt"
         subprocess.run(
             ["gdalwarp", "-q", "-s_srs", "EPSG:25832", "-t_srs", "EPSG:4326", "-of", "VRT",
-             "-overwrite", str(tile), str(warped)],
+             "-dstnodata", str(VRT_NODATA), "-overwrite", str(tile), str(warped)],
             check=True,
         )
         return warped
