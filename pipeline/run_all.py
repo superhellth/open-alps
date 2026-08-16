@@ -15,6 +15,7 @@ Usage:
     python pipeline/run_all.py --only 5,6           # re-fetch huts + rebuild graph
     python pipeline/run_all.py --only 3-6           # merge onward
     python pipeline/run_all.py --only 6 -- --max-edge-km 15   # step 6 with its own flags
+    python pipeline/run_all.py --only 12            # just re-copy outputs into huts/public/data/
 
 Any args after a literal `--` are passed through to 06-build-hut-graph.py. Step 8's own flag
 (--ele-noise-threshold-m) isn't forwarded here to keep that unambiguous when both are selected
@@ -23,13 +24,26 @@ that.
 """
 
 import argparse
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.pipeline import CONFIG_PATH, DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import CONFIG_PATH, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
+
+# What the app (huts/src/App.jsx, GraphPage.jsx) actually fetches - see root CLAUDE.md "App
+# structure". hut-edges.geojson (raw, ~190MB) and the *-test-out/*.mbtiles intermediates are
+# deliberately not copied - nothing in huts/ reads them.
+PUBLIC_FILES = [
+    "huts.geojson",
+    "hut-edges.pmtiles",
+    "hut-edge-stats.json",
+    "trails.pmtiles",
+    "stations.geojson",
+    "parking.geojson",
+]
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 STEP_NAMES = {
@@ -44,6 +58,7 @@ STEP_NAMES = {
     9: "build trail vector tiles",
     10: "fetch stations & parking",
     11: "build hut-edge vector tiles",
+    12: "copy outputs into huts/public/data",
 }
 
 
@@ -61,7 +76,7 @@ def parse_steps(spec: str) -> set[int]:
         raise SystemExit(f"--only: can't parse {spec!r} (expected e.g. '6', '1,2', '3-6')")
     unknown = steps - STEP_NAMES.keys()
     if unknown:
-        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-11)")
+        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-12)")
     return steps
 
 
@@ -69,7 +84,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument(
     "--only",
     metavar="STEPS",
-    help="comma/range list of steps to run, e.g. '6' or '1,2' or '3-6' (default: all, 1-10)",
+    help="comma/range list of steps to run, e.g. '6' or '1,2' or '3-6' (default: all, 1-12)",
 )
 args, passthrough = parser.parse_known_args()
 if passthrough and passthrough[0] == "--":
@@ -137,6 +152,29 @@ step(10, lambda: fresh(OSM_DIR / "stations.geojson") and fresh(OSM_DIR / "parkin
 step(11, lambda: fresh(OSM_DIR / "hut-edges.pmtiles") and fresh(OSM_DIR / "hut-edge-stats.json"),
      lambda: run("11-build-hut-edge-tiles.py"))
 
+
+def public_copy_fresh() -> bool:
+    return all(
+        (PUBLIC_DATA_DIR / name).exists()
+        and (PUBLIC_DATA_DIR / name).stat().st_mtime >= (OSM_DIR / name).stat().st_mtime
+        for name in PUBLIC_FILES
+        if (OSM_DIR / name).exists()
+    )
+
+
+def copy_public_data():
+    PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
+    for name in PUBLIC_FILES:
+        src = OSM_DIR / name
+        if not src.exists():
+            print(f"  skip {name} (not built yet)", flush=True)
+            continue
+        shutil.copy2(src, PUBLIC_DATA_DIR / name)
+        print(f"  {src} -> {PUBLIC_DATA_DIR / name}", flush=True)
+
+
+step(12, public_copy_fresh, copy_public_data)
+
 if 8 in selected:
     print(f"done -> {OSM_DIR / 'hut-edges.geojson'}", flush=True)
 elif 6 in selected:
@@ -145,3 +183,5 @@ if 9 in selected:
     print(f"done -> {OSM_DIR / 'trails.pmtiles'}", flush=True)
 if 11 in selected:
     print(f"done -> {OSM_DIR / 'hut-edges.pmtiles'}, {OSM_DIR / 'hut-edge-stats.json'}", flush=True)
+if 12 in selected:
+    print(f"done -> copied into {PUBLIC_DATA_DIR}", flush=True)

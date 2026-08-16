@@ -15,6 +15,7 @@ DATA_DIR = REPO_ROOT / "data"
 OSM_DIR = DATA_DIR / "osm"
 DEM_DIR = DATA_DIR / "dem"
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
+PUBLIC_DATA_DIR = REPO_ROOT / "huts" / "public" / "data"
 
 
 def load_config():
