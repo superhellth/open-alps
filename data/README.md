@@ -116,7 +116,12 @@ data/
   dem/
     raw/
       <TileName>.tif               # untouched Copernicus GLO-30 tiles, one per bbox degree cell
-    dem.vrt                        # GDAL mosaic index over raw/ (script 07), read lazily
+    dem.vrt                        # GDAL mosaic index over raw/ (script 07) - lazily reprojecting,
+                                    # not read directly by script 08 (see dem.tif)
+    dem.tif                        # dem.vrt materialized into a real, tiled/compressed GeoTIFF
+                                    # (script 07) - this is what script 08 actually samples, so
+                                    # reruns of 08 (e.g. to retune --ele-noise-threshold-m) don't
+                                    # keep re-paying dem.vrt's reprojection cost
 ```
 
 Everything is plain Python (stdlib `urllib`/`subprocess` + the `osmium`/`scipy`/`numpy`/`igraph`/
@@ -223,7 +228,7 @@ python data/scripts/05-fetch-huts.py              # -> data/osm/huts.geojson
 
 python data/scripts/06-build-hut-graph.py         # -> data/osm/hut-edges.geojson
 
-python data/scripts/07-fetch-dem.py               # -> data/dem/dem.vrt, via dem.provider (see Config)
+python data/scripts/07-fetch-dem.py               # -> data/dem/dem.tif, via dem.provider (see Config)
 python data/scripts/08-add-elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
 
 python data/scripts/09-build-trail-tiles.py       # -> data/osm/trails.pmtiles

@@ -36,6 +36,40 @@ def _to_wsl_path(arg: str) -> str:
     return f"/mnt/{drive.lower()}/{rest.replace(chr(92), '/')}"
 
 
+def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
+    """Bakes a (possibly lazily-reprojecting) VRT into a real, tiled/compressed GeoTIFF.
+
+    dem.vrt's composite provider chains several layers of on-the-fly `gdalwarp`-built VRTs (each
+    region's per-tile reprojection from its native CRS into EPSG:4326) - reading from it, as
+    08-add-elevation.py does, re-runs that reprojection math for every pixel touched, every time.
+    Timed at ~750s for a read covering AT+Bavaria (data/timings.jsonl, phase read_dem_window) -
+    almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles are already local. Materializing
+    once here means step 07 (already freshness-cached, rarely rerun) pays that reprojection cost
+    instead of every step 08 run - and 08 is explicitly the step people rerun repeatedly, to
+    retune --ele-noise-threshold-m.
+
+    -a_nodata copies NoDataValue from vrt_path explicitly (see composite.py's
+    _normalize_colorinterp for why this isn't left to gdal_translate's implicit passthrough).
+    PREDICTOR=3 is the floating-point predictor, which improves DEFLATE's ratio on elevation
+    data specifically (vs. the integer predictor default)."""
+    import rasterio
+
+    with rasterio.open(vrt_path) as src:
+        nodata = src.nodata
+
+    args = [
+        "gdal_translate", "-of", "GTiff",
+        "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "PREDICTOR=3",
+        "-co", "BIGTIFF=IF_SAFER",
+        "--config", "GDAL_NUM_THREADS", "ALL_CPUS",
+    ]
+    if nodata is not None:
+        args += ["-a_nodata", str(nodata)]
+    args += [str(vrt_path), str(out_path)]
+    subprocess.run(args, check=True)
+    return out_path
+
+
 def run_tippecanoe(tippecanoe_args):
     """Shells out to tippecanoe, natively if it's on PATH (Linux/macOS), otherwise via WSL - it
     has no Windows build on conda-forge (linux-64/osx-64 only). See data/README.md's "Displaying

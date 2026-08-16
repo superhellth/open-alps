@@ -122,7 +122,7 @@ step(5, lambda: fresh(OSM_DIR / "huts.geojson"),
 step(6, lambda: False,  # cheap enough, and usually run precisely to pick up new hyperparameters
      lambda: run("06-build-hut-graph.py", *passthrough))
 
-step(7, lambda: fresh(DEM_DIR / "dem.vrt"),
+step(7, lambda: fresh(DEM_DIR / "dem.tif"),
      lambda: run("07-fetch-dem.py"))
 
 step(8, lambda: False,  # cheap; usually run precisely to pick up a new elevation threshold

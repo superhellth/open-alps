@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """
 Adds ascent_m/descent_m and a downsampled elevation_profile to every edge in hut-edges.geojson
-(script 06's output), by sampling the DEM mosaic (script 07's dem.vrt) along each edge's real
-trail polyline.
+(script 06's output), by sampling the DEM mosaic (script 07's materialized dem.tif - a real
+GeoTIFF, not the lazily-reprojecting dem.vrt it's built from, so this stays cheap to rerun; see
+lib/pipeline.py's materialize_geotiff()) along each edge's real trail polyline.
 
 Raw DEM samples are noisy - summing every up/down step between adjacent samples overcounts
 ascent on flat-looking terrain (a well-known issue for any elevation-gain calculation, not
@@ -26,7 +27,7 @@ would be.
 Usage:
     python data/scripts/08-add-elevation.py
     python data/scripts/08-add-elevation.py --ele-noise-threshold-m 3
-Requires data/dem/dem.vrt (step 07) and data/osm/hut-edges.geojson (step 06).
+Requires data/dem/dem.tif (step 07) and data/osm/hut-edges.geojson (step 06).
 """
 
 import argparse
@@ -51,7 +52,7 @@ dem_config = config["dem"]
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--edges", default=str(OSM_DIR / "hut-edges.geojson"))
-parser.add_argument("--dem", default=str(DEM_DIR / "dem.vrt"))
+parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
 parser.add_argument("--out", default=str(OSM_DIR / "hut-edges.geojson"))
 parser.add_argument("--ele-noise-threshold-m", type=float, default=dem_config["eleNoiseThresholdM"])
 parser.add_argument("--profile-points", type=int, default=dem_config.get("profilePoints", 30))
