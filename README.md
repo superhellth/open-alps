@@ -1,8 +1,9 @@
 Ideas:
  - Show height profile (x)
  - chain contraction for 6
- - train stations
- - parking lots
+ - time table
+ - train stations (x)
+ - parking lots (x)
  - filtering (big one)
  - Seilbahnen
  - Script performance

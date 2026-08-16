@@ -2,6 +2,11 @@
 one source of truth for hyperparameters (bbox, regions, tag filter, graph thresholds)."""
 
 import json
+import platform
+import re
+import shlex
+import shutil
+import subprocess
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
@@ -14,6 +19,40 @@ CONFIG_PATH = DATA_DIR / "pipeline.config.json"
 def load_config():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         return json.load(f)
+
+
+WSL_MICROMAMBA_ROOT = "~/micromamba"
+WSL_MICROMAMBA_BIN = "~/mm/bin/micromamba"
+WSL_TIPPECANOE_ENV = "tippecanoe"
+
+
+def _to_wsl_path(arg: str) -> str:
+    """Translates a Windows absolute path (e.g. E:\\foo\\bar) to its WSL /mnt/ mount equivalent
+    (/mnt/e/foo/bar). Leaves anything that isn't a drive-letter path (flags, numbers) untouched."""
+    m = re.match(r"^([A-Za-z]):[\\/](.*)$", arg)
+    if not m:
+        return arg
+    drive, rest = m.groups()
+    return f"/mnt/{drive.lower()}/{rest.replace(chr(92), '/')}"
+
+
+def run_tippecanoe(tippecanoe_args):
+    """Shells out to tippecanoe, natively if it's on PATH (Linux/macOS), otherwise via WSL - it
+    has no Windows build on conda-forge (linux-64/osx-64 only). See data/README.md's "Displaying
+    the raw OSM trails" section for how the WSL-side micromamba env was created."""
+    if shutil.which("tippecanoe"):
+        subprocess.run(["tippecanoe", *tippecanoe_args], check=True)
+        return
+    if platform.system() != "Windows":
+        raise RuntimeError(
+            "tippecanoe not found on PATH. Install it (conda-forge on Linux/macOS) - see "
+            "data/README.md."
+        )
+    inner_cmd = (
+        f"{WSL_MICROMAMBA_BIN} run -r {WSL_MICROMAMBA_ROOT} -n {WSL_TIPPECANOE_ENV} tippecanoe "
+        + " ".join(shlex.quote(_to_wsl_path(a)) for a in tippecanoe_args)
+    )
+    subprocess.run(["wsl", "bash", "-lc", inner_cmd], check=True)
 
 
 def hut_points(huts_path, filter_bbox=None):

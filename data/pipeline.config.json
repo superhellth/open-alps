@@ -4,7 +4,7 @@
     { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
   ],
-  "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
+  "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary,via_ferrata",
   "graph": {
     "maxEdgeKm": 30,
     "maxSnapM": 100,
@@ -32,5 +32,6 @@
     "eleNoiseThresholdM": 4,
     "profilePoints": 30
   },
-  "trailTiles": { "minZoom": 6, "maxZoom": 14 }
+  "trailTiles": { "minZoom": 6, "maxZoom": 14 },
+  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "hoverSimplifyToleranceDeg": 0.0003 }
 }

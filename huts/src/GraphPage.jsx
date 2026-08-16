@@ -5,9 +5,10 @@ import { leafletLayer, LineSymbolizer } from 'protomaps-leaflet'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
 
-const EDGES_URL = '/data/hut-edges.geojson'
+const EDGE_STATS_URL = '/data/hut-edge-stats.json'
 const HUTS_URL = '/data/huts.geojson'
 const TRAILS_PMTILES_URL = '/data/trails.pmtiles'
+const HUT_EDGES_PMTILES_URL = '/data/hut-edges.pmtiles'
 
 // How close the cursor has to be to a trail polyline to count as "hovering" it, in screen
 // pixels - constant across zoom levels since it's a hit-test tolerance, not a map distance.
@@ -131,6 +132,48 @@ function TrailTilesLayer({ visible }) {
   return null
 }
 
+/**
+ * The derived hut-to-hut edges (data/osm/hut-edges.geojson, ~6,000 edges / ~7M vertices, ~184MB
+ * as plain GeoJSON) render the same way the raw OSM network does - PMTiles + protomaps-leaflet,
+ * not one React <Polyline> per edge - see data/scripts/11-build-hut-edge-tiles.py. Always on,
+ * unlike TrailTilesLayer's toggle, since this is the graph view's primary layer.
+ */
+function HutEdgeTilesLayer() {
+  const map = useMap()
+  const layerRef = useRef(null)
+
+  useEffect(() => {
+    layerRef.current = leafletLayer({
+      url: HUT_EDGES_PMTILES_URL,
+      maxDataZoom: 14,
+      paintRules: [
+        {
+          dataLayer: 'hut_edges',
+          symbolizer: new LineSymbolizer({ color: '#e65100', width: 2, opacity: 0.7 }),
+        },
+      ],
+    })
+    layerRef.current.addTo(map)
+    return () => {
+      map.removeLayer(layerRef.current)
+    }
+  }, [map])
+
+  return null
+}
+
+// Short display labels + color per OSM sac_scale value, easiest -> hardest (matches
+// SAC_SCALE_RANK in data/scripts/06-build-hut-graph.py). Color scales green -> red with grade.
+const SAC_SCALE_LABELS = {
+  strolling: { label: 'Spazierweg', color: '#2e7d32' },
+  hiking: { label: 'T1 Wandern', color: '#558b2f' },
+  mountain_hiking: { label: 'T2 Bergwandern', color: '#9e9d24' },
+  demanding_mountain_hiking: { label: 'T3 anspruchsvolles Bergwandern', color: '#f9a825' },
+  alpine_hiking: { label: 'T4 Alpinwandern', color: '#ef6c00' },
+  demanding_alpine_hiking: { label: 'T5 anspruchsvolles Alpinwandern', color: '#d84315' },
+  difficult_alpine_hiking: { label: 'T6 schwieriges Alpinwandern', color: '#b71c1c' },
+}
+
 const SPARKLINE_WIDTH = 120
 const SPARKLINE_HEIGHT = 32
 
@@ -174,18 +217,24 @@ function GraphPage() {
   const [showTrails, setShowTrails] = useState(false)
 
   useEffect(() => {
-    Promise.all([fetch(EDGES_URL).then((r) => r.json()), fetch(HUTS_URL).then((r) => r.json())])
-      .then(([edgesFc, hutsFc]) => {
+    Promise.all([fetch(EDGE_STATS_URL).then((r) => r.json()), fetch(HUTS_URL).then((r) => r.json())])
+      .then(([edgeStats, hutsFc]) => {
         setEdges(
-          edgesFc.features.map((f) => {
-            const positions = f.geometry.coordinates.map(([lng, lat]) => [lat, lng])
+          edgeStats.map((s) => {
+            // positions here are the RDP-simplified hover-hit-test copy (see
+            // data/scripts/11-build-hut-edge-tiles.py), not the full-resolution trail geometry -
+            // the visible line comes from HutEdgeTilesLayer's PMTiles layer instead.
+            const positions = s.positions.map(([lng, lat]) => [lat, lng])
             return {
-              fromId: f.properties.from_hut_id,
-              toId: f.properties.to_hut_id,
-              distanceM: f.properties.distance_m,
-              ascentM: f.properties.ascent_m,
-              descentM: f.properties.descent_m,
-              elevationProfile: f.properties.elevation_profile,
+              fromId: s.from_hut_id,
+              toId: s.to_hut_id,
+              distanceM: s.distance_m,
+              roadM: s.road_m,
+              ascentM: s.ascent_m,
+              descentM: s.descent_m,
+              elevationProfile: s.elevation_profile,
+              sacScale: s.sac_scale,
+              viaFerrata: s.via_ferrata,
               positions,
               bounds: L.latLngBounds(positions),
             }
@@ -205,7 +254,6 @@ function GraphPage() {
 
   const connectedIds = useMemo(() => new Set(edges.flatMap((e) => [e.fromId, e.toId])), [edges])
   const hutNameById = useMemo(() => new Map(huts.map((h) => [h.id, h.name])), [huts])
-  const hoveredSet = useMemo(() => new Set(hover?.indices ?? []), [hover])
 
   return (
     <div className="app">
@@ -234,17 +282,14 @@ function GraphPage() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Hüttendaten: Alpenverein / ArcGIS'
         />
         <TrailTilesLayer visible={showTrails} />
+        <HutEdgeTilesLayer />
         <HoverInspector edges={edges} onHover={setHover} />
-        {edges.map((edge, i) => (
+        {hover?.indices.map((i) => (
           <Polyline
-            key={`${edge.fromId}-${edge.toId}-${i}`}
-            positions={edge.positions}
+            key={`hover-${i}`}
+            positions={edges[i].positions}
             interactive={false}
-            pathOptions={
-              hoveredSet.has(i)
-                ? { color: '#ff1744', weight: 5, opacity: 1 }
-                : { color: '#e65100', weight: 2, opacity: 0.7 }
-            }
+            pathOptions={{ color: '#ff1744', weight: 5, opacity: 1 }}
           />
         ))}
         {huts.map((hut) => (
@@ -282,6 +327,21 @@ function GraphPage() {
                     ? ` · ↑${Math.round(edge.ascentM)}m ↓${Math.round(edge.descentM)}m`
                     : ''}
                 </span>
+                {(edge.sacScale || edge.viaFerrata) && (
+                  <span className="edge-difficulty-badges">
+                    {edge.sacScale && SAC_SCALE_LABELS[edge.sacScale] && (
+                      <span
+                        className="difficulty-badge"
+                        style={{ backgroundColor: SAC_SCALE_LABELS[edge.sacScale].color }}
+                      >
+                        {SAC_SCALE_LABELS[edge.sacScale].label}
+                      </span>
+                    )}
+                    {edge.viaFerrata && (
+                      <span className="difficulty-badge via-ferrata-badge">Klettersteig</span>
+                    )}
+                  </span>
+                )}
                 <ElevationSparkline values={edge.elevationProfile} />
               </div>
             )

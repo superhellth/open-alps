@@ -38,10 +38,6 @@ Usage:
 """
 
 import argparse
-import platform
-import re
-import shlex
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -50,40 +46,10 @@ import orjson
 from pmtiles.convert import mbtiles_to_pmtiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import OSM_DIR, load_config, run_tippecanoe  # noqa: E402
 
 config = load_config()
 tiles_config = config.get("trailTiles", {})
-
-WSL_MICROMAMBA_ROOT = "~/micromamba"
-WSL_MICROMAMBA_BIN = "~/mm/bin/micromamba"
-WSL_ENV_NAME = "tippecanoe"
-
-
-def _to_wsl_path(arg: str) -> str:
-    """Translates a Windows absolute path (e.g. E:\\foo\\bar) to its WSL /mnt/ mount equivalent
-    (/mnt/e/foo/bar). Leaves anything that isn't a drive-letter path (flags, numbers) untouched."""
-    m = re.match(r"^([A-Za-z]):[\\/](.*)$", arg)
-    if not m:
-        return arg
-    drive, rest = m.groups()
-    return f"/mnt/{drive.lower()}/{rest.replace(chr(92), '/')}"
-
-
-def run_tippecanoe(tippecanoe_args):
-    if shutil.which("tippecanoe"):
-        subprocess.run(["tippecanoe", *tippecanoe_args], check=True)
-        return
-    if platform.system() != "Windows":
-        raise RuntimeError(
-            "tippecanoe not found on PATH. Install it (conda-forge on Linux/macOS) - see "
-            "data/README.md."
-        )
-    inner_cmd = (
-        f"{WSL_MICROMAMBA_BIN} run -r {WSL_MICROMAMBA_ROOT} -n {WSL_ENV_NAME} tippecanoe "
-        + " ".join(shlex.quote(_to_wsl_path(a)) for a in tippecanoe_args)
-    )
-    subprocess.run(["wsl", "bash", "-lc", inner_cmd], check=True)
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))

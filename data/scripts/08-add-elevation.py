@@ -37,9 +37,14 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
+import rasterio.transform
+import rasterio.windows
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "08-add-elevation.py"
 
 config = load_config()
 dem_config = config["dem"]
@@ -111,32 +116,57 @@ all_coords = [c for feat in fc["features"] for c in feat["geometry"]["coordinate
 print(f"sampling {args.dem} for {len(all_coords):,} points across {len(fc['features'])} edges ...")
 with rasterio.open(args.dem) as dem:
     nodata = dem.nodata
-    all_samples = [v[0] for v in dem.sample(all_coords)]
+    lons = np.array([c[0] for c in all_coords])
+    lats = np.array([c[1] for c in all_coords])
+    # rasterio.transform.rowcol() crashes on this GDAL/rasterio build for any array input
+    # longer than 1 (native-level bug, reproduces even on 2 plain floats) - compute the
+    # row/col indices directly from the affine transform coefficients instead.
+    t = dem.transform
+    cols = np.floor((lons - t.c) / t.a).astype(np.int64)
+    rows = np.floor((lats - t.f) / t.e).astype(np.int64)
+
+    # dem.sample() opens+seeks a tiny window per point - fine for a handful of edges, but with
+    # thousands of vertices the per-point call overhead dominates. The DEM mosaic itself is too
+    # big to read wholesale into RAM (tens of GB), but the edges only span a small bbox within
+    # it, so read just that window once and fancy-index it - single I/O call, all points at once.
+    row_off = max(0, int(rows.min()))
+    col_off = max(0, int(cols.min()))
+    row_max = min(dem.height - 1, int(rows.max()))
+    col_max = min(dem.width - 1, int(cols.max()))
+    window = rasterio.windows.Window(
+        col_off, row_off, col_max - col_off + 1, row_max - row_off + 1
+    )
+    with phase(SCRIPT_NAME, "read_dem_window", width=window.width, height=window.height):
+        band = dem.read(1, window=window)
+    rows_clip = np.clip(rows, row_off, row_max) - row_off
+    cols_clip = np.clip(cols, col_off, col_max) - col_off
+    all_samples = band[rows_clip, cols_clip]
 
 nodata_count = 0
 offset = 0
-for i, feat in enumerate(fc["features"]):
-    coords = feat["geometry"]["coordinates"]
-    n = vertex_counts[i]
-    samples = all_samples[offset:offset + n]
-    offset += n
+with phase(SCRIPT_NAME, "per_edge_ascent_profile", edges=len(fc["features"])):
+    for i, feat in enumerate(fc["features"]):
+        coords = feat["geometry"]["coordinates"]
+        n = vertex_counts[i]
+        samples = all_samples[offset:offset + n]
+        offset += n
 
-    elevations = []
-    for s in samples:
-        if nodata is not None and s == nodata:
-            nodata_count += 1
-            continue
-        elevations.append(float(s))
+        elevations = []
+        for s in samples:
+            if nodata is not None and s == nodata:
+                nodata_count += 1
+                continue
+            elevations.append(float(s))
 
-    ascent, descent = ascent_descent(elevations, args.ele_noise_threshold_m)
-    feat["properties"]["ascent_m"] = round(ascent, 1)
-    feat["properties"]["descent_m"] = round(descent, 1)
-    feat["properties"]["elevation_profile"] = elevation_profile(
-        coords, samples, nodata, args.profile_points
-    )
+        ascent, descent = ascent_descent(elevations, args.ele_noise_threshold_m)
+        feat["properties"]["ascent_m"] = round(ascent, 1)
+        feat["properties"]["descent_m"] = round(descent, 1)
+        feat["properties"]["elevation_profile"] = elevation_profile(
+            coords, samples, nodata, args.profile_points
+        )
 
-    if i % 200 == 0:
-        print(f"  {i}/{len(fc['features'])} edges processed")
+        if i % 200 == 0:
+            print(f"  {i}/{len(fc['features'])} edges processed")
 
 if nodata_count:
     print(f"warning: {nodata_count} sample points had no DEM coverage (outside downloaded tiles)")

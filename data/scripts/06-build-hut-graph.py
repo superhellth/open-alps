@@ -71,6 +71,9 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "06-build-hut-graph.py"
 
 config = load_config()
 
@@ -93,6 +96,22 @@ def haversine_m(lon1, lat1, lon2, lat2):
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+# Canonical OSM sac_scale values, ordered easiest -> hardest (roughly SAC T1-T6). Ranked so a
+# multi-way edge can report the hardest segment walked (see rollup in _path_for below). Free-text
+# typos/garbage values (there are ~30 of those in the raw data, e.g. "fixme", "T3", "2") are left
+# unranked and simply don't contribute to an edge's max.
+SAC_SCALE_RANK = {
+    "strolling": 0,
+    "hiking": 1,
+    "mountain_hiking": 2,
+    "demanding_mountain_hiking": 3,
+    "alpine_hiking": 4,
+    "demanding_alpine_hiking": 5,
+    "difficult_alpine_hiking": 6,
+}
+SAC_SCALE_BY_RANK = {v: k for k, v in SAC_SCALE_RANK.items()}
 
 
 def haversine_m_vec(lon1, lat1, lon2, lat2):
@@ -121,6 +140,8 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_dist = []  # real haversine meters
         self.edges_w = []  # routing cost: dist, penalized on road-type ways
         self.edges_road = []  # bool, one per edge - is this a penalized (road-type) way
+        self.edges_sac_rank = []  # int, one per edge - SAC_SCALE_RANK value, or -1 if unrated
+        self.edges_via_ferrata = []  # bool, one per edge - via_ferrata_scale tag or highway=via_ferrata
         self.way_count = 0
 
     def _idx_for(self, node_id, lon, lat):
@@ -147,18 +168,25 @@ class WayGraphHandler(osmium.SimpleHandler):
             lons[k] = lon
             lats[k] = lat
         dists = haversine_m_vec(lons[:-1], lats[:-1], lons[1:], lats[1:])
-        is_road = w.tags.get("highway", "") in self.road_tags
+        highway = w.tags.get("highway", "")
+        is_road = highway in self.road_tags
         costs = dists * self.road_penalty_factor if is_road else dists
+        sac_rank = SAC_SCALE_RANK.get(w.tags.get("sac_scale", ""), -1)
+        is_via_ferrata = highway == "via_ferrata" or "via_ferrata_scale" in w.tags
+        n_edges = len(nodes) - 1
         self.edges_i.extend(idxs[:-1].tolist())
         self.edges_j.extend(idxs[1:].tolist())
         self.edges_dist.extend(dists.tolist())
         self.edges_w.extend(costs.tolist())
-        self.edges_road.extend([is_road] * (len(nodes) - 1))
+        self.edges_road.extend([is_road] * n_edges)
+        self.edges_sac_rank.extend([sac_rank] * n_edges)
+        self.edges_via_ferrata.extend([is_via_ferrata] * n_edges)
 
 
 print(f"streaming {args.trails} ...")
 handler = WayGraphHandler(config["graph"]["roadHighwayTags"], args.road_penalty_factor)
-handler.apply_file(args.trails, locations=True)
+with phase(SCRIPT_NAME, "stream_osm"):
+    handler.apply_file(args.trails, locations=True)
 n_nodes = len(handler.coords)
 n_edges = len(handler.edges_i)
 print(f"graph nodes: {n_nodes:,}, edges: {n_edges:,}")
@@ -169,24 +197,32 @@ j = np.array(handler.edges_j, dtype=np.int32)
 dist_arr = np.array(handler.edges_dist, dtype=np.float64)
 w = np.array(handler.edges_w, dtype=np.float64)
 road_arr = np.array(handler.edges_road, dtype=bool)
+sac_rank_arr = np.array(handler.edges_sac_rank, dtype=np.int8)
+via_ferrata_arr = np.array(handler.edges_via_ferrata, dtype=bool)
 
 print("building igraph graph ...")
-graph = ig.Graph(
-    n=n_nodes,
-    edges=np.column_stack((i, j)),
-    edge_attrs={"weight": w, "dist": dist_arr, "is_road": road_arr},
-    directed=False,
-)
+with phase(SCRIPT_NAME, "build_igraph", nodes=n_nodes, edges=n_edges):
+    graph = ig.Graph(
+        n=n_nodes,
+        edges=np.column_stack((i, j)),
+        edge_attrs={
+            "weight": w, "dist": dist_arr, "is_road": road_arr,
+            "sac_rank": sac_rank_arr, "is_via_ferrata": via_ferrata_arr,
+        },
+        directed=False,
+    )
 
 print("building node KDTree for hut snapping ...")
-node_tree = cKDTree(coords)
+with phase(SCRIPT_NAME, "build_kdtree", nodes=n_nodes):
+    node_tree = cKDTree(coords)
 
 # Component membership per node, computed once. Dijkstra can't know a target is unreachable
 # without exhausting the whole connected component it started in - on a graph this size that's
 # an expensive way to fail. Filtering candidates to the same component first turns that into an
 # O(1) lookup instead of a full traversal per unreachable pair.
 print("computing connected components ...")
-component_id = np.array(graph.connected_components().membership, dtype=np.int32)
+with phase(SCRIPT_NAME, "connected_components"):
+    component_id = np.array(graph.connected_components().membership, dtype=np.int32)
 
 with open(args.huts, encoding="utf-8") as f:
     huts_fc = json.load(f)
@@ -267,22 +303,23 @@ def _distances_for(item):
 
 kept_pairs = []  # (h, c)
 seen_pairs = set()
-with ThreadPoolExecutor(max_workers=args.workers) as pool:
-    for done, (item, dists) in enumerate(zip(work_items, pool.map(_distances_for, work_items))):
-        h, _, candidates, unique_target_nodes = item
-        dists_by_node = dict(zip(unique_target_nodes, dists))
-        for c in candidates:
-            d = dists_by_node[int(snapped_node[c])]
-            pair = tuple(sorted((h, c)))
-            if pair in seen_pairs:
-                continue
-            if not np.isfinite(d) or d > max_edge_m:
-                continue
-            seen_pairs.add(pair)
-            kept_pairs.append((h, c))
+with phase(SCRIPT_NAME, "pass1_distances", huts=len(work_items)):
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for done, (item, dists) in enumerate(zip(work_items, pool.map(_distances_for, work_items))):
+            h, _, candidates, unique_target_nodes = item
+            dists_by_node = dict(zip(unique_target_nodes, dists))
+            for c in candidates:
+                d = dists_by_node[int(snapped_node[c])]
+                pair = tuple(sorted((h, c)))
+                if pair in seen_pairs:
+                    continue
+                if not np.isfinite(d) or d > max_edge_m:
+                    continue
+                seen_pairs.add(pair)
+                kept_pairs.append((h, c))
 
-        if done % 100 == 0:
-            print(f"  {done}/{len(work_items)} huts processed, {len(kept_pairs)} edges so far")
+            if done % 100 == 0:
+                print(f"  {done}/{len(work_items)} huts processed, {len(kept_pairs)} edges so far")
 
 print(f"total edges: {len(kept_pairs)}")
 
@@ -300,6 +337,8 @@ def _path_for(pair):
     tgt = int(snapped_node[c])
     distance_m = 0.0
     road_m = 0.0
+    max_sac_rank = -1  # -1 = no rated segment on this edge
+    has_via_ferrata = False
     if src == tgt:
         trail_coords = [tuple(coords[src])]
     else:
@@ -317,6 +356,13 @@ def _path_for(pair):
             distance_m += e["dist"]
             if e["is_road"]:
                 road_m += e["dist"]
+            # An edge's overall grade is the hardest segment walked along it, same logic as
+            # road_m below - one demanding stretch makes the whole hut-to-hut route that grade,
+            # regardless of how easy the rest is.
+            if e["sac_rank"] > max_sac_rank:
+                max_sac_rank = e["sac_rank"]
+            if e["is_via_ferrata"]:
+                has_via_ferrata = True
             cur = nxt
         trail_coords = [tuple(coords[v]) for v in vseq] if len(vseq) >= 2 else [tuple(coords[src]), tuple(coords[tgt])]
 
@@ -328,6 +374,8 @@ def _path_for(pair):
             "to_hut_id": hut_ids[c],
             "distance_m": round(distance_m, 1),
             "road_m": round(road_m, 1),
+            "sac_scale": SAC_SCALE_BY_RANK.get(max_sac_rank),
+            "via_ferrata": has_via_ferrata,
             "source": "osm",
         },
         "geometry": {
@@ -338,11 +386,12 @@ def _path_for(pair):
 
 
 features = []
-with ThreadPoolExecutor(max_workers=args.workers) as pool:
-    for idx, feature in enumerate(pool.map(_path_for, kept_pairs)):
-        features.append(feature)
-        if idx % 100 == 0:
-            print(f"  {idx}/{len(kept_pairs)} paths fetched")
+with phase(SCRIPT_NAME, "pass2_paths", edges=len(kept_pairs)):
+    with ThreadPoolExecutor(max_workers=args.workers) as pool:
+        for idx, feature in enumerate(pool.map(_path_for, kept_pairs)):
+            features.append(feature)
+            if idx % 100 == 0:
+                print(f"  {idx}/{len(kept_pairs)} paths fetched")
 
 out_fc = {"type": "FeatureCollection", "features": features}
 with open(args.out, "w", encoding="utf-8") as f:

@@ -29,6 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import CONFIG_PATH, DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 STEP_NAMES = {
@@ -42,6 +43,7 @@ STEP_NAMES = {
     8: "add elevation",
     9: "build trail vector tiles",
     10: "fetch stations & parking",
+    11: "build hut-edge vector tiles",
 }
 
 
@@ -59,7 +61,7 @@ def parse_steps(spec: str) -> set[int]:
         raise SystemExit(f"--only: can't parse {spec!r} (expected e.g. '6', '1,2', '3-6')")
     unknown = steps - STEP_NAMES.keys()
     if unknown:
-        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-10)")
+        raise SystemExit(f"unknown step(s): {sorted(unknown)} (valid: 1-11)")
     return steps
 
 
@@ -96,7 +98,8 @@ def step(n, already_fresh, do_run):
         print(f"{label} skip (up to date) ==", flush=True)
         return
     print(label, flush=True)
-    do_run()
+    with phase("run_all", f"{n:02d}-{STEP_NAMES[n]}"):
+        do_run()
 
 
 region_names = [r["name"] for r in config["regions"]]
@@ -131,9 +134,14 @@ step(9, lambda: fresh(OSM_DIR / "trails.pmtiles"),
 step(10, lambda: fresh(OSM_DIR / "stations.geojson") and fresh(OSM_DIR / "parking.geojson"),
      lambda: run("05b-fetch-stations-parking.py"))
 
+step(11, lambda: fresh(OSM_DIR / "hut-edges.pmtiles") and fresh(OSM_DIR / "hut-edge-stats.json"),
+     lambda: run("11-build-hut-edge-tiles.py"))
+
 if 8 in selected:
     print(f"done -> {OSM_DIR / 'hut-edges.geojson'}", flush=True)
 elif 6 in selected:
     print(f"done -> {OSM_DIR / 'hut-edges.geojson'} (no elevation - steps 7/8 not selected)", flush=True)
 if 9 in selected:
     print(f"done -> {OSM_DIR / 'trails.pmtiles'}", flush=True)
+if 11 in selected:
+    print(f"done -> {OSM_DIR / 'hut-edges.pmtiles'}, {OSM_DIR / 'hut-edge-stats.json'}", flush=True)

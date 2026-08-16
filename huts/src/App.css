@@ -71,3 +71,22 @@ header span {
   margin-top: 0.2rem;
   display: block;
 }
+
+.edge-difficulty-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-top: 0.2rem;
+}
+
+.difficulty-badge {
+  color: #fff;
+  border-radius: 3px;
+  padding: 0.05rem 0.4rem;
+  font-size: 0.7rem;
+  white-space: nowrap;
+}
+
+.via-ferrata-badge {
+  background: #6a1b9a;
+}
