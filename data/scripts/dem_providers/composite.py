@@ -5,9 +5,12 @@ fetch+reproject pipeline, not just download raw tiles) - see fetch_and_build bel
 07-fetch-dem.py calls directly for provider == "composite" instead of the usual two-step
 sequence.
 
-gdalbuildvrt takes the first-listed source for overlapping pixels, so region order in
-providerConfig.regions is meaningful where two regions' bboxes overlap - list the
-higher-resolution/higher-priority source first.
+gdalbuildvrt takes the LAST-listed source for overlapping pixels (not the first - easy to get
+backwards), so region order in providerConfig.regions is meaningful where two regions' bboxes
+overlap - list the higher-resolution/higher-priority source last. This only matters where two
+regions both have *real* data at a pixel; a region's own genuine NoData (see bavaria_dgm.py's
+VRT_NODATA) is treated as transparent by gdalbuildvrt's default nodata handling, so a gap in the
+last-listed source still lets an earlier source's real data show through.
 
 Regions built from different sources can end up with different band color interpretation (e.g.
 a GeoTIFF-derived VRT comes out ColorInterp=Gray, while a VRT built by warping an ungeoreferenced
@@ -20,6 +23,8 @@ Gray band before the final merge so this can't happen."""
 import subprocess
 import sys
 from pathlib import Path
+
+import rasterio
 
 from . import get_provider
 
@@ -41,15 +46,21 @@ def _points_for_region(filter_bbox: dict) -> list[list[float]]:
 def _normalize_colorinterp(region_vrt: Path) -> Path:
     """Rewrites region_vrt as a thin VRT with ColorInterp explicitly forced to Gray, so the final
     gdalbuildvrt merge (see module docstring) doesn't silently drop it. A no-op passthrough when
-    region_vrt doesn't exist on disk (e.g. under test doubles that don't perform real I/O)."""
+    region_vrt doesn't exist on disk (e.g. under test doubles that don't perform real I/O).
+
+    gdal_translate carries over the source's NoDataValue by default, but that default has proven
+    fragile across GDAL builds - passed through explicitly here (rather than trusted implicitly)
+    so a region's real NoData (e.g. bavaria_dgm.py's VRT_NODATA marking its tile gaps) can never
+    silently turn into an opaque value in the merge gdalbuildvrt does downstream."""
     if not region_vrt.exists():
         return region_vrt
     normalized = region_vrt.with_name(region_vrt.stem + "_normalized.vrt")
-    subprocess.run(
-        ["gdal_translate", "-of", "VRT", "-colorinterp", "gray",
-         str(region_vrt), str(normalized)],
-        check=True,
-    )
+    translate_args = ["gdal_translate", "-of", "VRT", "-colorinterp", "gray"]
+    with rasterio.open(region_vrt) as src:
+        if src.nodata is not None:
+            translate_args += ["-a_nodata", str(src.nodata)]
+    translate_args += [str(region_vrt), str(normalized)]
+    subprocess.run(translate_args, check=True)
     return normalized
 
 

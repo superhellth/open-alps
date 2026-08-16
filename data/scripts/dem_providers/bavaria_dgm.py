@@ -246,10 +246,24 @@ def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
     return tile_paths
 
 
+VRT_NODATA = -9999.0
+
+
 def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # Source is an ungeoreferenced ASCII XYZ grid, implicitly in EPSG:25832 (UTM 32N) - unlike
     # at_bev.py's GeoTIFF source, gdalwarp needs -s_srs since the XYZ driver can't read a CRS off
     # the file itself. Same warp-then-mosaic pattern otherwise.
+    #
+    # The XYZ grid carries no NoData value of its own (every post in a downloaded tile is real
+    # data), but existing_tile_ids() only downloads tiles that actually exist - 1km cells with no
+    # coverage (e.g. ones straddling the Austrian border, see module docstring) are simply absent
+    # from tile_paths. The mosaic's overall extent still spans the bounding rectangle of every
+    # tile, so those absent cells are gaps *inside* that rectangle. Without an explicit NoData
+    # value, gdalbuildvrt fills uncovered pixels with 0 instead of flagging them - composite.py's
+    # final merge (and 08-add-elevation.py's own nodata check) then can't distinguish that 0 from
+    # a real elevation reading, so a gap here silently stomps valid data from other sources it's
+    # merged with. -vrtnodata makes gdalbuildvrt fill gaps with VRT_NODATA instead, so they read
+    # as proper NoData throughout the rest of the pipeline.
     warped_dir = out_vrt_path.parent / "bavaria_dgm_warped"
     warped_dir.mkdir(exist_ok=True)
 
@@ -279,7 +293,8 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     file_list_path = warped_dir / "warped_files.txt"
     file_list_path.write_text("\n".join(str(p) for p in warped_paths), encoding="utf-8")
     subprocess.run(
-        ["gdalbuildvrt", "-overwrite", "-input_file_list", str(file_list_path), str(out_vrt_path)],
+        ["gdalbuildvrt", "-overwrite", "-vrtnodata", str(VRT_NODATA),
+         "-input_file_list", str(file_list_path), str(out_vrt_path)],
         check=True,
     )
     return out_vrt_path
