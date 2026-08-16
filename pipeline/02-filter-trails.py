@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Filters each raw region extract down to hiking-relevant ways, using the tag filter from
-../pipeline.config.json. Preserves full node/way topology (osmium tags-filter keeps referenced
+pipeline.config.json. Preserves full node/way topology (osmium tags-filter keeps referenced
 nodes by default) - required for graph-building later. Requires osmium-tool installed natively
 (conda install -c conda-forge osmium-tool) and on PATH - no Docker.
-Usage: python data/scripts/02-filter-trails.py
+Usage: python pipeline/02-filter-trails.py
 """
 
 import subprocess

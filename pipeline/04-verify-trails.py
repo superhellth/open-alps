@@ -2,7 +2,7 @@
 """
 Sanity-check a .osm.pbf file: bbox, node/way/relation counts. Exits nonzero if the file is
 missing or empty, so run_all.py can gate on it automatically.
-Usage: python data/scripts/04-verify-trails.py [filename]   (default: trails.osm.pbf)
+Usage: python pipeline/04-verify-trails.py [filename]   (default: trails.osm.pbf)
 """
 
 import subprocess

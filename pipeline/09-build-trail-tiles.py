@@ -3,7 +3,7 @@
 Builds a single static PMTiles vector-tile archive from trails.osm.pbf (script 03's output), so
 the app can show the full raw OSM trail network as a toggleable layer without a server - PMTiles
 is a plain file read via HTTP range requests, same "no backend" shape as every other asset in
-this project. See data/README.md's "Displaying the raw OSM trails" section for why this exists
+this project. See pipeline/README.md's "Displaying the raw OSM trails" section for why this exists
 instead of shipping GeoJSON (26.5M nodes is too much for the browser) or standing up a tile
 server (this project has none, deliberately).
 
@@ -29,12 +29,12 @@ Requires, on PATH/importable inside the alpen-osm env:
 
 tippecanoe has no Windows build on conda-forge (linux-64/osx-64 only), so on Windows this script
 shells out to it inside WSL instead, via a separate linux-64 micromamba env there - see
-data/README.md's "Displaying the raw OSM trails" section for how that env was created. Native
+pipeline/README.md's "Displaying the raw OSM trails" section for how that env was created. Native
 `tippecanoe` on PATH is used automatically if present (e.g. on Linux/macOS running this directly).
 
 Usage:
-    python data/scripts/09-build-trail-tiles.py
-    python data/scripts/09-build-trail-tiles.py --min-zoom 6 --max-zoom 14
+    python pipeline/09-build-trail-tiles.py
+    python pipeline/09-build-trail-tiles.py --min-zoom 6 --max-zoom 14
 """
 
 import argparse

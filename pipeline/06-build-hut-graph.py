@@ -7,7 +7,7 @@ Why this replaces 06-08:
     That overhead is what didn't fit in RAM - not the raw data. 26.5M nodes as plain (lat, lon)
     float32 pairs is ~200MB; as a NetworkX graph it's many GB. Shrinking the *input area* (the
     06 buffer-radius approach) never fixed that, because Alpine huts are packed densely enough
-    that any buffer big enough to matter still covers most of the region (see data/README.md).
+    that any buffer big enough to matter still covers most of the region (see pipeline/README.md).
 
 What this does instead:
     1. Streams trails.osm.pbf once with pyosmium (C-backed, doesn't build Python objects for
@@ -48,9 +48,9 @@ parallelism without the cost of pickling the graph into worker processes.
 
 Usage:
     pip install osmium scipy numpy python-igraph   # pypi package is "osmium", not "pyosmium"
-    python data/scripts/06-build-hut-graph.py
-    # or override the ../pipeline.config.json defaults for one run:
-    python data/scripts/06-build-hut-graph.py --max-edge-km 10 --max-snap-m 200 --workers 8
+    python pipeline/06-build-hut-graph.py
+    # or override the pipeline.config.json defaults for one run:
+    python pipeline/06-build-hut-graph.py --max-edge-km 10 --max-snap-m 200 --workers 8
 
 Requires only data/osm/trails.osm.pbf (the already-merged, unclipped file from step 3) and
 data/osm/huts.geojson (step 5). No Docker, no OSMnx, no buffer/extract step needed.

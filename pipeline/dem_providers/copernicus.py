@@ -1,6 +1,6 @@
 """Copernicus GLO-30 DEM provider (AWS Open Data, no auth) - 30m global coverage, one tile per
 whole degree of lat/lon. Already EPSG:4326, so to_4326_vrt is a plain gdalbuildvrt, no reprojection.
-See data/README.md's DEM section for why a higher-resolution regional provider (at_bev, bavaria_dgm)
+See pipeline/README.md's DEM section for why a higher-resolution regional provider (at_bev, bavaria_dgm)
 might be preferred where available - this one's the default because it has global coverage and
 needs no per-region tile-index lookup."""
 

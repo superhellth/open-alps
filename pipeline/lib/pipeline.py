@@ -10,10 +10,11 @@ import subprocess
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = SCRIPTS_DIR.parent
+REPO_ROOT = SCRIPTS_DIR.parent
+DATA_DIR = REPO_ROOT / "data"
 OSM_DIR = DATA_DIR / "osm"
 DEM_DIR = DATA_DIR / "dem"
-CONFIG_PATH = DATA_DIR / "pipeline.config.json"
+CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
 
 
 def load_config():
@@ -72,7 +73,7 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
 
 def run_tippecanoe(tippecanoe_args):
     """Shells out to tippecanoe, natively if it's on PATH (Linux/macOS), otherwise via WSL - it
-    has no Windows build on conda-forge (linux-64/osx-64 only). See data/README.md's "Displaying
+    has no Windows build on conda-forge (linux-64/osx-64 only). See pipeline/README.md's "Displaying
     the raw OSM trails" section for how the WSL-side micromamba env was created."""
     if shutil.which("tippecanoe"):
         subprocess.run(["tippecanoe", *tippecanoe_args], check=True)
@@ -80,7 +81,7 @@ def run_tippecanoe(tippecanoe_args):
     if platform.system() != "Windows":
         raise RuntimeError(
             "tippecanoe not found on PATH. Install it (conda-forge on Linux/macOS) - see "
-            "data/README.md."
+            "pipeline/README.md."
         )
     inner_cmd = (
         f"{WSL_MICROMAMBA_BIN} run -r {WSL_MICROMAMBA_ROOT} -n {WSL_TIPPECANOE_ENV} tippecanoe "

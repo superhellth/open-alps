@@ -13,7 +13,7 @@ Parking is mapped as ways/polygons (the lot's outline), not points - `--geometry
 makes osmium export emit each polygon's centroid instead of its shape, keeping this layer a plain
 Point FeatureCollection like every other layer here.
 
-Usage: python data/scripts/05b-fetch-stations-parking.py
+Usage: python pipeline/05b-fetch-stations-parking.py
 Requires osmium-tool on PATH (same as 02-filter-trails.py).
 """
 

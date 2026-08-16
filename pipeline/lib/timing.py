@@ -1,5 +1,5 @@
 """Records how long pipeline phases take, so later runs can be compared against real numbers
-instead of guesses - see data/CLAUDE.md for why this matters (scope is expected to grow past
+instead of guesses - see pipeline/CLAUDE.md for why this matters (scope is expected to grow past
 AT+Bayern, and this is how we'll see which phases stop scaling).
 
 Appends one JSON line per phase to data/timings.jsonl. A phase's line is only written if its
@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-TIMINGS_PATH = Path(__file__).resolve().parent.parent.parent / "timings.jsonl"
+TIMINGS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "timings.jsonl"
 
 
 @contextmanager

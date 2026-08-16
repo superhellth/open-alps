@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Downloads raw Geofabrik regional extracts listed in ../pipeline.config.json.
+Downloads raw Geofabrik regional extracts listed in pipeline.config.json.
 Re-run to refresh to the latest Geofabrik snapshot (they regenerate daily, not pinned/versioned).
-Usage: python data/scripts/01-download-extracts.py
+Usage: python pipeline/01-download-extracts.py
 """
 
 import sys

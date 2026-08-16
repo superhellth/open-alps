@@ -23,8 +23,8 @@ Output:
        separate, much smaller copy just for that purpose.
 
 Usage:
-    python data/scripts/11-build-hut-edge-tiles.py
-    python data/scripts/11-build-hut-edge-tiles.py --min-zoom 6 --max-zoom 14
+    python pipeline/11-build-hut-edge-tiles.py
+    python pipeline/11-build-hut-edge-tiles.py --min-zoom 6 --max-zoom 14
 """
 
 import argparse

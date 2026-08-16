@@ -25,8 +25,8 @@ over the actual read cost, so batching is a bigger win here than parallelizing t
 would be.
 
 Usage:
-    python data/scripts/08-add-elevation.py
-    python data/scripts/08-add-elevation.py --ele-noise-threshold-m 3
+    python pipeline/08-add-elevation.py
+    python pipeline/08-add-elevation.py --ele-noise-threshold-m 3
 Requires data/dem/dem.tif (step 07) and data/osm/hut-edges.geojson (step 06).
 """
 

@@ -54,7 +54,8 @@ endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
 
 ## Hut-to-hut routing graph
 
-Offline trail-graph precompute pipeline under `data/`, whose outputs (`huts.geojson`,
-`trails.pmtiles`, `hut-edges.pmtiles`, `hut-edge-stats.json`, `stations.geojson`,
-`parking.geojson`) are hand-copied into `huts/public/data/` and rendered by `GraphPage.jsx`/
-`App.jsx` above — see `data/CLAUDE.md` for details.
+Offline trail-graph precompute pipeline under `pipeline/` (code) writing into `data/` (gitignored
+raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, `hut-edges.pmtiles`,
+`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) are hand-copied into
+`huts/public/data/` and rendered by `GraphPage.jsx`/`App.jsx` above — see `pipeline/CLAUDE.md` for
+details.

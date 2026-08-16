@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
 Fetches hut point locations from the Alpenverein ArcGIS layer, filtered to the bbox in
-../pipeline.config.json (Austria + Bavaria by default), and writes them as a GeoJSON
+pipeline.config.json (Austria + Bavaria by default), and writes them as a GeoJSON
 FeatureCollection.
-Usage: python data/scripts/05-fetch-huts.py
+Usage: python pipeline/05-fetch-huts.py
 Full field/endpoint reference: docs/alpenverein-api.md
 """
 

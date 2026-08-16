@@ -2,15 +2,15 @@
 """
 Fetches DEM tiles for the region(s) configured in pipeline.config.json, builds a single
 EPSG:4326 GDAL VRT (data/dem/dem.vrt), then materializes it into a real GeoTIFF
-(data/dem/dem.tif) that 08-add-elevation.py samples - see data/scripts/dem_providers/base.py for
-the provider contract, and data/README.md's DEM section for why this is pluggable (Copernicus
+(data/dem/dem.tif) that 08-add-elevation.py samples - see pipeline/dem_providers/base.py for
+the provider contract, and pipeline/README.md's DEM section for why this is pluggable (Copernicus
 GLO-30's global 30m coverage is the default; Austria/Bavaria have higher-resolution regional
 alternatives with their own coverage limits).
 
 Materializing (rather than having 08-add-elevation.py read dem.vrt directly) is what keeps step
 08 cheap to rerun - see materialize_geotiff()'s docstring in lib/pipeline.py.
 
-Usage: python data/scripts/07-fetch-dem.py
+Usage: python pipeline/07-fetch-dem.py
 """
 
 import sys

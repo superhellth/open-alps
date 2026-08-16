@@ -7,7 +7,7 @@ backend-free per the project's architecture.
 
 This covers the rationale for steps 1-4 (download → filter → merge → verify). For the runnable
 scripts, the hyperparameter config (`pipeline.config.json`), and the exact reproduction commands,
-see `data/README.md`. For why the graph-build step (5-6) is a streamed pyosmium+igraph build and
+see `pipeline/README.md`. For why the graph-build step (5-6) is a streamed pyosmium+igraph build and
 not an OSMnx buffer-clip, see the "Rejected" section of that same README.
 
 ## Why this shape
@@ -16,7 +16,7 @@ not an OSMnx buffer-clip, see the "Rejected" section of that same README.
   Slovenia 179, South Tyrol/IT ~89, CH 10, LI 2 — checked via the ArcGIS hut layer, see
   `docs/alpenverein-api.md`), but AT+DE alone already cover the majority of huts. Extending to
   CH/IT/SI later just means adding a `regions` entry per country to `pipeline.config.json` (see
-  `data/README.md`) — steps 1–3 already loop over that list, nothing to edit in the scripts.
+  `pipeline/README.md`) — steps 1–3 already loop over that list, nothing to edit in the scripts.
 - **Geofabrik `.osm.pbf` extracts, not live Overpass queries.** Overpass is fine for prototyping a
   small bbox but has query size/time limits and shouldn't be hit repeatedly for a full-region
   pull. A one-time download processed locally is more robust and repeatable.
@@ -28,13 +28,13 @@ not an OSMnx buffer-clip, see the "Rejected" section of that same README.
 - **`osmium-tool` via a native conda-forge binary, not Docker.** An earlier version of this
   pipeline shelled out to `stefda/osmium-tool` over Docker because `osmium-tool` wasn't installed
   natively. That's gone — the whole pipeline is plain Python now (`subprocess` calls to a native
-  `osmium` binary), no Docker/bash/Node dependency. See `data/README.md` "Setup" for how the
+  `osmium` binary), no Docker/bash/Node dependency. See `pipeline/README.md` "Setup" for how the
   `alpen-osm` conda env is created (via `micromamba`, since this machine's `base` conda env can't
   solve `-c conda-forge` specs in reasonable time).
 
 ## Prerequisites
 
-- The `alpen-osm` conda env active (`conda activate alpen-osm`) — see `data/README.md` "Setup".
+- The `alpen-osm` conda env active (`conda activate alpen-osm`) — see `pipeline/README.md` "Setup".
 - ~2GB free disk for raw extracts + filtered output.
 
 ## Directory layout
@@ -58,7 +58,7 @@ Not committed to version control (no `.gitignore` exists yet since this repo has
 
 ```bash
 conda activate alpen-osm
-python data/scripts/01-download-extracts.py
+python pipeline/01-download-extracts.py
 ```
 
 Sizes at time of writing: Austria ~807MB, Bavaria ~849MB. Geofabrik regenerates these regularly
@@ -68,7 +68,7 @@ geometry changes rarely, but note this if exact reproducibility across time matt
 ### 2. Filter each extract to hiking-relevant ways
 
 ```bash
-python data/scripts/02-filter-trails.py
+python pipeline/02-filter-trails.py
 ```
 
 Runs `osmium tags-filter` (native binary, via `subprocess`) once per region in
@@ -82,7 +82,7 @@ selected tags.
 ### 3. Merge into one file
 
 ```bash
-python data/scripts/03-merge-trails.py
+python pipeline/03-merge-trails.py
 ```
 
 Result: `data/osm/trails.osm.pbf`, 264MB.
@@ -90,7 +90,7 @@ Result: `data/osm/trails.osm.pbf`, 264MB.
 ### 4. Sanity-check
 
 ```bash
-python data/scripts/04-verify-trails.py
+python pipeline/04-verify-trails.py
 ```
 
 Exits nonzero if the file is missing or empty (so `run_all.py` can gate on it), then prints
@@ -113,8 +113,8 @@ fix — both resolve switchback-scale terrain, at the cost of being regional rat
 single provider covers this pipeline's whole AT+Bayern scope) and needing more
 download/storage/runtime than Copernicus's one flat global tileset. The `composite` meta-provider
 exists to combine them per sub-region without forcing one DEM source on the whole bbox — see
-`data/scripts/dem_providers/base.py` for the provider contract every source implements, and
-`data/README.md`'s Config section for the registered providers and how to select one via
+`pipeline/dem_providers/base.py` for the provider contract every source implements, and
+`pipeline/README.md`'s Config section for the registered providers and how to select one via
 `pipeline.config.json`'s `dem.provider`/`dem.providerConfig`.
 
 ## Not done yet
@@ -122,5 +122,5 @@ exists to combine them per sub-region without forcing one DEM source on the whol
 - Route-relation (`r/route=hiking`) pull for the named-trail overlay layer (E4/E5, Karnischer
   Höhenweg-style routes), separate from the Alpenverein `toursearchApi` catalogue (see
   `docs/alpenverein-api.md` §3 for that one — 26 predefined tours, not a general trail network).
-- Everything else tracked in `data/README.md`'s own "Not done yet" (scope beyond AT+Bayern, and
+- Everything else tracked in `pipeline/README.md`'s own "Not done yet" (scope beyond AT+Bayern, and
   wiring `hut-edges.geojson` into the `huts/` app).

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Runs the OSM hut-graph pipeline end to end, driven by ../pipeline.config.json.
+Runs the OSM hut-graph pipeline end to end, driven by pipeline.config.json.
 
 By default runs all steps 01-08, skipping any step whose output already exists and is newer
 than the config file (delete an output, or edit pipeline.config.json, to force it to rerun).
@@ -10,15 +10,15 @@ via --only always run (freshness check is skipped for them, since picking a step
 means you want it to run now).
 
 Usage:
-    python data/scripts/run_all.py                    # full pipeline, idempotent
-    python data/scripts/run_all.py --only 6            # just rebuild the graph
-    python data/scripts/run_all.py --only 5,6           # re-fetch huts + rebuild graph
-    python data/scripts/run_all.py --only 3-6           # merge onward
-    python data/scripts/run_all.py --only 6 -- --max-edge-km 15   # step 6 with its own flags
+    python pipeline/run_all.py                    # full pipeline, idempotent
+    python pipeline/run_all.py --only 6            # just rebuild the graph
+    python pipeline/run_all.py --only 5,6           # re-fetch huts + rebuild graph
+    python pipeline/run_all.py --only 3-6           # merge onward
+    python pipeline/run_all.py --only 6 -- --max-edge-km 15   # step 6 with its own flags
 
 Any args after a literal `--` are passed through to 06-build-hut-graph.py. Step 8's own flag
 (--ele-noise-threshold-m) isn't forwarded here to keep that unambiguous when both are selected
-at once - run `python data/scripts/08-add-elevation.py --ele-noise-threshold-m 3` directly for
+at once - run `python pipeline/08-add-elevation.py --ele-noise-threshold-m 3` directly for
 that.
 """
 
