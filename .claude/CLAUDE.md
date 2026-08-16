@@ -33,10 +33,18 @@ not be called in a loop over the whole hut list.
 
 ## App structure
 
-`huts/src/App.jsx` is the whole app: one `useEffect` fetch of the ArcGIS layer, mapped into flat
-`{id, name, elevation, category, club, lat, lng}` objects, rendered as react-leaflet
-`CircleMarker` + hover `Tooltip` over OSM raster tiles. Requesting `outSR=4326` is what makes
-`geometry.x/y` directly usable as lng/lat by Leaflet.
+`huts/src/main.jsx` is a hash-based router with no library: `#graph` renders `GraphPage.jsx`,
+anything else renders `App.jsx`.
+
+`huts/src/App.jsx` is the main hut map: fetches the ArcGIS hut layer plus
+`/data/stations.geojson` and `/data/parking.geojson` (outputs of `data/`'s pipeline, copied into
+`huts/public/data/`), mapped into flat `{id, name, elevation, category, club, lat, lng}` objects,
+rendered as react-leaflet `CircleMarker` + hover `Tooltip` over OSM raster tiles. Requesting
+`outSR=4326` is what makes `geometry.x/y` directly usable as lng/lat by Leaflet.
+
+`huts/src/GraphPage.jsx` (the `#graph` route) is the opt-in raw-network view for the hut-to-hut
+routing graph described below: renders `/data/trails.pmtiles` and `/data/hut-edges.pmtiles` via
+`protomaps-leaflet`, plus `/data/huts.geojson` and `/data/hut-edge-stats.json`.
 
 ## Re-inspecting the HAR
 
@@ -44,7 +52,9 @@ Response bodies in the HAR are base64 (`content.encoding`), so plain grep over t
 almost everything. Decode first — the app bundle `static/js/index-BR4qdKga.js` is where the
 endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
 
-## Hut-to-hut routing graph (in progress, offline)
+## Hut-to-hut routing graph
 
-Offline, not-yet-integrated trail-graph precompute pipeline under `data/` — see
-`data/CLAUDE.md` for details.
+Offline trail-graph precompute pipeline under `data/`, whose outputs (`huts.geojson`,
+`trails.pmtiles`, `hut-edges.pmtiles`, `hut-edge-stats.json`, `stations.geojson`,
+`parking.geojson`) are hand-copied into `huts/public/data/` and rendered by `GraphPage.jsx`/
+`App.jsx` above — see `data/CLAUDE.md` for details.
