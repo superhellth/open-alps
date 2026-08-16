@@ -13,24 +13,37 @@ What this does instead:
     1. Streams trails.osm.pbf once with pyosmium (C-backed, doesn't build Python objects for
        nodes/ways it discards) into flat numpy arrays: node coords + edge list with haversine
        edge weights.
-    2. Builds an igraph.Graph over those arrays (C-backed, low per-node overhead).
-    3. Snaps each hut to its nearest graph node via a KDTree (reject if farther than
+    2. Snaps each hut to its nearest raw trail node via a KDTree (reject if farther than
        --max-snap-m, default 200m - direct-booking-only huts or ones far from any mapped trail
        won't have a graph node and are simply skipped, not force-matched).
-    4. For each hut, runs igraph's `distances(source=[node], target=candidates, cutoff=...)`
+    3. Contracts chains: the raw OSM graph has a node at every digitized vertex, so a nearly-
+       straight trail segment between two junctions can be dozens of degree-2 nodes in a row -
+       pure pass-through with no route choice at them. Only real decision points (junctions,
+       dead ends) and hut-snap points matter for shortest-path search; every degree-2 run between
+       two such "keep" nodes collapses into a single edge carrying the summed distance/weight and
+       the full interior polyline + rolled-up road/SAC/via-ferrata stats, so no information is
+       lost - just represented once per chain instead of once per digitized vertex. Measured
+       at ~40M raw nodes / ~41M raw edges for AT+Bavaria (data/timings.jsonl); contraction is
+       lossless (same shortest-path costs, since a degree-2 node has no alternative route through
+       it) and expected to shrink the graph by an order of magnitude or more, since junctions and
+       hut-snap points are sparse compared to digitized trail vertices.
+    4. Builds an igraph.Graph over the *contracted* node/edge arrays (C-backed, low per-node
+       overhead) - this is what pass 1/2 below actually search over.
+    5. For each hut, runs igraph's `distances(source=[node], target=candidates, cutoff=...)`
        against only the small set of geographically-nearby candidate huts. This is the part that
        previously used scipy.sparse.csgraph.dijkstra, which - even with a cutoff - always
-       allocates and returns a distance array sized to *every* node in the graph (26.5M floats)
-       on every call; 1173 calls of that dominated runtime through sheer allocation/copy traffic,
-       not search cost. igraph's target-limited query only computes and returns distances to the
-       requested targets, so the cutoff actually bounds the work done, not just the traversal.
+       allocates and returns a distance array sized to *every* node in the graph on every call;
+       1173 calls of that dominated runtime through sheer allocation/copy traffic, not search
+       cost. igraph's target-limited query only computes and returns distances to the requested
+       targets, so the cutoff actually bounds the work done, not just the traversal.
 
 Output: data/osm/hut-edges.geojson - FeatureCollection of LineStrings, one per kept hut pair,
 properties {from_hut_id, to_hut_id, distance_m, road_m, source: "osm"}. Each unordered pair
 appears once. Geometry is the real trail polyline walked (hut -> snapped trail node -> ... ->
-snapped trail node -> hut), not a straight line - see the "full path" pass below. Elevation
-(ascent_m/descent_m) is a separate step, 08-add-elevation.py, since it needs a DEM
-(07-fetch-dem.py) that this script has no reason to depend on.
+snapped trail node -> hut), not a straight line - see the "full path" pass below, which now just
+concatenates each chosen contracted edge's precomputed interior polyline instead of re-walking
+raw OSM edges. Elevation (ascent_m/descent_m) is a separate step, 08-add-elevation.py, since it
+needs a DEM (07-fetch-dem.py) that this script has no reason to depend on.
 
 Road bias: every edge carries both a real distance ("dist") and a routing cost ("weight") that
 multiplies vehicle-oriented ways (graph.roadHighwayTags, e.g. residential/service/unclassified/
@@ -39,7 +52,7 @@ against real "dist", so the max-length guarantee is unaffected by the penalty. P
 (pass 2) runs Dijkstra over the penalized "weight" so it prefers trail-type ways when a
 comparably-short road alternative exists; the reported distance_m is the real length of that
 chosen path (which can be slightly longer than the shortest possible route), and road_m is the
-portion of it that runs over a penalized way.
+portion of it that runs over a penalized way (summed per chain during contraction).
 
 Pass 1 (distance-only queries) and pass 2 (full-path fetch) run their per-hut/per-edge igraph
 calls across a ThreadPoolExecutor (--workers, default os.cpu_count()). This works because
@@ -187,42 +200,23 @@ print(f"streaming {args.trails} ...")
 handler = WayGraphHandler(config["graph"]["roadHighwayTags"], args.road_penalty_factor)
 with phase(SCRIPT_NAME, "stream_osm"):
     handler.apply_file(args.trails, locations=True)
-n_nodes = len(handler.coords)
-n_edges = len(handler.edges_i)
-print(f"graph nodes: {n_nodes:,}, edges: {n_edges:,}")
+n_raw_nodes = len(handler.coords)
+n_raw_edges = len(handler.edges_i)
+print(f"raw graph nodes: {n_raw_nodes:,}, edges: {n_raw_edges:,}")
 
-coords = np.array(handler.coords, dtype=np.float64)  # (lon, lat)
-i = np.array(handler.edges_i, dtype=np.int32)
-j = np.array(handler.edges_j, dtype=np.int32)
-dist_arr = np.array(handler.edges_dist, dtype=np.float64)
-w = np.array(handler.edges_w, dtype=np.float64)
-road_arr = np.array(handler.edges_road, dtype=bool)
-sac_rank_arr = np.array(handler.edges_sac_rank, dtype=np.int8)
-via_ferrata_arr = np.array(handler.edges_via_ferrata, dtype=bool)
+raw_coords = np.array(handler.coords, dtype=np.float64)  # (lon, lat)
+raw_i = np.array(handler.edges_i, dtype=np.int64)
+raw_j = np.array(handler.edges_j, dtype=np.int64)
+raw_dist = np.array(handler.edges_dist, dtype=np.float64)
+raw_w = np.array(handler.edges_w, dtype=np.float64)
+raw_road = np.array(handler.edges_road, dtype=bool)
+raw_sac_rank = np.array(handler.edges_sac_rank, dtype=np.int8)
+raw_via_ferrata = np.array(handler.edges_via_ferrata, dtype=bool)
+del handler
 
-print("building igraph graph ...")
-with phase(SCRIPT_NAME, "build_igraph", nodes=n_nodes, edges=n_edges):
-    graph = ig.Graph(
-        n=n_nodes,
-        edges=np.column_stack((i, j)),
-        edge_attrs={
-            "weight": w, "dist": dist_arr, "is_road": road_arr,
-            "sac_rank": sac_rank_arr, "is_via_ferrata": via_ferrata_arr,
-        },
-        directed=False,
-    )
-
-print("building node KDTree for hut snapping ...")
-with phase(SCRIPT_NAME, "build_kdtree", nodes=n_nodes):
-    node_tree = cKDTree(coords)
-
-# Component membership per node, computed once. Dijkstra can't know a target is unreachable
-# without exhausting the whole connected component it started in - on a graph this size that's
-# an expensive way to fail. Filtering candidates to the same component first turns that into an
-# O(1) lookup instead of a full traversal per unreachable pair.
-print("computing connected components ...")
-with phase(SCRIPT_NAME, "connected_components"):
-    component_id = np.array(graph.connected_components().membership, dtype=np.int32)
+print("building raw-node KDTree for hut snapping ...")
+with phase(SCRIPT_NAME, "build_kdtree", nodes=n_raw_nodes):
+    raw_node_tree = cKDTree(raw_coords)
 
 with open(args.huts, encoding="utf-8") as f:
     huts_fc = json.load(f)
@@ -239,20 +233,145 @@ print(f"huts: {len(hut_ids)}")
 # KDTree works in raw lon/lat degrees, so convert the meter threshold to a rough degree
 # threshold for the query, then verify with real haversine distance below.
 deg_per_m = 1 / 111_320.0
-snap_dist_deg, snap_idx = node_tree.query(hut_coords, k=1, distance_upper_bound=args.max_snap_m * deg_per_m * 1.5)
+snap_dist_deg, snap_idx = raw_node_tree.query(
+    hut_coords, k=1, distance_upper_bound=args.max_snap_m * deg_per_m * 1.5
+)
 
-snapped_node = np.full(len(hut_ids), -1, dtype=np.int64)
+snapped_raw_node = np.full(len(hut_ids), -1, dtype=np.int64)
 for h, (dist_deg, node_idx) in enumerate(zip(snap_dist_deg, snap_idx)):
-    if node_idx >= n_nodes:
+    if node_idx >= n_raw_nodes:
         continue
     lon, lat = hut_coords[h]
-    nlon, nlat = coords[node_idx]
+    nlon, nlat = raw_coords[node_idx]
     if haversine_m(lon, lat, nlon, nlat) <= args.max_snap_m:
-        snapped_node[h] = node_idx
+        snapped_raw_node[h] = node_idx
 
-n_unsnapped = int((snapped_node == -1).sum())
+n_unsnapped = int((snapped_raw_node == -1).sum())
 print(f"snapped {len(hut_ids) - n_unsnapped}/{len(hut_ids)} huts to a trail node "
       f"({n_unsnapped} skipped, no trail within {args.max_snap_m:g}m)")
+
+# ---- Chain contraction ----
+# Collapses every run of degree-2 raw nodes between two "keep" nodes (real junctions/dead-ends,
+# or a hut-snap point - a hut can be a valid path endpoint mid-chain even at degree 2) into one
+# edge. Lossless: a degree-2 node has exactly one way through it, so summing distance/weight
+# along the chain gives the same shortest-path cost as walking the raw nodes one at a time: the
+# only thing that changes is how many graph nodes/edges igraph and Dijkstra have to touch.
+print("contracting degree-2 chains ...")
+with phase(SCRIPT_NAME, "contract_chains", raw_nodes=n_raw_nodes, raw_edges=n_raw_edges):
+    edge_ids = np.arange(n_raw_edges, dtype=np.int64)
+    # CSR-style adjacency (neighbor, edge_id) per node, built via one sort over the doubled
+    # (undirected) endpoint list - avoids a 40M-entry Python dict of adjacency lists.
+    end_node = np.concatenate([raw_i, raw_j])
+    end_other = np.concatenate([raw_j, raw_i])
+    end_edge = np.concatenate([edge_ids, edge_ids])
+    order = np.argsort(end_node, kind="stable")
+    end_other = end_other[order]
+    end_edge = end_edge[order]
+    degree = np.bincount(end_node, minlength=n_raw_nodes)
+    offsets = np.zeros(n_raw_nodes + 1, dtype=np.int64)
+    np.cumsum(degree, out=offsets[1:])
+
+    keep = degree != 2
+    snapped_set = np.unique(snapped_raw_node[snapped_raw_node != -1])
+    keep[snapped_set] = True
+
+    def _neighbors(node):
+        s, e = offsets[node], offsets[node + 1]
+        return end_other[s:e].tolist(), end_edge[s:e].tolist()
+
+    visited_edge = np.zeros(n_raw_edges, dtype=bool)
+    c_u, c_v = [], []
+    c_dist, c_weight, c_road_m = [], [], []
+    c_sac_rank, c_via_ferrata = [], []
+    c_interior = []  # interior polyline coords (excludes both endpoints), ordered u -> v
+
+    keep_idxs = np.flatnonzero(keep)
+    for count, k in enumerate(keep_idxs.tolist()):
+        if count % 500_000 == 0:
+            print(f"  {count:,}/{len(keep_idxs):,} keep-nodes processed")
+        nbrs, edges_here = _neighbors(k)
+        for nb, e in zip(nbrs, edges_here):
+            if visited_edge[e]:
+                continue
+            visited_edge[e] = True
+            d_sum = float(raw_dist[e])
+            w_sum = float(raw_w[e])
+            road_sum = d_sum if raw_road[e] else 0.0
+            sac_max = int(raw_sac_rank[e])
+            vf_any = bool(raw_via_ferrata[e])
+            interior = []
+            cur = nb
+            prev_edge = e
+            while not keep[cur]:
+                interior.append((float(raw_coords[cur, 0]), float(raw_coords[cur, 1])))
+                cnbrs, cedges = _neighbors(cur)
+                nxt = None
+                for nb2, e2 in zip(cnbrs, cedges):
+                    if e2 != prev_edge:
+                        nxt = (nb2, e2)
+                        break
+                if nxt is None:
+                    break  # dead-end self-loop artifact - stop the chain here
+                nb2, e2 = nxt
+                visited_edge[e2] = True
+                d_sum += raw_dist[e2]
+                w_sum += raw_w[e2]
+                if raw_road[e2]:
+                    road_sum += raw_dist[e2]
+                if raw_sac_rank[e2] > sac_max:
+                    sac_max = int(raw_sac_rank[e2])
+                if raw_via_ferrata[e2]:
+                    vf_any = True
+                prev_edge, cur = e2, nb2
+            c_u.append(k)
+            c_v.append(cur)
+            c_dist.append(d_sum)
+            c_weight.append(w_sum)
+            c_road_m.append(road_sum)
+            c_sac_rank.append(sac_max)
+            c_via_ferrata.append(vf_any)
+            c_interior.append(interior)
+
+    new_index = np.full(n_raw_nodes, -1, dtype=np.int64)
+    new_index[keep_idxs] = np.arange(len(keep_idxs))
+    coords = raw_coords[keep_idxs]
+    n_nodes = len(keep_idxs)
+    edges_uv = np.column_stack((new_index[np.array(c_u)], new_index[np.array(c_v)]))
+    n_edges = len(c_u)
+
+    mask = snapped_raw_node != -1
+    snapped_node = np.full(len(hut_ids), -1, dtype=np.int64)
+    snapped_node[mask] = new_index[snapped_raw_node[mask]]
+
+del raw_coords, raw_i, raw_j, raw_dist, raw_w, raw_road, raw_sac_rank, raw_via_ferrata
+del end_node, end_other, end_edge, order, degree, offsets, visited_edge, snapped_raw_node
+
+print(f"contracted {n_raw_nodes:,} raw nodes / {n_raw_edges:,} raw edges -> "
+      f"{n_nodes:,} kept nodes / {n_edges:,} chain edges")
+
+print("building igraph graph ...")
+with phase(SCRIPT_NAME, "build_igraph", nodes=n_nodes, edges=n_edges):
+    graph = ig.Graph(
+        n=n_nodes,
+        edges=edges_uv,
+        edge_attrs={
+            "weight": c_weight,
+            "dist": c_dist,
+            "road_m": c_road_m,
+            "sac_rank": c_sac_rank,
+            "via_ferrata": c_via_ferrata,
+            "interior_coords": c_interior,
+        },
+        directed=False,
+    )
+
+# Component membership per node, computed once. Dijkstra can't know a target is unreachable
+# without exhausting the whole connected component it started in - on a graph this size that's
+# an expensive way to fail. Filtering candidates to the same component first turns that into an
+# O(1) lookup instead of a full traversal per unreachable pair.
+print("computing connected components ...")
+with phase(SCRIPT_NAME, "connected_components"):
+    component_id = np.array(graph.connected_components().membership, dtype=np.int32)
 
 max_edge_m = args.max_edge_km * 1000
 hut_tree = cKDTree(hut_coords)
@@ -327,7 +446,9 @@ print(f"total edges: {len(kept_pairs)}")
 # vertex path walked so the output geometry is the real trail, not a straight line. igraph has
 # no batched multi-target path query (unlike distances()), so this is one call per edge - but
 # get_shortest_paths is also a compiled call that releases the GIL, so it parallelizes the same
-# way as pass 1.
+# way as pass 1. Each hop in the returned path is now a *contracted* chain edge, so distance_m/
+# road_m/sac_scale/via_ferrata and the interior polyline are just read off the edge attrs computed
+# during contraction, not re-derived by walking raw OSM edges one at a time.
 print(f"pass 2: fetching full paths for {len(kept_pairs)} kept edges, {args.workers} worker threads ...")
 
 
@@ -347,24 +468,28 @@ def _path_for(pair):
         # it from just the node sequence would be ambiguous wherever parallel edges exist between
         # the same two nodes (e.g. a path and a road running alongside each other).
         epath = graph.get_shortest_paths(src, to=tgt, weights="weight", output="epath")[0]
-        vseq = [src]
+        trail_coords = []
         cur = src
         for eid in epath:
             e = graph.es[eid]
-            nxt = e.target if e.source == cur else e.source
-            vseq.append(nxt)
+            forward = e.source == cur
+            nxt = e.target if forward else e.source
+            interior = e["interior_coords"] if forward else list(reversed(e["interior_coords"]))
+            trail_coords.append(tuple(coords[cur]))
+            trail_coords.extend(interior)
             distance_m += e["dist"]
-            if e["is_road"]:
-                road_m += e["dist"]
+            road_m += e["road_m"]
             # An edge's overall grade is the hardest segment walked along it, same logic as
-            # road_m below - one demanding stretch makes the whole hut-to-hut route that grade,
+            # road_m - one demanding stretch makes the whole hut-to-hut route that grade,
             # regardless of how easy the rest is.
             if e["sac_rank"] > max_sac_rank:
                 max_sac_rank = e["sac_rank"]
-            if e["is_via_ferrata"]:
+            if e["via_ferrata"]:
                 has_via_ferrata = True
             cur = nxt
-        trail_coords = [tuple(coords[v]) for v in vseq] if len(vseq) >= 2 else [tuple(coords[src]), tuple(coords[tgt])]
+        trail_coords.append(tuple(coords[cur]))
+        if len(trail_coords) < 2:
+            trail_coords = [tuple(coords[src]), tuple(coords[tgt])]
 
     path_coords = [tuple(hut_coords[h]), *trail_coords, tuple(hut_coords[c])]
     return {

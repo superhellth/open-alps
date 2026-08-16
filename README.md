@@ -1,6 +1,6 @@
 Ideas:
  - Show height profile (x)
- - move to ssd
+ - move to ssd (x)
  - chain contraction for 6
  - time table (x)
  - train stations (x)

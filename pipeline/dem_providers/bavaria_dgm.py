@@ -254,20 +254,29 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # at_bev.py's GeoTIFF source, gdalwarp needs -s_srs since the XYZ driver can't read a CRS off
     # the file itself. Same warp-then-mosaic pattern otherwise.
     #
-    # The XYZ grid carries no NoData value of its own (every post in a downloaded tile is real
-    # data), but existing_tile_ids() only downloads tiles that actually exist - 1km cells with no
-    # coverage (e.g. ones straddling the Austrian border, see module docstring) are simply absent
-    # from tile_paths. The mosaic's overall extent still spans the bounding rectangle of every
-    # tile, so those absent cells are gaps *inside* that rectangle. Without an explicit NoData
-    # value, gdalbuildvrt fills uncovered pixels with 0 instead of flagging them - composite.py's
-    # final merge (and 08-add-elevation.py's own nodata check) then can't distinguish that 0 from
-    # a real elevation reading, so a gap here silently stomps valid data from other sources it's
-    # merged with. -vrtnodata makes gdalbuildvrt fill gaps with VRT_NODATA instead, so they read
-    # as proper NoData throughout the rest of the pipeline.
+    # The XYZ grid has no NoData tag of its own (the ASCII driver can't carry one), but the
+    # *values* aren't all real either: a downloaded tile's own void/no-coverage posts are written
+    # right into the data as literal -9999.00 rows (checked a raw tile - 1335/1530 posts were
+    # -9999.00). Passing -srcnodata here is what turns those into recognized gaps instead of
+    # elevation readings of about -9999m; without it they used to trip gdalwarp's "Value -9999 in
+    # the source dataset has been changed ... to avoid being treated as NoData" warning per
+    # colliding post, and - worse than the warning - GDAL was nudging each one by a tiny epsilon
+    # to *keep* it as data, which fed a wall of fake sub-sea-level elevation into the mosaic and
+    # from there into 08-add-elevation.py's ascent/descent calc wherever a trail edge crossed one.
     #
-    # Separately, warp_one() below reprojects each 1km UTM32N tile individually - a UTM square
-    # doesn't stay axis-aligned once reprojected to EPSG:4326 (it becomes a slightly rotated
-    # quadrilateral), but gdalwarp's output is always an axis-aligned rectangle. Without an
+    # Separate issue, also handled below: existing_tile_ids() only downloads tiles that actually
+    # exist - 1km cells with no coverage (e.g. ones straddling the Austrian border, see module
+    # docstring) are simply absent from tile_paths. The mosaic's overall extent still spans the
+    # bounding rectangle of every tile, so those absent cells are gaps *inside* that rectangle.
+    # Without an explicit NoData value, gdalbuildvrt fills uncovered pixels with 0 instead of
+    # flagging them - composite.py's final merge (and 08-add-elevation.py's own nodata check) then
+    # can't distinguish that 0 from a real elevation reading, so a gap here silently stomps valid
+    # data from other sources it's merged with. -vrtnodata makes gdalbuildvrt fill gaps with
+    # VRT_NODATA instead, so they read as proper NoData throughout the rest of the pipeline.
+    #
+    # And a third, separate issue: warp_one() below reprojects each 1km UTM32N tile individually -
+    # a UTM square doesn't stay axis-aligned once reprojected to EPSG:4326 (it becomes a slightly
+    # rotated quadrilateral), but gdalwarp's output is always an axis-aligned rectangle. Without an
     # explicit -dstnodata, gdalwarp fills the corner slivers outside that rotated footprint with
     # 0 - inside *every* tile, not just at real coverage gaps, since it happens per-tile before
     # any mosaicking. That silently injected thousands of fake sea-level readings across Bavaria's
@@ -281,7 +290,8 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
         warped = warped_dir / f"{tile.stem}_4326.vrt"
         subprocess.run(
             ["gdalwarp", "-q", "-s_srs", "EPSG:25832", "-t_srs", "EPSG:4326", "-of", "VRT",
-             "-dstnodata", str(VRT_NODATA), "-overwrite", str(tile), str(warped)],
+             "-srcnodata", str(VRT_NODATA), "-dstnodata", str(VRT_NODATA),
+             "-overwrite", str(tile), str(warped)],
             check=True,
         )
         return warped

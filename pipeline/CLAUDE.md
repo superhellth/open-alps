@@ -30,15 +30,16 @@ line to `data/timings.jsonl` per completed phase (`{ts, script, phase, seconds, 
 entirely if the block raises, so a failed run never leaves a misleading partial record. Used by
 `run_all.py` (one record per step, keyed `"NN-<step name>"`), and internally by the steps
 expensive enough to want phase-level breakdown: `06-build-hut-graph.py` (`stream_osm`,
-`build_igraph`, `build_kdtree`, `connected_components`, `pass1_distances`, `pass2_paths`),
-`07-fetch-dem.py` (`materialize_geotiff`) and `08-add-elevation.py` (`read_dem_window`,
+`build_kdtree`, `contract_chains`, `build_igraph`, `connected_components`, `pass1_distances`,
+`pass2_paths`),
+`07b-build-dem-vrt.py` (`materialize_geotiff`) and `08-add-elevation.py` (`read_dem_window`,
 `per_edge_ascent_profile`). This exists because scope is expected to grow past AT+Bayern —
 `timings.jsonl` is the real-numbers record for seeing which phase stops scaling first, instead of
 guessing. It already caught one: `read_dem_window` timed at ~750s (`data/timings.jsonl`), because
 `08-add-elevation.py` used to sample `07`'s `dem.vrt` directly - a VRT chain that lazily
 reprojects every region's tiles into EPSG:4326 on read, so a window covering AT+Bavaria re-ran
 that reprojection on every step-8 run (and 08 is the step people rerun most, to retune
-`--ele-noise-threshold-m`). Fixed by having step 07 materialize the VRT into a real, tiled/
+`--ele-noise-threshold-m`). Fixed by having step 07b materialize the VRT into a real, tiled/
 compressed GeoTIFF once (`pipeline/lib/pipeline.py`'s `materialize_geotiff()`, `data/dem/dem.tif`) that 08
 reads instead - see that function's docstring. Wrap a new expensive block in `with
 phase(SCRIPT_NAME, "phase_name", **any_size_metadata):` rather than ad hoc `print`/`time.time()`

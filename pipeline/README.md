@@ -53,7 +53,11 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
   - **`provider`** / **`providerConfig`** — which DEM source step 07 fetches from, and that
     provider's own config. Every provider implements the contract in
     `pipeline/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `07-fetch-dem.py` is a
-    thin dispatcher over `dem_providers.get_provider(name)`. Registered providers:
+    thin dispatcher over `dem_providers.get_provider(name)` that only calls `fetch()` and writes
+    `data/dem/fetch_manifest.json` — `07b-build-dem-vrt.py` reads that manifest and calls
+    `to_4326_vrt()` + materializes `dem.tif`, with no network access of its own, so retuning a
+    provider's reprojection (e.g. a NoData-handling fix) is a rerun of 07b alone, never a
+    re-fetch. Registered providers:
     - **`copernicus-glo-30`** — global 30m coverage (AWS Open Data, no auth). `providerConfig: {}`
       (uses the top-level `bbox`). The safe default; systematically underestimates ascent/descent
       on switchback-heavy alpine trails because 30m can't resolve terrain that narrow (see
@@ -229,7 +233,8 @@ python pipeline/05-fetch-huts.py              # -> data/osm/huts.geojson
 
 python pipeline/06-build-hut-graph.py         # -> data/osm/hut-edges.geojson
 
-python pipeline/07-fetch-dem.py               # -> data/dem/dem.tif, via dem.provider (see Config)
+python pipeline/07-fetch-dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
+python pipeline/07b-build-dem-vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
 python pipeline/08-add-elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
 
 python pipeline/09-build-trail-tiles.py       # -> data/osm/trails.pmtiles

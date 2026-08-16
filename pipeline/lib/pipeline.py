@@ -72,6 +72,65 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
     return out_path
 
 
+def normalize_colorinterp(region_vrt: Path) -> Path:
+    """Rewrites region_vrt as a thin VRT with ColorInterp explicitly forced to Gray, so the final
+    gdalbuildvrt merge in build_dem_vrt() doesn't silently drop it. A no-op passthrough when
+    region_vrt doesn't exist on disk (e.g. under test doubles that don't perform real I/O).
+
+    Regions built from different DEM sources can end up with different band color interpretation
+    (e.g. a GeoTIFF-derived VRT comes out ColorInterp=Gray, while a VRT built by warping an
+    ungeoreferenced ASCII XYZ grid - as bavaria_dgm.py does - comes out ColorInterp=Undefined).
+    gdalbuildvrt does not error on that mismatch; it silently *drops* whichever source(s) disagree
+    with the first one from the merged VRT, so a naive final gdalbuildvrt call can produce a
+    dem.vrt that looks fine but is missing an entire region. This rewrite is what prevents that.
+
+    gdal_translate carries over the source's NoDataValue by default, but that default has proven
+    fragile across GDAL builds - passed through explicitly here (rather than trusted implicitly)
+    so a region's real NoData (e.g. bavaria_dgm.py's VRT_NODATA marking its tile gaps) can never
+    silently turn into an opaque value in the merge gdalbuildvrt does downstream."""
+    import rasterio
+
+    if not region_vrt.exists():
+        return region_vrt
+    normalized = region_vrt.with_name(region_vrt.stem + "_normalized.vrt")
+    translate_args = ["gdal_translate", "-of", "VRT", "-colorinterp", "gray"]
+    with rasterio.open(region_vrt) as src:
+        if src.nodata is not None:
+            translate_args += ["-a_nodata", str(src.nodata)]
+    translate_args += [str(region_vrt), str(normalized)]
+    subprocess.run(translate_args, check=True)
+    return normalized
+
+
+def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
+    """Reprojects each manifest region's already-downloaded tiles and merges them into
+    dem_dir/dem.vrt. manifest is a list of {"provider", "raw_dir", "region_vrt", "tile_paths"}
+    dicts - produced by dem_providers.composite.fetch_regions() for provider == "composite", or
+    written directly by 07-fetch-dem.py's single-region branch otherwise. Touches only local
+    files (no network), so it's safe - and fast - to rerun on its own after tweaking a provider's
+    to_4326_vrt() (e.g. bavaria_dgm.py's -srcnodata fix) without re-fetching. See
+    07-fetch-dem.py / 07b-build-dem-vrt.py for why fetching and building are split into separate
+    scripts in the first place."""
+    # local import: dem_providers.composite imports lib.pipeline at module level, so importing
+    # dem_providers back at this module's top level would be a circular import
+    from dem_providers import get_provider
+
+    region_vrts = []
+    for entry in manifest:
+        provider = get_provider(entry["provider"])
+        tile_paths = [Path(p) for p in entry["tile_paths"]]
+        region_vrt = Path(entry["region_vrt"])
+        provider.to_4326_vrt(tile_paths, region_vrt)
+        region_vrts.append(normalize_colorinterp(region_vrt))
+
+    out_vrt_path = dem_dir / "dem.vrt"
+    subprocess.run(
+        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(v) for v in region_vrts]],
+        check=True,
+    )
+    return out_vrt_path
+
+
 def run_tippecanoe(tippecanoe_args):
     """Shells out to tippecanoe, natively if it's on PATH (Linux/macOS), otherwise via WSL - it
     has no Windows build on conda-forge (linux-64/osx-64 only). See pipeline/README.md's "Displaying

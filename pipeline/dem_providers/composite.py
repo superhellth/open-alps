@@ -1,30 +1,21 @@
-"""Meta-provider that stitches per-sub-region VRTs from different providers into one final
-dem.vrt, e.g. Austria via at-bev-dgm + Bavaria via bavaria-dgm5. Doesn't fit the plain
-fetch()/to_4326_vrt() split every other provider uses (it needs to run each region's *entire*
-fetch+reproject pipeline, not just download raw tiles) - see fetch_and_build below, which
-07-fetch-dem.py calls directly for provider == "composite" instead of the usual two-step
-sequence.
+"""Meta-provider that fetches per-sub-region tiles from different providers, e.g. Austria via
+at-bev-dgm + Bavaria via bavaria-dgm5. Doesn't fit the plain fetch()/to_4326_vrt() split every
+other provider uses (it needs to resolve each region's own bbox/points and run its own fetch()),
+so 07-fetch-dem.py calls fetch_regions() below directly for provider == "composite" instead of the
+usual single fetch() call - see that script and 07b-build-dem-vrt.py (which does the actual
+reprojection/merge, via lib.pipeline.build_dem_vrt(), from fetch_regions()'s manifest) for why
+fetch and build are split into separate scripts.
 
 gdalbuildvrt takes the LAST-listed source for overlapping pixels (not the first - easy to get
 backwards), so region order in providerConfig.regions is meaningful where two regions' bboxes
 overlap - list the higher-resolution/higher-priority source last. This only matters where two
 regions both have *real* data at a pixel; a region's own genuine NoData (see bavaria_dgm.py's
 VRT_NODATA) is treated as transparent by gdalbuildvrt's default nodata handling, so a gap in the
-last-listed source still lets an earlier source's real data show through.
+last-listed source still lets an earlier source's real data show through - see
+lib.pipeline.normalize_colorinterp() for why each region VRT needs a rewrite before that merge."""
 
-Regions built from different sources can end up with different band color interpretation (e.g.
-a GeoTIFF-derived VRT comes out ColorInterp=Gray, while a VRT built by warping an ungeoreferenced
-ASCII XYZ grid - as bavaria_dgm.py does - comes out ColorInterp=Undefined). gdalbuildvrt does not
-error on that mismatch; it silently *drops* whichever source(s) disagree with the first one from
-the merged VRT, so a naive final gdalbuildvrt call can produce a dem.vrt that looks fine but is
-missing an entire region. _normalize_colorinterp() below rewrites each region VRT with an explicit
-Gray band before the final merge so this can't happen."""
-
-import subprocess
 import sys
 from pathlib import Path
-
-import rasterio
 
 from . import get_provider
 
@@ -41,27 +32,6 @@ def _points_for_region(filter_bbox: dict) -> list[list[float]]:
     if edges_path.exists():
         return edge_points(edges_path, filter_bbox=filter_bbox)
     return hut_points(OSM_DIR / "huts.geojson", filter_bbox=filter_bbox)
-
-
-def _normalize_colorinterp(region_vrt: Path) -> Path:
-    """Rewrites region_vrt as a thin VRT with ColorInterp explicitly forced to Gray, so the final
-    gdalbuildvrt merge (see module docstring) doesn't silently drop it. A no-op passthrough when
-    region_vrt doesn't exist on disk (e.g. under test doubles that don't perform real I/O).
-
-    gdal_translate carries over the source's NoDataValue by default, but that default has proven
-    fragile across GDAL builds - passed through explicitly here (rather than trusted implicitly)
-    so a region's real NoData (e.g. bavaria_dgm.py's VRT_NODATA marking its tile gaps) can never
-    silently turn into an opaque value in the merge gdalbuildvrt does downstream."""
-    if not region_vrt.exists():
-        return region_vrt
-    normalized = region_vrt.with_name(region_vrt.stem + "_normalized.vrt")
-    translate_args = ["gdal_translate", "-of", "VRT", "-colorinterp", "gray"]
-    with rasterio.open(region_vrt) as src:
-        if src.nodata is not None:
-            translate_args += ["-a_nodata", str(src.nodata)]
-    translate_args += [str(region_vrt), str(normalized)]
-    subprocess.run(translate_args, check=True)
-    return normalized
 
 
 def _resolve_region_bbox(region_config: dict) -> dict:
@@ -81,8 +51,12 @@ def _resolve_region_bbox(region_config: dict) -> dict:
     )
 
 
-def fetch_and_build(provider_config: dict, dem_dir: Path) -> Path:
-    region_vrts = []
+def fetch_regions(provider_config: dict, dem_dir: Path) -> list[dict]:
+    """Resolves each configured region's bbox/points and downloads its raw tiles, returning a
+    JSON-serializable manifest ([{"provider", "raw_dir", "region_vrt", "tile_paths"}, ...]) -
+    lib.pipeline.build_dem_vrt() consumes this to do the actual reprojection/merge, with no
+    network access of its own. See module docstring for why fetch and build are separate scripts."""
+    manifest = []
     for i, region_config in enumerate(provider_config["regions"]):
         if region_config.get("bboxFromHuts"):
             region_config = {**region_config, "points": _points_for_region(region_config["bbox"])}
@@ -94,12 +68,10 @@ def fetch_and_build(provider_config: dict, dem_dir: Path) -> Path:
 
         print(f"composite region {i}: {region_config['provider']} ...")
         tile_paths = provider.fetch(region_config, raw_dir)
-        provider.to_4326_vrt(tile_paths, region_vrt)
-        region_vrts.append(_normalize_colorinterp(region_vrt))
-
-    out_vrt_path = dem_dir / "dem.vrt"
-    subprocess.run(
-        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(v) for v in region_vrts]],
-        check=True,
-    )
-    return out_vrt_path
+        manifest.append({
+            "provider": region_config["provider"],
+            "raw_dir": str(raw_dir),
+            "region_vrt": str(region_vrt),
+            "tile_paths": [str(p) for p in tile_paths],
+        })
+    return manifest
