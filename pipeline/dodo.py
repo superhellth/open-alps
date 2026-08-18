@@ -15,17 +15,23 @@ Usage:
 A task always reruns if any file in its file_dep changed (content hash, not mtime - doit hashes
 by default) or if pipeline.config.json changed (every task depends on it, so editing the config
 invalidates everything downstream of the values it actually touches, same as run_all.py's
-config-mtime check but per-task instead of global). Tasks with no target (verify) or whose output
-is regenerated every run regardless of inputs (build_hut_graph, add_elevation - see their
-docstrings) declare `uptodate: [False]` to force a rerun every time they're selected, matching
-run_all.py's original behavior for steps 4/6/8.
+config-mtime check but per-task instead of global). verify_trails has no target (it's a gate, not
+a cacheable output) and declares `uptodate: [False]` to force a rerun every time it's selected.
+add_elevation does too - genuinely cheap (~90-100s, data/timings.jsonl) and usually run precisely
+to retune --ele-noise-threshold-m. build_hut_graph is NOT force-rerun despite looking similar -
+it's measured at ~4.1 hours (data/timings.jsonl, 2026-08-15) - so it's freshness-checked normally,
+with a config_changed uptodate check on its own params so passing a different --max-edge-km still
+reruns it without needing `doit forget` first (see its docstring above the task).
 
 CLAUDE.md's "never run a pipeline step without asking" rule applies here exactly as it did to
 run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
 """
 
+import json
 import sys
 from pathlib import Path
+
+from doit.tools import config_changed
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import CONFIG_PATH, DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
@@ -123,9 +129,17 @@ def task_fetch_stations_parking():
 
 
 # ---- 06: build hut graph ----------------------------------------------------
-# Always reruns when selected (cheap; usually run precisely to pick up a new hyperparameter),
-# same as run_all.py. Exposed as doit --params so `doit build_hut_graph --max-edge-km 15` works
-# without run_all.py's `--only 6 -- ...` passthrough hack.
+# NOT cheap - data/timings.jsonl recorded a ~4.1 hour run (14682s, phase "06-build hut graph",
+# 2026-08-15), so this is freshness-checked like every other step, not force-rerun. (run_all.py's
+# old step 6 was `uptodate: lambda: False` with a comment calling it "cheap enough" - that was
+# wrong, contradicted by its own timing log, and not something to carry forward uncritically.)
+# Still reruns automatically when --max-edge-km/--max-snap-m/--road-penalty-factor are passed a
+# different value than last time, via the config_changed uptodate check below - not just on
+# file_dep changes - so tuning a hyperparameter doesn't need a manual `doit forget` first.
+
+def _hut_graph_params_uptodate(task, values):
+    return config_changed(json.dumps(task.options, sort_keys=True))(task, values)
+
 
 def task_build_hut_graph():
     return {
@@ -144,7 +158,7 @@ def task_build_hut_graph():
         ],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf"), str(OSM_DIR / "huts.geojson")],
         "targets": [str(OSM_DIR / "hut-edges.geojson")],
-        "uptodate": [False],
+        "uptodate": [_hut_graph_params_uptodate],
     }
 
 

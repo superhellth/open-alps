@@ -62,7 +62,8 @@ by the pipeline's own `copy_public_data` task and rendered by `GraphPage.jsx`/`A
 see `pipeline/CLAUDE.md` for details.
 
 **Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
-first asking the user and getting explicit confirmation.** `build_hut_graph` and `add_elevation`
-are hardcoded to always run, not freshness-checked, and `build_hut_graph` alone has measured at
-~4 hours (see `data/timings.jsonl`) — an unfiltered run can silently kick off a multi-hour job.
-This applies even to tasks that look cheap or read-only.
+first asking the user and getting explicit confirmation.** `build_hut_graph` alone has measured at
+~4 hours (see `data/timings.jsonl`) and is a normal dependency of the default `doit` run — a
+freshness check can still decide it's stale and silently kick off a multi-hour job. This applies
+even to tasks that look cheap or read-only. (`add_elevation` is hardcoded to always run when
+selected, but is genuinely cheap — ~90-100s.)

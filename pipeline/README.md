@@ -199,9 +199,12 @@ doit
 
 Runs every task in dependency order, skipping any task whose `targets` already exist and whose
 `file_dep` (including `pipeline.config.json`) haven't changed since. Delete an output file (or
-edit the config) to force that task and everything downstream of it to rerun. `build_hut_graph`
-and `add_elevation` always rerun when selected (cheap, and usually run precisely to pick up a new
-hyperparameter) rather than being freshness-checked — same as before.
+edit the config) to force that task and everything downstream of it to rerun. `add_elevation`
+always reruns when selected (cheap - ~90-100s, `data/timings.jsonl` - and usually run precisely to
+retune `--ele-noise-threshold-m`). `build_hut_graph` is freshness-checked normally - it measured
+at ~4.1 hours on 2026-08-15 (`data/timings.jsonl`), not cheap enough to force-rerun by default -
+but still picks up a changed `--max-edge-km`/`--max-snap-m`/`--road-penalty-factor` automatically
+(no `doit forget` needed) via its own param-aware freshness check.
 
 Run a subset by naming tasks — dependencies of a named task still run first if stale, same as
 `--only` used to, just addressed by name instead of number:
