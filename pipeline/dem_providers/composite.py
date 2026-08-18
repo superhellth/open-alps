@@ -1,8 +1,8 @@
 """Meta-provider that fetches per-sub-region tiles from different providers, e.g. Austria via
 at-bev-dgm + Bavaria via bavaria-dgm5. Doesn't fit the plain fetch()/to_4326_vrt() split every
 other provider uses (it needs to resolve each region's own bbox/points and run its own fetch()),
-so 07-fetch-dem.py calls fetch_regions() below directly for provider == "composite" instead of the
-usual single fetch() call - see that script and 07b-build-dem-vrt.py (which does the actual
+so fetch_dem.py calls fetch_regions() below directly for provider == "composite" instead of the
+usual single fetch() call - see that script and build_dem_vrt.py (which does the actual
 reprojection/merge, via lib.pipeline.build_dem_vrt(), from fetch_regions()'s manifest) for why
 fetch and build are split into separate scripts.
 

@@ -22,7 +22,7 @@ Pipeline:
        CLI, despite the package name) repackages the mbtiles into one .pmtiles file.
 
 Requires, on PATH/importable inside the alpen-osm env:
-    - osmium-tool (already a pipeline dependency, see 02-filter-trails.py)
+    - osmium-tool (already a pipeline dependency, see filter_trails.py)
     - orjson (conda-forge: `micromamba install -n alpen-osm -c conda-forge orjson`)
     - the `pmtiles` package (PyPI only, not on conda-forge: `pip install pmtiles` inside the
       alpen-osm env) - imported directly, not shelled out to
@@ -33,8 +33,8 @@ pipeline/README.md's "Displaying the raw OSM trails" section for how that env wa
 `tippecanoe` on PATH is used automatically if present (e.g. on Linux/macOS running this directly).
 
 Usage:
-    python pipeline/09-build-trail-tiles.py
-    python pipeline/09-build-trail-tiles.py --min-zoom 6 --max-zoom 14
+    python pipeline/build_trail_tiles.py
+    python pipeline/build_trail_tiles.py --min-zoom 6 --max-zoom 14
 """
 
 import argparse

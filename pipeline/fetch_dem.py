@@ -5,14 +5,14 @@ writes data/dem/fetch_manifest.json recording exactly what was fetched (provider
 paths, and where each region's reprojected VRT will go) - see pipeline/dem_providers/base.py for
 the provider contract, and pipeline/README.md's DEM section for why this is pluggable.
 
-Deliberately does NOT reproject/merge/materialize - that's 07b-build-dem-vrt.py, split out so
+Deliberately does NOT reproject/merge/materialize - that's build_dem_vrt.py, split out so
 retuning a provider's to_4326_vrt() (e.g. a NoData-handling fix) or retuning materialize_geotiff
 never has to touch the network or re-run tile-existence checks (Bavaria's coverage-grid WMS query
 in particular) against data that's already downloaded. Every provider's fetch() already skips
 tiles that already exist on disk, but this split also skips the *tile-selection* network calls
 entirely on a build-only rerun, not just the actual downloads.
 
-Usage: python pipeline/07-fetch-dem.py
+Usage: python pipeline/fetch_dem.py
 """
 
 import json

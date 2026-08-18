@@ -52,9 +52,9 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     the DEM source now (kept only so old configs don't error on an unrecognized key).
   - **`provider`** / **`providerConfig`** — which DEM source step 07 fetches from, and that
     provider's own config. Every provider implements the contract in
-    `pipeline/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `07-fetch-dem.py` is a
+    `pipeline/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `fetch_dem.py` is a
     thin dispatcher over `dem_providers.get_provider(name)` that only calls `fetch()` and writes
-    `data/dem/fetch_manifest.json` — `07b-build-dem-vrt.py` reads that manifest and calls
+    `data/dem/fetch_manifest.json` — `build_dem_vrt.py` reads that manifest and calls
     `to_4326_vrt()` + materializes `dem.tif`, with no network access of its own, so retuning a
     provider's reprojection (e.g. a NoData-handling fix) is a rerun of 07b alone, never a
     re-fetch. Registered providers:
@@ -174,75 +174,81 @@ conda activate alpen-osm
 osmium --version   # sanity check: should print "osmium version ..."
 ```
 
-Step 09 also needs the `pmtiles` package, which isn't on conda-forge — install it with `pip`
-inside the same env (fine to mix; only the packages with native extensions above need conda). It
-has no CLI despite the name, script 09 imports `pmtiles.convert.mbtiles_to_pmtiles` directly:
+`build_trail_tiles.py` also needs the `pmtiles` package, which isn't on conda-forge — install it
+with `pip` inside the same env (fine to mix; only the packages with native extensions above need
+conda). It has no CLI despite the name, the script imports `pmtiles.convert.mbtiles_to_pmtiles`
+directly. The pipeline is orchestrated by [doit](https://pydoit.org) (`pipeline/dodo.py`), also
+`pip`-installed here — no native extensions either:
 
 ```bash
 conda activate alpen-osm
-pip install pmtiles
+pip install pmtiles doit
 ```
 
 ## Reproducing from scratch
 
+The pipeline is orchestrated by [doit](https://pydoit.org) — `pipeline/dodo.py` declares one task
+per script, wired together by `file_dep`/`targets` (doit derives run order and what's stale from
+that graph; nothing hand-numbered like the old `run_all.py` was). `doit` itself is installed into
+the `alpen-osm` env (`pip install doit`, see Setup above).
+
 ```bash
 conda activate alpen-osm
-python pipeline/run_all.py
+doit
 ```
 
-Runs steps 01-09 in order, skipping any step whose output already exists and is newer than
-`pipeline.config.json`. Delete an output file (or edit the config, which invalidates everything
-downstream of it) to force a rebuild. Steps 06 and 08 always run when selected (cheap, and
-usually run precisely to pick up a new hyperparameter) rather than being freshness-checked.
+Runs every task in dependency order, skipping any task whose `targets` already exist and whose
+`file_dep` (including `pipeline.config.json`) haven't changed since. Delete an output file (or
+edit the config) to force that task and everything downstream of it to rerun. `build_hut_graph`
+and `add_elevation` always rerun when selected (cheap, and usually run precisely to pick up a new
+hyperparameter) rather than being freshness-checked — same as before.
 
-Run a subset with `--only` (comma list and/or ranges) — steps passed this way always run,
-skipping the freshness check, since naming a step explicitly means you want it to run now:
+Run a subset by naming tasks — dependencies of a named task still run first if stale, same as
+`--only` used to, just addressed by name instead of number:
 
 ```bash
-python pipeline/run_all.py --only 6           # just rebuild the graph
-python pipeline/run_all.py --only 5,6          # re-fetch huts + rebuild graph
-python pipeline/run_all.py --only 3-6          # merge onward
-python pipeline/run_all.py --only 7,8          # DEM + elevation only
-python pipeline/run_all.py --only 9            # just rebuild the raw-trail vector tiles
+doit build_hut_graph                    # just rebuild the graph
+doit fetch_huts build_hut_graph         # re-fetch huts + rebuild graph
+doit merge_trails build_hut_graph       # merge onward
+doit fetch_dem build_dem_vrt add_elevation   # DEM + elevation only
+doit build_trail_tiles                  # just rebuild the raw-trail vector tiles
+doit list                               # see every task + up-to-date status
+doit info <task>                        # see why a task would (not) run, without running it
 ```
 
-Args after a literal `--` are passed through to script 06, e.g. to sweep `--max-edge-km` without
-re-running anything upstream:
+Each task with its own tunable exposes it as a normal doit param — no `--` passthrough hack
+needed:
 
 ```bash
-python pipeline/run_all.py --only 6 -- --max-edge-km 15
-```
-
-Step 08's own flag (`--ele-noise-threshold-m`) isn't forwarded through `run_all.py`'s `--`
-passthrough (that's reserved for script 06) — run it directly for that:
-
-```bash
-python pipeline/08-add-elevation.py --ele-noise-threshold-m 3
+doit build_hut_graph --max-edge-km 15
+doit add_elevation --ele-noise-threshold-m 3
 ```
 
 To run a single step by hand (e.g. while tuning a script), invoke it directly — each one is still
 a plain, independently runnable script (all from within the `alpen-osm` env):
 
 ```bash
-python pipeline/01-download-extracts.py      # ~1.6GB, Geofabrik extracts from pipeline.config.json
-python pipeline/02-filter-trails.py           # -> ~264MB combined, hiking ways only
-python pipeline/03-merge-trails.py            # -> data/osm/trails.osm.pbf
-python pipeline/04-verify-trails.py           # gate: fails if trails.osm.pbf is missing/empty
+python pipeline/download_extracts.py      # ~1.6GB, Geofabrik extracts from pipeline.config.json
+python pipeline/filter_trails.py           # -> ~264MB combined, hiking ways only
+python pipeline/merge_trails.py            # -> data/osm/trails.osm.pbf
+python pipeline/verify_trails.py           # gate: fails if trails.osm.pbf is missing/empty
 
-python pipeline/05-fetch-huts.py              # -> data/osm/huts.geojson
+python pipeline/fetch_huts.py              # -> data/osm/huts.geojson
 
-python pipeline/06-build-hut-graph.py         # -> data/osm/hut-edges.geojson
+python pipeline/build_hut_graph.py         # -> data/osm/hut-edges.geojson
 
-python pipeline/07-fetch-dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
-python pipeline/07b-build-dem-vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
-python pipeline/08-add-elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
+python pipeline/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
+python pipeline/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
+python pipeline/add_elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
 
-python pipeline/09-build-trail-tiles.py       # -> data/osm/trails.pmtiles
+python pipeline/build_trail_tiles.py       # -> data/osm/trails.pmtiles
 ```
 
-After step 09, copy `data/osm/trails.pmtiles` to `huts/public/data/trails.pmtiles` (same manual
-copy step used for `hut-edges.geojson`/`huts.geojson`) for the app's raw-trails toggle layer
-(`GraphPage.jsx`'s `TrailTilesLayer`, `#graph` route) to pick it up.
+`doit copy_public_data` copies every output the app reads (`huts.geojson`, `hut-edges.pmtiles`,
+`hut-edge-stats.json`, `trails.pmtiles`, `stations.geojson`, `parking.geojson`) from `data/osm/`
+into `huts/public/data/` — including `trails.pmtiles` for the app's raw-trails toggle layer
+(`GraphPage.jsx`'s `TrailTilesLayer`, `#graph` route). Included in the default `doit` run; run it
+alone to re-sync after hand-running individual scripts.
 
 ## Rejected: buffer-clip + OSMnx
 
@@ -252,9 +258,9 @@ the graph enough to fit in memory. It didn't work: Alpine huts are packed densel
 a 15km buffer only cut node count in half (26.5M → 13.5M), still too large to load. The actual
 problem was never the input size — it was NetworkX/OSMnx's per-node/edge Python object overhead
 (dict-of-dicts + shapely geometry per edge). Shrinking the *area* never fixed that. Those scripts
-have been removed; `06-build-hut-graph.py` (below) replaced the whole approach.
+have been removed; `build_hut_graph.py` (below) replaced the whole approach.
 
-`06-build-hut-graph.py` skips the buffer clip and OSMnx entirely: it streams `trails.osm.pbf`
+`build_hut_graph.py` skips the buffer clip and OSMnx entirely: it streams `trails.osm.pbf`
 (the full, unclipped merge from step 3) once with `pyosmium` into flat numpy arrays, builds a
 `scipy`-backed KDTree + `igraph` graph, snaps huts to their nearest trail node, and runs a
 distance-capped shortest-path query per hut — cheap even against the full network because the
@@ -297,7 +303,7 @@ mkdir -p mm && tar -xjf micromamba.tar.bz2 -C mm
 ./mm/bin/micromamba create -y -r ~/micromamba -n tippecanoe -c conda-forge tippecanoe
 ```
 
-`09-build-trail-tiles.py` detects it's on Windows, checks for a native `tippecanoe` on PATH
+`build_trail_tiles.py` detects it's on Windows, checks for a native `tippecanoe` on PATH
 first (absent), and falls back to invoking it through WSL — `wsl bash -lc "~/mm/bin/micromamba
 run -r ~/micromamba -n tippecanoe tippecanoe ..."` — translating the Windows absolute paths it
 passes (input `.geojsons`, output `.mbtiles`) to their `/mnt/<drive>/...` WSL-mount equivalents.
@@ -307,8 +313,5 @@ On Linux/macOS, install `tippecanoe` normally (conda-forge) and this fallback is
 
 - Extending scope beyond AT+Bayern (Switzerland, Italy/South Tyrol, Slovenia, Liechtenstein) — add
   each as a `regions` entry in `pipeline.config.json`.
-- All pipeline outputs (`hut-edges.geojson`, `huts.geojson`, `trails.pmtiles`) are still hand-copied
-  into `huts/public/data/` after a pipeline run, not fetched from `data/` directly or wired into a
-  build step.
 - The Alpenverein `toursearchApi` 26-tour overlay (see `docs/alpenverein-api.md` §3) is a separate,
   already-understood data source — not part of this OSM pipeline.

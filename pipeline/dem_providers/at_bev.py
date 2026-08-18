@@ -46,7 +46,7 @@ VRT_NODATA = -9999.0
 
 def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # Source is EPSG:31287 (Lambert) - gdalwarp reprojects each tile into a temp VRT in EPSG:4326
-    # before the final mosaic, so 08-add-elevation.py never has to know the source CRS.
+    # before the final mosaic, so add_elevation.py never has to know the source CRS.
     #
     # -dstnodata: without it, gdalwarp fills the corner slivers outside a reprojected tile's
     # (no-longer-axis-aligned) footprint with 0 instead of flagging them as nodata - see

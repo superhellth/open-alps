@@ -54,14 +54,15 @@ endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
 
 ## Hut-to-hut routing graph
 
-Offline trail-graph precompute pipeline under `pipeline/` (code) writing into `data/` (gitignored
+Offline trail-graph precompute pipeline under `pipeline/` (code, orchestrated as a
+[doit](https://pydoit.org) task DAG via `pipeline/dodo.py`) writing into `data/` (gitignored
 raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, `hut-edges.pmtiles`,
-`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) are hand-copied into
-`huts/public/data/` and rendered by `GraphPage.jsx`/`App.jsx` above — see `pipeline/CLAUDE.md` for
-details.
+`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) are copied into `huts/public/data/`
+by the pipeline's own `copy_public_data` task and rendered by `GraphPage.jsx`/`App.jsx` above —
+see `pipeline/CLAUDE.md` for details.
 
-**Never run any `pipeline/` step (individually or via `run_all.py`, with or without `--only`)
-without first asking the user and getting explicit confirmation.** Steps 06 and 08 are hardcoded
-in `run_all.py` to always run, not freshness-checked, and step 06 alone has measured at ~4 hours
-(see `data/timings.jsonl`) — an unfiltered run can silently kick off a multi-hour job. This applies
-even to steps that look cheap or read-only.
+**Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
+first asking the user and getting explicit confirmation.** `build_hut_graph` and `add_elevation`
+are hardcoded to always run, not freshness-checked, and `build_hut_graph` alone has measured at
+~4 hours (see `data/timings.jsonl`) — an unfiltered run can silently kick off a multi-hour job.
+This applies even to tasks that look cheap or read-only.

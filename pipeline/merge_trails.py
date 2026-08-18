@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Merges the per-region filtered extracts (one per region in pipeline.config.json) into one
-file: trails.osm.pbf. Requires osmium-tool on PATH (see 02-filter-trails.py).
-Usage: python pipeline/03-merge-trails.py
+file: trails.osm.pbf. Requires osmium-tool on PATH (see filter_trails.py).
+Usage: python pipeline/merge_trails.py
 """
 
 import subprocess

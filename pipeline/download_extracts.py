@@ -2,7 +2,7 @@
 """
 Downloads raw Geofabrik regional extracts listed in pipeline.config.json.
 Re-run to refresh to the latest Geofabrik snapshot (they regenerate daily, not pinned/versioned).
-Usage: python pipeline/01-download-extracts.py
+Usage: python pipeline/download_extracts.py
 """
 
 import sys

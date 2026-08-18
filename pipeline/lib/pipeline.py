@@ -43,7 +43,7 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
 
     dem.vrt's composite provider chains several layers of on-the-fly `gdalwarp`-built VRTs (each
     region's per-tile reprojection from its native CRS into EPSG:4326) - reading from it, as
-    08-add-elevation.py does, re-runs that reprojection math for every pixel touched, every time.
+    add_elevation.py does, re-runs that reprojection math for every pixel touched, every time.
     Timed at ~750s for a read covering AT+Bavaria (data/timings.jsonl, phase read_dem_window) -
     almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles are already local. Materializing
     once here means step 07 (already freshness-cached, rarely rerun) pays that reprojection cost
@@ -106,10 +106,10 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
     """Reprojects each manifest region's already-downloaded tiles and merges them into
     dem_dir/dem.vrt. manifest is a list of {"provider", "raw_dir", "region_vrt", "tile_paths"}
     dicts - produced by dem_providers.composite.fetch_regions() for provider == "composite", or
-    written directly by 07-fetch-dem.py's single-region branch otherwise. Touches only local
+    written directly by fetch_dem.py's single-region branch otherwise. Touches only local
     files (no network), so it's safe - and fast - to rerun on its own after tweaking a provider's
     to_4326_vrt() (e.g. bavaria_dgm.py's -srcnodata fix) without re-fetching. See
-    07-fetch-dem.py / 07b-build-dem-vrt.py for why fetching and building are split into separate
+    fetch_dem.py / build_dem_vrt.py for why fetching and building are split into separate
     scripts in the first place."""
     # local import: dem_providers.composite imports lib.pipeline at module level, so importing
     # dem_providers back at this module's top level would be a circular import
@@ -176,7 +176,7 @@ def hut_points(huts_path, filter_bbox=None):
 def edge_points(edges_path, filter_bbox=None):
     """Returns every trail-polyline vertex [lng, lat] in edges_path (script 06's hut-edges.geojson
     output), narrowed to filter_bbox if given. Vertices trace the actual trail geometry between
-    huts, not just the hut endpoints - this is exactly what 08-add-elevation.py samples, so a
+    huts, not just the hut endpoints - this is exactly what add_elevation.py samples, so a
     DEM-tile selection built from these points needs no separate assumption about how far a trail
     can wander from its endpoints (see bufferKm in bavaria_dgm.py's tiles_for_points - no longer
     needs to be sized off graph.maxEdgeKm)."""

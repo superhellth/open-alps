@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Reprojects/merges the DEM tiles data/dem/fetch_manifest.json (07-fetch-dem.py's output) points at
-into data/dem/dem.vrt, then materializes that into data/dem/dem.tif for 08-add-elevation.py to
+Reprojects/merges the DEM tiles data/dem/fetch_manifest.json (fetch_dem.py's output) points at
+into data/dem/dem.vrt, then materializes that into data/dem/dem.tif for add_elevation.py to
 sample - see pipeline/lib/pipeline.py's build_dem_vrt()/materialize_geotiff() docstrings for what
-each step does. Split out from 07-fetch-dem.py so retuning a provider's to_4326_vrt() (e.g.
+each step does. Split out from fetch_dem.py so retuning a provider's to_4326_vrt() (e.g.
 bavaria_dgm.py's -srcnodata fix) or the materialize step is a rerun of this script alone - no
 network access, no re-running Bavaria's coverage-grid WMS tile-existence check, nothing but local
 files already on disk.
 
-Usage: python pipeline/07b-build-dem-vrt.py
+Usage: python pipeline/build_dem_vrt.py
 """
 
 import json
@@ -19,11 +19,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import DEM_DIR, build_dem_vrt, materialize_geotiff  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
-SCRIPT_NAME = "07b-build-dem-vrt.py"
+SCRIPT_NAME = "build_dem_vrt.py"
 
 manifest_path = DEM_DIR / "fetch_manifest.json"
 if not manifest_path.exists():
-    raise SystemExit(f"{manifest_path} not found - run 07-fetch-dem.py first")
+    raise SystemExit(f"{manifest_path} not found - run fetch_dem.py first")
 
 with open(manifest_path, encoding="utf-8") as f:
     manifest = json.load(f)

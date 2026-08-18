@@ -42,8 +42,8 @@ properties {from_hut_id, to_hut_id, distance_m, road_m, source: "osm"}. Each uno
 appears once. Geometry is the real trail polyline walked (hut -> snapped trail node -> ... ->
 snapped trail node -> hut), not a straight line - see the "full path" pass below, which now just
 concatenates each chosen contracted edge's precomputed interior polyline instead of re-walking
-raw OSM edges. Elevation (ascent_m/descent_m) is a separate step, 08-add-elevation.py, since it
-needs a DEM (07-fetch-dem.py) that this script has no reason to depend on.
+raw OSM edges. Elevation (ascent_m/descent_m) is a separate step, add_elevation.py, since it
+needs a DEM (fetch_dem.py) that this script has no reason to depend on.
 
 Road bias: every edge carries both a real distance ("dist") and a routing cost ("weight") that
 multiplies vehicle-oriented ways (graph.roadHighwayTags, e.g. residential/service/unclassified/
@@ -61,9 +61,9 @@ parallelism without the cost of pickling the graph into worker processes.
 
 Usage:
     pip install osmium scipy numpy python-igraph   # pypi package is "osmium", not "pyosmium"
-    python pipeline/06-build-hut-graph.py
+    python pipeline/build_hut_graph.py
     # or override the pipeline.config.json defaults for one run:
-    python pipeline/06-build-hut-graph.py --max-edge-km 10 --max-snap-m 200 --workers 8
+    python pipeline/build_hut_graph.py --max-edge-km 10 --max-snap-m 200 --workers 8
 
 Requires only data/osm/trails.osm.pbf (the already-merged, unclipped file from step 3) and
 data/osm/huts.geojson (step 5). No Docker, no OSMnx, no buffer/extract step needed.
@@ -86,7 +86,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
-SCRIPT_NAME = "06-build-hut-graph.py"
+SCRIPT_NAME = "build_hut_graph.py"
 
 config = load_config()
 

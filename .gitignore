@@ -1,11 +1,10 @@
 # Offline precompute pipeline - large derived/downloaded outputs, not source.
 # Pipeline code/config lives in pipeline/ and IS tracked - only data/'s raw/generated
 # dirs below are excluded.
-data/osm/
-data/dem/
-data/timings.jsonl
+data/
 
-# Generated pipeline output, copied here manually per pipeline/README.md - regenerated, not source
+# Generated pipeline output, copied here by the pipeline's copy_public_data doit task -
+# regenerated, not source
 huts/public/data/
 
 # Reference network capture, not build input

@@ -8,7 +8,7 @@ making the trail-graph view slow.
 Output:
     1. hut-edges.pmtiles - a PMTiles vector-tile archive of the full-resolution edge geometry
        (properties trimmed to just `edge_id`, everything else lives in file 2), built the same
-       way as trails.pmtiles (09-build-trail-tiles.py): tippecanoe zoomed tiles -> pmtiles convert.
+       way as trails.pmtiles (build_trail_tiles.py): tippecanoe zoomed tiles -> pmtiles convert.
        Rendered client-side via protomaps-leaflet, same "no backend" shape as the raw-trails
        layer - no per-edge React component, no 184MB fetch, tippecanoe's own zoom-dependent
        simplification instead of shipping one fixed resolution.
@@ -23,8 +23,8 @@ Output:
        separate, much smaller copy just for that purpose.
 
 Usage:
-    python pipeline/11-build-hut-edge-tiles.py
-    python pipeline/11-build-hut-edge-tiles.py --min-zoom 6 --max-zoom 14
+    python pipeline/build_hut_edge_tiles.py
+    python pipeline/build_hut_edge_tiles.py --min-zoom 6 --max-zoom 14
 """
 
 import argparse

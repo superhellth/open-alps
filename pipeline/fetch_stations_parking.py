@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fetches train station and trailhead-parking point locations from OSM, filtered from the raw
-region extracts already downloaded by 01-download-extracts.py (no new download), and writes them
+region extracts already downloaded by download_extracts.py (no new download), and writes them
 as two GeoJSON FeatureCollections - same flat {id?, name, ...} properties shape as 05's
 huts.geojson.
 
@@ -14,7 +14,7 @@ makes osmium export emit each polygon's centroid instead of its shape, keeping t
 Point FeatureCollection like every other layer here.
 
 Usage: python pipeline/05b-fetch-stations-parking.py
-Requires osmium-tool on PATH (same as 02-filter-trails.py).
+Requires osmium-tool on PATH (same as filter_trails.py).
 """
 
 import json

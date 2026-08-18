@@ -5,7 +5,7 @@ documented and IDEs/type-checkers can verify a new provider module actually impl
 here is instantiated.
 
 Every provider's `to_4326_vrt` must return a VRT in EPSG:4326 - that's the one hard requirement
-that lets 08-add-elevation.py stay provider-agnostic, since it samples DEM pixels directly at
+that lets add_elevation.py stay provider-agnostic, since it samples DEM pixels directly at
 hut/trail lon/lat coordinates with no reprojection step of its own.
 """
 

@@ -25,8 +25,8 @@ over the actual read cost, so batching is a bigger win here than parallelizing t
 would be.
 
 Usage:
-    python pipeline/08-add-elevation.py
-    python pipeline/08-add-elevation.py --ele-noise-threshold-m 3
+    python pipeline/add_elevation.py
+    python pipeline/add_elevation.py --ele-noise-threshold-m 3
 Requires data/dem/dem.tif (step 07) and data/osm/hut-edges.geojson (step 06).
 """
 
@@ -45,7 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
-SCRIPT_NAME = "08-add-elevation.py"
+SCRIPT_NAME = "add_elevation.py"
 
 config = load_config()
 dem_config = config["dem"]

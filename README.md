@@ -1,7 +1,7 @@
 Ideas:
  - Show height profile (x)
  - move to ssd (x)
- - chain contraction for 6
+ - chain contraction for 6 (x)
  - time table (x)
  - train stations (x)
  - parking lots (x)

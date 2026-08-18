@@ -262,14 +262,14 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # the source dataset has been changed ... to avoid being treated as NoData" warning per
     # colliding post, and - worse than the warning - GDAL was nudging each one by a tiny epsilon
     # to *keep* it as data, which fed a wall of fake sub-sea-level elevation into the mosaic and
-    # from there into 08-add-elevation.py's ascent/descent calc wherever a trail edge crossed one.
+    # from there into add_elevation.py's ascent/descent calc wherever a trail edge crossed one.
     #
     # Separate issue, also handled below: existing_tile_ids() only downloads tiles that actually
     # exist - 1km cells with no coverage (e.g. ones straddling the Austrian border, see module
     # docstring) are simply absent from tile_paths. The mosaic's overall extent still spans the
     # bounding rectangle of every tile, so those absent cells are gaps *inside* that rectangle.
     # Without an explicit NoData value, gdalbuildvrt fills uncovered pixels with 0 instead of
-    # flagging them - composite.py's final merge (and 08-add-elevation.py's own nodata check) then
+    # flagging them - composite.py's final merge (and add_elevation.py's own nodata check) then
     # can't distinguish that 0 from a real elevation reading, so a gap here silently stomps valid
     # data from other sources it's merged with. -vrtnodata makes gdalbuildvrt fill gaps with
     # VRT_NODATA instead, so they read as proper NoData throughout the rest of the pipeline.
