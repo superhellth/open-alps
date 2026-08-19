@@ -21,18 +21,32 @@ a numbered run order), idempotently (`doit` skips a task whose targets are alrea
 `pipeline/README.md` "Setup" for how that env was created — via `micromamba`, not `conda create`,
 since this machine's `base` conda env hangs solving `-c conda-forge` specs). The last task,
 `copy_public_data`, copies every output into `huts/public/data/` — no separate hand-copy step.
+
+**V2 architecture** (`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`): a persisted,
+hub-agnostic base graph (`build_base_graph.py`, streams+contracts `trails.osm.pbf` once into
+`data/osm/base_graph/`'s plain `.npy` structured arrays, `lib/binfmt.py`) is decoupled from the
+hub-edge query (`build_hub_edges.py`), which partitions the bbox into `lib/grid.py` cells and
+runs one worker process per cell (`ProcessPoolExecutor`), each mmap-slicing only its own padded
+region of the base graph (`lib/subgraph.py`) rather than sharing one big in-process graph. This
+means the expensive stream+contract step is cached across hub-set changes and hyperparameter
+retuning, and station/parking routing edges (filtered to hub range by
+`filter_start_points.py`, snapped mid-chain via `lib/edge_split.py` where needed) are now
+first-class alongside hut-hut edges — both live in the same `records.npy`/`geometry.npy` binary
+format (`hut_edges/`, `start_edges/`), tiled by the same generalized `build_edge_tiles.py`.
+
 Current status: built and up to date for Austria+Bavaria, outputs rendered by the app
-(`GraphPage.jsx`'s `#graph` route for the raw network, `App.jsx` for stations/parking) — see the
-root `CLAUDE.md`'s "App structure" section. Not done: extending scope past AT+Bayern.
+(`GraphPage.jsx`'s `#graph` route for the raw network + hut/start edges, `App.jsx` for
+stations/parking markers) — see the root `CLAUDE.md`'s "App structure" section. Not done:
+extending scope past AT+Bayern; the diverse-paths (multiple route variants per pair,
+`RECORD_DTYPE`'s `variant` field) extensibility hook exists but no second variant is computed yet.
 
 ## Timing pipeline phases
 
 `pipeline/lib/timing.py`'s `phase(script, name, **meta)` context manager appends one JSON
 line to `data/timings.jsonl` per completed phase (`{ts, script, phase, seconds, meta?}`) — skipped
 entirely if the block raises, so a failed run never leaves a misleading partial record. Used
-internally by the scripts expensive enough to want phase-level breakdown: `build_hut_graph.py`
-(`stream_osm`, `build_kdtree`, `contract_chains`, `build_igraph`, `connected_components`,
-`pass1_distances`, `pass2_paths`), `build_dem_vrt.py` (`materialize_geotiff`) and
+internally by the scripts expensive enough to want phase-level breakdown: `build_base_graph.py`
+(`stream_osm`, `contract_structural`), `build_dem_vrt.py` (`materialize_geotiff`) and
 `add_elevation.py` (`read_dem_window`, `per_edge_ascent_profile`). This exists because scope is
 expected to grow past AT+Bayern — `timings.jsonl` is the real-numbers record for seeing which
 phase stops scaling first, instead of guessing. It already caught one: `read_dem_window` timed at

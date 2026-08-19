@@ -19,7 +19,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
-  "graph": { "maxEdgeKm": 10, "maxSnapM": 200 },
+  "graph": { "maxEdgeKm": 10, "maxSnapM": 200, "tileSizeKm": 60 },
   "dem": { "provider": "composite", "providerConfig": { "regions": [ ... ] }, "eleNoiseThresholdM": 4 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }
@@ -47,6 +47,13 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     osm-trail-pipeline.md` for why). It also bounds the search — each hut's shortest-path query is
     capped at this distance, and candidate huts beyond `3 × maxEdgeKm` beeline are never queried at
     all, so raising it increases both edge count and runtime.
+  - **`tileSizeKm`** (kilometers, default 60) — the cell size `build_hub_edges.py`'s `Grid`
+    (`lib/grid.py`) partitions the bbox into; one worker process handles one cell, each mmap-
+    slicing only its own padded region (cell + `maxEdgeKm` buffer) of the persisted base graph
+    (`lib/subgraph.py`). 60km ≈ 2× `maxEdgeKm`, giving each tile a core-to-buffer area ratio that
+    keeps per-tile work non-trivial relative to the fixed buffer overhead — retune once real
+    per-tile timings exist. Also read by `build_base_graph.py`, which assigns every graph node to
+    a cell at write time so `build_hub_edges.py` can look cells up identically at query time.
 - `dem` — inputs to step 07/08's elevation pass:
   - **`source`** — vestigial, no longer read by any script; `provider` is what actually selects
     the DEM source now (kept only so old configs don't error on an unrecognized key).
@@ -115,9 +122,21 @@ data/                               # gitignored raw/generated inputs+outputs, r
     <region>-trails.osm.pbf       # filtered to hiking ways (script 02), one per region
     trails.osm.pbf                # merged hiking network across all regions (script 03)
     huts.geojson                  # hut points in scope, from ArcGIS (script 05)
-    hut-edges.geojson             # derived hut-to-hut trail edges (script 06), gains
-                                   # ascent_m/descent_m properties per feature after script 08
+    stations.geojson              # railway stations, from raw extracts (script 05b)
+    parking.geojson               # parking points, from raw extracts (script 05b)
+    start_points.npy              # stations+parking filtered to hub range (script 05c),
+    start_points_id_table.json    # + osm_id lookup table
+    base_graph/                   # persisted hub-agnostic base graph (script 06a), plain .npy
+      nodes.npy, cell_index.npy, node_edge_index.npy, node_edge_ids.npy,
+      edges.npy, interior.npy, manifest.json
+    hut_edges/                    # hut-to-hut edges (script 06b), gains ascent_m/descent_m/
+      records.npy, geometry.npy   # profiles.npy after script 08
+      profiles.npy                # (after script 08)
+    start_edges/                  # start(station/parking)-to-hut edges (script 06b), same shape
+      records.npy, geometry.npy, profiles.npy
     trails.pmtiles                 # raw trail network as static vector tiles (script 09)
+    hut-edges.pmtiles, hut-edge-stats.json     # hut_edges tiled for the app (script 11)
+    start-edges.pmtiles, start-edge-stats.json # start_edges tiled for the app (script 11)
   dem/
     raw/
       <TileName>.tif               # untouched Copernicus GLO-30 tiles, one per bbox degree cell
@@ -201,18 +220,19 @@ Runs every task in dependency order, skipping any task whose `targets` already e
 `file_dep` (including `pipeline.config.json`) haven't changed since. Delete an output file (or
 edit the config) to force that task and everything downstream of it to rerun. `add_elevation`
 always reruns when selected (cheap - ~90-100s, `data/timings.jsonl` - and usually run precisely to
-retune `--ele-noise-threshold-m`). `build_hut_graph` is freshness-checked normally - it measured
-at ~4.1 hours on 2026-08-15 (`data/timings.jsonl`), not cheap enough to force-rerun by default -
-but still picks up a changed `--max-edge-km`/`--max-snap-m`/`--road-penalty-factor` automatically
-(no `doit forget` needed) via its own param-aware freshness check.
+retune `--ele-noise-threshold-m`). `build_base_graph`/`build_hub_edges` are freshness-checked
+normally - their predecessor `build_hut_graph` measured at ~4.1 hours on 2026-08-15
+(`data/timings.jsonl`), not cheap enough to force-rerun by default - but each still picks up a
+changed `--tile-size-km`/`--max-edge-km`/`--max-snap-m` automatically (no `doit forget` needed)
+via its own param-aware freshness check.
 
 Run a subset by naming tasks — dependencies of a named task still run first if stale, same as
 `--only` used to, just addressed by name instead of number:
 
 ```bash
-doit build_hut_graph                    # just rebuild the graph
-doit fetch_huts build_hut_graph         # re-fetch huts + rebuild graph
-doit merge_trails build_hut_graph       # merge onward
+doit build_base_graph build_hub_edges   # just rebuild the graph + edges
+doit fetch_huts build_hub_edges         # re-fetch huts + rebuild edges
+doit merge_trails build_base_graph      # merge onward
 doit fetch_dem build_dem_vrt add_elevation   # DEM + elevation only
 doit build_trail_tiles                  # just rebuild the raw-trail vector tiles
 doit list                               # see every task + up-to-date status
@@ -223,7 +243,8 @@ Each task with its own tunable exposes it as a normal doit param — no `--` pas
 needed:
 
 ```bash
-doit build_hut_graph --max-edge-km 15
+doit build_base_graph --tile-size-km 60
+doit build_hub_edges --max-edge-km 15
 doit add_elevation --ele-noise-threshold-m 3
 ```
 
@@ -237,21 +258,29 @@ python pipeline/merge_trails.py            # -> data/osm/trails.osm.pbf
 python pipeline/verify_trails.py           # gate: fails if trails.osm.pbf is missing/empty
 
 python pipeline/fetch_huts.py              # -> data/osm/huts.geojson
+python pipeline/fetch_stations_parking.py  # -> data/osm/stations.geojson, parking.geojson
+python pipeline/filter_start_points.py     # -> data/osm/start_points.npy, start_points_id_table.json
 
-python pipeline/build_hut_graph.py         # -> data/osm/hut-edges.geojson
+python pipeline/build_base_graph.py        # -> data/osm/base_graph/ (hub-agnostic, cached trail graph)
+python pipeline/build_hub_edges.py         # -> data/osm/hut_edges/, start_edges/ (records.npy, geometry.npy)
 
 python pipeline/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
 python pipeline/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
-python pipeline/add_elevation.py           # adds ascent_m/descent_m to data/osm/hut-edges.geojson in place
+python pipeline/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
 
 python pipeline/build_trail_tiles.py       # -> data/osm/trails.pmtiles
+python pipeline/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
+    --layer-name hut_edges --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
+python pipeline/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
+    --layer-name start_edges --out-tiles data/osm/start-edges.pmtiles --out-stats data/osm/start-edge-stats.json
 ```
 
 `doit copy_public_data` copies every output the app reads (`huts.geojson`, `hut-edges.pmtiles`,
-`hut-edge-stats.json`, `trails.pmtiles`, `stations.geojson`, `parking.geojson`) from `data/osm/`
-into `huts/public/data/` — including `trails.pmtiles` for the app's raw-trails toggle layer
-(`GraphPage.jsx`'s `TrailTilesLayer`, `#graph` route). Included in the default `doit` run; run it
-alone to re-sync after hand-running individual scripts.
+`hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `trails.pmtiles`,
+`stations.geojson`, `parking.geojson`) from `data/osm/` into `huts/public/data/` — including
+`trails.pmtiles` for the app's raw-trails toggle layer (`GraphPage.jsx`'s `TrailTilesLayer`,
+`#graph` route). Included in the default `doit` run; run it alone to re-sync after hand-running
+individual scripts.
 
 ## Rejected: buffer-clip + OSMnx
 
@@ -261,26 +290,29 @@ the graph enough to fit in memory. It didn't work: Alpine huts are packed densel
 a 15km buffer only cut node count in half (26.5M → 13.5M), still too large to load. The actual
 problem was never the input size — it was NetworkX/OSMnx's per-node/edge Python object overhead
 (dict-of-dicts + shapely geometry per edge). Shrinking the *area* never fixed that. Those scripts
-have been removed; `build_hut_graph.py` (below) replaced the whole approach.
+have been removed; `build_base_graph.py`/`build_hub_edges.py` (above) replaced the whole approach.
 
-`build_hut_graph.py` skips the buffer clip and OSMnx entirely: it streams `trails.osm.pbf`
-(the full, unclipped merge from step 3) once with `pyosmium` into flat numpy arrays, builds a
-`scipy`-backed KDTree + `igraph` graph, snaps huts to their nearest trail node, and runs a
-distance-capped shortest-path query per hut — cheap even against the full network because the
-`--max-edge-km` cutoff (from `pipeline.config.json`) stops each search early. See the script's
-docstring for details. Its two per-hut/per-edge query passes run across a `ThreadPoolExecutor`
-(`--workers`, default all cores) since igraph's C routines release the GIL — no process-pool
-pickling of the graph needed.
+`build_base_graph.py` skips the buffer clip and OSMnx entirely: it streams `trails.osm.pbf`
+(the full, unclipped merge from step 3) once with `pyosmium` into flat numpy arrays and
+structurally contracts it (`lib/contraction.py`) into a persisted, hub-agnostic mmap graph
+(`lib/binfmt.py`) — no hut/station/parking snapping happens at this stage at all. `build_hub_edges.py`
+then partitions the bbox into `lib/grid.py` cells and runs one worker process per cell
+(`ProcessPoolExecutor`), each mmap-slicing only its own padded region of the base graph
+(`lib/subgraph.py`), snapping hubs (`lib/edge_split.py`) and running a distance-capped
+shortest-path query per hub within that region — cheap even against the full network because the
+`--max-edge-km` cutoff (from `pipeline.config.json`) stops each search early, and because each
+worker only ever loads its own tile plus a buffer, not the whole graph. See `docs/superpowers/
+specs/2026-08-19-pipeline-v2-design.md` for the full design rationale.
 
 Step 08's elevation pass is a straight DEM sample-and-sum per edge polyline (rasterio + a
 threshold-hysteresis filter, see the script's docstring) — cheap enough on the surviving edge set
-that it hasn't needed the same treatment.
+that it hasn't needed the same tiled treatment.
 
 ## Displaying the raw OSM trails
 
-`hut-edges.geojson` only ships the ~600 derived hut-to-hut trail segments, not the full raw OSM
-network they were computed from (`trails.osm.pbf`, 26.5M nodes) — far too large to ship as plain
-GeoJSON to a browser. A dynamic tile server (martin, tegola, tileserver-gl) was considered and
+`hut-edges.pmtiles`/`start-edges.pmtiles` only ship the derived hut-to-hut and start-to-hut trail
+segments, not the full raw OSM network they were computed from (`trails.osm.pbf`, 26.5M nodes) —
+far too large to ship as plain GeoJSON to a browser. A dynamic tile server (martin, tegola, tileserver-gl) was considered and
 rejected: this project has no backend by design, and standing one up means new hosting/TLS/uptime
 to maintain, not just a build step.
 
