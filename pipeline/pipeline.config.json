@@ -9,7 +9,8 @@
     "maxEdgeKm": 30,
     "maxSnapM": 100,
     "roadPenaltyFactor": 1.3,
-    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"]
+    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
+    "tileSizeKm": 60
   },
   "dem": {
     "source": "copernicus-glo-30",
