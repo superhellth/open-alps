@@ -7,10 +7,10 @@ Setup (inside the alpen-osm conda env):
 Usage:
     doit list                              # show all tasks + up-to-date status
     doit                                   # run everything, idempotently (like old run_all.py)
-    doit build_hut_graph                   # run one task + its deps (like --only 6)
-    doit fetch_huts build_hut_graph        # several tasks (like --only 5,6)
-    doit build_hut_graph --max-edge-km 15  # task with its own flag (like --only 6 -- --max-edge-km 15)
-    doit info build_hut_graph              # show why a task would (not) run, without running it
+    doit build_base_graph                  # run one task + its deps
+    doit fetch_huts build_hub_edges        # several tasks
+    doit build_hub_edges --max-edge-km 15  # task with its own flag
+    doit info build_hub_edges              # show why a task would (not) run, without running it
 
 A task always reruns if any file in its file_dep changed (content hash, not mtime - doit hashes
 by default) or if pipeline.config.json changed (every task depends on it, so editing the config
@@ -18,10 +18,11 @@ invalidates everything downstream of the values it actually touches, same as run
 config-mtime check but per-task instead of global). verify_trails has no target (it's a gate, not
 a cacheable output) and declares `uptodate: [False]` to force a rerun every time it's selected.
 add_elevation does too - genuinely cheap (~90-100s, data/timings.jsonl) and usually run precisely
-to retune --ele-noise-threshold-m. build_hut_graph is NOT force-rerun despite looking similar -
-it's measured at ~4.1 hours (data/timings.jsonl, 2026-08-15) - so it's freshness-checked normally,
-with a config_changed uptodate check on its own params so passing a different --max-edge-km still
-reruns it without needing `doit forget` first (see its docstring above the task).
+to retune --ele-noise-threshold-m. build_base_graph/build_hub_edges are NOT force-rerun despite
+looking similar - their predecessor build_hut_graph.py was measured at ~4.1 hours
+(data/timings.jsonl, 2026-08-15) - so they're freshness-checked normally, each with a
+config_changed uptodate check on its own params so passing a different --max-edge-km still
+reruns it without needing `doit forget` first (see the docstrings above those tasks).
 
 CLAUDE.md's "never run a pipeline step without asking" rule applies here exactly as it did to
 run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
@@ -42,9 +43,11 @@ DOIT_CONFIG = {
     "dep_file": str(DATA_DIR / ".doit.db"),
     "default_tasks": [
         "download_extracts", "filter_trails", "merge_trails", "verify_trails",
-        "fetch_huts", "fetch_stations_parking", "build_hut_graph",
+        "fetch_huts", "fetch_stations_parking", "filter_start_points",
+        "build_base_graph", "build_hub_edges",
         "fetch_dem", "build_dem_vrt", "add_elevation",
-        "build_trail_tiles", "build_hut_edge_tiles", "copy_public_data",
+        "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
+        "copy_public_data",
     ],
 }
 
@@ -56,6 +59,8 @@ PUBLIC_FILES = [
     "huts.geojson",
     "hut-edges.pmtiles",
     "hut-edge-stats.json",
+    "start-edges.pmtiles",
+    "start-edge-stats.json",
     "trails.pmtiles",
     "stations.geojson",
     "parking.geojson",
@@ -128,37 +133,63 @@ def task_fetch_stations_parking():
     }
 
 
-# ---- 06: build hut graph ----------------------------------------------------
-# NOT cheap - data/timings.jsonl recorded a ~4.1 hour run (14682s, phase "06-build hut graph",
-# 2026-08-15), so this is freshness-checked like every other step, not force-rerun. (run_all.py's
-# old step 6 was `uptodate: lambda: False` with a comment calling it "cheap enough" - that was
-# wrong, contradicted by its own timing log, and not something to carry forward uncritically.)
-# Still reruns automatically when --max-edge-km/--max-snap-m/--road-penalty-factor are passed a
-# different value than last time, via the config_changed uptodate check below - not just on
-# file_dep changes - so tuning a hyperparameter doesn't need a manual `doit forget` first.
+# ---- 05c: filter stations/parking down to hub-range candidates ------------
 
-def _hut_graph_params_uptodate(task, values):
-    return config_changed(json.dumps(task.options, sort_keys=True))(task, values)
+def task_filter_start_points():
+    return {
+        "actions": [py("filter_start_points.py")],
+        "file_dep": [
+            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "stations.geojson"),
+            str(OSM_DIR / "parking.geojson"), str(CONFIG_PATH),
+        ],
+        "targets": [str(OSM_DIR / "start_points.npy"), str(OSM_DIR / "start_points_id_table.json")],
+    }
 
 
-def task_build_hut_graph():
+# ---- 06a: build base graph (hub-agnostic, cached trail graph) -------------
+# NOT cheap - build_hut_graph.py's old stream+contract half recorded ~4.1 hour runs
+# (data/timings.jsonl), so this is freshness-checked like every other step, not force-rerun.
+# Still reruns automatically when --tile-size-km is passed a different value than last time, via
+# the config_changed uptodate check below - not just on file_dep changes.
+
+def task_build_base_graph():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "build_hut_graph.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "build_base_graph.py"}"'
+            " --tile-size-km %(tile_size_km)s"
+        ],
+        "params": [
+            {"name": "tile_size_km", "long": "tile-size-km", "type": float,
+             "default": CONFIG["graph"]["tileSizeKm"]},
+        ],
+        "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
+        "targets": [str(OSM_DIR / "base_graph" / "manifest.json")],
+        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
+    }
+
+
+# ---- 06b: build hut-hut / start-hut edges (tiled, multiprocess) -----------
+
+def task_build_hub_edges():
+    return {
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "build_hub_edges.py"}"'
             " --max-edge-km %(max_edge_km)s --max-snap-m %(max_snap_m)s"
-            " --road-penalty-factor %(road_penalty_factor)s"
         ],
         "params": [
             {"name": "max_edge_km", "long": "max-edge-km", "type": float,
              "default": CONFIG["graph"]["maxEdgeKm"]},
             {"name": "max_snap_m", "long": "max-snap-m", "type": float,
              "default": CONFIG["graph"]["maxSnapM"]},
-            {"name": "road_penalty_factor", "long": "road-penalty-factor", "type": float,
-             "default": CONFIG["graph"]["roadPenaltyFactor"]},
         ],
-        "file_dep": [str(OSM_DIR / "trails.osm.pbf"), str(OSM_DIR / "huts.geojson")],
-        "targets": [str(OSM_DIR / "hut-edges.geojson")],
-        "uptodate": [_hut_graph_params_uptodate],
+        "file_dep": [
+            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "huts.geojson"),
+            str(OSM_DIR / "start_points.npy"),
+        ],
+        "targets": [
+            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+        ],
+        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
     }
 
 
@@ -180,7 +211,7 @@ def task_build_dem_vrt():
     }
 
 
-# ---- 08: add elevation (in-place edit of hut-edges.geojson) ---------------
+# ---- 08: add elevation (in-place edit of hut_edges/ + start_edges/ records) --
 # Always reruns when selected (cheap; usually run precisely to retune --ele-noise-threshold-m).
 
 def task_add_elevation():
@@ -196,9 +227,12 @@ def task_add_elevation():
             {"name": "profile_points", "long": "profile-points", "type": int,
              "default": CONFIG["dem"].get("profilePoints", 30)},
         ],
-        "task_dep": ["build_hut_graph"],  # same file, not just same mtime - see docstring above
+        "task_dep": ["build_hub_edges"],  # same file, not just same mtime - see docstring above
         "file_dep": [str(DEM_DIR / "dem.tif")],
-        "targets": [str(OSM_DIR / "hut-edges.geojson")],
+        "targets": [
+            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "hut_edges" / "profiles.npy"),
+            str(OSM_DIR / "start_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "profiles.npy"),
+        ],
         "uptodate": [False],
     }
 
@@ -220,21 +254,47 @@ def task_build_trail_tiles():
     }
 
 
-# ---- 11: build hut-edge vector tiles + stats -------------------------------
+# ---- 11: build hut-edge / start-edge vector tiles + stats -----------------
 
 def task_build_hut_edge_tiles():
     tiles_cfg = CONFIG.get("hutEdgeTiles", {})
     return {
         "actions": [
             py(
-                "build_hut_edge_tiles.py",
+                "build_edge_tiles.py",
+                f"--edges-dir {OSM_DIR / 'hut_edges'}",
+                f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
+                "--layer-name hut_edges",
+                f"--out-tiles {OSM_DIR / 'hut-edges.pmtiles'}",
+                f"--out-stats {OSM_DIR / 'hut-edge-stats.json'}",
                 f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
                 f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
                 f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
             )
         ],
-        "file_dep": [str(OSM_DIR / "hut-edges.geojson")],
+        "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "hut-edges.pmtiles"), str(OSM_DIR / "hut-edge-stats.json")],
+    }
+
+
+def task_build_start_edge_tiles():
+    tiles_cfg = CONFIG.get("hutEdgeTiles", {})
+    return {
+        "actions": [
+            py(
+                "build_edge_tiles.py",
+                f"--edges-dir {OSM_DIR / 'start_edges'}",
+                f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
+                "--layer-name start_edges",
+                f"--out-tiles {OSM_DIR / 'start-edges.pmtiles'}",
+                f"--out-stats {OSM_DIR / 'start-edge-stats.json'}",
+                f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
+                f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
+                f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
+            )
+        ],
+        "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
+        "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
     }
 
 
