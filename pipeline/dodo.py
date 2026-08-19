@@ -229,9 +229,14 @@ def task_add_elevation():
         ],
         "task_dep": ["build_hub_edges"],  # same file, not just same mtime - see docstring above
         "file_dep": [str(DEM_DIR / "dem.tif")],
+        # records.npy is rewritten in place (ascent_m/descent_m/profile_offset/profile_count
+        # filled) but NOT listed as a target here: build_hub_edges already owns it as a target,
+        # and doit forbids two tasks sharing one target. profiles.npy is the only file this task
+        # alone produces. Downstream tasks that need to wait for the in-place rewrite (the tile
+        # builders) declare an explicit task_dep on add_elevation instead of relying on a shared
+        # target/file_dep link.
         "targets": [
-            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "hut_edges" / "profiles.npy"),
-            str(OSM_DIR / "start_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "profiles.npy"),
+            str(OSM_DIR / "hut_edges" / "profiles.npy"), str(OSM_DIR / "start_edges" / "profiles.npy"),
         ],
         "uptodate": [False],
     }
@@ -272,6 +277,10 @@ def task_build_hut_edge_tiles():
                 f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
             )
         ],
+        # task_dep (not just file_dep) on add_elevation: records.npy is rewritten in place by
+        # that task but isn't one of its declared targets (see task_add_elevation's comment), so
+        # doit's file-hash freshness check alone wouldn't guarantee this task runs after it.
+        "task_dep": ["add_elevation"],
         "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "hut-edges.pmtiles"), str(OSM_DIR / "hut-edge-stats.json")],
     }
@@ -293,6 +302,7 @@ def task_build_start_edge_tiles():
                 f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
             )
         ],
+        "task_dep": ["add_elevation"],  # see task_build_hut_edge_tiles's comment
         "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
     }
