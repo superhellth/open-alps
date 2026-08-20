@@ -58,9 +58,7 @@ def test_compute_hub_edges_for_cell_connects_two_huts_on_the_line():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hub_coords_by_type={binfmt.TYPE_HUT: {
-            1: (0.0001, 0.0), 2: (0.0089, 0.0),
-        }}, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
     )
     assert len(records) == 1
     assert records[0]["distance_m"] < 5000
@@ -73,9 +71,7 @@ def test_compute_hub_edges_for_cell_returns_full_path_geometry():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hub_coords_by_type={binfmt.TYPE_HUT: {
-            1: (0.0001, 0.0), 2: (0.0089, 0.0),
-        }}, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
     )
     assert len(records) == 1
     geometry = records[0]["geometry"]

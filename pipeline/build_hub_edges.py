@@ -187,15 +187,16 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int):
 
 
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
-                                all_hub_coords_by_type: dict, max_edge_km: float,
+                                all_hubs: list, max_edge_km: float,
                                 max_snap_m: float) -> list:
+    """all_hubs: candidate targets already filtered (by the caller) to hubs whose straight-line
+    distance to this cell could possibly be within max_edge_km of trail distance - trail distance
+    is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
+    superset. Without that prefilter this used to snap every hub in the whole bbox against every
+    cell's local subgraph (O(cells * total_hubs) snap calls), which is what made this step take
+    hours instead of minutes."""
     if not core_hubs:
         return []
-
-    all_hubs = []
-    for htype, coords_by_id in all_hub_coords_by_type.items():
-        for hid, (lon, lat) in coords_by_id.items():
-            all_hubs.append({"id": hid, "type": htype, "lon": lon, "lat": lat})
 
     snaps = {}
     for hub in core_hubs + all_hubs:
@@ -296,10 +297,10 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
 
 
 def _run_cell(args):
-    base_graph_dir, grid, cell_id, buffer_km, core_hubs, all_hub_coords_by_type, max_edge_km, \
+    base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
         max_snap_m = args
     subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
-    return compute_hub_edges_for_cell(subgraph, core_hubs, all_hub_coords_by_type, max_edge_km,
+    return compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
                                        max_snap_m)
 
 
@@ -325,16 +326,29 @@ if __name__ == "__main__":
 
     all_hub_coords_by_type = {binfmt.TYPE_HUT: hut_coords_by_id, **start_by_id}
 
+    all_hubs_flat = [
+        {"id": hid, "type": htype, "lon": lon, "lat": lat}
+        for htype, coords_by_id in all_hub_coords_by_type.items()
+        for hid, (lon, lat) in coords_by_id.items()
+    ]
+
     hubs_by_cell = {}
-    for htype, coords_by_id in all_hub_coords_by_type.items():
-        for hid, (lon, lat) in coords_by_id.items():
-            cid = grid.cell_id_for_point(lon, lat)
-            hubs_by_cell.setdefault(cid, []).append(
-                {"id": hid, "type": htype, "lon": lon, "lat": lat}
-            )
+    for hub in all_hubs_flat:
+        cid = grid.cell_id_for_point(hub["lon"], hub["lat"])
+        hubs_by_cell.setdefault(cid, []).append(hub)
+
+    def _candidate_hubs_for_cell(cid):
+        # Trail distance is always >= straight-line distance, so a bbox padded by max_edge_km
+        # around the cell is a safe superset of every hub that could end up within max_edge_km
+        # trail distance of a hub in this cell - see compute_hub_edges_for_cell's docstring.
+        b = grid.padded_bounds(cid, args.max_edge_km)
+        return [
+            h for h in all_hubs_flat
+            if b["minLng"] <= h["lon"] <= b["maxLng"] and b["minLat"] <= h["lat"] <= b["maxLat"]
+        ]
 
     tasks = [
-        (args.base_graph_dir, grid, cid, args.max_edge_km, hubs, all_hub_coords_by_type,
+        (args.base_graph_dir, grid, cid, args.max_edge_km, hubs, _candidate_hubs_for_cell(cid),
          args.max_edge_km, args.max_snap_m)
         for cid, hubs in hubs_by_cell.items()
     ]
