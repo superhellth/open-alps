@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402
+from lib.memtrace import rss_sampler  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -103,25 +104,29 @@ def stream_osm(trails_path, config):
     handler = WayGraphHandler(
         config["graph"]["roadHighwayTags"], config["graph"]["roadPenaltyFactor"]
     )
-    with phase(SCRIPT_NAME, "stream_osm"):
-        handler.apply_file(trails_path, locations=True)
+    with phase(SCRIPT_NAME, "stream_osm") as meta:
+        with rss_sampler() as sample:
+            handler.apply_file(trails_path, locations=True)
+        meta.update(sample.as_meta())  # outside rss_sampler: its finally fills the peak
     print(f"raw graph nodes: {len(handler.coords):,}, edges: {len(handler.edges_i):,}", flush=True)
     return handler
 
 
 def contract(handler, progress_every: int = 20_000):
-    with phase(SCRIPT_NAME, "contract_structural"):
-        contracted = contract_structural(
-            np.array(handler.coords, dtype=np.float64),
-            np.array(handler.edges_i, dtype=np.int64),
-            np.array(handler.edges_j, dtype=np.int64),
-            np.array(handler.edges_dist, dtype=np.float64),
-            np.array(handler.edges_w, dtype=np.float64),
-            np.array(handler.edges_road, dtype=bool),
-            np.array(handler.edges_sac_rank, dtype=np.int8),
-            np.array(handler.edges_via_ferrata, dtype=bool),
-            progress_every=progress_every,
-        )
+    with phase(SCRIPT_NAME, "contract_structural") as meta:
+        with rss_sampler() as sample:
+            contracted = contract_structural(
+                np.array(handler.coords, dtype=np.float64),
+                np.array(handler.edges_i, dtype=np.int64),
+                np.array(handler.edges_j, dtype=np.int64),
+                np.array(handler.edges_dist, dtype=np.float64),
+                np.array(handler.edges_w, dtype=np.float64),
+                np.array(handler.edges_road, dtype=bool),
+                np.array(handler.edges_sac_rank, dtype=np.int8),
+                np.array(handler.edges_via_ferrata, dtype=bool),
+                progress_every=progress_every,
+            )
+        meta.update(sample.as_meta())  # outside rss_sampler: its finally fills the peak
     print(f"contracted to {len(contracted.coords):,} nodes / "
           f"{len(contracted.edges_u):,} edges", flush=True)
     return contracted

@@ -19,7 +19,7 @@ TIMINGS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "timings
 @contextmanager
 def phase(script: str, name: str, **meta):
     t0 = time.monotonic()
-    yield
+    yield meta  # mutable: a block can add values (e.g. peak RSS) only knowable at the end
     elapsed = time.monotonic() - t0
     rec = {
         "ts": datetime.now(timezone.utc).isoformat(),
