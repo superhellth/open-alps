@@ -7,7 +7,7 @@ across the whole Austria+Bavaria extract, so trail-snap distance alone would not
 parking - this beeline-to-hut filter is what actually bounds the hub count before it reaches the
 expensive graph query. See docs/superpowers/specs/2026-08-19-pipeline-v2-design.md.
 
-Usage: python pipeline/preprocessing/filter_start_points.py
+Usage: python pipeline/phases/preprocessing/filter_start_points.py
 """
 
 import json
@@ -17,7 +17,7 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
 

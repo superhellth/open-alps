@@ -3,7 +3,7 @@
 Fetches hut point locations from the Alpenverein ArcGIS layer, filtered to the bbox in
 pipeline.config.json (Austria + Bavaria by default), and writes them as a GeoJSON
 FeatureCollection.
-Usage: python pipeline/downloads/fetch_huts.py
+Usage: python pipeline/phases/downloads/fetch_huts.py
 Full field/endpoint reference: docs/alpenverein-api.md
 """
 
@@ -12,7 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 
 bbox = load_config()["bbox"]

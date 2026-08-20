@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import get_provider
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 from lib.pipeline import OSM_DIR, bbox_from_huts, edge_points, hut_points  # noqa: E402
 
 

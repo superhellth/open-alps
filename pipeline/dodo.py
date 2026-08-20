@@ -76,7 +76,7 @@ def py(script, *args):
 
 def task_download_extracts():
     return {
-        "actions": [py("downloads/download_extracts.py")],
+        "actions": [py("phases/downloads/download_extracts.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
     }
@@ -86,7 +86,7 @@ def task_download_extracts():
 
 def task_filter_trails():
     return {
-        "actions": [py("preprocessing/filter_trails.py")],
+        "actions": [py("phases/preprocessing/filter_trails.py")],
         "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
         + [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
@@ -97,7 +97,7 @@ def task_filter_trails():
 
 def task_merge_trails():
     return {
-        "actions": [py("preprocessing/merge_trails.py")],
+        "actions": [py("phases/preprocessing/merge_trails.py")],
         "file_dep": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
         "targets": [str(OSM_DIR / "trails.osm.pbf")],
     }
@@ -107,7 +107,7 @@ def task_merge_trails():
 
 def task_verify_trails():
     return {
-        "actions": [py("preprocessing/verify_trails.py")],
+        "actions": [py("phases/preprocessing/verify_trails.py")],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
         "uptodate": [False],
     }
@@ -117,7 +117,7 @@ def task_verify_trails():
 
 def task_fetch_huts():
     return {
-        "actions": [py("downloads/fetch_huts.py")],
+        "actions": [py("phases/downloads/fetch_huts.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / "huts.geojson")],
     }
@@ -127,7 +127,7 @@ def task_fetch_huts():
 
 def task_fetch_stations_parking():
     return {
-        "actions": [py("downloads/fetch_stations_parking.py")],
+        "actions": [py("phases/downloads/fetch_stations_parking.py")],
         "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
         "targets": [str(OSM_DIR / "stations.geojson"), str(OSM_DIR / "parking.geojson")],
     }
@@ -137,7 +137,7 @@ def task_fetch_stations_parking():
 
 def task_filter_start_points():
     return {
-        "actions": [py("preprocessing/filter_start_points.py")],
+        "actions": [py("phases/preprocessing/filter_start_points.py")],
         "file_dep": [
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "stations.geojson"),
             str(OSM_DIR / "parking.geojson"), str(CONFIG_PATH),
@@ -155,7 +155,7 @@ def task_filter_start_points():
 def task_build_base_graph():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "graph_building" / "build_base_graph.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "build_base_graph.py"}"'
             " --tile-size-km %(tile_size_km)s"
         ],
         "params": [
@@ -173,7 +173,7 @@ def task_build_base_graph():
 def task_build_hub_edges():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "graph_building" / "build_hub_edges.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "build_hub_edges.py"}"'
             " --max-edge-km %(max_edge_km)s --max-snap-m %(max_snap_m)s"
         ],
         "params": [
@@ -197,7 +197,7 @@ def task_build_hub_edges():
 
 def task_fetch_dem():
     return {
-        "actions": [py("downloads/fetch_dem.py")],
+        "actions": [py("phases/downloads/fetch_dem.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(DEM_DIR / "fetch_manifest.json")],
     }
@@ -205,7 +205,7 @@ def task_fetch_dem():
 
 def task_build_dem_vrt():
     return {
-        "actions": [py("elevation/build_dem_vrt.py")],
+        "actions": [py("phases/elevation/build_dem_vrt.py")],
         "file_dep": [str(DEM_DIR / "fetch_manifest.json")],
         "targets": [str(DEM_DIR / "dem.vrt"), str(DEM_DIR / "dem.tif")],
     }
@@ -217,7 +217,7 @@ def task_build_dem_vrt():
 def task_add_elevation():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "elevation" / "add_elevation.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "add_elevation.py"}"'
             " --ele-noise-threshold-m %(ele_noise_threshold_m)s"
             " --profile-points %(profile_points)s"
         ],
@@ -249,7 +249,7 @@ def task_build_trail_tiles():
     return {
         "actions": [
             py(
-                "postprocessing/build_trail_tiles.py",
+                "phases/postprocessing/build_trail_tiles.py",
                 f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
                 f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
             )
@@ -266,7 +266,7 @@ def task_build_hut_edge_tiles():
     return {
         "actions": [
             py(
-                "postprocessing/build_edge_tiles.py",
+                "phases/postprocessing/build_edge_tiles.py",
                 f"--edges-dir {OSM_DIR / 'hut_edges'}",
                 f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
                 "--layer-name hut_edges",
@@ -291,7 +291,7 @@ def task_build_start_edge_tiles():
     return {
         "actions": [
             py(
-                "postprocessing/build_edge_tiles.py",
+                "phases/postprocessing/build_edge_tiles.py",
                 f"--edges-dir {OSM_DIR / 'start_edges'}",
                 f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
                 "--layer-name start_edges",

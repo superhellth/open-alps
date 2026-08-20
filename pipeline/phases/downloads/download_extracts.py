@@ -2,14 +2,14 @@
 """
 Downloads raw Geofabrik regional extracts listed in pipeline.config.json.
 Re-run to refresh to the latest Geofabrik snapshot (they regenerate daily, not pinned/versioned).
-Usage: python pipeline/downloads/download_extracts.py
+Usage: python pipeline/phases/downloads/download_extracts.py
 """
 
 import sys
 import urllib.request
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 
 config = load_config()

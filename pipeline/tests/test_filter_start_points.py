@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from preprocessing.filter_start_points import filter_to_hut_range  # noqa: E402
 

@@ -4,14 +4,14 @@ Filters each raw region extract down to hiking-relevant ways, using the tag filt
 pipeline.config.json. Preserves full node/way topology (osmium tags-filter keeps referenced
 nodes by default) - required for graph-building later. Requires osmium-tool installed natively
 (conda install -c conda-forge osmium-tool) and on PATH - no Docker.
-Usage: python pipeline/preprocessing/filter_trails.py
+Usage: python pipeline/phases/preprocessing/filter_trails.py
 """
 
 import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 
 config = load_config()
