@@ -53,7 +53,7 @@ class WayGraphHandler(osmium.SimpleHandler):
     """Identical streaming shape to build_hut_graph.py's old handler - kept unchanged since
     nothing about hub sets affects how raw ways are turned into raw node/edge arrays."""
 
-    def __init__(self, road_tags, road_penalty_factor):
+    def __init__(self, road_tags, road_penalty_factor, progress_every=100_000):
         super().__init__()
         self.road_tags = set(road_tags)
         self.road_penalty_factor = road_penalty_factor
@@ -62,6 +62,8 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_i, self.edges_j = [], []
         self.edges_dist, self.edges_w = [], []
         self.edges_road, self.edges_sac_rank, self.edges_via_ferrata = [], [], []
+        self.progress_every = progress_every
+        self.n_ways = 0
 
     def _idx_for(self, node_id, lon, lat):
         idx = self.node_id_to_idx.get(node_id)
@@ -97,6 +99,11 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_sac_rank.extend([sac_rank] * n_edges)
         self.edges_via_ferrata.extend([is_via_ferrata] * n_edges)
 
+        self.n_ways += 1
+        if self.progress_every and self.n_ways % self.progress_every == 0:
+            print(f"  stream_osm: {self.n_ways:,} ways -> {len(self.coords):,} nodes, "
+                  f"{len(self.edges_i):,} edges so far", flush=True)
+
 
 print(f"streaming {args.trails} ...")
 handler = WayGraphHandler(config["graph"]["roadHighwayTags"], config["graph"]["roadPenaltyFactor"])
@@ -114,6 +121,7 @@ with phase(SCRIPT_NAME, "contract_structural"):
         np.array(handler.edges_road, dtype=bool),
         np.array(handler.edges_sac_rank, dtype=np.int8),
         np.array(handler.edges_via_ferrata, dtype=bool),
+        progress_every=20_000,
     )
 del handler
 print(f"contracted to {len(contracted.coords):,} nodes / {len(contracted.edges_u):,} edges")

@@ -25,7 +25,11 @@ class ContractedGraph:
 
 
 def contract_structural(coords, edges_i, edges_j, edges_dist, edges_weight, edges_road,
-                         edges_sac_rank, edges_via_ferrata) -> ContractedGraph:
+                         edges_sac_rank, edges_via_ferrata, progress_every: int = 0) -> ContractedGraph:
+    """progress_every: print a progress line every N processed junction (keep) nodes - 0 (default)
+    prints nothing, kept quiet for tests/callers that don't want console output. Junction-node
+    count is much smaller than raw node count (the whole point of contraction), so a much smaller
+    interval than stream_osm's way-count one makes sense here."""
     n_nodes = len(coords)
     n_edges = len(edges_i)
     edge_ids = np.arange(n_edges, dtype=np.int64)
@@ -52,7 +56,12 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_weight, edge
     c_sac_rank, c_via_ferrata = [], []
     c_interior = []
 
-    for k in np.flatnonzero(keep).tolist():
+    keep_idxs_list = np.flatnonzero(keep).tolist()
+    total_keep = len(keep_idxs_list)
+    for processed, k in enumerate(keep_idxs_list, start=1):
+        if progress_every and processed % progress_every == 0:
+            print(f"  contract_structural: {processed:,}/{total_keep:,} junction nodes "
+                  f"processed -> {len(c_u):,} chain edges so far", flush=True)
         nbrs, edges_here = _neighbors(k)
         for nb, e in zip(nbrs, edges_here):
             if visited_edge[e]:
