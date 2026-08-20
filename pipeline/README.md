@@ -3,9 +3,10 @@
 Offline precompute pipeline for the hut-to-hut trail graph. This directory (`pipeline.config.json`,
 scripts, this file) is the tracked source; its raw/generated inputs and outputs live in the
 sibling `data/` dir (`data/osm/`, `data/dem/`), which is entirely gitignored — regenerate it via
-`pipeline/run_all.py` rather than expecting it to be present after a fresh clone. Rationale for the
-pipeline's design choices lives in `docs/osm-trail-pipeline.md`; this file is the practical "how to
-reproduce it" index.
+`doit` (see "Reproducing from scratch" below) rather than expecting it to be present after a fresh
+clone. Rationale for the pipeline's design choices lives in `docs/osm-trail-pipeline.md`; this file
+is the practical "how to reproduce it" index. For what each script actually does — data structures,
+algorithms — see `phases/README.md` and each phase subdirectory's own `README.md`.
 
 ## Config
 
@@ -28,131 +29,70 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 (`dem.providerConfig.regions` elided above for brevity — see the `dem` bullet below and the real
 `pipeline.config.json` for the full shape.)
 
-- `bbox` — filters the ArcGIS hut pull (script 05) to the pipeline's current scope.
-- `regions` — one Geofabrik extract per entry; scripts 01-03 loop over this list, so adding a
-  region (e.g. Switzerland) is just adding `{ "name": "switzerland", "url": "..." }` here.
-- `trailTagFilter` — the `osmium tags-filter` expression script 02 applies.
-- `graph.maxEdgeKm` / `graph.maxSnapM` — defaults for script 06's `--max-edge-km` /
+- `bbox` — filters the ArcGIS hut pull (`fetch_huts.py`) to the pipeline's current scope.
+- `regions` — one Geofabrik extract per entry; `download_extracts.py`/`filter_trails.py`/
+  `merge_trails.py` loop over this list, so adding a region (e.g. Switzerland) is just adding
+  `{ "name": "switzerland", "url": "..." }` here.
+- `trailTagFilter` — the `osmium tags-filter` expression `filter_trails.py` applies.
+- `graph.maxEdgeKm` / `graph.maxSnapM` — defaults for `build_hub_edges.py`'s `--max-edge-km` /
   `--max-snap-m`; still overridable per-run via those flags. What they actually control:
-  - **`maxSnapM`** (meters, default 200) — how far a hut may be from the nearest OSM trail node
-    to count as "on the trail network" at all. Script 06 snaps each hut to its closest trail node
-    via a KDTree; if that nearest node is farther than `maxSnapM`, the hut is skipped entirely
-    (no edges computed for it) rather than force-matched to a trail it isn't really on. Raising
-    this includes more huts (e.g. ones set back from the mapped path) at the cost of snapping some
-    to a trail node that isn't really their access point.
+  - **`maxSnapM`** (meters, default 200) — how far a hub may be from the nearest OSM trail node
+    to count as "on the trail network" at all. `build_hub_edges.py` snaps each hub to its closest
+    trail node via a KDTree; if that nearest node is farther than `maxSnapM`, the hub is skipped
+    entirely (no edges computed for it) rather than force-matched to a trail it isn't really on.
+    Raising this includes more hubs (e.g. huts set back from the mapped path) at the cost of
+    snapping some to a trail node that isn't really their access point.
   - **`maxEdgeKm`** (kilometers, default 10) — the longest hut-to-hut trail distance (walking
     distance along the graph, not beeline) that's kept as an edge. It's a deliberate cutoff, not
     just a performance knob: a hut-to-hut edge is meant to represent one day-hike leg, so anything
     longer should be multiple hops through intermediate huts, not one edge (see `docs/
-    osm-trail-pipeline.md` for why). It also bounds the search — each hut's shortest-path query is
-    capped at this distance, and candidate huts beyond `3 × maxEdgeKm` beeline are never queried at
-    all, so raising it increases both edge count and runtime.
+    osm-trail-pipeline.md` for why). It also bounds the search — each hub's shortest-path query is
+    capped at this distance, so raising it increases both edge count and runtime.
   - **`tileSizeKm`** (kilometers, default 60) — the cell size `build_hub_edges.py`'s `Grid`
     (`lib/grid.py`) partitions the bbox into; one worker process handles one cell, each mmap-
     slicing only its own padded region (cell + `maxEdgeKm` buffer) of the persisted base graph
     (`lib/subgraph.py`). 60km ≈ 2× `maxEdgeKm`, giving each tile a core-to-buffer area ratio that
-    keeps per-tile work non-trivial relative to the fixed buffer overhead — retune once real
-    per-tile timings exist. Also read by `build_base_graph.py`, which assigns every graph node to
-    a cell at write time so `build_hub_edges.py` can look cells up identically at query time.
-- `dem` — inputs to step 07/08's elevation pass:
-  - **`source`** — vestigial, no longer read by any script; `provider` is what actually selects
-    the DEM source now (kept only so old configs don't error on an unrecognized key).
-  - **`provider`** / **`providerConfig`** — which DEM source step 07 fetches from, and that
-    provider's own config. Every provider implements the contract in
-    `pipeline/phases/downloads/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `fetch_dem.py` is a
-    thin dispatcher over `dem_providers.get_provider(name)` that only calls `fetch()` and writes
-    `data/dem/fetch_manifest.json` — `build_dem_vrt.py` reads that manifest and calls
-    `to_4326_vrt()` + materializes `dem.tif`, with no network access of its own, so retuning a
-    provider's reprojection (e.g. a NoData-handling fix) is a rerun of 07b alone, never a
-    re-fetch. Registered providers:
+    keeps per-tile work non-trivial relative to the fixed buffer overhead. Also read by
+    `build_base_graph.py`, which assigns every graph node to a cell at write time so
+    `build_hub_edges.py` can look cells up identically at query time.
+- `dem` — inputs to the elevation pass (`fetch_dem.py`/`build_dem_vrt.py`/`add_elevation.py`):
+  - **`provider`** / **`providerConfig`** — which DEM source `fetch_dem.py` fetches from, and that
+    provider's own config. Registered providers (`pipeline/phases/downloads/dem_providers/`):
     - **`copernicus-glo-30`** — global 30m coverage (AWS Open Data, no auth). `providerConfig: {}`
       (uses the top-level `bbox`). The safe default; systematically underestimates ascent/descent
       on switchback-heavy alpine trails because 30m can't resolve terrain that narrow (see
       `docs/osm-trail-pipeline.md`).
     - **`at-bev-dgm`** — Austria's national 10m DGM (data.gv.at, CC-BY-4.0, Lambert/EPSG:31287).
       `providerConfig: {"downloadUrl": "<confirmed direct .zip URL>"}` — single ~1.9GB national
-      file, not tiled, so `bbox` in its config is unused metadata (the whole file downloads
-      regardless).
+      file, not tiled, so `bbox` in its config is unused metadata.
     - **`bavaria-dgm5`** — Bavaria's 5m DGM (geodaten.bayern.de, CC BY 4.0, UTM32N/EPSG:25832),
-      served as one small (~200KB) direct-download zip per 1km tile
-      (`https://download1.bayernwolke.de/a/dgm/dgm5xyz/{easting_km}_{northing_km}.zip`) - tile IDs
-      are computed from `providerConfig.bbox` (no tile-index file needed), so keeping that bbox
-      tight matters: see `bboxFromHuts` below.
+      served as one small (~200KB) direct-download zip per 1km tile; tile IDs are computed from
+      `providerConfig.bbox` (no tile-index file needed), so keeping that bbox tight matters: see
+      `bboxFromHuts` below.
     - **`composite`** — meta-provider stitching per-sub-region VRTs from *different* providers
       into one final `dem.vrt` (e.g. Austria via `at-bev-dgm`, Bavaria via `bavaria-dgm5`).
       `providerConfig: {"regions": [{"provider": "...", "bbox": {...}, ...that provider's own
-      config keys}, ...]}`. Region order matters where two regions' bboxes overlap -
+      config keys}, ...]}`. Region order matters where two regions' bboxes overlap —
       `gdalbuildvrt` keeps the first-listed source's pixels.
   - **`bboxFromHuts`** (per-region, `composite` only, default false) — a region's `bbox` is
     normally just a coarse political-boundary filter used to pick out which huts belong to that
     region (`data/osm/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
     `bboxFromHuts: true` tightens the box actually fetched down to those huts' real extent (+
-    `bufferDeg`, default 0.05°) instead of the full political box. This matters for
-    request-per-tile providers like `bavaria-dgm5`: Bavaria's full state bbox is ~80,000 1km
-    tiles, but huts only exist in the southern Alpine strip near the Austrian border - deriving
-    the fetch bbox from actual hut locations (`lib/pipeline.py`'s `bbox_from_huts`) cuts that down
-    to only the area the pipeline actually needs, without hand-tuning a smaller political box that
-    would go stale as huts are added/removed. Providers whose `fetch()` ignores `bbox` entirely
-    (e.g. `at-bev-dgm`'s single national file) are unaffected either way.
-  - **`eleNoiseThresholdM`** (meters, default 2) — step 08's threshold-hysteresis cutoff: a
-    direction change only counts toward ascent/descent once cumulative drift since the last
-    counted point exceeds this, so per-sample DEM noise doesn't inflate totals. Lower = more
+    `bufferDeg`, default 0.05°) instead of the full political box — matters for request-per-tile
+    providers like `bavaria-dgm5`, whose full state bbox is ~80,000 1km tiles even though huts
+    only exist in the southern Alpine strip near the Austrian border.
+  - **`eleNoiseThresholdM`** (meters, default 2) — `add_elevation.py`'s threshold-hysteresis
+    cutoff: a direction change only counts toward ascent/descent once cumulative drift since the
+    last counted point exceeds this, so per-sample DEM noise doesn't inflate totals. Lower = more
     sensitive to real short climbs but noisier; higher = smoother but can flatten genuinely short
-    steep sections. Still overridable per-run via step 08's `--ele-noise-threshold-m`.
-- `trailTiles.minZoom` / `trailTiles.maxZoom` — defaults for step 09's `--min-zoom` / `--max-zoom`,
-  the zoom range `tippecanoe` builds vector tiles for. Below `minZoom` the layer just isn't
-  rendered; above `maxZoom` Leaflet oversamples the highest tile that exists (standard vector-tile
-  overzoom), so raising `maxZoom` mainly costs build time/tile count, not correctness.
+    steep sections. Still overridable per-run via `--ele-noise-threshold-m`.
+- `trailTiles.minZoom` / `trailTiles.maxZoom` — defaults for `build_trail_tiles.py`'s `--min-zoom`
+  / `--max-zoom`, the zoom range `tippecanoe` builds vector tiles for. Below `minZoom` the layer
+  just isn't rendered; above `maxZoom` Leaflet oversamples the highest tile that exists (standard
+  vector-tile overzoom), so raising `maxZoom` mainly costs build time/tile count, not correctness.
 
 Every script reads this file (via `pipeline/lib/pipeline.py`'s `load_config()`) instead of
 hardcoding these values — change the config, not the scripts.
-
-## Layout
-
-```
-pipeline/                          # tracked source
-  pipeline.config.json            # single source of truth for hyperparameters, above
-  lib/pipeline.py                  # shared config reader + path constants
-  run_all.py                       # runs everything below in order, idempotently
-  01-11                            # individual steps, in run order — plain Python scripts
-data/                               # gitignored raw/generated inputs+outputs, regenerated by the above
-  osm/
-    raw/
-      <region>-latest.osm.pbf     # untouched Geofabrik download, one per pipeline.config.json region
-    <region>-trails.osm.pbf       # filtered to hiking ways (script 02), one per region
-    trails.osm.pbf                # merged hiking network across all regions (script 03)
-    huts.geojson                  # hut points in scope, from ArcGIS (script 05)
-    stations.geojson              # railway stations, from raw extracts (script 05b)
-    parking.geojson               # parking points, from raw extracts (script 05b)
-    start_points.npy              # stations+parking filtered to hub range (script 05c),
-    start_points_id_table.json    # + osm_id lookup table
-    base_graph/                   # persisted hub-agnostic base graph (script 06a), plain .npy
-      nodes.npy, cell_index.npy, node_edge_index.npy, node_edge_ids.npy,
-      edges.npy, interior.npy, manifest.json
-    hut_edges/                    # hut-to-hut edges (script 06b), gains ascent_m/descent_m/
-      records.npy, geometry.npy   # profiles.npy after script 08
-      profiles.npy                # (after script 08)
-    start_edges/                  # start(station/parking)-to-hut edges (script 06b), same shape
-      records.npy, geometry.npy, profiles.npy
-    trails.pmtiles                 # raw trail network as static vector tiles (script 09)
-    hut-edges.pmtiles, hut-edge-stats.json     # hut_edges tiled for the app (script 11)
-    start-edges.pmtiles, start-edge-stats.json # start_edges tiled for the app (script 11)
-  dem/
-    raw/
-      <TileName>.tif               # untouched Copernicus GLO-30 tiles, one per bbox degree cell
-    dem.vrt                        # GDAL mosaic index over raw/ (script 07) - lazily reprojecting,
-                                    # not read directly by script 08 (see dem.tif)
-    dem.tif                        # dem.vrt materialized into a real, tiled/compressed GeoTIFF
-                                    # (script 07) - this is what script 08 actually samples, so
-                                    # reruns of 08 (e.g. to retune --ele-noise-threshold-m) don't
-                                    # keep re-paying dem.vrt's reprojection cost
-```
-
-Everything is plain Python (stdlib `urllib`/`subprocess` + the `osmium`/`scipy`/`numpy`/`igraph`/
-`rasterio`/GDAL libs) — no bash, no Node, no Docker. `osmium-tool` (the CLI, called via
-`subprocess`) and `pyosmium` (the Python bindings, imported directly in script 06) are two
-different packages that happen to share a name upstream; both come from the conda env below, as
-is `gdalbuildvrt` (the CLI script 07 shells out to) and `rasterio` (script 08's DEM reader).
 
 ## Setup: the `alpen-osm` conda env
 
@@ -160,193 +100,61 @@ The pipeline needs a real `osmium-tool` binary (`tags-filter`/`merge`/`fileinfo`
 of Python packages with native extensions (`pyosmium`, `scipy`, `numpy`, `python-igraph`). None of
 that is on PyPI in CLI form, so it's a conda-forge env, not `pip`/`uv`.
 
-**Use `micromamba` to create it, not `conda create` directly.** This machine's `base` conda env
-only has `defaults` in its channel list (`conda config --show channels`); solving a `-c
-conda-forge` spec against that with conda's classic solver cross-checks builds across both
-channels and can hang for 10+ minutes or spin forever in "Solving environment" / "retrying with
-next repodata source". `micromamba` is a fast, standalone solver binary — no install step, no
-touching your existing conda setup — that solves the same spec in seconds.
-
 ```bash
-# one-time: fetch the micromamba binary (~4.5MB, no install)
-curl -sSL -o micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/win-64/latest"
-mkdir mm && tar -xjf micromamba.tar.bz2 -C mm
-# mm/Library/bin/micromamba.exe is now a standalone executable
-
-# create the env inside your existing conda envs dir, so `conda activate` finds it too
-mm/Library/bin/micromamba.exe create -y -r "$CONDA_ROOT" -n alpen-osm -c conda-forge \
+conda create -n alpen-osm -c conda-forge \
   python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson
-```
-
-(`$CONDA_ROOT` is wherever your miniconda/anaconda lives, e.g. `C:/Users/<you>/miniconda3` —
-same value `conda info` reports as "base environment".)
-
-`tippecanoe` is **not** installable into this env — conda-forge only ships it for linux-64/osx-64,
-not win-64. Step 09 needs it separately; see "Displaying the raw OSM trails" below for how that's
-set up on Windows (a WSL micromamba env, one-time).
-
-Once created, use it like any normal conda env — `micromamba` was only needed to get past the
-solve; the env itself is a regular conda env with no lingering micromamba dependency:
-
-```bash
 conda activate alpen-osm
 osmium --version   # sanity check: should print "osmium version ..."
+pip install pmtiles doit   # pmtiles + doit aren't on conda-forge
 ```
 
-`build_trail_tiles.py` also needs the `pmtiles` package, which isn't on conda-forge — install it
-with `pip` inside the same env (fine to mix; only the packages with native extensions above need
-conda). It has no CLI despite the name, the script imports `pmtiles.convert.mbtiles_to_pmtiles`
-directly. The pipeline is orchestrated by [doit](https://pydoit.org) (`pipeline/dodo.py`), also
-`pip`-installed here — no native extensions either:
+`tippecanoe` (needed by `build_trail_tiles.py`/`build_edge_tiles.py`) has no Windows build on
+conda-forge — only linux-64/osx-64. On Windows, set up a one-time WSL micromamba env instead:
 
 ```bash
-conda activate alpen-osm
-pip install pmtiles doit
+# inside WSL
+curl -sSL -o micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/linux-64/latest"
+mkdir -p mm && tar -xjf micromamba.tar.bz2 -C mm
+./mm/bin/micromamba create -y -r ~/micromamba -n tippecanoe -c conda-forge tippecanoe
 ```
+
+`build_trail_tiles.py` detects Windows and falls back to invoking `tippecanoe` through WSL
+automatically (`lib.pipeline.run_tippecanoe()`) — see `phases/postprocessing/README.md` for how.
+On Linux/macOS, just `conda install -c conda-forge tippecanoe` into `alpen-osm` and skip this.
 
 ## Reproducing from scratch
 
 The pipeline is orchestrated by [doit](https://pydoit.org) — `pipeline/dodo.py` declares one task
-per script, wired together by `file_dep`/`targets` (doit derives run order and what's stale from
-that graph; nothing hand-numbered like the old `run_all.py` was). `doit` itself is installed into
-the `alpen-osm` env (`pip install doit`, see Setup above).
+per script, wired by `file_dep`/`targets` (doit derives run order and staleness from that graph).
 
 ```bash
 conda activate alpen-osm
-doit
-```
-
-Runs every task in dependency order, skipping any task whose `targets` already exist and whose
-`file_dep` (including `pipeline.config.json`) haven't changed since. Delete an output file (or
-edit the config) to force that task and everything downstream of it to rerun. `add_elevation`
-always reruns when selected (cheap - ~90-100s, `data/timings.jsonl` - and usually run precisely to
-retune `--ele-noise-threshold-m`). `build_base_graph`/`build_hub_edges` are freshness-checked
-normally - their predecessor `build_hut_graph` measured at ~4.1 hours on 2026-08-15
-(`data/timings.jsonl`), not cheap enough to force-rerun by default - but each still picks up a
-changed `--tile-size-km`/`--max-edge-km`/`--max-snap-m` automatically (no `doit forget` needed)
-via its own param-aware freshness check.
-
-Run a subset by naming tasks — dependencies of a named task still run first if stale, same as
-`--only` used to, just addressed by name instead of number:
-
-```bash
-doit build_base_graph build_hub_edges   # just rebuild the graph + edges
-doit fetch_huts build_hub_edges         # re-fetch huts + rebuild edges
-doit merge_trails build_base_graph      # merge onward
-doit fetch_dem build_dem_vrt add_elevation   # DEM + elevation only
-doit build_trail_tiles                  # just rebuild the raw-trail vector tiles
+doit                                    # run everything that's stale, in dependency order
+doit build_base_graph build_hub_edges   # run just these tasks (+ stale deps)
+doit build_base_graph --tile-size-km 60 # override a task's own param
 doit list                               # see every task + up-to-date status
-doit info <task>                        # see why a task would (not) run, without running it
+doit info <task>                        # see why a task would (not) run
 ```
 
-Each task with its own tunable exposes it as a normal doit param — no `--` passthrough hack
-needed:
+`doit` skips any task whose `targets` already exist and whose `file_dep` (including
+`pipeline.config.json`) haven't changed. Delete an output file (or edit the config) to force that
+task and everything downstream to rerun. `add_elevation` always reruns when selected (cheap,
+~90-100s — usually run to retune `--ele-noise-threshold-m`). `build_base_graph`/`build_hub_edges`
+are freshness-checked normally (`build_base_graph` alone measured ~4.1h — see `pipeline/CLAUDE.md`
+for why you must ask before running it), but still pick up a changed `--tile-size-km`/
+`--max-edge-km`/`--max-snap-m` automatically.
 
-```bash
-doit build_base_graph --tile-size-km 60
-doit build_hub_edges --max-edge-km 15
-doit add_elevation --ele-noise-threshold-m 3
-```
-
-To run a single step by hand (e.g. while tuning a script), invoke it directly — each one is still
-a plain, independently runnable script (all from within the `alpen-osm` env):
-
-```bash
-python pipeline/phases/downloads/download_extracts.py      # ~1.6GB, Geofabrik extracts from pipeline.config.json
-python pipeline/phases/preprocessing/filter_trails.py           # -> ~264MB combined, hiking ways only
-python pipeline/phases/preprocessing/merge_trails.py            # -> data/osm/trails.osm.pbf
-python pipeline/phases/preprocessing/verify_trails.py           # gate: fails if trails.osm.pbf is missing/empty
-
-python pipeline/phases/downloads/fetch_huts.py              # -> data/osm/huts.geojson
-python pipeline/phases/downloads/fetch_stations_parking.py  # -> data/osm/stations.geojson, parking.geojson
-python pipeline/phases/preprocessing/filter_start_points.py     # -> data/osm/start_points.npy, start_points_id_table.json
-
-python pipeline/phases/graph_building/build_base_graph.py        # -> data/osm/base_graph/ (hub-agnostic, cached trail graph)
-python pipeline/phases/graph_building/build_hub_edges.py         # -> data/osm/hut_edges/, start_edges/ (records.npy, geometry.npy)
-
-python pipeline/phases/downloads/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
-python pipeline/phases/elevation/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
-python pipeline/phases/elevation/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
-
-python pipeline/phases/postprocessing/build_trail_tiles.py       # -> data/osm/trails.pmtiles
-python pipeline/phases/postprocessing/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
-    --layer-name hut_edges --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
-python pipeline/phases/postprocessing/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
-    --layer-name start_edges --out-tiles data/osm/start-edges.pmtiles --out-stats data/osm/start-edge-stats.json
-```
-
-`doit copy_public_data` copies every output the app reads (`huts.geojson`, `hut-edges.pmtiles`,
-`hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `trails.pmtiles`,
-`stations.geojson`, `parking.geojson`) from `data/osm/` into `huts/public/data/` — including
-`trails.pmtiles` for the app's raw-trails toggle layer (`GraphPage.jsx`'s `TrailTilesLayer`,
-`#graph` route). Included in the default `doit` run; run it alone to re-sync after hand-running
-individual scripts.
+`doit copy_public_data` (included in the default run) copies every output the app reads into
+`huts/public/data/` — run it alone to re-sync after hand-running individual scripts.
 
 ## Rejected: buffer-clip + OSMnx
 
-An earlier version of step 6 buffered every hut by a radius, unioned the buffers, and clipped
-`trails.osm.pbf` to that polygon before loading it into NetworkX/OSMnx — the idea being to shrink
-the graph enough to fit in memory. It didn't work: Alpine huts are packed densely enough that even
-a 15km buffer only cut node count in half (26.5M → 13.5M), still too large to load. The actual
-problem was never the input size — it was NetworkX/OSMnx's per-node/edge Python object overhead
-(dict-of-dicts + shapely geometry per edge). Shrinking the *area* never fixed that. Those scripts
-have been removed; `build_base_graph.py`/`build_hub_edges.py` (above) replaced the whole approach.
-
-`build_base_graph.py` skips the buffer clip and OSMnx entirely: it streams `trails.osm.pbf`
-(the full, unclipped merge from step 3) once with `pyosmium` into flat numpy arrays and
-structurally contracts it (`lib/contraction.py`) into a persisted, hub-agnostic mmap graph
-(`lib/binfmt.py`) — no hut/station/parking snapping happens at this stage at all. `build_hub_edges.py`
-then partitions the bbox into `lib/grid.py` cells and runs one worker process per cell
-(`ProcessPoolExecutor`), each mmap-slicing only its own padded region of the base graph
-(`lib/subgraph.py`), snapping hubs (`lib/edge_split.py`) and running a distance-capped
-shortest-path query per hub within that region — cheap even against the full network because the
-`--max-edge-km` cutoff (from `pipeline.config.json`) stops each search early, and because each
-worker only ever loads its own tile plus a buffer, not the whole graph. See `docs/superpowers/
-specs/2026-08-19-pipeline-v2-design.md` for the full design rationale.
-
-Step 08's elevation pass is a straight DEM sample-and-sum per edge polyline (rasterio + a
-threshold-hysteresis filter, see the script's docstring) — cheap enough on the surviving edge set
-that it hasn't needed the same tiled treatment.
-
-## Displaying the raw OSM trails
-
-`hut-edges.pmtiles`/`start-edges.pmtiles` only ship the derived hut-to-hut and start-to-hut trail
-segments, not the full raw OSM network they were computed from (`trails.osm.pbf`, 26.5M nodes) —
-far too large to ship as plain GeoJSON to a browser. A dynamic tile server (martin, tegola, tileserver-gl) was considered and
-rejected: this project has no backend by design, and standing one up means new hosting/TLS/uptime
-to maintain, not just a build step.
-
-Instead, step 09 pre-builds the raw network into a single static **PMTiles** vector-tile archive
-(`trails.pmtiles`) — still just a file, read via HTTP range requests from whatever static host
-serves the rest of the app, with zoom-dependent detail instead of one fixed simplification level.
-`GraphPage.jsx` renders it client-side with `protomaps-leaflet`, toggleable via a checkbox so it's
-opt-in (it's a lot of lines to draw at once).
-
-### tippecanoe on Windows (WSL)
-
-`tippecanoe` (the vector-tile builder step 09 shells out to) has no Windows build on
-conda-forge — only linux-64/osx-64. It's also not packaged in Ubuntu's apt repos, so the fix is a
-small linux-64 micromamba env inside WSL, one-time setup, independent of the Windows `alpen-osm`
-env:
-
-```bash
-# inside WSL (wsl.exe from a Windows shell, or a WSL terminal directly)
-cd ~
-curl -sSL -o micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/linux-64/latest"
-mkdir -p mm && tar -xjf micromamba.tar.bz2 -C mm
-
-./mm/bin/micromamba create -y -r ~/micromamba -n tippecanoe -c conda-forge tippecanoe
-```
-
-`build_trail_tiles.py` detects it's on Windows, checks for a native `tippecanoe` on PATH
-first (absent), and falls back to invoking it through WSL — `wsl bash -lc "~/mm/bin/micromamba
-run -r ~/micromamba -n tippecanoe tippecanoe ..."` — translating the Windows absolute paths it
-passes (input `.geojsons`, output `.mbtiles`) to their `/mnt/<drive>/...` WSL-mount equivalents.
-On Linux/macOS, install `tippecanoe` normally (conda-forge) and this fallback is never triggered.
-
-## Not done yet
-
-- Extending scope beyond AT+Bayern (Switzerland, Italy/South Tyrol, Slovenia, Liechtenstein) — add
-  each as a `regions` entry in `pipeline.config.json`.
-- The Alpenverein `toursearchApi` 26-tour overlay (see `docs/alpenverein-api.md` §3) is a separate,
-  already-understood data source — not part of this OSM pipeline.
+An earlier version of graph-building buffered every hut by a radius, unioned the buffers, and
+clipped `trails.osm.pbf` to that polygon before loading it into NetworkX/OSMnx — the idea being to
+shrink the graph enough to fit in memory. It didn't work: Alpine huts are packed densely enough
+that even a 15km buffer only cut node count in half (26.5M → 13.5M), still too large to load. The
+actual problem was never the input size — it was NetworkX/OSMnx's per-node/edge Python object
+overhead (dict-of-dicts + shapely geometry per edge). Shrinking the *area* never fixed that. Those
+scripts have been removed; `build_base_graph.py`/`build_hub_edges.py` (see
+`phases/graph_building/README.md`) replaced the whole approach — full design rationale in
+`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`.
