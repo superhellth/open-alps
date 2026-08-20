@@ -52,6 +52,19 @@ def _haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarra
     return 2 * r * np.arcsin(np.sqrt(a))
 
 
+def _haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
+                            lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
+    """Fully-vectorized haversine over paired arrays (both endpoints vary per element), unlike
+    _haversine_m_vec (one fixed point vs an array) - used by _build_edge_spatial_index to compute
+    every polyline segment length in a cell in one call."""
+    r = 6_371_000.0
+    p1, p2 = np.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))
+
+
 @dataclass
 class SnapResult:
     node_index: int = None
@@ -76,34 +89,56 @@ def _build_edge_spatial_index(subgraph: LocalSubgraph):
     vertices, so a hub within max_snap_m of that point isn't necessarily within max_snap_m of a
     vertex - it can be up to max_snap_m + segment_length away from the nearest vertex (triangle
     inequality). Query radius therefore pads max_snap_m by this cell's longest single segment
-    (max_seg_len_m), computed once here, not by max_snap_m alone."""
-    if len(subgraph.local_edges) == 0:
+    (max_seg_len_m), computed once here, not by max_snap_m alone.
+
+    Vectorized (binfmt.gather_ragged/ragged_positions) rather than a per-edge Python loop with
+    per-point scalar structured-array access - was the hot path on a 60km cell with thousands of
+    edges * tens-hundreds of interior points each."""
+    local_edges = subgraph.local_edges
+    n_edges = len(local_edges)
+    if n_edges == 0:
         return None
     ref_lat = float(np.mean(subgraph.local_nodes["lat"])) if len(subgraph.local_nodes) else 0.0
     km_per_deg_lng = KM_PER_DEG_LAT * math.cos(math.radians(ref_lat))
 
-    xs, ys, edge_ids = [], [], []
+    u_lon = subgraph.local_nodes["lon"][local_edges["u"]]
+    u_lat = subgraph.local_nodes["lat"][local_edges["u"]]
+    v_lon = subgraph.local_nodes["lon"][local_edges["v"]]
+    v_lat = subgraph.local_nodes["lat"][local_edges["v"]]
+
+    # Every edge's interior points gathered in one pass; group_ids[k] is which local edge
+    # interior_pts[k] belongs to, in original (offset) order within each edge.
+    interior_pts, group_ids = binfmt.gather_ragged(
+        subgraph.interior, local_edges["interior_offset"], local_edges["interior_count"],
+    )
+    interior_lon, interior_lat = interior_pts["lon"], interior_pts["lat"]
+
+    # Point order doesn't matter for the KDTree itself (only the edge_id tag per point does) -
+    # true polyline order is only needed below, for max_seg_len_m.
+    all_lon = np.concatenate([u_lon, interior_lon, v_lon])
+    all_lat = np.concatenate([u_lat, interior_lat, v_lat])
+    edge_ids = np.concatenate([np.arange(n_edges), group_ids, np.arange(n_edges)])
+    xs, ys = _project_m(all_lon, all_lat, km_per_deg_lng)
+
+    # True per-edge polyline order (u -> interior in offset order -> v), reconstructed via a
+    # position key + lexsort, needed only to compute real consecutive-segment lengths.
+    counts = local_edges["interior_count"].astype(np.int64)
+    pos = np.concatenate([np.zeros(n_edges, dtype=np.int64),
+                           binfmt.ragged_positions(counts) + 1, counts + 1])
+    order = np.lexsort((pos, edge_ids))
+    ordered_edge_ids, ordered_lon, ordered_lat = edge_ids[order], all_lon[order], all_lat[order]
     max_seg_len_m = 0.0
-    for ei, e in enumerate(subgraph.local_edges):
-        interior = [
-            (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
-            for j in range(e["interior_offset"], e["interior_offset"] + e["interior_count"])
-        ]
-        u = subgraph.local_nodes[e["u"]]
-        v = subgraph.local_nodes[e["v"]]
-        polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
-        for lon, lat in polyline:
-            x, y = _project_m(lon, lat, km_per_deg_lng)
-            xs.append(x)
-            ys.append(y)
-            edge_ids.append(ei)
-        for i in range(len(polyline) - 1):
-            seg_len_m = _haversine_m(*polyline[i], *polyline[i + 1])
-            if seg_len_m > max_seg_len_m:
-                max_seg_len_m = seg_len_m
+    if len(ordered_edge_ids) > 1:
+        same_next = ordered_edge_ids[:-1] == ordered_edge_ids[1:]
+        if np.any(same_next):
+            seg_lens = _haversine_m_vec_pairs(
+                ordered_lon[:-1][same_next], ordered_lat[:-1][same_next],
+                ordered_lon[1:][same_next], ordered_lat[1:][same_next],
+            )
+            max_seg_len_m = float(seg_lens.max())
 
     tree = cKDTree(np.column_stack([xs, ys]))
-    return tree, np.array(edge_ids), max_seg_len_m, km_per_deg_lng
+    return tree, edge_ids, max_seg_len_m, km_per_deg_lng
 
 
 def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,

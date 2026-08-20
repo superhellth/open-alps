@@ -46,6 +46,35 @@ def test_snap_hub_mid_chain_returns_split():
     assert result.edge_local_index == 0
 
 
+def _line_subgraph_with_interior():
+    # Same two nodes ~1000m apart as _line_subgraph, but the edge now has a 2-point interior
+    # polyline - _line_subgraph's zero-interior edge never exercises
+    # _build_edge_spatial_index's ragged-gather/lexsort path for real polyline order.
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    interior = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    interior[0] = (0.003, 0.0)
+    interior[1] = (0.006, 0.0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 1000.0, 0.0, -1, False, 0, 2, 0)  # interior_offset=0, count=2
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+    )
+
+
+def test_snap_hub_mid_chain_with_interior_polyline_picks_nearest_segment():
+    # Hub sits just past the second interior point (0.006, 0.0), close to the segment between it
+    # and node 1 - exercises the vectorized interior-point gather + true-polyline-order
+    # reconstruction in _build_edge_spatial_index, not just the two-endpoint case.
+    subgraph = _line_subgraph_with_interior()
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0065, hub_lat=0.0002, max_snap_m=50.0)
+    assert result is not None
+    assert result.split is not None
+    assert result.edge_local_index == 0
+
+
 def test_snap_returns_none_when_out_of_range():
     subgraph = _line_subgraph()
     result = snap_hub_to_subgraph(subgraph, hub_lon=0.5, hub_lat=0.5, max_snap_m=50.0)

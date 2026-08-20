@@ -60,6 +60,35 @@ def load_manifest(path: Path) -> dict:
         return json.load(f)
 
 
+def ragged_positions(counts: np.ndarray) -> np.ndarray:
+    """0-indexed position within each ragged group - e.g. counts=[3,0,2] -> [0,1,2,0,1]. Split out
+    from gather_ragged (below) since some callers need true within-group order (e.g.
+    build_hub_edges.py's _build_edge_spatial_index reconstructing real polyline point order)
+    without needing to gather a values array."""
+    counts = np.asarray(counts)
+    total = int(counts.sum())
+    if total == 0:
+        return np.zeros(0, dtype=np.int64)
+    return np.arange(total) - np.repeat(np.cumsum(counts) - counts, counts)
+
+
+def gather_ragged(values: np.ndarray, starts: np.ndarray, counts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Vectorized equivalent of `for i, (s, c) in enumerate(zip(starts, counts)): yield from
+    ((i, values[j]) for j in range(s, s + c))` - gathers every group's slice of `values` in one
+    pass instead of a per-group Python loop + numpy slice (was the hot path in both
+    lib/subgraph.py's incidence closure and build_hub_edges.py's per-edge interior-point
+    reconstruction, each doing this once per node/edge in a 60km cell). Returns (gathered_values,
+    group_ids) - group_ids[k] says which group gathered_values[k] came from, and within a group
+    the original values order is preserved (ragged_positions walks start..start+count-1 in order)."""
+    counts = np.asarray(counts)
+    total = int(counts.sum())
+    if total == 0:
+        return values[:0], np.zeros(0, dtype=np.int64)
+    group_ids = np.repeat(np.arange(len(counts)), counts)
+    flat_idx = np.repeat(np.asarray(starts), counts).astype(np.int64) + ragged_positions(counts)
+    return values[flat_idx], group_ids
+
+
 def build_csr_index(group_ids: np.ndarray, n_groups: int) -> tuple[np.ndarray, np.ndarray]:
     """Sorts positions by group_ids (stable) and returns (order, index) where order is the
     sorted position array and index[g] = (start_offset, count) into `order` for group g. Same

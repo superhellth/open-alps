@@ -55,6 +55,60 @@ def test_gather_includes_frontier_node_via_one_hop_closure():
     assert len(result.local_edges) == 2
 
 
+def _write_fixture_base_graph_with_interior(tmp_path, grid):
+    # Same 3-node/2-edge layout as _write_fixture_base_graph, but edge 0 (node 0 -> node 1) gets a
+    # 2-point interior polyline - exercises the vectorized ragged-gather path in
+    # _build_edge_spatial_index (build_hub_edges.py), which the zero-interior fixture above never
+    # touches.
+    coords = [(0.05, 0.05), (0.95, 0.05), (0.05, 0.95)]
+    cell_ids = [grid.cell_id_for_point(lon, lat) for lon, lat in coords]
+    nodes = np.zeros(3, dtype=binfmt.NODE_DTYPE)
+    for i, (c, cid) in enumerate(zip(coords, cell_ids)):
+        nodes[i] = (c[0], c[1], cid)
+
+    _, cell_index = binfmt.build_csr_index(
+        np.array(cell_ids, dtype=np.int32), n_groups=len(grid.all_cell_ids())
+    )
+    interior = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    interior[0] = (0.35, 0.05)
+    interior[1] = (0.65, 0.05)
+    edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 1000.0, 0.0, -1, False, 0, 2, 0)  # interior_offset=0, count=2
+    edges[1] = (0, 2, 1000.0, 1000.0, 0.0, -1, False, 0, 0, 1)
+    doubled_nodes = np.concatenate([edges["u"], edges["v"]])
+    doubled_edge_ids = np.concatenate([edges["edge_id"], edges["edge_id"]])
+    order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=3)
+    node_edge_ids = doubled_edge_ids[order]
+
+    out_dir = tmp_path / "base_graph"
+    binfmt.save_array(out_dir / "nodes.npy", nodes)
+    binfmt.save_array(out_dir / "cell_index.npy", cell_index)
+    binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
+    binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+    binfmt.save_array(out_dir / "edges.npy", edges)
+    binfmt.save_array(out_dir / "interior.npy", interior)
+    return out_dir
+
+
+def test_gather_preserves_interior_offsets_for_downstream_lookup():
+    # interior stays a lazy view over the full global array (not remapped per-subgraph), so
+    # local_edges' interior_offset/interior_count must still address the *original* interior.npy
+    # positions correctly after gather.
+    fine_grid = Grid(BBOX, tile_size_km=20.0)
+    out_dir = _write_fixture_base_graph_with_interior(_tmp_path_fixture(), fine_grid)
+    cell_id = fine_grid.cell_id_for_point(0.05, 0.05)
+    result = gather_padded_subgraph(out_dir, fine_grid, cell_id, buffer_km=1.0)
+
+    assert set(result.global_node_ids.tolist()) == {0, 1, 2}
+    edge0 = result.local_edges[result.local_edges["edge_id"] == 0][0]
+    offset, count = int(edge0["interior_offset"]), int(edge0["interior_count"])
+    pts = result.interior[offset:offset + count]
+    assert list(zip(pts["lon"].tolist(), pts["lat"].tolist())) == [(0.35, 0.05), (0.65, 0.05)]
+    # u/v were remapped to local indices via searchsorted over global_node_ids
+    assert int(edge0["u"]) == int(np.searchsorted(result.global_node_ids, 0))
+    assert int(edge0["v"]) == int(np.searchsorted(result.global_node_ids, 1))
+
+
 def _tmp_path_fixture():
     import tempfile
     return Path(tempfile.mkdtemp())

@@ -38,38 +38,50 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
     padded = grid.padded_bounds(cell_id, buffer_km)
     overlapping_cells = grid.cell_ids_overlapping(padded)
 
-    node_id_set = set()
-    for cid in overlapping_cells:
-        start, count = cell_index["start_offset"][cid], cell_index["count"][cid]
-        node_id_set.update(range(int(start), int(start + count)))
+    if overlapping_cells:
+        base_node_ids = np.unique(np.concatenate([
+            np.arange(int(cell_index["start_offset"][cid]),
+                      int(cell_index["start_offset"][cid] + cell_index["count"][cid]))
+            for cid in overlapping_cells
+        ]))
+    else:
+        base_node_ids = np.zeros(0, dtype=np.int64)
 
-    # one-hop edge-incidence closure
-    frontier_edge_ids = set()
-    for node_id in list(node_id_set):
-        start, count = node_edge_index["start_offset"][node_id], node_edge_index["count"][node_id]
-        frontier_edge_ids.update(node_edge_ids[start:start + count].tolist())
-    for edge_id in frontier_edge_ids:
-        e = edges[edge_id]
-        node_id_set.add(int(e["u"]))
-        node_id_set.add(int(e["v"]))
+    # one-hop edge-incidence closure, vectorized via binfmt.gather_ragged over
+    # node_edge_index/node_edge_ids's CSR layout instead of a per-node Python loop + tolist() -
+    # was O(nodes in cell) at Python speed on a 60km cell (10^4-10^5 nodes).
+    incident_edge_ids, _ = binfmt.gather_ragged(
+        node_edge_ids, node_edge_index["start_offset"][base_node_ids],
+        node_edge_index["count"][base_node_ids],
+    )
+    frontier_edge_ids = np.unique(incident_edge_ids)
 
-    global_node_ids = np.array(sorted(node_id_set), dtype=np.int64)
-    global_to_local = {int(g): i for i, g in enumerate(global_node_ids)}
+    if len(frontier_edge_ids):
+        # Every frontier edge's endpoints are unioned in here, so global_node_ids is guaranteed to
+        # contain both u and v for every frontier edge below - no membership filter needed (the
+        # old per-edge `if u in global_to_local and v in global_to_local` was always true).
+        global_node_ids = np.unique(np.concatenate([
+            base_node_ids, edges["u"][frontier_edge_ids], edges["v"][frontier_edge_ids],
+        ]))
+    else:
+        global_node_ids = base_node_ids
 
     local_nodes = np.array(nodes[global_node_ids])
 
-    local_edges_list = [
-        edges[edge_id] for edge_id in sorted(frontier_edge_ids)
-        if int(edges[edge_id]["u"]) in global_to_local and int(edges[edge_id]["v"]) in global_to_local
-    ]
-    local_edges = np.array(local_edges_list, dtype=binfmt.EDGE_DTYPE)
+    local_edges = np.array(edges[frontier_edge_ids], dtype=binfmt.EDGE_DTYPE)
     if len(local_edges):
-        local_edges["u"] = [global_to_local[int(u)] for u in local_edges["u"]]
-        local_edges["v"] = [global_to_local[int(v)] for v in local_edges["v"]]
+        # global_node_ids is sorted (np.unique), so searchsorted vectorizes the old
+        # {global_id: local_index} dict + per-edge scalar lookup.
+        local_edges["u"] = np.searchsorted(global_node_ids, local_edges["u"])
+        local_edges["v"] = np.searchsorted(global_node_ids, local_edges["v"])
 
     return LocalSubgraph(
         global_node_ids=global_node_ids,
         local_nodes=local_nodes,
         local_edges=local_edges,
-        interior=np.array(interior),
+        # interior_offset/interior_count on local_edges index into the *global* interior array
+        # unchanged (never remapped per-subgraph), so this can stay a lazy mmap view instead of
+        # copying the whole (hundreds of MB for AT+Bayern) array on every call - only the slices
+        # snap_hub_to_subgraph actually touches get paged in.
+        interior=interior,
     )
