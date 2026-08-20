@@ -5,6 +5,8 @@ both build_base_graph.py write time and build_hub_edges.py query time - no looku
 
 import math
 
+import numpy as np
+
 KM_PER_DEG_LAT = 111.320
 
 
@@ -29,6 +31,19 @@ class Grid:
     def cell_id_for_point(self, lon: float, lat: float) -> int:
         col, row = self.col_row_for_point(lon, lat)
         return row * self.n_cols + col
+
+    def cell_ids_for_points(self, lons, lats):
+        """Vectorized cell_id_for_point over whole arrays - the per-point Python call was the
+        cost driver when build_base_graph.py assigned cells to millions of nodes one at a time.
+        np.floor and int() differ only on negative values, all of which both paths clamp to 0,
+        so this is exactly equivalent to looping cell_id_for_point (test_grid.py proves it)."""
+        lons = np.asarray(lons, dtype=np.float64)
+        lats = np.asarray(lats, dtype=np.float64)
+        col = np.floor((lons - self.bbox["minLng"]) * self.km_per_deg_lng / self.tile_size_km)
+        row = np.floor((lats - self.bbox["minLat"]) * KM_PER_DEG_LAT / self.tile_size_km)
+        col = np.clip(col, 0, self.n_cols - 1).astype(np.int64)
+        row = np.clip(row, 0, self.n_rows - 1).astype(np.int64)
+        return (row * self.n_cols + col).astype(np.int32)
 
     def cell_bounds(self, cell_id: int) -> dict:
         row, col = divmod(cell_id, self.n_cols)

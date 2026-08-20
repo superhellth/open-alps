@@ -130,9 +130,7 @@ def contract(handler, progress_every: int = 20_000):
 def pack_and_write(contracted, bbox, tile_size_km, out_dir):
     # --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
     grid = Grid(bbox, tile_size_km)
-    cell_ids = np.array(
-        [grid.cell_id_for_point(lon, lat) for lon, lat in contracted.coords], dtype=np.int32
-    )
+    cell_ids = grid.cell_ids_for_points(contracted.coords[:, 0], contracted.coords[:, 1])
     sort_order, cell_index = binfmt.build_csr_index(cell_ids, n_groups=len(grid.all_cell_ids()))
 
     old_to_new = np.empty(len(contracted.coords), dtype=np.int64)
