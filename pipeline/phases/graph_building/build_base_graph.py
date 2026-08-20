@@ -27,13 +27,6 @@ SCRIPT_NAME = "build_base_graph.py"
 
 config = load_config()
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
-parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"))
-parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"])
-args = parser.parse_args()
-
-
 def haversine_m_vec(lon1, lat1, lon2, lat2):
     r = 6_371_000.0
     p1, p2 = np.radians(lat1), np.radians(lat2)
@@ -105,91 +98,116 @@ class WayGraphHandler(osmium.SimpleHandler):
                   f"{len(self.edges_i):,} edges so far", flush=True)
 
 
-print(f"streaming {args.trails} ...")
-handler = WayGraphHandler(config["graph"]["roadHighwayTags"], config["graph"]["roadPenaltyFactor"])
-with phase(SCRIPT_NAME, "stream_osm"):
-    handler.apply_file(args.trails, locations=True)
-print(f"raw graph nodes: {len(handler.coords):,}, edges: {len(handler.edges_i):,}")
-
-with phase(SCRIPT_NAME, "contract_structural"):
-    contracted = contract_structural(
-        np.array(handler.coords, dtype=np.float64),
-        np.array(handler.edges_i, dtype=np.int64),
-        np.array(handler.edges_j, dtype=np.int64),
-        np.array(handler.edges_dist, dtype=np.float64),
-        np.array(handler.edges_w, dtype=np.float64),
-        np.array(handler.edges_road, dtype=bool),
-        np.array(handler.edges_sac_rank, dtype=np.int8),
-        np.array(handler.edges_via_ferrata, dtype=bool),
-        progress_every=20_000,
+def stream_osm(trails_path, config):
+    print(f"streaming {trails_path} ...", flush=True)
+    handler = WayGraphHandler(
+        config["graph"]["roadHighwayTags"], config["graph"]["roadPenaltyFactor"]
     )
-del handler
-print(f"contracted to {len(contracted.coords):,} nodes / {len(contracted.edges_u):,} edges")
+    with phase(SCRIPT_NAME, "stream_osm"):
+        handler.apply_file(trails_path, locations=True)
+    print(f"raw graph nodes: {len(handler.coords):,}, edges: {len(handler.edges_i):,}", flush=True)
+    return handler
 
-# --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
-bbox = config["bbox"]
-grid = Grid(bbox, args.tile_size_km)
-cell_ids = np.array(
-    [grid.cell_id_for_point(lon, lat) for lon, lat in contracted.coords], dtype=np.int32
-)
-sort_order, cell_index = binfmt.build_csr_index(cell_ids, n_groups=len(grid.all_cell_ids()))
 
-old_to_new = np.empty(len(contracted.coords), dtype=np.int64)
-old_to_new[sort_order] = np.arange(len(sort_order))
+def contract(handler, progress_every: int = 20_000):
+    with phase(SCRIPT_NAME, "contract_structural"):
+        contracted = contract_structural(
+            np.array(handler.coords, dtype=np.float64),
+            np.array(handler.edges_i, dtype=np.int64),
+            np.array(handler.edges_j, dtype=np.int64),
+            np.array(handler.edges_dist, dtype=np.float64),
+            np.array(handler.edges_w, dtype=np.float64),
+            np.array(handler.edges_road, dtype=bool),
+            np.array(handler.edges_sac_rank, dtype=np.int8),
+            np.array(handler.edges_via_ferrata, dtype=bool),
+            progress_every=progress_every,
+        )
+    print(f"contracted to {len(contracted.coords):,} nodes / "
+          f"{len(contracted.edges_u):,} edges", flush=True)
+    return contracted
 
-nodes_arr = np.zeros(len(contracted.coords), dtype=binfmt.NODE_DTYPE)
-nodes_arr["lon"] = contracted.coords[sort_order, 0]
-nodes_arr["lat"] = contracted.coords[sort_order, 1]
-nodes_arr["cell_id"] = cell_ids[sort_order]
 
-# --- remap edge endpoints through the node reorder, pack interior polylines ---
-n_edges = len(contracted.edges_u)
-interior_offsets = np.zeros(n_edges, dtype=np.int64)
-interior_counts = np.zeros(n_edges, dtype=np.int32)
-flat_interior = []
-cursor = 0
-for i, pts in enumerate(contracted.interior_coords):
-    interior_offsets[i] = cursor
-    interior_counts[i] = len(pts)
-    flat_interior.extend(pts)
-    cursor += len(pts)
+def pack_and_write(contracted, bbox, tile_size_km, out_dir):
+    # --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
+    grid = Grid(bbox, tile_size_km)
+    cell_ids = np.array(
+        [grid.cell_id_for_point(lon, lat) for lon, lat in contracted.coords], dtype=np.int32
+    )
+    sort_order, cell_index = binfmt.build_csr_index(cell_ids, n_groups=len(grid.all_cell_ids()))
 
-interior_arr = np.zeros(len(flat_interior), dtype=binfmt.COORD_DTYPE)
-if flat_interior:
-    interior_arr["lon"] = [p[0] for p in flat_interior]
-    interior_arr["lat"] = [p[1] for p in flat_interior]
+    old_to_new = np.empty(len(contracted.coords), dtype=np.int64)
+    old_to_new[sort_order] = np.arange(len(sort_order))
 
-edges_arr = np.zeros(n_edges, dtype=binfmt.EDGE_DTYPE)
-edges_arr["u"] = old_to_new[contracted.edges_u]
-edges_arr["v"] = old_to_new[contracted.edges_v]
-edges_arr["dist"] = contracted.edges_dist
-edges_arr["weight"] = contracted.edges_weight
-edges_arr["road_m"] = contracted.edges_road_m
-edges_arr["sac_rank"] = contracted.edges_sac_rank
-edges_arr["via_ferrata"] = contracted.edges_via_ferrata
-edges_arr["interior_offset"] = interior_offsets
-edges_arr["interior_count"] = interior_counts
-edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id
+    nodes_arr = np.zeros(len(contracted.coords), dtype=binfmt.NODE_DTYPE)
+    nodes_arr["lon"] = contracted.coords[sort_order, 0]
+    nodes_arr["lat"] = contracted.coords[sort_order, 1]
+    nodes_arr["cell_id"] = cell_ids[sort_order]
 
-# --- node -> incident edge ids CSR (built on FINAL node ids, after the cell-sort remap) ---
-doubled_nodes = np.concatenate([edges_arr["u"], edges_arr["v"]])
-doubled_edge_ids = np.concatenate([edges_arr["edge_id"], edges_arr["edge_id"]])
-ne_order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=len(nodes_arr))
-node_edge_ids = doubled_edge_ids[ne_order]
+    # --- remap edge endpoints through the node reorder, pack interior polylines ---
+    n_edges = len(contracted.edges_u)
+    interior_offsets = np.zeros(n_edges, dtype=np.int64)
+    interior_counts = np.zeros(n_edges, dtype=np.int32)
+    flat_interior = []
+    cursor = 0
+    for i, pts in enumerate(contracted.interior_coords):
+        interior_offsets[i] = cursor
+        interior_counts[i] = len(pts)
+        flat_interior.extend(pts)
+        cursor += len(pts)
 
-out_dir = Path(args.out_dir)
-binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
-binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
-binfmt.save_array(out_dir / "edges.npy", edges_arr)
-binfmt.save_array(out_dir / "interior.npy", interior_arr)
-binfmt.save_manifest(out_dir / "manifest.json", {
-    "bbox": bbox,
-    "tile_size_km": args.tile_size_km,
-    "n_cols": grid.n_cols,
-    "n_rows": grid.n_rows,
-    "n_nodes": len(nodes_arr),
-    "n_edges": n_edges,
-})
-print(f"written {out_dir}")
+    interior_arr = np.zeros(len(flat_interior), dtype=binfmt.COORD_DTYPE)
+    if flat_interior:
+        interior_arr["lon"] = [p[0] for p in flat_interior]
+        interior_arr["lat"] = [p[1] for p in flat_interior]
+
+    edges_arr = np.zeros(n_edges, dtype=binfmt.EDGE_DTYPE)
+    edges_arr["u"] = old_to_new[contracted.edges_u]
+    edges_arr["v"] = old_to_new[contracted.edges_v]
+    edges_arr["dist"] = contracted.edges_dist
+    edges_arr["weight"] = contracted.edges_weight
+    edges_arr["road_m"] = contracted.edges_road_m
+    edges_arr["sac_rank"] = contracted.edges_sac_rank
+    edges_arr["via_ferrata"] = contracted.edges_via_ferrata
+    edges_arr["interior_offset"] = interior_offsets
+    edges_arr["interior_count"] = interior_counts
+    edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id
+
+    # --- node -> incident edge ids CSR (built on FINAL node ids, after the cell-sort remap) ---
+    doubled_nodes = np.concatenate([edges_arr["u"], edges_arr["v"]])
+    doubled_edge_ids = np.concatenate([edges_arr["edge_id"], edges_arr["edge_id"]])
+    ne_order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=len(nodes_arr))
+    node_edge_ids = doubled_edge_ids[ne_order]
+
+    out_dir = Path(out_dir)
+    binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
+    binfmt.save_array(out_dir / "cell_index.npy", cell_index)
+    binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
+    binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+    binfmt.save_array(out_dir / "edges.npy", edges_arr)
+    binfmt.save_array(out_dir / "interior.npy", interior_arr)
+    binfmt.save_manifest(out_dir / "manifest.json", {
+        "bbox": bbox,
+        "tile_size_km": tile_size_km,
+        "n_cols": grid.n_cols,
+        "n_rows": grid.n_rows,
+        "n_nodes": len(nodes_arr),
+        "n_edges": n_edges,
+    })
+    print(f"written {out_dir}", flush=True)
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
+    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"])
+    args = parser.parse_args(argv)
+
+    handler = stream_osm(args.trails, config)
+    contracted = contract(handler)
+    del handler
+    pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir)
+
+
+if __name__ == "__main__":
+    main()
