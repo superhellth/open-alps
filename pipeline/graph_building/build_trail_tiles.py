@@ -33,8 +33,8 @@ pipeline/README.md's "Displaying the raw OSM trails" section for how that env wa
 `tippecanoe` on PATH is used automatically if present (e.g. on Linux/macOS running this directly).
 
 Usage:
-    python pipeline/build_trail_tiles.py
-    python pipeline/build_trail_tiles.py --min-zoom 6 --max-zoom 14
+    python pipeline/graph_building/build_trail_tiles.py
+    python pipeline/graph_building/build_trail_tiles.py --min-zoom 6 --max-zoom 14
 """
 
 import argparse
@@ -45,7 +45,7 @@ from pathlib import Path
 import orjson
 from pmtiles.convert import mbtiles_to_pmtiles
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib.pipeline import OSM_DIR, load_config, run_tippecanoe  # noqa: E402
 
 config = load_config()

@@ -6,7 +6,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import binfmt  # noqa: E402
-from add_elevation import fill_elevation_records  # noqa: E402
+from graph_building.add_elevation import fill_elevation_records  # noqa: E402
 
 
 def _one_record_fixture():

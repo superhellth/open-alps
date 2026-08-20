@@ -6,7 +6,7 @@ per cell via ProcessPoolExecutor - each mmap-slicing only its own padded region
 (lib/subgraph.py) rather than sharing one big in-process graph. See docs/superpowers/specs/
 2026-08-19-pipeline-v2-design.md.
 
-Usage: python pipeline/build_hub_edges.py [--max-edge-km 30] [--max-snap-m 100] [--workers N]
+Usage: python pipeline/graph_building/build_hub_edges.py [--max-edge-km 30] [--max-snap-m 100] [--workers N]
 """
 
 import argparse
@@ -21,7 +21,7 @@ import igraph as ig
 import numpy as np
 from scipy.spatial import cKDTree
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402

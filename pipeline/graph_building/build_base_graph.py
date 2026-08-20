@@ -6,7 +6,7 @@ changes and downstream hyperparameter retuning; build_hub_edges.py (which does d
 sets) loads this output instead of re-streaming/re-contracting every run. See
 docs/superpowers/specs/2026-08-19-pipeline-v2-design.md.
 
-Usage: python pipeline/build_base_graph.py [--tile-size-km 60]
+Usage: python pipeline/graph_building/build_base_graph.py [--tile-size-km 60]
 """
 
 import argparse
@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 import osmium
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402

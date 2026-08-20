@@ -6,7 +6,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import binfmt  # noqa: E402
-from build_edge_tiles import build_stats, rdp_keep_indices  # noqa: E402
+from graph_building.build_edge_tiles import build_stats, rdp_keep_indices  # noqa: E402
 
 
 def test_rdp_keep_indices_collapses_straight_line():

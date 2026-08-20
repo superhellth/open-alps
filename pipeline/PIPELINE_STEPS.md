@@ -12,14 +12,14 @@ default `doit` run.
 
 ---
 
-## 1. `download_extracts` — `download_extracts.py`
+## 1. `download_extracts` — `downloads/download_extracts.py`
 
 - Reads `config["regions"]` (name + Geofabrik URL, e.g. austria/bayern).
 - For each region: `urllib.request.urlretrieve(url, data/osm/raw/<name>-latest.osm.pbf)`.
 - Prints final file sizes. No pinning — Geofabrik extracts regenerate daily, rerun to refresh.
 - **doit wiring**: `file_dep=[pipeline.config.json]`, `targets=[raw/<region>-latest.osm.pbf, ...]`.
 
-## 2. `filter_trails` — `filter_trails.py`
+## 2. `filter_trails` — `preprocessing/filter_trails.py`
 
 - Reads `config["trailTagFilter"]` (an `osmium tags-filter` expression, e.g.
   `w/highway=path,footway,track,steps,residential,service,unclassified,tertiary,via_ferrata`).
@@ -28,19 +28,19 @@ default `doit` run.
 - Requires `osmium-tool` native binary on PATH (conda-forge, `alpen-osm` env).
 - **doit wiring**: `file_dep=[raw/<region>-latest.osm.pbf,... , config]`, `targets=[<region>-trails.osm.pbf,...]`.
 
-## 3. `merge_trails` — `merge_trails.py`
+## 3. `merge_trails` — `preprocessing/merge_trails.py`
 
 - `osmium merge <region1-trails.osm.pbf> <region2-trails.osm.pbf> ... -o trails.osm.pbf --overwrite`.
 - Combines all per-region filtered extracts into one merged hiking network.
 - **doit wiring**: `file_dep=[<region>-trails.osm.pbf, ...]`, `targets=[trails.osm.pbf]`.
 
-## 4. `verify_trails` — `verify_trails.py`  (gate, always reruns — `uptodate: [False]`)
+## 4. `verify_trails` — `preprocessing/verify_trails.py`  (gate, always reruns — `uptodate: [False]`)
 
 - Checks `trails.osm.pbf` exists and is non-empty; exits nonzero otherwise (fails the doit run).
 - Runs `osmium fileinfo -e trails.osm.pbf` to print bbox/node/way/relation counts.
 - No target — it's a sanity gate, not a cacheable build step.
 
-## 5. `fetch_huts` — `fetch_huts.py`
+## 5. `fetch_huts` — `downloads/fetch_huts.py`
 
 - Reads `config["bbox"]`.
 - `GET` the Alpenverein ArcGIS layer (`AVT_GEO_CAA_HUETTEN_View_P/FeatureServer/0/query`,
@@ -49,7 +49,7 @@ default `doit` run.
 - Writes `data/osm/huts.geojson`: FeatureCollection of Points, `properties={id, name}`.
 - **doit wiring**: `file_dep=[config]`, `targets=[huts.geojson]`.
 
-## 5b. `fetch_stations_parking` — `fetch_stations_parking.py`
+## 5b. `fetch_stations_parking` — `downloads/fetch_stations_parking.py`
 
 - Two layers, each processed per region (reusing the raw extracts from step 1, no new download):
   - **stations**: `osmium tags-filter n/railway=station,halt` → `osmium export --geometry-types point`
@@ -60,13 +60,13 @@ default `doit` run.
   `data/osm/parking.geojson`.
 - **doit wiring**: `file_dep=[raw/<region>-latest.osm.pbf, ...]`, `targets=[stations.geojson, parking.geojson]`.
 
-## 5c. `filter_start_points` — `filter_start_points.py`
+## 5c. `filter_start_points` — `preprocessing/filter_start_points.py`
 
 - Reads `huts.geojson`, `stations.geojson`, `parking.geojson`.
 - `filter_to_hut_range()`: a correct (not approximate) filter — drops every station/parking point
   farther than `config.graph.maxEdgeKm` beeline from every hut, via a `scipy.spatial.cKDTree`
   over hut coords. No point farther than that can ever produce a kept edge under
-  `build_hub_edges.py`'s real-distance cutoff, regardless of how the trail actually routes — this
+  `graph_building/build_hub_edges.py`'s real-distance cutoff, regardless of how the trail actually routes — this
   is what bounds the hub count before it reaches the expensive graph query (`trailTagFilter`
   already includes residential/service/unclassified/tertiary roads across the whole
   Austria+Bavaria extract, so trail-snap distance alone wouldn't exclude urban parking).
@@ -77,12 +77,12 @@ default `doit` run.
 - **doit wiring**: `file_dep=[huts.geojson, stations.geojson, parking.geojson, config]`,
   `targets=[start_points.npy, start_points_id_table.json]`.
 
-## 6a. `build_base_graph` — `build_base_graph.py`  (the expensive step, ~4.1h for AT+Bayern)
+## 6a. `build_base_graph` — `graph_building/build_base_graph.py`  (the expensive step, ~4.1h for AT+Bayern)
 
 Replaces the old buffer-clip + OSMnx/NetworkX approach (rejected — object overhead, not input
 size, was the memory problem; see `pipeline/README.md`). Params: `--tile-size-km` (default
 `config.graph.tileSizeKm`). Depends only on `trails.osm.pbf` — not on any hub set — so it's
-cached across hub-set changes and downstream hyperparameter retuning; `build_hub_edges.py` (which
+cached across hub-set changes and downstream hyperparameter retuning; `graph_building/build_hub_edges.py` (which
 does depend on hub sets) loads this output instead of re-streaming/re-contracting every run.
 
 1. **stream_osm** — streams `trails.osm.pbf` once via `pyosmium` (`osmium.SimpleHandler`) into
@@ -94,7 +94,7 @@ does depend on hub sets) loads this output instead of re-streaming/re-contractin
 2. **contract_structural** (`lib/contraction.py`) — collapses every run of degree-2 nodes (pure
    pass-through, no junction) into one chain edge. Unlike the old script, this is **structural
    only** — no hub-snap-point exception, since hub sets aren't known at this point in V2; mid-chain
-   hub snapping is deferred to `lib/edge_split.py` at `build_hub_edges.py` time. Built via
+   hub snapping is deferred to `lib/edge_split.py` at `graph_building/build_hub_edges.py` time. Built via
    CSR-style adjacency (one sort over doubled endpoint arrays, no Python dict-of-lists). Each
    chain edge carries summed distance/weight, summed road length, the max `sac_scale` rank
    walked, whether any via-ferrata segment was crossed, and the full interior polyline. Lossless
@@ -103,7 +103,7 @@ does depend on hub sets) loads this output instead of re-streaming/re-contractin
    magnitude or more (measured ~40M raw nodes/edges for AT+Bavaria).
 3. Nodes are assigned a `lib/grid.py` `Grid` cell id (`config.graph.tileSizeKm`) and re-sorted by
    cell so `cell_index.npy` addresses a contiguous slice per cell — this is what lets
-   `build_hub_edges.py`'s workers mmap-slice just their own region instead of loading everything.
+   `graph_building/build_hub_edges.py`'s workers mmap-slice just their own region instead of loading everything.
 - **Output**: `data/osm/base_graph/{nodes.npy, cell_index.npy, node_edge_index.npy,
   node_edge_ids.npy, edges.npy, interior.npy, manifest.json}` — plain `.npy` structured arrays
   (see `lib/binfmt.py`), memory-mappable, one file per array.
@@ -112,7 +112,7 @@ does depend on hub sets) loads this output instead of re-streaming/re-contractin
   triggers a rerun without `doit forget`. NOT force-rerun (unlike `add_elevation`) —
   freshness-checked normally given its ~4.1h cost.
 
-## 6b. `build_hub_edges` — `build_hub_edges.py`  (tiled, multiprocess)
+## 6b. `build_hub_edges` — `graph_building/build_hub_edges.py`  (tiled, multiprocess)
 
 Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.graph.maxEdgeKm`),
 `--max-snap-m` (`maxSnapM`), `--workers` (default `os.cpu_count()`).
@@ -141,12 +141,12 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
 - **Output**: `data/osm/hut_edges/{records.npy, geometry.npy}` and
   `data/osm/start_edges/{records.npy, geometry.npy}` (`binfmt.RECORD_DTYPE` +
   `binfmt.COORD_DTYPE`; `ascent_m`/`descent_m`/`profile_*` left `UNSET`/`0` here — filled by
-  `add_elevation.py`).
+  `graph_building/add_elevation.py`).
 - **doit wiring**: `file_dep=[base_graph/manifest.json, huts.geojson, start_points.npy]`,
   `targets=[hut_edges/records.npy, start_edges/records.npy]`. `uptodate` uses `config_changed`
   over the task's own params.
 
-## 7. `fetch_dem` — `fetch_dem.py`
+## 7. `fetch_dem` — `downloads/fetch_dem.py`
 
 - Reads `config["dem"]` (`provider`, `providerConfig`, with `bbox` defaulted from top-level
   `config["bbox"]`).
@@ -160,7 +160,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   re-triggers Bavaria's coverage-grid WMS tile-existence check.
 - Writes `data/dem/fetch_manifest.json`.
 - **doit wiring**: `file_dep=[config]`, `targets=[fetch_manifest.json]`.
-- Providers (`pipeline/dem_providers/`):
+- Providers (`pipeline/downloads/dem_providers/`):
   - `copernicus-glo-30` — global 30m, AWS Open Data, no auth, `providerConfig: {}` (uses top bbox).
   - `at-bev-dgm` — Austria 10m DGM, one ~1.9GB national zip (`downloadUrl`), bbox unused.
   - `bavaria-dgm5` — Bavaria 5m DGM, one ~200KB zip per 1km tile computed from `providerConfig.bbox`;
@@ -169,7 +169,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   - `composite` — stitches per-sub-region VRTs from different providers; region order matters
     where bboxes overlap (`gdalbuildvrt` keeps the first-listed source).
 
-## 7b. `build_dem_vrt` — `build_dem_vrt.py`
+## 7b. `build_dem_vrt` — `graph_building/build_dem_vrt.py`
 
 - Reads `fetch_manifest.json`.
 - `lib.pipeline.build_dem_vrt(manifest, DEM_DIR)`: for each manifest region, calls that
@@ -181,10 +181,10 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   tiled/DEFLATE-compressed `dem.tif` via `gdal_translate` (`PREDICTOR=3`, `-a_nodata` copied
   explicitly). This exists because reading `dem.vrt` directly re-runs per-pixel reprojection on
   every read — timed at ~750s for one AT+Bavaria window — so materializing once here means
-  `add_elevation.py` (rerun often, to retune noise threshold) doesn't keep re-paying that cost.
+  `graph_building/add_elevation.py` (rerun often, to retune noise threshold) doesn't keep re-paying that cost.
 - **doit wiring**: `file_dep=[fetch_manifest.json]`, `targets=[dem.vrt, dem.tif]`.
 
-## 8. `add_elevation` — `add_elevation.py`  (always reruns when selected, `uptodate: [False]`; cheap, ~90–100s)
+## 8. `add_elevation` — `graph_building/add_elevation.py`  (always reruns when selected, `uptodate: [False]`; cheap, ~90–100s)
 
 - Params: `--ele-noise-threshold-m` (default `config.dem.eleNoiseThresholdM`), `--profile-points`
   (default `config.dem.profilePoints`, 30).
@@ -209,7 +209,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   `targets=[hut_edges/records.npy, hut_edges/profiles.npy, start_edges/records.npy,
   start_edges/profiles.npy]`.
 
-## 9. `build_trail_tiles` — `build_trail_tiles.py`
+## 9. `build_trail_tiles` — `graph_building/build_trail_tiles.py`
 
 Builds the *raw* trail network into static vector tiles (too large — 26.5M nodes — to ship as
 plain GeoJSON).
@@ -227,7 +227,7 @@ plain GeoJSON).
   which shells out through WSL to a separate linux-64 micromamba env there.
 - **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[trails.pmtiles]`.
 
-## 11. `build_hut_edge_tiles` / `build_start_edge_tiles` — `build_edge_tiles.py`
+## 11. `build_hut_edge_tiles` / `build_start_edge_tiles` — `graph_building/build_edge_tiles.py`
 
 Generalized from the old `build_hut_edge_tiles.py`: same script, run twice by `dodo.py` (once per
 `--edges-dir`/`--layer-name`) — once over `hut_edges/`, once over `start_edges/` — splitting each
@@ -272,12 +272,12 @@ assets instead of shipping the arrays directly.
   `bbox_from_huts()` (used by DEM providers to derive fetch extents from real hut/edge locations).
 - **`lib/timing.py`** — `phase(script, name, **meta)` context manager, appends one JSON line to
   `data/timings.jsonl` per completed phase (skipped on exception, so failed runs leave no
-  misleading partial record). Used by the expensive scripts (`build_base_graph.py`,
-  `build_dem_vrt.py`, `add_elevation.py`) to track which phase stops scaling first as regional
+  misleading partial record). Used by the expensive scripts (`graph_building/build_base_graph.py`,
+  `graph_building/build_dem_vrt.py`, `graph_building/add_elevation.py`) to track which phase stops scaling first as regional
   scope grows past AT+Bayern.
 - **`lib/grid.py`** — `Grid`, a row-major spatial grid partitioning a bbox into
   `tileSizeKm` cells; `cell_id` is fully determined by `(bbox, tile_size_km)` so it's
-  re-derivable identically at both `build_base_graph.py` write time and `build_hub_edges.py`
+  re-derivable identically at both `graph_building/build_base_graph.py` write time and `graph_building/build_hub_edges.py`
   query time, with no lookup table needed.
 - **`lib/binfmt.py`** — the shared binary array formats: dtypes (`NODE_DTYPE`, `EDGE_DTYPE`,
   `RECORD_DTYPE`, `COORD_DTYPE`, ...), type constants (`TYPE_HUT`/`TYPE_STATION`/`TYPE_PARKING`),
@@ -286,8 +286,8 @@ assets instead of shipping the arrays directly.
   bincount+cumsum for offsets" CSR-adjacency helper used for both nodes-by-cell and
   edges-by-node indexing).
 - **`lib/contraction.py`** — `contract_structural()`, the pure structural (no hub-snap exception)
-  chain-contraction function `build_base_graph.py` calls.
+  chain-contraction function `graph_building/build_base_graph.py` calls.
 - **`lib/edge_split.py`** — `nearest_point_on_polyline()`/`split_edge_at_point()`, mid-chain edge
   splitting for snapping a hub to the interior of a chain edge rather than an existing node.
 - **`lib/subgraph.py`** — `gather_padded_subgraph()`, the padded-region (cell + buffer) mmap
-  gather `build_hub_edges.py`'s per-cell workers use to slice the persisted base graph.
+  gather `graph_building/build_hub_edges.py`'s per-cell workers use to slice the persisted base graph.

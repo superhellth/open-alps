@@ -155,7 +155,7 @@ def task_filter_start_points():
 def task_build_base_graph():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "build_base_graph.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "graph_building" / "build_base_graph.py"}"'
             " --tile-size-km %(tile_size_km)s"
         ],
         "params": [
@@ -173,7 +173,7 @@ def task_build_base_graph():
 def task_build_hub_edges():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "build_hub_edges.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "graph_building" / "build_hub_edges.py"}"'
             " --max-edge-km %(max_edge_km)s --max-snap-m %(max_snap_m)s"
         ],
         "params": [
@@ -205,7 +205,7 @@ def task_fetch_dem():
 
 def task_build_dem_vrt():
     return {
-        "actions": [py("build_dem_vrt.py")],
+        "actions": [py("graph_building/build_dem_vrt.py")],
         "file_dep": [str(DEM_DIR / "fetch_manifest.json")],
         "targets": [str(DEM_DIR / "dem.vrt"), str(DEM_DIR / "dem.tif")],
     }
@@ -217,7 +217,7 @@ def task_build_dem_vrt():
 def task_add_elevation():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "add_elevation.py"}"'
+            f'"{sys.executable}" "{SCRIPT_DIR / "graph_building" / "add_elevation.py"}"'
             " --ele-noise-threshold-m %(ele_noise_threshold_m)s"
             " --profile-points %(profile_points)s"
         ],
@@ -249,7 +249,7 @@ def task_build_trail_tiles():
     return {
         "actions": [
             py(
-                "build_trail_tiles.py",
+                "graph_building/build_trail_tiles.py",
                 f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
                 f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
             )
@@ -266,7 +266,7 @@ def task_build_hut_edge_tiles():
     return {
         "actions": [
             py(
-                "build_edge_tiles.py",
+                "graph_building/build_edge_tiles.py",
                 f"--edges-dir {OSM_DIR / 'hut_edges'}",
                 f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
                 "--layer-name hut_edges",
@@ -291,7 +291,7 @@ def task_build_start_edge_tiles():
     return {
         "actions": [
             py(
-                "build_edge_tiles.py",
+                "graph_building/build_edge_tiles.py",
                 f"--edges-dir {OSM_DIR / 'start_edges'}",
                 f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
                 "--layer-name start_edges",

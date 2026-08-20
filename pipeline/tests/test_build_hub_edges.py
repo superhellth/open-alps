@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
-from build_hub_edges import (  # noqa: E402
+from graph_building.build_hub_edges import (  # noqa: E402
     compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph,
 )
 

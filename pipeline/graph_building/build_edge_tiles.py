@@ -6,7 +6,7 @@ for hut-edges, once for start-edges - same script, different --edges-dir/--layer
 docs/superpowers/specs/2026-08-19-pipeline-v2-design.md.
 
 Usage:
-    python pipeline/build_edge_tiles.py --edges-dir data/osm/hut_edges --layer-name hut_edges \
+    python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/hut_edges --layer-name hut_edges \
         --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
 """
 
@@ -20,7 +20,7 @@ import numpy as np
 import orjson
 from pmtiles.convert import mbtiles_to_pmtiles
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import load_config, run_tippecanoe  # noqa: E402
 
