@@ -302,10 +302,17 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
         if not targets:
             continue
         target_vs = [hub_vertex[(t["type"], t["id"])] for t in targets]
+        # Two different hubs can snap to the same graph vertex (both within max_snap_m of one
+        # existing node), so target_vs can contain duplicates - igraph's distances() rejects a
+        # target list with duplicates, so query only the unique vertex set and fan the results
+        # back out per-hub by vertex id.
+        unique_target_vs = sorted(set(target_vs))
         # cutoff uses real-distance ("dist") weights, same as build_hut_graph.py's pass1 -
         # max-edge-km stays a guarantee about actual trail length, unaffected by the
         # road-penalty cost ("weight") used to pick the routed path below.
-        cutoff_dists = graph.distances(source=[src_v], target=target_vs, weights="dist")[0]
+        unique_dists = graph.distances(source=[src_v], target=unique_target_vs, weights="dist")[0]
+        dist_by_vertex = dict(zip(unique_target_vs, unique_dists))
+        cutoff_dists = [dist_by_vertex[tv] for tv in target_vs]
         for t, tv, cutoff_d in zip(targets, target_vs, cutoff_dists):
             if not np.isfinite(cutoff_d) or cutoff_d > max_edge_m:
                 continue
