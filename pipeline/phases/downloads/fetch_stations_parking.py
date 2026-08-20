@@ -56,8 +56,12 @@ def export_layer(layer: dict) -> None:
         )
 
         result = subprocess.run(
+            # --add-unique-id=type_id: osmium export emits no id at all by default. With this
+            # flag it lands on each Feature's top-level "id" (e.g. "n8091317", type prefix +
+            # numeric id) - not inside "properties" - which filter_start_points.py's osm_id
+            # depends on to identify every station/parking point.
             ["osmium", "export", str(filtered), "-f", "geojson",
-             "--geometry-types", "point"],
+             "--geometry-types", "point", "--add-unique-id=type_id"],
             check=True, capture_output=True, text=True, encoding="utf-8",
         )
         fc = json.loads(result.stdout)

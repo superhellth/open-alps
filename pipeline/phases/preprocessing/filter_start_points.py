@@ -42,11 +42,14 @@ def _load_layer(path: Path, point_type: str) -> list:
         fc = json.load(f)
     points = []
     for feat in fc["features"]:
-        osm_id = feat["properties"].get("@id") or feat["properties"].get("id")
-        if osm_id is None:
+        # fetch_stations_parking.py's osmium export --add-unique-id=type_id puts the id on the
+        # Feature itself (e.g. "n8091317" - type prefix + numeric OSM id), not inside
+        # "properties" - properties only ever holds the tag fields KEEP_FIELDS lets through.
+        raw_id = feat.get("id")
+        if raw_id is None:
             continue
         lon, lat = feat["geometry"]["coordinates"]
-        points.append({"lon": lon, "lat": lat, "osm_id": int(osm_id), "type": point_type})
+        points.append({"lon": lon, "lat": lat, "osm_id": int(raw_id[1:]), "type": point_type})
     return points
 
 

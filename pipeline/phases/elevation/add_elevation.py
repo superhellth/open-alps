@@ -112,6 +112,11 @@ def _process_edge_set(edge_dir: Path, dem_path: Path, profile_points: int, noise
     records = binfmt.load_array(edge_dir / "records.npy", mmap=False)
     geometry = binfmt.load_array(edge_dir / "geometry.npy", mmap=False)
 
+    if len(records) == 0:
+        binfmt.save_array(edge_dir / "records.npy", records)
+        binfmt.save_array(edge_dir / "profiles.npy", np.zeros(0, dtype=binfmt.PROFILE_DTYPE))
+        return
+
     with rasterio.open(dem_path) as dem:
         t = dem.transform
         lons = geometry["lon"]
