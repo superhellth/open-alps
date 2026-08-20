@@ -15,8 +15,30 @@ from lib.contraction import ContractedGraph  # noqa: E402
 def test_module_exposes_callable_phases_without_running_them():
     # Importing must not parse argv or touch the filesystem - the module is imported by
     # pipeline/analysis/ harnesses that pass their own arguments.
-    for name in ("stream_osm", "contract", "pack_and_write", "main"):
+    for name in ("stream_osm", "handler_to_arrays", "contract", "pack_and_write", "main"):
         assert callable(getattr(bbg, name)), f"{name} missing or not callable"
+
+
+def test_contract_takes_the_eight_raw_arrays_so_main_can_free_the_handler_first(tmp_path,
+                                                                               monkeypatch):
+    # contract() must accept the already-converted arrays rather than the handler - that is what
+    # lets main() drop the handler's ~12 GB of raw Python lists before contraction starts.
+    import lib.timing as timing
+    monkeypatch.setattr(timing, "TIMINGS_PATH", tmp_path / "timings.jsonl")
+
+    # 0 -- 1 -- 2 : node 1 is degree-2, so this contracts to a single chain edge
+    out = bbg.contract(
+        np.array([(11.0, 47.0), (11.1, 47.0), (11.2, 47.0)]),
+        np.array([0, 1], dtype=np.int64),
+        np.array([1, 2], dtype=np.int64),
+        np.array([100.0, 200.0]),
+        np.array([100.0, 200.0]),
+        np.array([False, False]),
+        np.array([1, 2], dtype=np.int8),
+        np.array([False, False]),
+    )
+    assert len(out.edges_u) == 1
+    assert out.edges_dist[0] == 300.0
 
 
 def _tiny_contracted():

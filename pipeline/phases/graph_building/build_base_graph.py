@@ -112,20 +112,27 @@ def stream_osm(trails_path, config):
     return handler
 
 
-def contract(handler, progress_every: int = 20_000):
+def handler_to_arrays(handler):
+    """The eight numpy arrays contract_structural takes, in order. Split out from contract() so
+    main() can drop the handler - and with it ~12 GB of now-dead raw Python lists (40M coord
+    tuples, 41M-element int/float lists) - BEFORE contraction starts rather than after. See
+    docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md."""
+    return (
+        np.array(handler.coords, dtype=np.float64),
+        np.array(handler.edges_i, dtype=np.int64),
+        np.array(handler.edges_j, dtype=np.int64),
+        np.array(handler.edges_dist, dtype=np.float64),
+        np.array(handler.edges_w, dtype=np.float64),
+        np.array(handler.edges_road, dtype=bool),
+        np.array(handler.edges_sac_rank, dtype=np.int8),
+        np.array(handler.edges_via_ferrata, dtype=bool),
+    )
+
+
+def contract(*raw_args, progress_every: int = 20_000):
     with phase(SCRIPT_NAME, "contract_structural") as meta:
         with rss_sampler() as sample:
-            contracted = contract_structural(
-                np.array(handler.coords, dtype=np.float64),
-                np.array(handler.edges_i, dtype=np.int64),
-                np.array(handler.edges_j, dtype=np.int64),
-                np.array(handler.edges_dist, dtype=np.float64),
-                np.array(handler.edges_w, dtype=np.float64),
-                np.array(handler.edges_road, dtype=bool),
-                np.array(handler.edges_sac_rank, dtype=np.int8),
-                np.array(handler.edges_via_ferrata, dtype=bool),
-                progress_every=progress_every,
-            )
+            contracted = contract_structural(*raw_args, progress_every=progress_every)
         meta.update(sample.as_meta())  # outside rss_sampler: its finally fills the peak
     print(f"contracted to {len(contracted.coords):,} nodes / "
           f"{len(contracted.edges_u):,} edges", flush=True)
@@ -207,8 +214,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     handler = stream_osm(args.trails, config)
-    contracted = contract(handler)
-    del handler
+    raw_args = handler_to_arrays(handler)
+    del handler  # ~12 GB of raw Python lists, dead once copied into the arrays above
+    contracted = contract(*raw_args)
+    del raw_args
     pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir)
 
 
