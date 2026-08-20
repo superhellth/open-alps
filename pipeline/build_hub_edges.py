@@ -10,6 +10,7 @@ Usage: python pipeline/build_hub_edges.py [--max-edge-km 30] [--max-snap-m 100] 
 """
 
 import argparse
+import math
 import sys
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -29,13 +30,24 @@ SCRIPT_NAME = "build_hub_edges.py"
 
 
 def _haversine_m(lon1, lat1, lon2, lat2):
-    import math
     r = 6_371_000.0
     p1, p2 = math.radians(lat1), math.radians(lat2)
     dphi = math.radians(lat2 - lat1)
     dlambda = math.radians(lon2 - lon1)
     a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
     return 2 * r * math.asin(math.sqrt(a))
+
+
+def _haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
+    """Same formula as _haversine_m, but against an array of points in one numpy call instead of
+    a Python-level loop - used in snap_hub_to_subgraph's node scan, the hot path (one call per hub
+    per cell against every candidate node)."""
+    r = 6_371_000.0
+    p1, p2 = math.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2) ** 2 + math.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 @dataclass
@@ -51,13 +63,13 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
     # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
     # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
     # right next to it.
-    best_node = None  # (dist_m, index)
-    for i, n in enumerate(subgraph.local_nodes):
-        d = _haversine_m(hub_lon, hub_lat, n["lon"], n["lat"])
-        if d <= max_snap_m and (best_node is None or d < best_node[0]):
-            best_node = (d, i)
-    if best_node is not None:
-        return SnapResult(node_index=best_node[1])
+    if len(subgraph.local_nodes) > 0:
+        node_dists = _haversine_m_vec(
+            hub_lon, hub_lat, subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+        )
+        best_i = int(np.argmin(node_dists))
+        if node_dists[best_i] <= max_snap_m:
+            return SnapResult(node_index=best_i)
 
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei, e in enumerate(subgraph.local_edges):
