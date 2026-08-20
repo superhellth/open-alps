@@ -9,8 +9,10 @@ This is entirely an offline precompute pipeline living under `pipeline/` — it 
 app's backend-free architecture; outputs are static files (GeoJSON + PMTiles vector tiles), copied
 into `huts/public/data/` for the app to fetch (see the root `CLAUDE.md`'s "App structure"). Raw
 downloads and generated pipeline outputs live in the sibling `data/` dir (gitignored — `pipeline/`
-is the only tracked half). Full reproduction steps and scripts: **`pipeline/README.md`**. Design
-rationale for the OSM extract/filter/merge steps: **`docs/osm-trail-pipeline.md`**.
+is the only tracked half). Full reproduction steps and scripts: **`pipeline/README.md`**. Per-script
+data structures and algorithms: **`pipeline/phases/README.md`** (high-level DAG map) and each
+`phases/<phase>/README.md` (detailed). Design rationale for the OSM extract/filter/merge steps:
+**`docs/osm-trail-pipeline.md`**.
 
 Pipeline is plain Python, no bash/Node/Docker: config-driven — every hyperparameter (region list,
 hut bbox, trail tag filter, max-edge-km / max-snap-m, DEM provider) lives in
@@ -18,9 +20,14 @@ hut bbox, trail tag filter, max-edge-km / max-snap-m, DEM provider) lives in
 [doit](https://pydoit.org) task DAG (one task per script, wired by `file_dep`/`targets` rather than
 a numbered run order), idempotently (`doit` skips a task whose targets are already up to date;
 `doit <task>` reruns just that task and any stale deps), inside the `alpen-osm` conda env (see
-`pipeline/README.md` "Setup" for how that env was created — via `micromamba`, not `conda create`,
-since this machine's `base` conda env hangs solving `-c conda-forge` specs). The last task,
-`copy_public_data`, copies every output into `huts/public/data/` — no separate hand-copy step.
+`pipeline/README.md` "Setup"). The last task, `copy_public_data`, copies every output into
+`huts/public/data/` — no separate hand-copy step.
+
+`pipeline/analysis/` holds standalone, read-only analysis/benchmark scripts (e.g. `snap_stats.py`)
+that are **not** part of the `dodo.py` task DAG and never modify `phases/` scripts — they import and
+call the real phase functions directly (e.g. `build_hub_edges.py`'s `snap_hub_to_subgraph()`) against
+already-persisted `data/` outputs, to get hard numbers on where a phase's complexity/cost actually
+goes, without touching production code. Run by hand: `python pipeline/analysis/<script>.py`.
 
 **V2 architecture** (`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`): a persisted,
 hub-agnostic base graph (`phases/graph_building/build_base_graph.py`, streams+contracts `trails.osm.pbf` once into
@@ -59,3 +66,12 @@ read, so a window covering AT+Bavaria re-ran that reprojection on every `phases/
 reads instead - see that function's docstring. Wrap a new expensive block in `with
 phase(SCRIPT_NAME, "phase_name", **any_size_metadata):` rather than ad hoc `print`/`time.time()`
 timing to keep it queryable the same way.
+
+## Progress logging
+
+Every script under `phases/` or `analysis/` must print progress as it runs — never go silent for
+more than a few seconds on a real-size run. `build_hub_edges.py`'s per-cell loop is the model:
+print one line per unit of work as it completes (`[completed/total] ... -> N records | elapsed Xm,
+~Ym remaining`), with `flush=True` so it's visible immediately even when stdout is piped/redirected.
+A script that only prints a final summary is unreviewable while it runs and looks hung on a slow
+box — this applies equally to `analysis/` scripts, which are run by hand and read interactively.
