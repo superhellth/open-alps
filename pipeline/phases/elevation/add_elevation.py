@@ -53,20 +53,26 @@ def haversine_m(lon1, lat1, lon2, lat2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def elevation_profile(coords, samples, n_points):
-    dist = 0.0
-    xs, ys = [], []
-    prev = None
-    for (lon, lat), s in zip(coords, samples):
-        if prev is not None:
-            dist += haversine_m(prev[0], prev[1], lon, lat)
-        prev = (lon, lat)
-        xs.append(dist)
-        ys.append(float(s))
-    if len(xs) < 2:
+def haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
+                           lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
+    """Fully-vectorized haversine over paired arrays (both endpoints vary per element) - computes
+    every polyline segment length for one edge's elevation profile in a single call instead of a
+    per-point Python loop calling the scalar haversine_m above."""
+    r = 6_371_000.0
+    p1, p2 = np.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))
+
+
+def elevation_profile(lon: np.ndarray, lat: np.ndarray, samples: np.ndarray, n_points: int) -> list:
+    if len(lon) < 2:
         return []
+    seg_lens = haversine_m_vec_pairs(lon[:-1], lat[:-1], lon[1:], lat[1:])
+    xs = np.concatenate([[0.0], np.cumsum(seg_lens)])
     targets = np.linspace(xs[0], xs[-1], n_points)
-    return [round(v, 1) for v in np.interp(targets, xs, ys).tolist()]
+    return [round(v, 1) for v in np.interp(targets, xs, samples).tolist()]
 
 
 def fill_elevation_records(records: np.ndarray, geometry: np.ndarray, all_elevations: np.ndarray,
@@ -74,13 +80,19 @@ def fill_elevation_records(records: np.ndarray, geometry: np.ndarray, all_elevat
     records = records.copy()
     profile_chunks = []
     cursor = 0
+    lons, lats = geometry["lon"], geometry["lat"]
     for i in range(len(records)):
         offset, count = int(records[i]["geom_offset"]), int(records[i]["geom_count"])
-        coords = [(geometry[offset + k]["lon"], geometry[offset + k]["lat"]) for k in range(count)]
-        elevations = [float(all_elevations[offset + k]) for k in range(count)]
+        lon = lons[offset:offset + count]
+        lat = lats[offset:offset + count]
+        elevations = all_elevations[offset:offset + count].astype(np.float64)
 
-        ascent, descent = ascent_descent(elevations, noise_threshold_m)
-        profile = elevation_profile(coords, elevations, profile_points)
+        # ascent_descent's threshold-hysteresis is inherently sequential (each step's baseline
+        # reset depends on the cumulative decision so far), so it stays a Python loop - but over a
+        # plain list (elevations.tolist()) rather than iterating a numpy array element-by-element,
+        # which boxes each element as a numpy scalar and is slower than plain Python floats here.
+        ascent, descent = ascent_descent(elevations.tolist(), noise_threshold_m)
+        profile = elevation_profile(lon, lat, elevations, profile_points)
 
         records[i]["ascent_m"] = round(ascent, 1)
         records[i]["descent_m"] = round(descent, 1)

@@ -65,16 +65,16 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
     def resolve(record_id, record_type):
         return inverse_id_table.get((TYPE_PREFIX[record_type], int(record_id)), int(record_id))
 
+    lons, lats = geometry["lon"], geometry["lat"]
     stats = []
     for edge_id in range(len(records)):
         r = records[edge_id]
         g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
-        coords = np.array([(geometry[g_off + i]["lon"], geometry[g_off + i]["lat"])
-                            for i in range(g_count)])
+        coords = np.column_stack([lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]])
         keep = rdp_keep_indices(coords, hover_tolerance_deg)
 
         p_off, p_count = int(r["profile_offset"]), int(r["profile_count"])
-        profile = [float(profiles[p_off + i]) for i in range(p_count)] if p_count else []
+        profile = profiles[p_off:p_off + p_count].tolist() if p_count else []
 
         stats.append({
             "edge_id": edge_id,
@@ -117,12 +117,14 @@ if __name__ == "__main__":
 
     print(f"streaming {len(records):,} edges -> tiling input + stats ...")
     tiling_input = edges_dir / "tiling_input.geojsonseq"
+    lons, lats = geometry["lon"], geometry["lat"]
     with open(tiling_input, "wb") as tf:
         for edge_id in range(len(records)):
             r = records[edge_id]
             g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
-            coords = [[float(geometry[g_off + i]["lon"]), float(geometry[g_off + i]["lat"])]
-                      for i in range(g_count)]
+            coords = np.column_stack(
+                [lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]]
+            ).tolist()
             tf.write(orjson.dumps({
                 "type": "Feature",
                 "properties": {"edge_id": edge_id},

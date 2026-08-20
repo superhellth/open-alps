@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
-from elevation.add_elevation import fill_elevation_records  # noqa: E402
+from elevation.add_elevation import elevation_profile, fill_elevation_records  # noqa: E402
 
 
 def _one_record_fixture():
@@ -28,6 +28,17 @@ def test_fill_elevation_records_sets_ascent_descent():
     )
     assert updated[0]["ascent_m"] == 10.0
     assert updated[0]["descent_m"] == 10.0
+
+
+def test_elevation_profile_vectorized_distance_matches_expected_values():
+    # 3 equally-spaced points on the equator (lat=0) -> two equal-length segments, so with
+    # n_points=3 the interpolation targets land exactly on the original samples - locks in the
+    # vectorized cumsum-based cumulative distance against a known result.
+    lon = np.array([0.0, 0.005, 0.01])
+    lat = np.array([0.0, 0.0, 0.0])
+    samples = np.array([1000.0, 1010.0, 1000.0])
+    profile = elevation_profile(lon, lat, samples, n_points=3)
+    assert profile == [1000.0, 1010.0, 1000.0]
 
 
 def test_fill_elevation_records_writes_profile_offsets_sequentially():
