@@ -5,7 +5,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from filter_start_points import filter_to_hut_range  # noqa: E402
+from preprocessing.filter_start_points import filter_to_hut_range  # noqa: E402
 
 HUT_COORDS = np.array([(10.0, 47.0), (11.0, 47.0)])
 

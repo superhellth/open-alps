@@ -86,7 +86,7 @@ def task_download_extracts():
 
 def task_filter_trails():
     return {
-        "actions": [py("filter_trails.py")],
+        "actions": [py("preprocessing/filter_trails.py")],
         "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
         + [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
@@ -97,7 +97,7 @@ def task_filter_trails():
 
 def task_merge_trails():
     return {
-        "actions": [py("merge_trails.py")],
+        "actions": [py("preprocessing/merge_trails.py")],
         "file_dep": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
         "targets": [str(OSM_DIR / "trails.osm.pbf")],
     }
@@ -107,7 +107,7 @@ def task_merge_trails():
 
 def task_verify_trails():
     return {
-        "actions": [py("verify_trails.py")],
+        "actions": [py("preprocessing/verify_trails.py")],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
         "uptodate": [False],
     }
@@ -137,7 +137,7 @@ def task_fetch_stations_parking():
 
 def task_filter_start_points():
     return {
-        "actions": [py("filter_start_points.py")],
+        "actions": [py("preprocessing/filter_start_points.py")],
         "file_dep": [
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "stations.geojson"),
             str(OSM_DIR / "parking.geojson"), str(CONFIG_PATH),
