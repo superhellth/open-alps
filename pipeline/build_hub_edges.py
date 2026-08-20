@@ -12,17 +12,19 @@ Usage: python pipeline/build_hub_edges.py [--max-edge-km 30] [--max-snap-m 100] 
 import argparse
 import math
 import sys
-from concurrent.futures import ProcessPoolExecutor
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 
 import igraph as ig
 import numpy as np
+from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import binfmt  # noqa: E402
 from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noqa: E402
-from lib.grid import Grid  # noqa: E402
+from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402
 from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
 from lib.subgraph import LocalSubgraph, gather_padded_subgraph  # noqa: E402
 
@@ -57,6 +59,67 @@ class SnapResult:
     split: object = None  # lib.edge_split.SplitResult, only set when node_index is None
 
 
+def _project_m(lon, lat, km_per_deg_lng: float):
+    """Local equirectangular projection to meters, accurate enough at the scale of one padded
+    cell (tens of km) - same simplification nearest_point_on_polyline already relies on."""
+    return lon * km_per_deg_lng * 1000.0, lat * KM_PER_DEG_LAT * 1000.0
+
+
+def _build_edge_spatial_index(subgraph: LocalSubgraph):
+    """Indexes every polyline vertex (endpoints + interior points) of every local edge in a
+    cKDTree, tagged with the owning edge_local_index, so snap_hub_to_subgraph's edge scan can
+    query a small candidate set instead of looping every edge. Built once per cell (called once,
+    then cached on the subgraph) rather than once per hub - this is what turns the old
+    candidates * edges Python loop into edges (build) + candidates * log(edges) (query).
+
+    Correctness: the true nearest point on a polyline segment can lie strictly between its two
+    vertices, so a hub within max_snap_m of that point isn't necessarily within max_snap_m of a
+    vertex - it can be up to max_snap_m + segment_length away from the nearest vertex (triangle
+    inequality). Query radius therefore pads max_snap_m by this cell's longest single segment
+    (max_seg_len_m), computed once here, not by max_snap_m alone."""
+    if len(subgraph.local_edges) == 0:
+        return None
+    ref_lat = float(np.mean(subgraph.local_nodes["lat"])) if len(subgraph.local_nodes) else 0.0
+    km_per_deg_lng = KM_PER_DEG_LAT * math.cos(math.radians(ref_lat))
+
+    xs, ys, edge_ids = [], [], []
+    max_seg_len_m = 0.0
+    for ei, e in enumerate(subgraph.local_edges):
+        interior = [
+            (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
+            for j in range(e["interior_offset"], e["interior_offset"] + e["interior_count"])
+        ]
+        u = subgraph.local_nodes[e["u"]]
+        v = subgraph.local_nodes[e["v"]]
+        polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
+        for lon, lat in polyline:
+            x, y = _project_m(lon, lat, km_per_deg_lng)
+            xs.append(x)
+            ys.append(y)
+            edge_ids.append(ei)
+        for i in range(len(polyline) - 1):
+            seg_len_m = _haversine_m(*polyline[i], *polyline[i + 1])
+            if seg_len_m > max_seg_len_m:
+                max_seg_len_m = seg_len_m
+
+    tree = cKDTree(np.column_stack([xs, ys]))
+    return tree, np.array(edge_ids), max_seg_len_m, km_per_deg_lng
+
+
+def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
+                           max_snap_m: float) -> list:
+    index = getattr(subgraph, "_edge_spatial_index", "unset")
+    if index == "unset":
+        index = _build_edge_spatial_index(subgraph)
+        subgraph._edge_spatial_index = index
+    if index is None:
+        return []
+    tree, edge_ids, max_seg_len_m, km_per_deg_lng = index
+    x, y = _project_m(hub_lon, hub_lat, km_per_deg_lng)
+    point_idxs = tree.query_ball_point([x, y], r=max_snap_m + max_seg_len_m)
+    return sorted(set(edge_ids[point_idxs].tolist()))
+
+
 def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
                           max_snap_m: float) -> SnapResult | None:
     # An existing graph node within range always wins over a mid-chain split, even if some
@@ -72,7 +135,8 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
             return SnapResult(node_index=best_i)
 
     best_edge = None  # (dist_m, edge_local_index, split)
-    for ei, e in enumerate(subgraph.local_edges):
+    for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
+        e = subgraph.local_edges[ei]
         interior = [
             (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
             for j in range(e["interior_offset"], e["interior_offset"] + e["interior_count"])
@@ -311,9 +375,15 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
 def _run_cell(args):
     base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
         max_snap_m = args
+    t0 = time.time()
     subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
-    return compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
-                                       max_snap_m)
+    records = compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
+                                          max_snap_m)
+    return {
+        "cell_id": cell_id, "elapsed_s": time.time() - t0, "n_core_hubs": len(core_hubs),
+        "n_nodes": len(subgraph.local_nodes), "n_edges": len(subgraph.local_edges),
+        "records": records,
+    }
 
 
 if __name__ == "__main__":
@@ -365,10 +435,27 @@ if __name__ == "__main__":
         for cid, hubs in hubs_by_cell.items()
     ]
 
+    total = len(tasks)
+    print(f"{total} cells with hubs to process", flush=True)
     shard_records = []
+    completed = 0
+    t_start = time.time()
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        for records in pool.map(_run_cell, tasks):
-            shard_records.append(records)
+        futures = [pool.submit(_run_cell, t) for t in tasks]
+        for fut in as_completed(futures):
+            result = fut.result()
+            shard_records.append(result["records"])
+            completed += 1
+            overall_elapsed = time.time() - t_start
+            avg_s = overall_elapsed / completed
+            remaining_s = avg_s * (total - completed)
+            print(
+                f"[{completed}/{total}] cell {result['cell_id']}: {result['elapsed_s']:.1f}s "
+                f"({result['n_core_hubs']} hubs, {result['n_nodes']:,} nodes, "
+                f"{result['n_edges']:,} edges) -> {len(result['records'])} edge records "
+                f"| elapsed {overall_elapsed/60:.1f}m, ~{remaining_s/60:.1f}m remaining",
+                flush=True,
+            )
 
     merged = merge_and_dedup(shard_records)
     hut_records = [r for r in merged if r["to_type"] == binfmt.TYPE_HUT and r["from_type"] == binfmt.TYPE_HUT]
