@@ -2,8 +2,9 @@
 """
 Downloads whatever raw DEM tiles the region(s) configured in pipeline.config.json need, then
 writes data/dem/fetch_manifest.json recording exactly what was fetched (provider name, raw tile
-paths, and where each region's reprojected VRT will go) - see pipeline/dem_providers/base.py for
-the provider contract, and pipeline/README.md's DEM section for why this is pluggable.
+paths, and where each region's reprojected VRT will go) - see
+pipeline/downloads/dem_providers/base.py for the provider contract, and pipeline/README.md's DEM
+section for why this is pluggable.
 
 Deliberately does NOT reproject/merge/materialize - that's build_dem_vrt.py, split out so
 retuning a provider's to_4326_vrt() (e.g. a NoData-handling fix) or retuning materialize_geotiff
@@ -12,13 +13,14 @@ in particular) against data that's already downloaded. Every provider's fetch() 
 tiles that already exist on disk, but this split also skips the *tile-selection* network calls
 entirely on a build-only rerun, not just the actual downloads.
 
-Usage: python pipeline/fetch_dem.py
+Usage: python pipeline/downloads/fetch_dem.py
 """
 
 import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dem_providers import get_provider  # noqa: E402
 from lib.pipeline import DEM_DIR, load_config  # noqa: E402

@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dem_providers import copernicus  # noqa: E402
+from downloads.dem_providers import copernicus  # noqa: E402
 
 
 def test_tile_name_positive_lat_lon():

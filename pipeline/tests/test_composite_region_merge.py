@@ -4,8 +4,8 @@ from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import dem_providers  # noqa: E402
-from dem_providers import composite  # noqa: E402
+import downloads.dem_providers as dem_providers  # noqa: E402
+from downloads.dem_providers import composite  # noqa: E402
 from lib import pipeline as pipeline_lib  # noqa: E402
 
 

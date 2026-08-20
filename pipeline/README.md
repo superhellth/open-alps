@@ -59,7 +59,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     the DEM source now (kept only so old configs don't error on an unrecognized key).
   - **`provider`** / **`providerConfig`** — which DEM source step 07 fetches from, and that
     provider's own config. Every provider implements the contract in
-    `pipeline/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `fetch_dem.py` is a
+    `pipeline/downloads/dem_providers/base.py` (`fetch()` + `to_4326_vrt()`); `fetch_dem.py` is a
     thin dispatcher over `dem_providers.get_provider(name)` that only calls `fetch()` and writes
     `data/dem/fetch_manifest.json` — `build_dem_vrt.py` reads that manifest and calls
     `to_4326_vrt()` + materializes `dem.tif`, with no network access of its own, so retuning a
@@ -252,26 +252,26 @@ To run a single step by hand (e.g. while tuning a script), invoke it directly �
 a plain, independently runnable script (all from within the `alpen-osm` env):
 
 ```bash
-python pipeline/download_extracts.py      # ~1.6GB, Geofabrik extracts from pipeline.config.json
-python pipeline/filter_trails.py           # -> ~264MB combined, hiking ways only
-python pipeline/merge_trails.py            # -> data/osm/trails.osm.pbf
-python pipeline/verify_trails.py           # gate: fails if trails.osm.pbf is missing/empty
+python pipeline/downloads/download_extracts.py      # ~1.6GB, Geofabrik extracts from pipeline.config.json
+python pipeline/preprocessing/filter_trails.py           # -> ~264MB combined, hiking ways only
+python pipeline/preprocessing/merge_trails.py            # -> data/osm/trails.osm.pbf
+python pipeline/preprocessing/verify_trails.py           # gate: fails if trails.osm.pbf is missing/empty
 
-python pipeline/fetch_huts.py              # -> data/osm/huts.geojson
-python pipeline/fetch_stations_parking.py  # -> data/osm/stations.geojson, parking.geojson
-python pipeline/filter_start_points.py     # -> data/osm/start_points.npy, start_points_id_table.json
+python pipeline/downloads/fetch_huts.py              # -> data/osm/huts.geojson
+python pipeline/downloads/fetch_stations_parking.py  # -> data/osm/stations.geojson, parking.geojson
+python pipeline/preprocessing/filter_start_points.py     # -> data/osm/start_points.npy, start_points_id_table.json
 
-python pipeline/build_base_graph.py        # -> data/osm/base_graph/ (hub-agnostic, cached trail graph)
-python pipeline/build_hub_edges.py         # -> data/osm/hut_edges/, start_edges/ (records.npy, geometry.npy)
+python pipeline/graph_building/build_base_graph.py        # -> data/osm/base_graph/ (hub-agnostic, cached trail graph)
+python pipeline/graph_building/build_hub_edges.py         # -> data/osm/hut_edges/, start_edges/ (records.npy, geometry.npy)
 
-python pipeline/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
-python pipeline/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
-python pipeline/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
+python pipeline/downloads/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
+python pipeline/graph_building/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
+python pipeline/graph_building/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
 
-python pipeline/build_trail_tiles.py       # -> data/osm/trails.pmtiles
-python pipeline/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
+python pipeline/graph_building/build_trail_tiles.py       # -> data/osm/trails.pmtiles
+python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
     --layer-name hut_edges --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
-python pipeline/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
+python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
     --layer-name start_edges --out-tiles data/osm/start-edges.pmtiles --out-stats data/osm/start-edge-stats.json
 ```
 

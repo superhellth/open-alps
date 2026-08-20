@@ -3,7 +3,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from dem_providers import at_bev  # noqa: E402
+from downloads.dem_providers import at_bev  # noqa: E402
 
 
 def test_download_url_uses_configured_url():

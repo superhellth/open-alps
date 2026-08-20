@@ -76,7 +76,7 @@ def py(script, *args):
 
 def task_download_extracts():
     return {
-        "actions": [py("download_extracts.py")],
+        "actions": [py("downloads/download_extracts.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
     }
@@ -117,7 +117,7 @@ def task_verify_trails():
 
 def task_fetch_huts():
     return {
-        "actions": [py("fetch_huts.py")],
+        "actions": [py("downloads/fetch_huts.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(OSM_DIR / "huts.geojson")],
     }
@@ -127,7 +127,7 @@ def task_fetch_huts():
 
 def task_fetch_stations_parking():
     return {
-        "actions": [py("fetch_stations_parking.py")],
+        "actions": [py("downloads/fetch_stations_parking.py")],
         "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
         "targets": [str(OSM_DIR / "stations.geojson"), str(OSM_DIR / "parking.geojson")],
     }
@@ -197,7 +197,7 @@ def task_build_hub_edges():
 
 def task_fetch_dem():
     return {
-        "actions": [py("fetch_dem.py")],
+        "actions": [py("downloads/fetch_dem.py")],
         "file_dep": [str(CONFIG_PATH)],
         "targets": [str(DEM_DIR / "fetch_manifest.json")],
     }

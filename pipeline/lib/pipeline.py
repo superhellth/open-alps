@@ -113,7 +113,7 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
     scripts in the first place."""
     # local import: dem_providers.composite imports lib.pipeline at module level, so importing
     # dem_providers back at this module's top level would be a circular import
-    from dem_providers import get_provider
+    from downloads.dem_providers import get_provider
 
     region_vrts = []
     for entry in manifest:
