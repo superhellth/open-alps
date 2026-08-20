@@ -32,7 +32,7 @@ means the expensive stream+contract step is cached across hub-set changes and hy
 retuning, and station/parking routing edges (filtered to hub range by
 `preprocessing/filter_start_points.py`, snapped mid-chain via `lib/edge_split.py` where needed) are now
 first-class alongside hut-hut edges — both live in the same `records.npy`/`geometry.npy` binary
-format (`hut_edges/`, `start_edges/`), tiled by the same generalized `graph_building/build_edge_tiles.py`.
+format (`hut_edges/`, `start_edges/`), tiled by the same generalized `postprocessing/build_edge_tiles.py`.
 
 Current status: built and up to date for Austria+Bavaria, outputs rendered by the app
 (`GraphPage.jsx`'s `#graph` route for the raw network + hut/start edges, `App.jsx` for
@@ -46,16 +46,16 @@ extending scope past AT+Bayern; the diverse-paths (multiple route variants per p
 line to `data/timings.jsonl` per completed phase (`{ts, script, phase, seconds, meta?}`) — skipped
 entirely if the block raises, so a failed run never leaves a misleading partial record. Used
 internally by the scripts expensive enough to want phase-level breakdown: `graph_building/build_base_graph.py`
-(`stream_osm`, `contract_structural`), `graph_building/build_dem_vrt.py` (`materialize_geotiff`) and
-`graph_building/add_elevation.py` (`read_dem_window`, `per_edge_ascent_profile`). This exists because scope is
+(`stream_osm`, `contract_structural`), `elevation/build_dem_vrt.py` (`materialize_geotiff`) and
+`elevation/add_elevation.py` (`read_dem_window`, `per_edge_ascent_profile`). This exists because scope is
 expected to grow past AT+Bayern — `timings.jsonl` is the real-numbers record for seeing which
 phase stops scaling first, instead of guessing. It already caught one: `read_dem_window` timed at
-~750s (`data/timings.jsonl`), because `graph_building/add_elevation.py` used to sample `graph_building/build_dem_vrt.py`'s
+~750s (`data/timings.jsonl`), because `elevation/add_elevation.py` used to sample `elevation/build_dem_vrt.py`'s
 `dem.vrt` directly - a VRT chain that lazily reprojects every region's tiles into EPSG:4326 on
-read, so a window covering AT+Bavaria re-ran that reprojection on every `graph_building/add_elevation.py` run
+read, so a window covering AT+Bavaria re-ran that reprojection on every `elevation/add_elevation.py` run
 (the script people rerun most, to retune `--ele-noise-threshold-m`). Fixed by having
-`graph_building/build_dem_vrt.py` materialize the VRT into a real, tiled/compressed GeoTIFF once
-(`pipeline/lib/pipeline.py`'s `materialize_geotiff()`, `data/dem/dem.tif`) that `graph_building/add_elevation.py`
+`elevation/build_dem_vrt.py` materialize the VRT into a real, tiled/compressed GeoTIFF once
+(`pipeline/lib/pipeline.py`'s `materialize_geotiff()`, `data/dem/dem.tif`) that `elevation/add_elevation.py`
 reads instead - see that function's docstring. Wrap a new expensive block in `with
 phase(SCRIPT_NAME, "phase_name", **any_size_metadata):` rather than ad hoc `print`/`time.time()`
 timing to keep it queryable the same way.

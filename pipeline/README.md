@@ -265,13 +265,13 @@ python pipeline/graph_building/build_base_graph.py        # -> data/osm/base_gra
 python pipeline/graph_building/build_hub_edges.py         # -> data/osm/hut_edges/, start_edges/ (records.npy, geometry.npy)
 
 python pipeline/downloads/fetch_dem.py               # -> data/dem/fetch_manifest.json, via dem.provider (see Config)
-python pipeline/graph_building/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
-python pipeline/graph_building/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
+python pipeline/elevation/build_dem_vrt.py          # -> data/dem/dem.tif; rerun alone after tweaking a provider, no re-fetch
+python pipeline/elevation/add_elevation.py           # adds ascent_m/descent_m/profiles.npy to hut_edges/, start_edges/ in place
 
-python pipeline/graph_building/build_trail_tiles.py       # -> data/osm/trails.pmtiles
-python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
+python pipeline/postprocessing/build_trail_tiles.py       # -> data/osm/trails.pmtiles
+python pipeline/postprocessing/build_edge_tiles.py --edges-dir data/osm/hut_edges --id-table data/osm/start_points_id_table.json \
     --layer-name hut_edges --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
-python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
+python pipeline/postprocessing/build_edge_tiles.py --edges-dir data/osm/start_edges --id-table data/osm/start_points_id_table.json \
     --layer-name start_edges --out-tiles data/osm/start-edges.pmtiles --out-stats data/osm/start-edge-stats.json
 ```
 

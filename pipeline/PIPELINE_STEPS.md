@@ -141,7 +141,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
 - **Output**: `data/osm/hut_edges/{records.npy, geometry.npy}` and
   `data/osm/start_edges/{records.npy, geometry.npy}` (`binfmt.RECORD_DTYPE` +
   `binfmt.COORD_DTYPE`; `ascent_m`/`descent_m`/`profile_*` left `UNSET`/`0` here — filled by
-  `graph_building/add_elevation.py`).
+  `elevation/add_elevation.py`).
 - **doit wiring**: `file_dep=[base_graph/manifest.json, huts.geojson, start_points.npy]`,
   `targets=[hut_edges/records.npy, start_edges/records.npy]`. `uptodate` uses `config_changed`
   over the task's own params.
@@ -169,7 +169,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   - `composite` — stitches per-sub-region VRTs from different providers; region order matters
     where bboxes overlap (`gdalbuildvrt` keeps the first-listed source).
 
-## 7b. `build_dem_vrt` — `graph_building/build_dem_vrt.py`
+## 7b. `build_dem_vrt` — `elevation/build_dem_vrt.py`
 
 - Reads `fetch_manifest.json`.
 - `lib.pipeline.build_dem_vrt(manifest, DEM_DIR)`: for each manifest region, calls that
@@ -181,10 +181,10 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   tiled/DEFLATE-compressed `dem.tif` via `gdal_translate` (`PREDICTOR=3`, `-a_nodata` copied
   explicitly). This exists because reading `dem.vrt` directly re-runs per-pixel reprojection on
   every read — timed at ~750s for one AT+Bavaria window — so materializing once here means
-  `graph_building/add_elevation.py` (rerun often, to retune noise threshold) doesn't keep re-paying that cost.
+  `elevation/add_elevation.py` (rerun often, to retune noise threshold) doesn't keep re-paying that cost.
 - **doit wiring**: `file_dep=[fetch_manifest.json]`, `targets=[dem.vrt, dem.tif]`.
 
-## 8. `add_elevation` — `graph_building/add_elevation.py`  (always reruns when selected, `uptodate: [False]`; cheap, ~90–100s)
+## 8. `add_elevation` — `elevation/add_elevation.py`  (always reruns when selected, `uptodate: [False]`; cheap, ~90–100s)
 
 - Params: `--ele-noise-threshold-m` (default `config.dem.eleNoiseThresholdM`), `--profile-points`
   (default `config.dem.profilePoints`, 30).
@@ -209,7 +209,7 @@ Replaces the old script's pass1/pass2. Params: `--max-edge-km` (default `config.
   `targets=[hut_edges/records.npy, hut_edges/profiles.npy, start_edges/records.npy,
   start_edges/profiles.npy]`.
 
-## 9. `build_trail_tiles` — `graph_building/build_trail_tiles.py`
+## 9. `build_trail_tiles` — `postprocessing/build_trail_tiles.py`
 
 Builds the *raw* trail network into static vector tiles (too large — 26.5M nodes — to ship as
 plain GeoJSON).
@@ -227,7 +227,7 @@ plain GeoJSON).
   which shells out through WSL to a separate linux-64 micromamba env there.
 - **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[trails.pmtiles]`.
 
-## 11. `build_hut_edge_tiles` / `build_start_edge_tiles` — `graph_building/build_edge_tiles.py`
+## 11. `build_hut_edge_tiles` / `build_start_edge_tiles` — `postprocessing/build_edge_tiles.py`
 
 Generalized from the old `build_hut_edge_tiles.py`: same script, run twice by `dodo.py` (once per
 `--edges-dir`/`--layer-name`) — once over `hut_edges/`, once over `start_edges/` — splitting each
@@ -273,7 +273,7 @@ assets instead of shipping the arrays directly.
 - **`lib/timing.py`** — `phase(script, name, **meta)` context manager, appends one JSON line to
   `data/timings.jsonl` per completed phase (skipped on exception, so failed runs leave no
   misleading partial record). Used by the expensive scripts (`graph_building/build_base_graph.py`,
-  `graph_building/build_dem_vrt.py`, `graph_building/add_elevation.py`) to track which phase stops scaling first as regional
+  `elevation/build_dem_vrt.py`, `elevation/add_elevation.py`) to track which phase stops scaling first as regional
   scope grows past AT+Bayern.
 - **`lib/grid.py`** — `Grid`, a row-major spatial grid partitioning a bbox into
   `tileSizeKm` cells; `cell_id` is fully determined by `(bbox, tile_size_km)` so it's

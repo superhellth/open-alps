@@ -6,7 +6,7 @@ for hut-edges, once for start-edges - same script, different --edges-dir/--layer
 docs/superpowers/specs/2026-08-19-pipeline-v2-design.md.
 
 Usage:
-    python pipeline/graph_building/build_edge_tiles.py --edges-dir data/osm/hut_edges --layer-name hut_edges \
+    python pipeline/postprocessing/build_edge_tiles.py --edges-dir data/osm/hut_edges --layer-name hut_edges \
         --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
 """
 

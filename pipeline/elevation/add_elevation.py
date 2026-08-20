@@ -6,8 +6,8 @@ unchanged); only the I/O layer changed from GeoJSON to lib/binfmt.py's binary ar
 edge sets are now processed together in one combined batched DEM window read.
 
 Usage:
-    python pipeline/graph_building/add_elevation.py
-    python pipeline/graph_building/add_elevation.py --ele-noise-threshold-m 3
+    python pipeline/elevation/add_elevation.py
+    python pipeline/elevation/add_elevation.py --ele-noise-threshold-m 3
 Requires data/dem/dem.tif (build_dem_vrt.py) and data/osm/{hut_edges,start_edges}/records.npy
 (build_hub_edges.py).
 """

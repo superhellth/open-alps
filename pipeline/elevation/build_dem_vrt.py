@@ -8,7 +8,7 @@ bavaria_dgm.py's -srcnodata fix) or the materialize step is a rerun of this scri
 network access, no re-running Bavaria's coverage-grid WMS tile-existence check, nothing but local
 files already on disk.
 
-Usage: python pipeline/graph_building/build_dem_vrt.py
+Usage: python pipeline/elevation/build_dem_vrt.py
 """
 
 import json
