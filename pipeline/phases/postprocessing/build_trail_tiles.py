@@ -47,6 +47,9 @@ from pmtiles.convert import mbtiles_to_pmtiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config, run_tippecanoe  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
+
+SCRIPT_NAME = "build_trail_tiles.py"
 
 config = load_config()
 tiles_config = config.get("trailTiles", {})
@@ -63,7 +66,12 @@ filtered = OSM_DIR / "trails.geojsons"  # tippecanoe recognizes this extension a
 mbtiles = OSM_DIR / "trails.mbtiles"
 out_path = Path(args.out)
 
-print(f"streaming {trails_pbf} -> filtering -> {filtered} ...")
+# Splits the three costs: the osmium export + per-feature tag rewrite (ours, Python), tippecanoe
+# (external), and the pmtiles conversion. Without the split a slower run is unattributable.
+timer = StepTimer()
+n_features = 0
+
+print(f"streaming {trails_pbf} -> filtering -> {filtered} ...", flush=True)
 # osmium export's stdout is piped straight into the filter loop below - no intermediate
 # trails.geojsonseq on disk, since nothing else needs the full-tag version. Streams line-by-line
 # throughout, so this never holds the full multi-million-way export in memory.
@@ -76,7 +84,7 @@ export = subprocess.Popen(
     ],
     stdout=subprocess.PIPE,
 )
-with open(filtered, "wb") as dst:
+with timer.step("osmium_export_filter"), open(filtered, "wb") as dst:
     for line in export.stdout:
         line = line.strip(b"\x1e\n")  # RFC 8142 record separator osmium emits per line
         if not line:
@@ -86,26 +94,33 @@ with open(filtered, "wb") as dst:
         feat["properties"] = {"highway": props.get("highway")}
         dst.write(orjson.dumps(feat))
         dst.write(b"\n")
-returncode = export.wait()
-if returncode != 0:
-    raise subprocess.CalledProcessError(returncode, export.args)
+        n_features += 1
+    returncode = export.wait()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, export.args)
 
-print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...")
-run_tippecanoe(
-    [
-        "-o", str(mbtiles),
-        "-l", "trails",
-        "-Z", str(args.min_zoom),
-        "-z", str(args.max_zoom),
-        "--drop-densest-as-needed",
-        "--force",
-        str(filtered),
-    ]
-)
+print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...", flush=True)
+with timer.step("tippecanoe"):
+    run_tippecanoe(
+        [
+            "-o", str(mbtiles),
+            "-l", "trails",
+            "-Z", str(args.min_zoom),
+            "-z", str(args.max_zoom),
+            "--drop-densest-as-needed",
+            "--force",
+            str(filtered),
+        ]
+    )
 
-print(f"converting {mbtiles} -> {out_path} ...")
-mbtiles_to_pmtiles(str(mbtiles), str(out_path), args.max_zoom)
+print(f"converting {mbtiles} -> {out_path} ...", flush=True)
+with timer.step("mbtiles_to_pmtiles"):
+    mbtiles_to_pmtiles(str(mbtiles), str(out_path), args.max_zoom)
 
 filtered.unlink(missing_ok=True)
 mbtiles.unlink(missing_ok=True)
+with phase(SCRIPT_NAME, "build_trail_tiles", n_features=n_features,
+           min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
+    pass
+print(f"step totals: {timer.summary()}", flush=True)
 print(f"written {out_path}")

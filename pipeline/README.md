@@ -98,11 +98,13 @@ hardcoding these values — change the config, not the scripts.
 
 The pipeline needs a real `osmium-tool` binary (`tags-filter`/`merge`/`fileinfo`) plus a handful
 of Python packages with native extensions (`pyosmium`, `scipy`, `numpy`, `python-igraph`). None of
-that is on PyPI in CLI form, so it's a conda-forge env, not `pip`/`uv`.
+that is on PyPI in CLI form, so it's a conda-forge env, not `pip`/`uv`. `psutil` is in the
+list too: `lib/memtrace.py` imports it at module level and `build_base_graph.py` imports
+memtrace, so an env without it fails the phase at import time, not at first use.
 
 ```bash
 conda create -n alpen-osm -c conda-forge \
-  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson
+  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson psutil
 conda activate alpen-osm
 osmium --version   # sanity check: should print "osmium version ..."
 pip install pmtiles doit   # pmtiles + doit aren't on conda-forge

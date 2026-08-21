@@ -1,6 +1,8 @@
 import sys
 from pathlib import Path
 
+import numpy as np
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib.grid import Grid  # noqa: E402
@@ -62,3 +64,25 @@ def test_single_cell_grid_when_bbox_smaller_than_tile():
     assert grid.n_cols == 1
     assert grid.n_rows == 1
     assert grid.all_cell_ids() == [0]
+
+
+def test_cell_ids_for_points_matches_scalar_version_including_out_of_bbox():
+    bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
+    grid = Grid(bbox, 60.0)
+
+    rng = np.random.default_rng(0)
+    # deliberately overshoot the bbox on both sides: Grid clamps, and the vectorized path
+    # must clamp identically (np.floor vs int() disagree on negatives before clamping)
+    lons = rng.uniform(bbox["minLng"] - 2.0, bbox["maxLng"] + 2.0, 5000)
+    lats = rng.uniform(bbox["minLat"] - 2.0, bbox["maxLat"] + 2.0, 5000)
+
+    expected = np.array([grid.cell_id_for_point(lo, la) for lo, la in zip(lons, lats)],
+                        dtype=np.int32)
+    assert np.array_equal(grid.cell_ids_for_points(lons, lats), expected)
+
+
+def test_cell_ids_for_points_returns_int32_and_handles_empty():
+    grid = Grid({"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}, 60.0)
+    out = grid.cell_ids_for_points(np.zeros(0), np.zeros(0))
+    assert out.dtype == np.int32
+    assert len(out) == 0

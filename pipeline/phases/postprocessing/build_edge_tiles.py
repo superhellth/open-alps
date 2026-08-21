@@ -23,6 +23,9 @@ from pmtiles.convert import mbtiles_to_pmtiles
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import load_config, run_tippecanoe  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
+
+SCRIPT_NAME = "build_edge_tiles.py"
 
 TYPE_PREFIX = {binfmt.TYPE_HUT: "hut", binfmt.TYPE_STATION: "station", binfmt.TYPE_PARKING: "parking"}
 
@@ -109,16 +112,21 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     edges_dir = Path(args.edges_dir)
-    records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
-    geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
-    profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
-    with open(args.id_table, encoding="utf-8") as f:
-        id_table = json.load(f)
+    # Four very different costs live in this script - our own geometry/stats Python loops, an
+    # external tippecanoe run, and the mbtiles->pmtiles conversion. Splitting them is the only
+    # way to tell "our code got slower" from "there are simply more edges to tile".
+    timer = StepTimer()
+    with timer.step("load_arrays"):
+        records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
+        geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
+        profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
+        with open(args.id_table, encoding="utf-8") as f:
+            id_table = json.load(f)
 
-    print(f"streaming {len(records):,} edges -> tiling input + stats ...")
+    print(f"streaming {len(records):,} edges -> tiling input + stats ...", flush=True)
     tiling_input = edges_dir / "tiling_input.geojsonseq"
     lons, lats = geometry["lon"], geometry["lat"]
-    with open(tiling_input, "wb") as tf:
+    with timer.step("write_tiling_input"), open(tiling_input, "wb") as tf:
         for edge_id in range(len(records)):
             r = records[edge_id]
             g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
@@ -132,22 +140,32 @@ if __name__ == "__main__":
             }))
             tf.write(b"\n")
 
-    stats = build_stats(records, geometry, profiles, id_table, args.hover_simplify_tolerance_deg)
-    print(f"writing {args.out_stats} ...")
-    with open(args.out_stats, "wb") as f:
+    with timer.step("build_stats"):
+        stats = build_stats(records, geometry, profiles, id_table,
+                            args.hover_simplify_tolerance_deg)
+    print(f"writing {args.out_stats} ...", flush=True)
+    with timer.step("write_stats"), open(args.out_stats, "wb") as f:
         f.write(orjson.dumps(stats))
 
     mbtiles = edges_dir / "tiling_input.mbtiles"
-    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...")
-    run_tippecanoe([
-        "-o", str(mbtiles), "-l", args.layer_name,
-        "-Z", str(args.min_zoom), "-z", str(args.max_zoom),
-        "--drop-densest-as-needed", "--force", str(tiling_input),
-    ])
+    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...", flush=True)
+    with timer.step("tippecanoe"):
+        run_tippecanoe([
+            "-o", str(mbtiles), "-l", args.layer_name,
+            "-Z", str(args.min_zoom), "-z", str(args.max_zoom),
+            "--drop-densest-as-needed", "--force", str(tiling_input),
+        ])
 
-    print(f"converting {mbtiles} -> {args.out_tiles} ...")
-    mbtiles_to_pmtiles(str(mbtiles), args.out_tiles, args.max_zoom)
+    print(f"converting {mbtiles} -> {args.out_tiles} ...", flush=True)
+    with timer.step("mbtiles_to_pmtiles"):
+        mbtiles_to_pmtiles(str(mbtiles), args.out_tiles, args.max_zoom)
 
     tiling_input.unlink(missing_ok=True)
     mbtiles.unlink(missing_ok=True)
+    # Nothing left to time - phase() here exists only to land the split in timings.jsonl next to
+    # every other phase, keyed by layer so hut_edges and start_edges stay distinguishable.
+    with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name, n_edges=len(records),
+               min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
+        pass
+    print(f"step totals: {timer.summary()}", flush=True)
     print(f"written {args.out_tiles} and {args.out_stats}")

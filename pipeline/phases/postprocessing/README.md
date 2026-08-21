@@ -66,3 +66,12 @@ raw binary arrays directly.
 - **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`),
   `targets=[hut-edges.pmtiles, hut-edge-stats.json]` (resp. `start-edges.pmtiles`,
   `start-edge-stats.json`).
+
+## Timing
+
+`build_edge_tiles.py` and `build_trail_tiles.py` each write one `lib/timing.py` `phase()` record
+per run (`build_edge_tiles`, keyed by `layer` so the hut and access runs stay apart; and
+`build_trail_tiles`), with a `StepTimer` split in the meta and a `step totals:` line at the end.
+The steps separate our own Python work from the external tools: `write_tiling_input` /
+`build_stats` / `write_stats` (resp. `osmium_export_filter`) vs. `tippecanoe` vs.
+`mbtiles_to_pmtiles` — so a slower run says which of the three grew.

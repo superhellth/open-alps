@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
+from lib.timing import StepTimer  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
     compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph,
 )
@@ -128,3 +129,52 @@ def test_merge_and_dedup_keeps_directional_start_edges():
     ]
     merged = merge_and_dedup([shard])
     assert len(merged) == 2
+
+
+def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
+    # A station and a parking lot on the same trail line, no hut anywhere: nothing downstream
+    # consumes a station<->parking edge, so no record should be routed at all.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_STATION, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_PARKING, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+    )
+    assert records == []
+
+
+def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
+    # Hut and station both core hubs of this cell: only the access->hut direction is emitted,
+    # since __main__ drops hut->access records anyway.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+    )
+    assert len(records) == 1
+    assert records[0]["from_type"] == binfmt.TYPE_STATION
+    assert records[0]["to_type"] == binfmt.TYPE_HUT
+
+
+def test_compute_hub_edges_for_cell_fills_the_step_timer():
+    # The per-step split is what tells a long run apart: snapping scales with hub count, the
+    # distance/path steps with subgraph size x pair count.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
+    ]
+    timer = StepTimer()
+    compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0, timer=timer,
+    )
+    assert set(timer.seconds) == {"snap", "build_igraph", "distances", "paths"}
+    assert timer.calls["snap"] == 1          # one timed pass over the whole snap loop
+    assert timer.calls["snap_hubs"] == 2     # both huts snapped onto the line
+    assert timer.calls["distances"] == 2     # one distance query per core hub
+    assert timer.calls["paths"] == 1         # one surviving pair, deduped to a single record
