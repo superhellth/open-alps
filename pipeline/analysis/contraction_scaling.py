@@ -55,7 +55,12 @@ def cells_by_density(nodes, n_cells: int) -> list[int]:
 def pick_cell_sets(nodes, n_cells: int, fractions) -> list[tuple[float, list[int]]]:
     """Densest-first nested prefixes: the cells needed to cover each target fraction of all nodes.
     Nested so each larger measurement is a strict superset of the smaller ones - otherwise a
-    size-vs-time curve would also be measuring a change of terrain."""
+    size-vs-time curve would also be measuring a change of terrain.
+
+    Sorted and de-duplicated here rather than trusted from the caller: --fractions is free text,
+    and out-of-order values would break both the nesting above and run_sweep's
+    last/first us-per-edge ratio, silently and with plausible-looking output."""
+    fractions = sorted(set(fractions))
     ranked = cells_by_density(nodes, n_cells)
     counts = np.bincount(np.asarray(nodes["cell_id"]), minlength=n_cells)
     total = counts.sum()
@@ -122,6 +127,7 @@ def run_sweep(base_graph_dir, fractions, out_path):
               f"{r['us_per_edge']:>7.2f}  {r['peak_rss_gb']:>11.2f}  "
               f"{r['swap_in_delta_mb']:>10.1f}", flush=True)
     if len(results) >= 2:
+        # safe because pick_cell_sets sorted the fractions, so results runs smallest -> largest
         ratio = results[-1]["us_per_edge"] / results[0]["us_per_edge"]
         print(f"\nus/edge ratio (largest / smallest): {ratio:.2f}x", flush=True)
         print("  < 1.3x  -> linear, CPU-bound          -> tiling justified (ceiling ~6 cores)",

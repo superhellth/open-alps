@@ -74,3 +74,51 @@ def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
     assert set(edges["u"].tolist()) | set(edges["v"].tolist()) == {0, 1, 2}
     assert sorted(edges["dist"].tolist()) == [100.0, 200.0]
     assert interior["lon"][0] == pytest.approx(11.05)
+
+
+def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch):
+    # The ordering IS the optimization: with the handler still live through contraction, its raw
+    # Python lists (~40M coord tuples, 41M-element int/float lists, and the 40M-entry
+    # node_id_to_idx dict) sit alongside the numpy copies for the whole phase and push a 16 GiB
+    # box into swap - that is what made the recorded run 3963s instead of ~150s. A later reorder
+    # of main() would reintroduce it silently, since nothing about the OUTPUT changes.
+    import weakref
+
+    import lib.timing as timing
+    monkeypatch.setattr(timing, "TIMINGS_PATH", tmp_path / "timings.jsonl")
+
+    class FakeHandler:
+        def __init__(self):
+            # 0 -- 1 -- 2, same tiny chain as the contract() test above
+            self.coords = [(11.0, 47.0), (11.1, 47.0), (11.2, 47.0)]
+            self.edges_i, self.edges_j = [0, 1], [1, 2]
+            self.edges_dist, self.edges_w = [100.0, 200.0], [100.0, 200.0]
+            self.edges_road = [False, False]
+            self.edges_sac_rank = [1, 2]
+            self.edges_via_ferrata = [False, False]
+
+    # the weakref is the only handle the test keeps - a strong ref here would defeat the check
+    handler_ref = {}
+
+    def fake_stream_osm(trails_path, config):
+        handler = FakeHandler()
+        handler_ref["r"] = weakref.ref(handler)
+        return handler
+
+    real_contract = bbg.contract
+    observed = {}
+
+    def spying_contract(*raw_args, **kwargs):
+        observed["handler_alive"] = handler_ref["r"]() is not None
+        return real_contract(*raw_args, **kwargs)
+
+    monkeypatch.setattr(bbg, "stream_osm", fake_stream_osm)
+    monkeypatch.setattr(bbg, "contract", spying_contract)
+    monkeypatch.setattr(bbg, "pack_and_write", lambda *a, **k: None)
+
+    bbg.main(["--out-dir", str(tmp_path)])
+
+    assert observed["handler_alive"] is False, (
+        "handler was still referenced when contract() started - main() must convert to arrays "
+        "and drop the handler first"
+    )

@@ -41,6 +41,11 @@ DOIT_CONFIG = {
     # keeps doit's runtime state out of the tracked half of pipeline/, alongside every other
     # generated/gitignored pipeline artifact (see root CLAUDE.md's data/ vs pipeline/ split)
     "dep_file": str(DATA_DIR / ".doit.db"),
+    # 2 = stream both stdout and stderr from the task's action, live. doit's default (1) captures
+    # stdout and only replays it if the task fails, which hides the per-unit progress lines this
+    # pipeline is required to print (see CLAUDE.md "Progress logging") and makes a multi-hour task
+    # look hung. A single task can still opt out with "verbosity" in its own task dict.
+    "verbosity": 2,
     "default_tasks": [
         "download_extracts", "filter_trails", "merge_trails", "verify_trails",
         "fetch_huts", "fetch_stations_parking", "filter_start_points",

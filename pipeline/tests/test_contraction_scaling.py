@@ -64,3 +64,21 @@ def test_profile_one_writes_a_prof_file_and_returns_a_table(tmp_path):
 
     assert prof_path.exists()
     assert "contract_structural" in table
+
+
+def test_pick_cell_sets_sorts_unordered_fractions_so_prefixes_stay_nested():
+    # --fractions is free text: "0.5,0.1" must not produce a shrinking sequence, which would
+    # break both the nesting invariant and run_sweep's last/first us-per-edge ratio.
+    nodes = _nodes([0] * 50 + [1] * 30 + [2] * 20)
+    out = pick_cell_sets(nodes, 4, [0.75, 0.25, 0.5])
+
+    assert [f for f, _ in out] == [0.25, 0.5, 0.75]
+    sizes = [len(cells) for _, cells in out]
+    assert sizes == sorted(sizes)
+    for (_, smaller), (_, larger) in zip(out, out[1:]):
+        assert smaller == larger[:len(smaller)], "prefixes must stay nested"
+
+
+def test_pick_cell_sets_deduplicates_repeated_fractions():
+    nodes = _nodes([0] * 50 + [1] * 30)
+    assert [f for f, _ in pick_cell_sets(nodes, 2, [0.5, 0.5, 1.0])] == [0.5, 1.0]
