@@ -11,6 +11,7 @@ Usage: python pipeline/phases/graph_building/build_hub_edges.py [--max-edge-km 3
 
 import argparse
 import math
+import os
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -27,6 +28,7 @@ from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noq
 from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402
 from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
 from lib.subgraph import LocalSubgraph, gather_padded_subgraph  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_hub_edges.py"
 
@@ -299,7 +301,7 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int):
 
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                                 all_hubs: list, max_edge_km: float,
-                                max_snap_m: float) -> list:
+                                max_snap_m: float, timer: StepTimer = None) -> list:
     """all_hubs: candidate targets already filtered (by the caller) to hubs whose straight-line
     distance to this cell could possibly be within max_edge_km of trail distance - trail distance
     is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
@@ -311,22 +313,31 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     access-point-to-hut (see __main__), so a station->station or parking->parking pair is work
     whose result nothing consumes, and a hut->access-point pair duplicates the access->hut record
     the access point's own cell already emits. Restricting targets to huts also keeps the
-    non-core access points out of the snap loop entirely."""
+    non-core access points out of the snap loop entirely.
+
+    timer: optional lib/timing.py StepTimer, filled with the per-step split (snap / build_igraph /
+    distances / paths) so the parent can merge every worker's totals and report where the run
+    actually went - snapping and graph traversal scale with different things (hub count vs.
+    subgraph size x pair count), so a single per-cell wall-clock number cannot tell them apart."""
     if not core_hubs:
         return []
+    timer = timer if timer is not None else StepTimer()
 
     hut_targets = [h for h in all_hubs if h["type"] == binfmt.TYPE_HUT]
 
     snaps = {}
-    for hub in core_hubs + hut_targets:
-        key = (hub["type"], hub["id"])
-        if key in snaps:
-            continue
-        snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m)
-        if snap is not None:
-            snaps[key] = snap
+    with timer.step("snap"):
+        for hub in core_hubs + hut_targets:
+            key = (hub["type"], hub["id"])
+            if key in snaps:
+                continue
+            snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m)
+            if snap is not None:
+                snaps[key] = snap
+    timer.count("snap_hubs", len(snaps))
 
-    graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, snaps)
+    with timer.step("build_igraph"):
+        graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, snaps)
 
     max_edge_m = max_edge_km * 1000
     records = []
@@ -353,7 +364,11 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
         # cutoff uses real-distance ("dist") weights, same as build_hut_graph.py's pass1 -
         # max-edge-km stays a guarantee about actual trail length, unaffected by the
         # road-penalty cost ("weight") used to pick the routed path below.
-        unique_dists = graph.distances(source=[src_v], target=unique_target_vs, weights="dist")[0]
+        with timer.step("distances"):
+            unique_dists = graph.distances(
+                source=[src_v], target=unique_target_vs, weights="dist"
+            )[0]
+        timer.count("distance_targets", len(unique_target_vs))
         dist_by_vertex = dict(zip(unique_target_vs, unique_dists))
         cutoff_dists = [dist_by_vertex[tv] for tv in target_vs]
         for t, tv, cutoff_d in zip(targets, target_vs, cutoff_dists):
@@ -364,9 +379,10 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                 if pair_key in seen_hut_pairs:
                     continue
                 seen_hut_pairs.add(pair_key)
-            trail_coords, distance_m, road_m, sac_rank, via_ferrata = _path_for(
-                graph, vertex_coords, src_v, tv
-            )
+            with timer.step("paths"):
+                trail_coords, distance_m, road_m, sac_rank, via_ferrata = _path_for(
+                    graph, vertex_coords, src_v, tv
+                )
             geometry = [(hub["lon"], hub["lat"]), *trail_coords, (t["lon"], t["lat"])]
             records.append({
                 "from_id": hub["id"], "from_type": hub["type"],
@@ -426,13 +442,18 @@ def _run_cell(args):
     base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
         max_snap_m = args
     t0 = time.time()
-    subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
+    # One StepTimer per worker process, returned to the parent (it holds plain dicts, so it
+    # pickles back through ProcessPoolExecutor) rather than each worker appending its own
+    # timings.jsonl line - see lib/timing.py's StepTimer docstring.
+    timer = StepTimer()
+    with timer.step("gather_subgraph"):
+        subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
     records = compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
-                                          max_snap_m)
+                                          max_snap_m, timer=timer)
     return {
         "cell_id": cell_id, "elapsed_s": time.time() - t0, "n_core_hubs": len(core_hubs),
         "n_nodes": len(subgraph.local_nodes), "n_edges": len(subgraph.local_edges),
-        "records": records,
+        "records": records, "timer": timer,
     }
 
 
@@ -486,26 +507,45 @@ if __name__ == "__main__":
     ]
 
     total = len(tasks)
-    print(f"{total} cells with hubs to process", flush=True)
+    n_huts = sum(1 for h in all_hubs_flat if h["type"] == binfmt.TYPE_HUT)
+    print(f"{total} cells with hubs to process "
+          f"({n_huts:,} huts, {len(all_hubs_flat) - n_huts:,} access points)", flush=True)
     shard_records = []
     completed = 0
     t_start = time.time()
-    with ProcessPoolExecutor(max_workers=args.workers) as pool:
-        futures = [pool.submit(_run_cell, t) for t in tasks]
-        for fut in as_completed(futures):
-            result = fut.result()
-            shard_records.append(result["records"])
-            completed += 1
-            overall_elapsed = time.time() - t_start
-            avg_s = overall_elapsed / completed
-            remaining_s = avg_s * (total - completed)
-            print(
-                f"[{completed}/{total}] cell {result['cell_id']}: {result['elapsed_s']:.1f}s "
-                f"({result['n_core_hubs']} hubs, {result['n_nodes']:,} nodes, "
-                f"{result['n_edges']:,} edges) -> {len(result['records'])} edge records "
-                f"| elapsed {overall_elapsed/60:.1f}m, ~{remaining_s/60:.1f}m remaining",
-                flush=True,
-            )
+    # Sums every worker's per-step totals. These are CPU-parallel seconds, so the columns add up
+    # to more than the wall clock - the reading that matters is the ratio between steps (snap vs.
+    # distances vs. paths), not the absolute number.
+    run_timer = StepTimer()
+    with phase(SCRIPT_NAME, "hub_edge_query", n_cells=total, n_huts=n_huts,
+               n_access_points=len(all_hubs_flat) - n_huts,
+               workers=args.workers or os.cpu_count(), max_edge_km=args.max_edge_km,
+               max_snap_m=args.max_snap_m) as meta:
+        with ProcessPoolExecutor(max_workers=args.workers) as pool:
+            futures = [pool.submit(_run_cell, t) for t in tasks]
+            for fut in as_completed(futures):
+                result = fut.result()
+                shard_records.append(result["records"])
+                run_timer.merge(result["timer"])
+                completed += 1
+                overall_elapsed = time.time() - t_start
+                avg_s = overall_elapsed / completed
+                remaining_s = avg_s * (total - completed)
+                cell_s = result["timer"].seconds
+                print(
+                    f"[{completed}/{total}] cell {result['cell_id']}: {result['elapsed_s']:.1f}s "
+                    f"({result['n_core_hubs']} hubs, {result['n_nodes']:,} nodes, "
+                    f"{result['n_edges']:,} edges) -> {len(result['records'])} edge records "
+                    f"| slice {cell_s.get('gather_subgraph', 0):.1f}s, snap "
+                    f"{cell_s.get('snap', 0):.1f}s, igraph "
+                    f"{cell_s.get('build_igraph', 0):.1f}s, dist "
+                    f"{cell_s.get('distances', 0):.1f}s, paths {cell_s.get('paths', 0):.1f}s "
+                    f"| elapsed {overall_elapsed/60:.1f}m, ~{remaining_s/60:.1f}m remaining",
+                    flush=True,
+                )
+        meta.update(run_timer.as_meta())
+
+    print(f"step totals (summed over workers): {run_timer.summary()}", flush=True)
 
     merged = merge_and_dedup(shard_records)
     hut_records = [r for r in merged if r["to_type"] == binfmt.TYPE_HUT and r["from_type"] == binfmt.TYPE_HUT]

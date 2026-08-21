@@ -115,6 +115,13 @@ reserved extensibility hook for a future second route variant per pair (not comp
 `geom_offset`/`geom_count` slice into the sibling `geometry.npy` (`COORD_DTYPE`), a flat polyline
 vertex pool exactly like `base_graph/interior.npy`.
 
+**Timing**: the whole cell-pool loop is one `lib/timing.py` `phase("build_hub_edges.py",
+"hub_edge_query", ...)` record. Each worker fills a `StepTimer` with its own
+`gather_subgraph`/`snap`/`build_igraph`/`distances`/`paths` split and returns it with its records;
+the parent merges them all into the phase meta (`<step>_s`, `<step>_calls`) and prints a final
+`step totals` line, with the same split per cell in the progress line. Summed across workers, so
+the columns exceed wall clock — read the ratios.
+
 - **doit wiring**: `file_dep=[base_graph/manifest.json, huts.geojson, start_points.npy]`,
   `targets=[hut_edges/records.npy, start_edges/records.npy]`. `uptodate` uses `config_changed`
   over the task's own params, so `--max-edge-km`/`--max-snap-m` changes trigger a rerun

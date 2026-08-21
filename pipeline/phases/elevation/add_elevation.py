@@ -22,7 +22,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
-from lib.timing import phase  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "add_elevation.py"
 
@@ -105,12 +105,19 @@ def fill_elevation_records(records: np.ndarray, geometry: np.ndarray, all_elevat
     return records, profiles
 
 
-def _process_edge_set(edge_dir: Path, dem_path: Path, profile_points: int, noise_threshold_m: float):
+def _process_edge_set(edge_dir: Path, dem_path: Path, profile_points: int,
+                      noise_threshold_m: float, timer: StepTimer = None):
+    """timer: optional StepTimer for the parts read_dem_window/per_edge_ascent_profile's own
+    phase() records never covered - loading and re-saving the arrays, and the vectorized
+    lon/lat -> DEM row/col math. Those two phase() series stay as they are: they are the
+    historical record this script's DEM fix was measured against (see pipeline/CLAUDE.md)."""
     import rasterio
     import rasterio.windows
 
-    records = binfmt.load_array(edge_dir / "records.npy", mmap=False)
-    geometry = binfmt.load_array(edge_dir / "geometry.npy", mmap=False)
+    timer = timer if timer is not None else StepTimer()
+    with timer.step("load_arrays"):
+        records = binfmt.load_array(edge_dir / "records.npy", mmap=False)
+        geometry = binfmt.load_array(edge_dir / "geometry.npy", mmap=False)
 
     if len(records) == 0:
         binfmt.save_array(edge_dir / "records.npy", records)
@@ -118,28 +125,35 @@ def _process_edge_set(edge_dir: Path, dem_path: Path, profile_points: int, noise
         return
 
     with rasterio.open(dem_path) as dem:
-        t = dem.transform
-        lons = geometry["lon"]
-        lats = geometry["lat"]
-        cols = np.floor((lons - t.c) / t.a).astype(np.int64)
-        rows = np.floor((lats - t.f) / t.e).astype(np.int64)
-        row_off, col_off = max(0, int(rows.min())), max(0, int(cols.min()))
-        row_max = min(dem.height - 1, int(rows.max()))
-        col_max = min(dem.width - 1, int(cols.max()))
-        window = rasterio.windows.Window(col_off, row_off, col_max - col_off + 1, row_max - row_off + 1)
-        with phase(SCRIPT_NAME, "read_dem_window", width=window.width, height=window.height):
-            band = dem.read(1, window=window)
-        rows_clip = np.clip(rows, row_off, row_max) - row_off
-        cols_clip = np.clip(cols, col_off, col_max) - col_off
-        elevations = band[rows_clip, cols_clip]
+        with timer.step("dem_index_math"):
+            t = dem.transform
+            lons = geometry["lon"]
+            lats = geometry["lat"]
+            cols = np.floor((lons - t.c) / t.a).astype(np.int64)
+            rows = np.floor((lats - t.f) / t.e).astype(np.int64)
+            row_off, col_off = max(0, int(rows.min())), max(0, int(cols.min()))
+            row_max = min(dem.height - 1, int(rows.max()))
+            col_max = min(dem.width - 1, int(cols.max()))
+            window = rasterio.windows.Window(
+                col_off, row_off, col_max - col_off + 1, row_max - row_off + 1
+            )
+        with timer.step("read_dem_window"):
+            with phase(SCRIPT_NAME, "read_dem_window", width=window.width, height=window.height):
+                band = dem.read(1, window=window)
+        with timer.step("sample_elevations"):
+            rows_clip = np.clip(rows, row_off, row_max) - row_off
+            cols_clip = np.clip(cols, col_off, col_max) - col_off
+            elevations = band[rows_clip, cols_clip]
 
-    with phase(SCRIPT_NAME, "per_edge_ascent_profile", edges=len(records)):
-        updated_records, profiles = fill_elevation_records(
-            records, geometry, elevations, profile_points, noise_threshold_m
-        )
+    with timer.step("per_edge_ascent_profile"):
+        with phase(SCRIPT_NAME, "per_edge_ascent_profile", edges=len(records)):
+            updated_records, profiles = fill_elevation_records(
+                records, geometry, elevations, profile_points, noise_threshold_m
+            )
 
-    binfmt.save_array(edge_dir / "records.npy", updated_records)
-    binfmt.save_array(edge_dir / "profiles.npy", profiles)
+    with timer.step("save_arrays"):
+        binfmt.save_array(edge_dir / "records.npy", updated_records)
+        binfmt.save_array(edge_dir / "profiles.npy", profiles)
 
 
 if __name__ == "__main__":
@@ -152,8 +166,15 @@ if __name__ == "__main__":
     parser.add_argument("--profile-points", type=int, default=dem_config.get("profilePoints", 30))
     args = parser.parse_args()
 
-    for name in ("hut_edges", "start_edges"):
-        edge_dir = OSM_DIR / name
-        print(f"processing {edge_dir} ...")
-        _process_edge_set(edge_dir, Path(args.dem), args.profile_points, args.ele_noise_threshold_m)
-        print(f"written {edge_dir}/records.npy, {edge_dir}/profiles.npy")
+    timer = StepTimer()
+    with phase(SCRIPT_NAME, "add_elevation",
+               ele_noise_threshold_m=args.ele_noise_threshold_m,
+               profile_points=args.profile_points) as meta:
+        for name in ("hut_edges", "start_edges"):
+            edge_dir = OSM_DIR / name
+            print(f"processing {edge_dir} ...", flush=True)
+            _process_edge_set(edge_dir, Path(args.dem), args.profile_points,
+                              args.ele_noise_threshold_m, timer=timer)
+            print(f"written {edge_dir}/records.npy, {edge_dir}/profiles.npy", flush=True)
+        meta.update(timer.as_meta())
+    print(f"step totals: {timer.summary()}", flush=True)

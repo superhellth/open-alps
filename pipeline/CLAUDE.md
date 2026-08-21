@@ -69,6 +69,27 @@ reads instead - see that function's docstring. Wrap a new expensive block in `wi
 phase(SCRIPT_NAME, "phase_name", **any_size_metadata):` rather than ad hoc `print`/`time.time()`
 timing to keep it queryable the same way.
 
+`lib/timing.py`'s `StepTimer` is the sub-phase counterpart: it sums seconds + call counts per
+step name in memory and lands them as `<step>_s`/`<step>_calls` meta on ONE `phase(...)` record,
+for steps that repeat inside a phase or run in worker processes (where concurrent `phase()` calls
+would interleave lines in the single `timings.jsonl`). Steps must not nest, or the percentages
+stop being a split. Every long script now ends with a `step totals: ...` line:
+
+| script | phase record | steps |
+| --- | --- | --- |
+| `graph_building/build_hub_edges.py` | `hub_edge_query` | `gather_subgraph`, `snap`, `build_igraph`, `distances`, `paths` (per worker, merged in the parent; also printed per cell in the progress line) |
+| `graph_building/build_base_graph.py` | `build_base_graph` | `stream_osm`, `handler_to_arrays`, `contract`, `pack_nodes`, `pack_interior`, `pack_edges`, `write_arrays` |
+| `elevation/add_elevation.py` | `add_elevation` | `load_arrays`, `dem_index_math`, `read_dem_window`, `sample_elevations`, `per_edge_ascent_profile`, `save_arrays` |
+| `postprocessing/build_edge_tiles.py` | `build_edge_tiles` | `load_arrays`, `write_tiling_input`, `build_stats`, `write_stats`, `tippecanoe`, `mbtiles_to_pmtiles` |
+| `postprocessing/build_trail_tiles.py` | `build_trail_tiles` | `osmium_export_filter`, `tippecanoe`, `mbtiles_to_pmtiles` |
+
+The pre-existing `stream_osm` / `contract_structural` / `read_dem_window` /
+`per_edge_ascent_profile` `phase()` records are deliberately kept alongside the StepTimer steps
+of the same name - they are the historical series in `data/timings.jsonl` (and carry the
+`rss_sampler` memory meta), so queries over them keep working. `build_hub_edges.py`'s step
+seconds are summed across parallel workers and therefore exceed its wall clock - read the ratios
+between steps there, not the absolute numbers.
+
 ## Progress logging
 
 Every script under `phases/` or `analysis/` must print progress as it runs — never go silent for

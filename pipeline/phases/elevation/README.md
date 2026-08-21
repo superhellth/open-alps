@@ -25,6 +25,12 @@ polyline `graph_building/build_hub_edges.py` computed, filling in the `ascent_m`
 Params: `--ele-noise-threshold-m` (default `config.dem.eleNoiseThresholdM`), `--profile-points`
 (default `config.dem.profilePoints`, 30).
 
+**Timing**: the whole run is one `add_elevation` `phase()` record whose meta carries a
+`lib/timing.py` `StepTimer` split — `load_arrays`, `dem_index_math`, `read_dem_window`,
+`sample_elevations`, `per_edge_ascent_profile`, `save_arrays` — summed over both edge sets, plus a
+`step totals:` line at the end. The standalone `read_dem_window` / `per_edge_ascent_profile`
+`phase()` records are kept as well: they are the historical series in `data/timings.jsonl`.
+
 Processes `data/osm/hut_edges/` and `data/osm/start_edges/` together in one run, each via
 `_process_edge_set()`: reads that edge set's `records.npy`/`geometry.npy`, samples the DEM, writes
 back updated `records.npy` plus a new `profiles.npy`.

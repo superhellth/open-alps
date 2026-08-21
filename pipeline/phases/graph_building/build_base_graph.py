@@ -22,7 +22,7 @@ from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
-from lib.timing import phase  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_base_graph.py"
 
@@ -112,21 +112,23 @@ def stream_osm(trails_path, config):
     return handler
 
 
-def handler_to_arrays(handler):
+def handler_to_arrays(handler, timer: StepTimer = None):
     """The eight numpy arrays contract_structural takes, in order. Split out from contract() so
     main() can drop the handler - and with it ~12 GB of now-dead raw Python lists (40M coord
     tuples, 41M-element int/float lists) - BEFORE contraction starts rather than after. See
     docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md."""
-    return (
-        np.array(handler.coords, dtype=np.float64),
-        np.array(handler.edges_i, dtype=np.int64),
-        np.array(handler.edges_j, dtype=np.int64),
-        np.array(handler.edges_dist, dtype=np.float64),
-        np.array(handler.edges_w, dtype=np.float64),
-        np.array(handler.edges_road, dtype=bool),
-        np.array(handler.edges_sac_rank, dtype=np.int8),
-        np.array(handler.edges_via_ferrata, dtype=bool),
-    )
+    timer = timer if timer is not None else StepTimer()
+    with timer.step("handler_to_arrays"):
+        return (
+            np.array(handler.coords, dtype=np.float64),
+            np.array(handler.edges_i, dtype=np.int64),
+            np.array(handler.edges_j, dtype=np.int64),
+            np.array(handler.edges_dist, dtype=np.float64),
+            np.array(handler.edges_w, dtype=np.float64),
+            np.array(handler.edges_road, dtype=bool),
+            np.array(handler.edges_sac_rank, dtype=np.int8),
+            np.array(handler.edges_via_ferrata, dtype=bool),
+        )
 
 
 def contract(*raw_args, progress_every: int = 20_000):
@@ -139,19 +141,22 @@ def contract(*raw_args, progress_every: int = 20_000):
     return contracted
 
 
-def pack_and_write(contracted, bbox, tile_size_km, out_dir):
+def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = None):
+    timer = timer if timer is not None else StepTimer()
     # --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
-    grid = Grid(bbox, tile_size_km)
-    cell_ids = grid.cell_ids_for_points(contracted.coords[:, 0], contracted.coords[:, 1])
-    sort_order, cell_index = binfmt.build_csr_index(cell_ids, n_groups=len(grid.all_cell_ids()))
+    # Steps below never nest, so StepTimer.summary()'s percentages stay a real split of the run.
+    with timer.step("pack_nodes"):
+        grid = Grid(bbox, tile_size_km)
+        cell_ids = grid.cell_ids_for_points(contracted.coords[:, 0], contracted.coords[:, 1])
+        sort_order, cell_index = binfmt.build_csr_index(cell_ids, n_groups=len(grid.all_cell_ids()))
 
-    old_to_new = np.empty(len(contracted.coords), dtype=np.int64)
-    old_to_new[sort_order] = np.arange(len(sort_order))
+        old_to_new = np.empty(len(contracted.coords), dtype=np.int64)
+        old_to_new[sort_order] = np.arange(len(sort_order))
 
-    nodes_arr = np.zeros(len(contracted.coords), dtype=binfmt.NODE_DTYPE)
-    nodes_arr["lon"] = contracted.coords[sort_order, 0]
-    nodes_arr["lat"] = contracted.coords[sort_order, 1]
-    nodes_arr["cell_id"] = cell_ids[sort_order]
+        nodes_arr = np.zeros(len(contracted.coords), dtype=binfmt.NODE_DTYPE)
+        nodes_arr["lon"] = contracted.coords[sort_order, 0]
+        nodes_arr["lat"] = contracted.coords[sort_order, 1]
+        nodes_arr["cell_id"] = cell_ids[sort_order]
 
     # --- remap edge endpoints through the node reorder, pack interior polylines ---
     n_edges = len(contracted.edges_u)
@@ -159,42 +164,47 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir):
     interior_counts = np.zeros(n_edges, dtype=np.int32)
     flat_interior = []
     cursor = 0
-    for i, pts in enumerate(contracted.interior_coords):
-        interior_offsets[i] = cursor
-        interior_counts[i] = len(pts)
-        flat_interior.extend(pts)
-        cursor += len(pts)
+    # The one remaining Python-level loop in this script after contraction - over every contracted
+    # edge's interior polyline, so it scales with raw (uncontracted) vertex count, not edge count.
+    with timer.step("pack_interior"):
+        for i, pts in enumerate(contracted.interior_coords):
+            interior_offsets[i] = cursor
+            interior_counts[i] = len(pts)
+            flat_interior.extend(pts)
+            cursor += len(pts)
 
-    interior_arr = np.zeros(len(flat_interior), dtype=binfmt.COORD_DTYPE)
-    if flat_interior:
-        interior_arr["lon"] = [p[0] for p in flat_interior]
-        interior_arr["lat"] = [p[1] for p in flat_interior]
+        interior_arr = np.zeros(len(flat_interior), dtype=binfmt.COORD_DTYPE)
+        if flat_interior:
+            interior_arr["lon"] = [p[0] for p in flat_interior]
+            interior_arr["lat"] = [p[1] for p in flat_interior]
 
-    edges_arr = np.zeros(n_edges, dtype=binfmt.EDGE_DTYPE)
-    edges_arr["u"] = old_to_new[contracted.edges_u]
-    edges_arr["v"] = old_to_new[contracted.edges_v]
-    edges_arr["dist"] = contracted.edges_dist
-    edges_arr["weight"] = contracted.edges_weight
-    edges_arr["road_m"] = contracted.edges_road_m
-    edges_arr["sac_rank"] = contracted.edges_sac_rank
-    edges_arr["via_ferrata"] = contracted.edges_via_ferrata
-    edges_arr["interior_offset"] = interior_offsets
-    edges_arr["interior_count"] = interior_counts
-    edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id
+    with timer.step("pack_edges"):
+        edges_arr = np.zeros(n_edges, dtype=binfmt.EDGE_DTYPE)
+        edges_arr["u"] = old_to_new[contracted.edges_u]
+        edges_arr["v"] = old_to_new[contracted.edges_v]
+        edges_arr["dist"] = contracted.edges_dist
+        edges_arr["weight"] = contracted.edges_weight
+        edges_arr["road_m"] = contracted.edges_road_m
+        edges_arr["sac_rank"] = contracted.edges_sac_rank
+        edges_arr["via_ferrata"] = contracted.edges_via_ferrata
+        edges_arr["interior_offset"] = interior_offsets
+        edges_arr["interior_count"] = interior_counts
+        edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id
 
-    # --- node -> incident edge ids CSR (built on FINAL node ids, after the cell-sort remap) ---
-    doubled_nodes = np.concatenate([edges_arr["u"], edges_arr["v"]])
-    doubled_edge_ids = np.concatenate([edges_arr["edge_id"], edges_arr["edge_id"]])
-    ne_order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=len(nodes_arr))
-    node_edge_ids = doubled_edge_ids[ne_order]
+        # --- node -> incident edge ids CSR (built on FINAL node ids, after the cell-sort remap) ---
+        doubled_nodes = np.concatenate([edges_arr["u"], edges_arr["v"]])
+        doubled_edge_ids = np.concatenate([edges_arr["edge_id"], edges_arr["edge_id"]])
+        ne_order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=len(nodes_arr))
+        node_edge_ids = doubled_edge_ids[ne_order]
 
     out_dir = Path(out_dir)
-    binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
-    binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-    binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-    binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
-    binfmt.save_array(out_dir / "edges.npy", edges_arr)
-    binfmt.save_array(out_dir / "interior.npy", interior_arr)
+    with timer.step("write_arrays"):
+        binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
+        binfmt.save_array(out_dir / "cell_index.npy", cell_index)
+        binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
+        binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+        binfmt.save_array(out_dir / "edges.npy", edges_arr)
+        binfmt.save_array(out_dir / "interior.npy", interior_arr)
     binfmt.save_manifest(out_dir / "manifest.json", {
         "bbox": bbox,
         "tile_size_km": tile_size_km,
@@ -213,12 +223,23 @@ def main(argv=None):
     parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"])
     args = parser.parse_args(argv)
 
-    handler = stream_osm(args.trails, config)
-    raw_args = handler_to_arrays(handler)
-    del handler  # ~12 GB of raw Python lists, dead once copied into the arrays above
-    contracted = contract(*raw_args)
-    del raw_args
-    pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir)
+    # stream_osm and contract keep their own phase() records (with rss_sampler meta) - they are
+    # the long-running historical series in data/timings.jsonl. The StepTimer adds the parts
+    # between them, which nothing measured before: turning the handler's Python lists into numpy
+    # arrays, and packing/writing the output arrays.
+    timer = StepTimer()
+    with phase(SCRIPT_NAME, "build_base_graph", tile_size_km=args.tile_size_km) as meta:
+        with timer.step("stream_osm"):
+            handler = stream_osm(args.trails, config)
+        raw_args = handler_to_arrays(handler, timer=timer)
+        del handler  # ~12 GB of raw Python lists, dead once copied into the arrays above
+        with timer.step("contract"):
+            contracted = contract(*raw_args)
+        del raw_args
+        pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir,
+                       timer=timer)
+        meta.update(timer.as_meta())
+    print(f"step totals: {timer.summary()}", flush=True)
 
 
 if __name__ == "__main__":
