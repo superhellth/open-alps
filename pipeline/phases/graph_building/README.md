@@ -77,28 +77,35 @@ worker module in each child). Each worker, independently:
    cell-union-then-edge-incidence-closure mmap slice of the base graph, buffered by
    `--max-edge-km` so a hub near a cell boundary still sees every trail edge within range, without
    loading cells the worker doesn't need.
-2. **Snaps** each hub in its region onto the subgraph (`snap_hub_to_subgraph()`): an existing
+2. **Snaps** each relevant hub in its region onto the subgraph (`snap_hub_to_subgraph()`) — the
+   cell's own core hubs plus the *huts* in its padded region; non-core stations/parking are
+   skipped, since huts are the only routing targets (see step 3). An existing
    graph node within `--max-snap-m` always wins; otherwise the nearest mid-chain point on a chain
    edge's interior polyline is found (`lib/edge_split.py`'s `nearest_point_on_polyline()`) and the
    edge is split there (`split_edge_at_point()`), inserting a virtual vertex. A hub with no node
    within `--max-snap-m` is skipped entirely — not force-matched to a distant trail.
 3. **Builds an in-process `igraph.Graph`** over the region (base nodes + virtual snap vertices),
    then for each core hub in the region: computes real-distance shortest-path *distances*
-   (`weights="dist"`) to every other hub in range and discards any pair over `--max-edge-km`
+   (`weights="dist"`) to every *hut* in range and discards any pair over `--max-edge-km`
    (mirrors an "all-pairs cutoff" pass), then for surviving pairs fetches the road-penalized
    shortest *path* (`weights="weight"`, `get_shortest_paths(..., output="epath")`) and walks its
    edge list to build full path geometry, summing real `dist`/`road_m` and tracking max `sac_rank`
    and any `via_ferrata` crossing along the path.
-4. **`merge_and_dedup()`** combines every worker's records: undirected hut↔hub pairs are
+   Only huts are ever routed *to*: the two shipped edge sets are hut-hut and access-point-to-hut,
+   so a station↔parking pair is work nothing consumes, and a hut→access-point pair would just
+   duplicate the access→hut record the access point's own cell already emits.
+4. **`merge_and_dedup()`** combines every worker's records: undirected hut↔hut pairs are
    deduplicated on `(type, id)` (not id alone — hut/station/parking id spaces can collide), while
-   directional start→hut records are kept as-is (a station/parking point is always the origin,
-   never merged symmetrically with a hut).
+   directional access→hut records are kept as-is (a station/parking point is always stored as the
+   origin, never merged symmetrically with a hut).
 
 **Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`; `ascent_m`/`descent_m`/`profile_*`
 left at `UNSET`(-1.0)/0 here, filled in by `phases/elevation/add_elevation.py`):
 
 - `data/osm/hut_edges/{records.npy, geometry.npy}` — hut-to-hut edges.
-- `data/osm/start_edges/{records.npy, geometry.npy}` — station/parking-to-hut edges, same shape.
+- `data/osm/start_edges/{records.npy, geometry.npy}` — access edges (station/parking ↔ hut), same
+  shape. Named "start" for historical reasons; the edge is undirected — the same record serves a
+  trip that *starts* at the station and one that *ends* there. It is only stored access→hut.
 
 `RECORD_DTYPE = (from_id i8, to_id i8, from_type u1, to_type u1, variant u1, distance_m f4,
 road_m f4, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, geom_offset i8, geom_count

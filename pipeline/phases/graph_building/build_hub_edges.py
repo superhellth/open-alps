@@ -305,12 +305,20 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
     superset. Without that prefilter this used to snap every hub in the whole bbox against every
     cell's local subgraph (O(cells * total_hubs) snap calls), which is what made this step take
-    hours instead of minutes."""
+    hours instead of minutes.
+
+    Only huts are ever routed *to*: the edge sets this pipeline ships are hut-hut and
+    access-point-to-hut (see __main__), so a station->station or parking->parking pair is work
+    whose result nothing consumes, and a hut->access-point pair duplicates the access->hut record
+    the access point's own cell already emits. Restricting targets to huts also keeps the
+    non-core access points out of the snap loop entirely."""
     if not core_hubs:
         return []
 
+    hut_targets = [h for h in all_hubs if h["type"] == binfmt.TYPE_HUT]
+
     snaps = {}
-    for hub in core_hubs + all_hubs:
+    for hub in core_hubs + hut_targets:
         key = (hub["type"], hub["id"])
         if key in snaps:
             continue
@@ -332,7 +340,7 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
         if src_key not in hub_vertex:
             continue
         src_v = hub_vertex[src_key]
-        targets = [h for h in all_hubs if (h["type"], h["id"]) != (hub["type"], hub["id"])
+        targets = [h for h in hut_targets if (h["type"], h["id"]) != (hub["type"], hub["id"])
                    and (h["type"], h["id"]) in hub_vertex]
         if not targets:
             continue
@@ -501,11 +509,16 @@ if __name__ == "__main__":
 
     merged = merge_and_dedup(shard_records)
     hut_records = [r for r in merged if r["to_type"] == binfmt.TYPE_HUT and r["from_type"] == binfmt.TYPE_HUT]
-    start_records = [r for r in merged if r["from_type"] != binfmt.TYPE_HUT]
+    # "access edges": station/parking <-> hut. Stored access->hut by convention (that is the
+    # direction compute_hub_edges_for_cell emits), but the edge is undirected - the same record
+    # serves a trip that starts at the station and one that ends there. The on-disk directory
+    # and tile layer keep their original "start_edges" name.
+    access_records = [r for r in merged if r["from_type"] != binfmt.TYPE_HUT]
 
-    print(f"hut-hut edges: {len(hut_records)}, start-hut edges: {len(start_records)}")
+    print(f"hut-hut edges: {len(hut_records)}, "
+          f"access edges (station/parking <-> hut): {len(access_records)}")
 
     out_dir = Path(args.out_dir)
     _write_edge_output(hut_records, out_dir / "hut_edges")
-    _write_edge_output(start_records, out_dir / "start_edges")
+    _write_edge_output(access_records, out_dir / "start_edges")
     print(f"written {out_dir / 'hut_edges'} and {out_dir / 'start_edges'}")

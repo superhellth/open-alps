@@ -128,3 +128,33 @@ def test_merge_and_dedup_keeps_directional_start_edges():
     ]
     merged = merge_and_dedup([shard])
     assert len(merged) == 2
+
+
+def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
+    # A station and a parking lot on the same trail line, no hut anywhere: nothing downstream
+    # consumes a station<->parking edge, so no record should be routed at all.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_STATION, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_PARKING, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+    )
+    assert records == []
+
+
+def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
+    # Hut and station both core hubs of this cell: only the access->hut direction is emitted,
+    # since __main__ drops hut->access records anyway.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+    )
+    assert len(records) == 1
+    assert records[0]["from_type"] == binfmt.TYPE_STATION
+    assert records[0]["to_type"] == binfmt.TYPE_HUT
