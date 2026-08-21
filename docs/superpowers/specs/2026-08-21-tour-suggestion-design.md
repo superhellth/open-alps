@@ -149,24 +149,29 @@ Added to `RECORD_DTYPE` (`lib/binfmt.py`):
 27,261 parkings and 3,025 stations are in `huts/public/data/`. Seeding a chain search from every
 one of them would dominate the search's complexity.
 
-They do not need to. A tour is `approach + hut chain + exit`, so start points can be lifted out of
-the combinatorial search entirely:
+`start_edges/records.npy` already holds **92,426** of them — 82,251 parking→hut and 10,175
+station→hut, all directional into huts (`to_type` is uniformly `TYPE_HUT`). Shipping that set to
+the client, or seeding a search from it, is not viable.
+
+It does not need to be. A tour is `approach + hut chain + exit`, so start points can be lifted out
+of the combinatorial search entirely:
 
 - Precompute, per hut, the **k best approaches and exits** (k ≈ 3): fastest parking-sourced edge,
-  fastest station-sourced edge, from the existing `start_edges/` records.
+  fastest station-sourced edge, reduced from the 92k `start_edges/` records.
 - The chain search runs over the **hut graph only** (1173 nodes).
 - Each surviving chain attaches `bestApproach[chain[0]]` and `bestExit[chain[-1]]` as an O(1)
   lookup.
 
-Size: 1173 × 3 × 2 ≈ 7k rows, well under 100 KB. Start-point count drops out of the search
-complexity completely.
+Size: 1173 × 3 × 2 ≈ 7k rows, well under 100 KB — a ~13× reduction on the raw start-edge set, and
+start-point count drops out of the search complexity completely.
+
+Because start edges are directional into huts, "exit" edges are the same records read backwards.
+Hiking time is not symmetric (ascent and descent have different rates in Part 1's formula), so the
+exit table must recompute `time_min` with ascent and descent swapped rather than reusing the
+approach value.
 
 "Loop" (start and end at the same point) is not a separate mode — it is a post-filter on the
 attached pair, or a constraint that `bestExit` is restricted to the approach's own start id.
-
-**Prerequisite:** `data/osm/start_edges/records.npy` currently holds **0 records**. Parking and
-station edges must actually exist before Part 4 means anything. Diagnosing that is a precondition
-of this work, not part of it.
 
 ## Part 5: client payload
 
