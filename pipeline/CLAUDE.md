@@ -28,6 +28,8 @@ that are **not** part of the `dodo.py` task DAG and never modify `phases/` scrip
 call the real phase functions directly (e.g. `build_hub_edges.py`'s `snap_hub_to_subgraph()`) against
 already-persisted `data/` outputs, to get hard numbers on where a phase's complexity/cost actually
 goes, without touching production code. Run by hand: `python pipeline/analysis/<script>.py`.
+Per-script purpose, requirements and outputs, plus the rules a new script here has to follow:
+**`pipeline/analysis/README.md`**.
 
 **V2 architecture** (`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`): a persisted,
 hub-agnostic base graph (`phases/graph_building/build_base_graph.py`, streams+contracts `trails.osm.pbf` once into
