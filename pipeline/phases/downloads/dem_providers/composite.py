@@ -20,7 +20,7 @@ from pathlib import Path
 from . import get_provider
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-from lib.pipeline import OSM_DIR, bbox_from_huts, edge_points, hut_points  # noqa: E402
+from lib.pipeline import OSM_DIR, edge_points, hut_points  # noqa: E402
 
 
 def _points_for_region(filter_bbox: dict) -> list[list[float]]:
@@ -34,23 +34,6 @@ def _points_for_region(filter_bbox: dict) -> list[list[float]]:
     return hut_points(OSM_DIR / "huts.geojson", filter_bbox=filter_bbox)
 
 
-def _resolve_region_bbox(region_config: dict) -> dict:
-    """A region's configured "bbox" is the coarse political-boundary box used only to pick out
-    which huts belong to this region (huts.geojson covers the whole pipeline scope, both
-    countries) - not necessarily the box actually fetched. When "bboxFromHuts" is set, the real
-    fetch bbox is tightened to just those huts' extent (+ bufferDeg padding), so a
-    tile-per-request provider like bavaria_dgm.py doesn't pay for empty terrain the pipeline's
-    huts never cover. Providers whose fetch() ignores bbox entirely (e.g. at_bev.py, a single
-    national download) are unaffected either way."""
-    if not region_config.get("bboxFromHuts"):
-        return region_config["bbox"]
-    return bbox_from_huts(
-        OSM_DIR / "huts.geojson",
-        filter_bbox=region_config["bbox"],
-        buffer_deg=region_config.get("bufferDeg", 0.05),
-    )
-
-
 def fetch_regions(provider_config: dict, dem_dir: Path) -> list[dict]:
     """Resolves each configured region's bbox/points and downloads its raw tiles, returning a
     JSON-serializable manifest ([{"provider", "raw_dir", "region_vrt", "tile_paths"}, ...]) -
@@ -59,9 +42,13 @@ def fetch_regions(provider_config: dict, dem_dir: Path) -> list[dict]:
     manifest = []
     for i, region_config in enumerate(provider_config["regions"]):
         if region_config.get("bboxFromHuts"):
+            # "bbox" stays as-is once bboxFromHuts sets "points" - bavaria_dgm.fetch() (the only
+            # provider using bboxFromHuts) always prefers points over bbox when both are present,
+            # so a resolved/tightened bbox here would just be computed and discarded. A previous
+            # `_resolve_region_bbox()` did that dead work anyway (removed 2026-08-22, found while
+            # debugging add_base_elevation's DEM-coverage gap - see
+            # docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md open question 5).
             region_config = {**region_config, "points": _points_for_region(region_config["bbox"])}
-        if "bbox" in region_config:
-            region_config = {**region_config, "bbox": _resolve_region_bbox(region_config)}
         provider = get_provider(region_config["provider"])
         raw_dir = dem_dir / "raw" / f"region_{i}_{region_config['provider']}"
         region_vrt = dem_dir / f"region_{i}_{region_config['provider']}.vrt"
