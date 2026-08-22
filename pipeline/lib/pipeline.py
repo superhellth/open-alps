@@ -11,7 +11,12 @@ from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = SCRIPTS_DIR.parent
-DATA_DIR = REPO_ROOT / "data"
+# .resolve() so a worktree's data/ symlink and the main checkout's real data/ dir produce
+# identical path strings - doit's dependency db is keyed by path text, and a checkout-relative
+# (unresolved) path here makes every file_dep look "moved" when run from a worktree, which
+# defeats the cache doit relies on for multi-hour tasks (see pipeline/CLAUDE.md "Timing pipeline
+# phases" and root CLAUDE.md's pipeline-task warning).
+DATA_DIR = (REPO_ROOT / "data").resolve()
 OSM_DIR = DATA_DIR / "osm"
 DEM_DIR = DATA_DIR / "dem"
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
