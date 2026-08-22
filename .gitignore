@@ -20,3 +20,6 @@ __pycache__/
 # Local Claude Code session/runtime state, not project config
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
+
+# Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
+.superpowers/
