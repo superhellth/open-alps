@@ -1,13 +1,24 @@
 #!/usr/bin/env python3
 """
 Filters each raw region extract down to hiking-relevant ways, using the tag filter from
-pipeline.config.json. Preserves full node/way topology (osmium tags-filter keeps referenced
-nodes by default) - required for graph-building later. Requires osmium-tool installed natively
-(conda install -c conda-forge osmium-tool) and on PATH - no Docker.
+pipeline.config.json, then clips to the hub range (data/osm/hub_range.json,
+compute_hub_range.py's output - every hut's bbox padded by graph.maxEdgeKm). No trail farther
+than that from every hut can ever appear on a valid hut-to-hut/hut-to-start edge (see
+compute_hub_range.py's docstring), so dropping it here means stream_osm/contract_structural in
+build_base_graph.py never have to process it, and add_base_elevation.py never needs DEM coverage
+for it either.
+
+Preserves full node/way topology at both steps (osmium tags-filter keeps referenced nodes by
+default; `osmium extract`'s default "complete_ways" strategy keeps a way whole if any of its nodes
+falls inside the bbox, rather than cutting through it) - required for graph-building later.
+Requires osmium-tool installed natively (conda install -c conda-forge osmium-tool) and on PATH -
+no Docker.
+
 Usage: python pipeline/phases/preprocessing/filter_trails.py
 """
 
 import argparse
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -21,12 +32,25 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--tag-filter", default=config["trailTagFilter"])
 args = parser.parse_args()
 
+with open(OSM_DIR / "hub_range.json", encoding="utf-8") as f:
+    hub_range = json.load(f)
+bbox_arg = f"{hub_range['minLng']},{hub_range['minLat']},{hub_range['maxLng']},{hub_range['maxLat']}"
+
 for region in config["regions"]:
     name = region["name"]
     src = OSM_DIR / "raw" / f"{name}-latest.osm.pbf"
+    tag_filtered = OSM_DIR / f"{name}-tag-filtered.osm.pbf"
     dst = OSM_DIR / f"{name}-trails.osm.pbf"
-    print(f"filtering {src} -> {dst}")
+
+    print(f"tag-filtering {src} -> {tag_filtered}")
     subprocess.run(
-        ["osmium", "tags-filter", str(src), args.tag_filter, "-o", str(dst), "--overwrite"],
+        ["osmium", "tags-filter", str(src), args.tag_filter, "-o", str(tag_filtered), "--overwrite"],
         check=True,
     )
+
+    print(f"clipping {tag_filtered} to hub range {bbox_arg} -> {dst}")
+    subprocess.run(
+        ["osmium", "extract", "--bbox", bbox_arg, str(tag_filtered), "-o", str(dst), "--overwrite"],
+        check=True,
+    )
+    tag_filtered.unlink()

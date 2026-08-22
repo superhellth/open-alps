@@ -71,8 +71,9 @@ DOIT_CONFIG = {
     # look hung. A single task can still opt out with "verbosity" in its own task dict.
     "verbosity": 2,
     "default_tasks": [
-        "download_extracts", "filter_trails", "merge_trails", "verify_trails",
-        "fetch_huts", "fetch_stations_parking", "filter_start_points",
+        "download_extracts", "fetch_huts", "compute_hub_range", "filter_trails",
+        "merge_trails", "verify_trails",
+        "fetch_stations_parking", "filter_start_points",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "add_base_elevation",
         "build_hub_edges", "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
@@ -131,7 +132,10 @@ def task_filter_trails():
             {"name": "tag_filter", "long": "tag-filter", "type": str,
              "default": CONFIG["trailTagFilter"]},
         ],
-        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
+        # hub_range.json (compute_hub_range.py, task 05a below) needs huts.geojson first, so this
+        # early-numbered task now depends on a later-numbered one - see 05a's comment.
+        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
+        + [str(OSM_DIR / "hub_range.json")],
         "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
         "uptodate": [TaskOptionsChanged()],
     }
@@ -171,6 +175,28 @@ def task_fetch_huts():
              "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
         ],
         "targets": [str(OSM_DIR / "huts.geojson")],
+        "uptodate": [TaskOptionsChanged()],
+    }
+
+
+# ---- 05a: hub range (every hut's bbox + graph.maxEdgeKm buffer) -----------
+# Numbered after fetch_huts (needs huts.geojson) but consumed by filter_trails (02) - a DAG
+# diamond, not a numbering mistake: huts.geojson must exist before this can compute the range
+# filter_trails clips to, even though filter_trails otherwise runs early in the pipeline. See
+# compute_hub_range.py's docstring for why this bound is provably safe, not a heuristic.
+
+def task_compute_hub_range():
+    return {
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "preprocessing" / "compute_hub_range.py"}"'
+            " --max-edge-km %(max_edge_km)s"
+        ],
+        "params": [
+            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
+             "default": CONFIG["graph"]["maxEdgeKm"]},
+        ],
+        "file_dep": [str(OSM_DIR / "huts.geojson")],
+        "targets": [str(OSM_DIR / "hub_range.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
