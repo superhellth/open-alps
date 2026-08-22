@@ -135,7 +135,7 @@ def task_filter_trails():
         # hub_range.json (compute_hub_range.py, task 05a below) needs huts.geojson first, so this
         # early-numbered task now depends on a later-numbered one - see 05a's comment.
         "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
-        + [str(OSM_DIR / "hub_range.json")],
+        + [str(OSM_DIR / "hub_range.geojson")],
         "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
         "uptodate": [TaskOptionsChanged()],
     }
