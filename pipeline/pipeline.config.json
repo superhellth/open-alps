@@ -9,7 +9,8 @@
     "maxEdgeKm": 30,
     "maxSnapM": 100,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
-    "tileSizeKm": 60
+    "tileSizeKm": 60,
+    "speedModel": { "v0": 6.0, "k": 3.5, "s0": 0.05 }
   },
   "dem": {
     "source": "copernicus-glo-30",
