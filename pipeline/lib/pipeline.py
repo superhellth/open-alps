@@ -207,31 +207,6 @@ def edge_points(edges_path, filter_bbox=None):
     return points
 
 
-def bbox_from_huts(huts_path, filter_bbox=None, buffer_deg=0.05):
-    """Computes a tight {minLng,maxLng,minLat,maxLat} covering every hut in huts_path, instead of
-    a hand-picked political-boundary box. buffer_deg pads the result so DEM coverage doesn't clip
-    right at a hut's coordinate; a hut's trail edges (see hut-edges.geojson) extend somewhat past
-    the hut point itself, and elevation sampling needs the trail's terrain, not just the
-    endpoint's.
-
-    Huts scattered across a wide area (e.g. Bavaria's alpine-fringe cluster plus a few outlying
-    non-alpine AV huts up near the Bavarian Forest) make this a poor shape for a per-tile DEM
-    fetch: the enclosing rectangle balloons to cover empty terrain between clusters. Callers doing
-    a tile-per-request fetch (bavaria_dgm.py) should use hut_points() + a per-point buffer instead
-    - this bbox is for providers that only need a coarse fetch extent (e.g. a single bulk
-    download)."""
-    points = hut_points(huts_path, filter_bbox)
-    lngs = [p[0] for p in points]
-    lats = [p[1] for p in points]
-
-    return {
-        "minLng": min(lngs) - buffer_deg,
-        "maxLng": max(lngs) + buffer_deg,
-        "minLat": min(lats) - buffer_deg,
-        "maxLat": max(lats) + buffer_deg,
-    }
-
-
 # Safety margin applied by callers ON TOP OF graph.maxEdgeKm before passing radius_km to
 # circle_polygon()/hub_range_polygon() (compute_hub_range.py) and into bavaria-dgm5's per-hut
 # tile buffer (dem_providers/composite.py) - the ONE place both sides' radius is derived from, so
