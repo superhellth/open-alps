@@ -104,7 +104,7 @@ memtrace, so an env without it fails the phase at import time, not at first use.
 
 ```bash
 conda create -n alpen-osm -c conda-forge \
-  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson psutil
+  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson psutil shapely
 conda activate alpen-osm
 osmium --version   # sanity check: should print "osmium version ..."
 pip install pmtiles doit   # pmtiles + doit aren't on conda-forge
