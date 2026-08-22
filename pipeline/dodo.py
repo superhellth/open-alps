@@ -22,9 +22,9 @@ build_profiles does too - it never reads the DEM (spec B4) and is usually run pr
 add_base_elevation are NOT force-rerun despite add_base_elevation looking similarly cheap-to-retune
 - their predecessor build_hut_graph.py was measured at ~4.1 hours (data/timings.jsonl,
 2026-08-15), and add_base_elevation genuinely reads the whole DEM and re-routes every base edge
-- so they're freshness-checked normally, each with a config_changed uptodate check on its own
+- so they're freshness-checked normally, each with a TaskOptionsChanged uptodate check on its own
 params so passing a different flag still reruns it without needing `doit forget` first (see the
-docstrings above those tasks).
+docstrings above those tasks and TaskOptionsChanged's own docstring below).
 
 CLAUDE.md's "never run a pipeline step without asking" rule applies here exactly as it did to
 run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
@@ -34,10 +34,30 @@ import json
 import sys
 from pathlib import Path
 
-from doit.tools import config_changed
-
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib.pipeline import CONFIG_PATH, DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
+
+
+class TaskOptionsChanged:
+    """uptodate check: rerun a task if its own resolved param values (task.options - the CLI
+    flags/defaults doit already parsed for it, e.g. --tile-size-km) changed since its last
+    successful run. This is what `config_changed(json.dumps(task.options, sort_keys=True))`
+    is meant to do, but doit only registers the "persist this digest after success" hook
+    (Task._init_uptodate, doit/task.py) for uptodate items that expose a `configure_task`
+    method - a bare `config_changed(...)` instance has one, but wrapping it in
+    `lambda task, values: config_changed(...)(task, values)` hides it behind a plain lambda,
+    so the digest never gets saved and the task shows "not up to date" on every single future
+    run, forever, even immediately after a clean success. That silently defeated caching for
+    build_base_graph/build_hub_edges/add_base_elevation - the three tasks this pipeline most
+    needs NOT to rerun by accident (see this module's docstring)."""
+
+    def configure_task(self, task):
+        task.value_savers.append(
+            lambda: {"_task_options": json.dumps(task.options, sort_keys=True)}
+        )
+
+    def __call__(self, task, values):
+        return values.get("_task_options") == json.dumps(task.options, sort_keys=True)
 
 DOIT_CONFIG = {
     # keeps doit's runtime state out of the tracked half of pipeline/, alongside every other
@@ -157,7 +177,7 @@ def task_filter_start_points():
 # NOT cheap - build_hut_graph.py's old stream+contract half recorded ~4.1 hour runs
 # (data/timings.jsonl), so this is freshness-checked like every other step, not force-rerun.
 # Still reruns automatically when --tile-size-km is passed a different value than last time, via
-# the config_changed uptodate check below - not just on file_dep changes.
+# the TaskOptionsChanged uptodate check below - not just on file_dep changes.
 
 def task_build_base_graph():
     return {
@@ -171,7 +191,7 @@ def task_build_base_graph():
         ],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
         "targets": [str(OSM_DIR / "base_graph" / "manifest.json")],
-        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -201,7 +221,7 @@ def task_build_hub_edges():
         "targets": [
             str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
         ],
-        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -244,7 +264,7 @@ def task_add_base_elevation():
         "targets": [
             str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
         ],
-        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
