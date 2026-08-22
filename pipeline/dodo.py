@@ -17,12 +17,14 @@ by default) or if pipeline.config.json changed (every task depends on it, so edi
 invalidates everything downstream of the values it actually touches, same as run_all.py's
 config-mtime check but per-task instead of global). verify_trails has no target (it's a gate, not
 a cacheable output) and declares `uptodate: [False]` to force a rerun every time it's selected.
-add_elevation does too - genuinely cheap (~90-100s, data/timings.jsonl) and usually run precisely
-to retune --ele-noise-threshold-m. build_base_graph/build_hub_edges are NOT force-rerun despite
-looking similar - their predecessor build_hut_graph.py was measured at ~4.1 hours
-(data/timings.jsonl, 2026-08-15) - so they're freshness-checked normally, each with a
-config_changed uptodate check on its own params so passing a different --max-edge-km still
-reruns it without needing `doit forget` first (see the docstrings above those tasks).
+build_profiles does too - it never reads the DEM (spec B4) and is usually run precisely to retune
+--profile-points, so a fresh run is always cheap (seconds). build_base_graph/build_hub_edges/
+add_base_elevation are NOT force-rerun despite add_base_elevation looking similarly cheap-to-retune
+- their predecessor build_hut_graph.py was measured at ~4.1 hours (data/timings.jsonl,
+2026-08-15), and add_base_elevation genuinely reads the whole DEM and re-routes every base edge
+- so they're freshness-checked normally, each with a config_changed uptodate check on its own
+params so passing a different flag still reruns it without needing `doit forget` first (see the
+docstrings above those tasks).
 
 CLAUDE.md's "never run a pipeline step without asking" rule applies here exactly as it did to
 run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
@@ -49,8 +51,8 @@ DOIT_CONFIG = {
     "default_tasks": [
         "download_extracts", "filter_trails", "merge_trails", "verify_trails",
         "fetch_huts", "fetch_stations_parking", "filter_start_points",
-        "build_base_graph", "build_hub_edges",
-        "fetch_dem", "build_dem_vrt", "add_elevation",
+        "build_base_graph", "fetch_dem", "build_dem_vrt", "add_base_elevation",
+        "build_hub_edges", "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "copy_public_data",
     ],
@@ -187,9 +189,14 @@ def task_build_hub_edges():
             {"name": "max_snap_m", "long": "max-snap-m", "type": float,
              "default": CONFIG["graph"]["maxSnapM"]},
         ],
+        # task_dep (not just file_dep) on add_base_elevation: edges.npy's time_s/ascent_m/
+        # descent_m are rewritten in place by that task but aren't one of its declared targets
+        # (build_base_graph already owns edges.npy as a target, and doit forbids two tasks
+        # sharing one target) - node_ele.npy is the completion signal instead.
+        "task_dep": ["add_base_elevation"],
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "huts.geojson"),
-            str(OSM_DIR / "start_points.npy"),
+            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
+            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
         ],
         "targets": [
             str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
@@ -216,30 +223,55 @@ def task_build_dem_vrt():
     }
 
 
-# ---- 08: add elevation (in-place edit of hut_edges/ + start_edges/ records) --
-# Always reruns when selected (cheap; usually run precisely to retune --ele-noise-threshold-m).
+# ---- 06c: elevation per base edge (in-place edit of base_graph/edges.npy) --
+# NOT force-rerun - reads the whole DEM and re-derives time_s/ascent_m/descent_m for every base
+# edge, the thing that makes the next `build_hub_edges` run the multi-hour job (see dodo.py's
+# module docstring and Task 22's schema_version fingerprint).
 
-def task_add_elevation():
+def task_add_base_elevation():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "add_elevation.py"}"'
-            " --ele-noise-threshold-m %(ele_noise_threshold_m)s"
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "add_base_elevation.py"}"'
+            " --smoothing-kernel-m %(smoothing_kernel_m)s"
+        ],
+        "params": [
+            {"name": "smoothing_kernel_m", "long": "smoothing-kernel-m", "type": float,
+             "default": CONFIG["dem"]["smoothingKernelM"]},
+        ],
+        # spec B5: the elevation pass genuinely needs the DEM, so declare it - the previous
+        # numbering-convention ordering let a stale dem.tif through silently.
+        "file_dep": [str(OSM_DIR / "base_graph" / "manifest.json"), str(DEM_DIR / "dem.tif")],
+        "targets": [
+            str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
+        ],
+        "uptodate": [lambda task, values: config_changed(json.dumps(task.options, sort_keys=True))(task, values)],
+    }
+
+
+# ---- 09b: display-only elevation profiles (never reads the DEM) -----------
+# Always reruns when selected - genuinely cheap (seconds), and usually run precisely to retune
+# --profile-points (spec B4: that retune must not force a re-route or a DEM read).
+
+def task_build_profiles():
+    return {
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "build_profiles.py"}"'
             " --profile-points %(profile_points)s"
         ],
         "params": [
-            {"name": "ele_noise_threshold_m", "long": "ele-noise-threshold-m", "type": float,
-             "default": CONFIG["dem"]["eleNoiseThresholdM"]},
             {"name": "profile_points", "long": "profile-points", "type": int,
              "default": CONFIG["dem"].get("profilePoints", 30)},
         ],
         "task_dep": ["build_hub_edges"],  # same file, not just same mtime - see docstring above
-        "file_dep": [str(DEM_DIR / "dem.tif")],
-        # records.npy is rewritten in place (ascent_m/descent_m/profile_offset/profile_count
-        # filled) but NOT listed as a target here: build_hub_edges already owns it as a target,
-        # and doit forbids two tasks sharing one target. profiles.npy is the only file this task
-        # alone produces. Downstream tasks that need to wait for the in-place rewrite (the tile
-        # builders) declare an explicit task_dep on add_elevation instead of relying on a shared
-        # target/file_dep link.
+        "file_dep": [
+            str(OSM_DIR / "base_graph" / "interior_ele.npy"),
+            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+        ],
+        # records.npy is rewritten in place (profile_offset/profile_count filled) but NOT listed
+        # as a target here: build_hub_edges already owns it as a target, and doit forbids two
+        # tasks sharing one target. profiles.npy is the only file this task alone produces.
+        # Downstream tasks that need to wait for the in-place rewrite (the tile builders) declare
+        # an explicit task_dep on build_profiles instead of relying on a shared target/file_dep link.
         "targets": [
             str(OSM_DIR / "hut_edges" / "profiles.npy"), str(OSM_DIR / "start_edges" / "profiles.npy"),
         ],
@@ -282,10 +314,11 @@ def task_build_hut_edge_tiles():
                 f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
             )
         ],
-        # task_dep (not just file_dep) on add_elevation: records.npy is rewritten in place by
-        # that task but isn't one of its declared targets (see task_add_elevation's comment), so
-        # doit's file-hash freshness check alone wouldn't guarantee this task runs after it.
-        "task_dep": ["add_elevation"],
+        # task_dep (not just file_dep) on build_profiles: records.npy's profile_offset/
+        # profile_count are rewritten in place by that task but aren't one of its declared
+        # targets (see task_build_profiles's comment), so doit's file-hash freshness check alone
+        # wouldn't guarantee this task runs after it.
+        "task_dep": ["build_profiles"],
         "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "hut-edges.pmtiles"), str(OSM_DIR / "hut-edge-stats.json")],
     }
@@ -307,7 +340,7 @@ def task_build_start_edge_tiles():
                 f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
             )
         ],
-        "task_dep": ["add_elevation"],  # see task_build_hut_edge_tiles's comment
+        "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
         "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
     }

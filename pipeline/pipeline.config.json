@@ -30,7 +30,7 @@
         }
       ]
     },
-    "eleNoiseThresholdM": 4,
+    "smoothingKernelM": 30,
     "profilePoints": 30
   },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },

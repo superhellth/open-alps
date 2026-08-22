@@ -16,12 +16,28 @@ loop are retired, and the kernel width (metres) is the replacement tunable.
 
 Persists node_ele.npy (f4 x 6.85M, 27 MB) and interior_ele.npy (f4 x 33.1M, 132 MB) so
 build_profiles.py and every display path can avoid reopening the DEM.
-
-This module is pure functions only (no argv/filesystem access) - the doit wiring, DEM reading and
-edges.npy rewrite live in Task 8's main().
 """
 
+import argparse
+import sys
+from pathlib import Path
+
 import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from graph_building import build_base_graph as bbg  # noqa: E402
+from lib import binfmt, speed  # noqa: E402
+from lib.grid import Grid  # noqa: E402
+from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
+
+SCRIPT_NAME = "add_base_elevation.py"
+
+# Buffer around a cell's own bounds for its DEM window read - only needs to cover bilinear
+# interpolation's 1-pixel neighbourhood for points exactly on the cell boundary, at DEM
+# resolutions of 5-10 m this is generous, not tight.
+_DEM_WINDOW_BUFFER_KM = 0.2
 
 
 def smooth_profile(elevations, seg_len_m, kernel_m: float) -> np.ndarray:
@@ -89,3 +105,153 @@ def sample_bilinear(dem_window: np.ndarray, transform, lon: np.ndarray, lat: np.
     v10 = dem_window[row1, col0].astype(np.float64)
     v11 = dem_window[row1, col1].astype(np.float64)
     return (1 - fx) * (1 - fy) * v00 + fx * (1 - fy) * v01 + (1 - fx) * fy * v10 + fx * fy * v11
+
+
+def _sample_all_points(dem_path, nodes, cell_index, interior, grid, timer: StepTimer):
+    """Fills node_ele/interior_ele by reading one DEM window per grid cell (never the whole
+    74008x39276 raster at once - see module docstring). nodes are already sorted/CSR-indexed by
+    cell_id (build_base_graph.py's pack_and_write); interior points carry no cell_id, so their
+    per-cell grouping is computed here the same way (grid.cell_ids_for_points + build_csr_index)."""
+    import rasterio
+    import rasterio.windows
+
+    node_ele = np.zeros(len(nodes), dtype=np.float32)
+    interior_ele = np.zeros(len(interior), dtype=np.float32)
+
+    interior_cell_ids = grid.cell_ids_for_points(interior["lon"], interior["lat"])
+    n_cells = len(grid.all_cell_ids())
+    interior_order, interior_cell_index = binfmt.build_csr_index(interior_cell_ids, n_groups=n_cells)
+
+    with rasterio.open(dem_path) as dem:
+        for cell_id in range(n_cells):
+            n_start, n_count = int(cell_index["start_offset"][cell_id]), int(cell_index["count"][cell_id])
+            i_start, i_count = (int(interior_cell_index["start_offset"][cell_id]),
+                                int(interior_cell_index["count"][cell_id]))
+            if n_count == 0 and i_count == 0:
+                continue
+
+            with timer.step("read_dem"):
+                bounds = grid.padded_bounds(cell_id, _DEM_WINDOW_BUFFER_KM)
+                window = rasterio.windows.from_bounds(
+                    bounds["minLng"], bounds["minLat"], bounds["maxLng"], bounds["maxLat"],
+                    transform=dem.transform,
+                ).round_offsets().round_lengths()
+                window = window.intersection(rasterio.windows.Window(0, 0, dem.width, dem.height))
+                band = dem.read(1, window=window)
+                window_transform = rasterio.windows.transform(window, dem.transform)
+
+            with timer.step("sample"):
+                if n_count:
+                    node_ele[n_start:n_start + n_count] = sample_bilinear(
+                        band, window_transform,
+                        nodes["lon"][n_start:n_start + n_count], nodes["lat"][n_start:n_start + n_count],
+                    )
+                if i_count:
+                    idx = interior_order[i_start:i_start + i_count]
+                    interior_ele[idx] = sample_bilinear(
+                        band, window_transform, interior["lon"][idx], interior["lat"][idx],
+                    )
+
+            print(f"  sample: cell {cell_id + 1}/{n_cells} -> {n_count:,} nodes, "
+                  f"{i_count:,} interior points", flush=True)
+
+    return node_ele, interior_ele
+
+
+def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele, kernel_m,
+                                  speed_model, timer: StepTimer):
+    """Per base-graph edge: reconstructs its point sequence (u -> interior[offset:offset+count]
+    -> v), smooths the elevation profile (kernel_m), computes time_s from the smoothed profile
+    (lib.speed.edge_time_s), and appends the smoothed profile to a flat buffer. The per-edge
+    reconstruction is a Python loop (same pattern as build_base_graph.py's pack_and_write
+    pack_interior loop, and the old add_elevation.py's fill_elevation_records) - smoothing is an
+    inherently per-edge local operation, a global vectorised pass would leak across edge
+    boundaries the same way un-masked ascent/descent would. ascent_m/descent_m are filled
+    afterwards in ONE vectorised batch call to edge_ascent_descent (Task 7) over every edge's
+    smoothed profile at once."""
+    n_edges = len(edges)
+    time_s = np.zeros(n_edges, dtype=np.float64)
+    edge_point_counts = np.empty(n_edges, dtype=np.int64)
+    all_smoothed = []
+
+    node_lon, node_lat = nodes["lon"], nodes["lat"]
+    interior_lon, interior_lat = interior["lon"], interior["lat"]
+    interior_offset, interior_count = edges["interior_offset"], edges["interior_count"]
+
+    with timer.step("smooth"):
+        for i in range(n_edges):
+            u, v = int(edges["u"][i]), int(edges["v"][i])
+            off, cnt = int(interior_offset[i]), int(interior_count[i])
+            lon = np.concatenate(([node_lon[u]], interior_lon[off:off + cnt], [node_lon[v]]))
+            lat = np.concatenate(([node_lat[u]], interior_lat[off:off + cnt], [node_lat[v]]))
+            elev = np.concatenate(
+                ([node_ele[u]], interior_ele[off:off + cnt], [node_ele[v]])
+            ).astype(np.float64)
+            edge_point_counts[i] = len(elev)
+
+            seg_len = bbg.haversine_m_vec(lon[:-1], lat[:-1], lon[1:], lat[1:]) if len(lon) > 1 \
+                else np.zeros(0)
+            smoothed = smooth_profile(elev, seg_len, kernel_m)
+            all_smoothed.append(smoothed)
+            time_s[i] = float(speed.edge_time_s(seg_len, np.diff(smoothed), **speed_model).sum())
+
+            if (i + 1) % 200_000 == 0 or i + 1 == n_edges:
+                print(f"  smooth/time_s: {i + 1:,}/{n_edges:,} edges", flush=True)
+
+    flat_smoothed = np.concatenate(all_smoothed) if all_smoothed else np.zeros(0)
+    with timer.step("ascent_descent"):
+        ascent, descent = edge_ascent_descent(
+            flat_smoothed, np.zeros(n_edges, dtype=np.int64), edge_point_counts,
+        )
+
+    return time_s, ascent.astype(np.float32), descent.astype(np.float32)
+
+
+def main(argv=None):
+    config = load_config()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
+    parser.add_argument("--smoothing-kernel-m", type=float,
+                        default=config["dem"]["smoothingKernelM"])
+    args = parser.parse_args(argv)
+
+    base_graph_dir = Path(args.base_graph_dir)
+    timer = StepTimer()
+    with phase(SCRIPT_NAME, "add_base_elevation", smoothing_kernel_m=args.smoothing_kernel_m) as meta:
+        with timer.step("load_arrays"):
+            manifest = binfmt.load_manifest(base_graph_dir / "manifest.json")
+            grid = Grid(manifest["bbox"], manifest["tile_size_km"])
+            nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
+            cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy", mmap=False)
+            interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
+            edges = binfmt.load_array(base_graph_dir / "edges.npy", mmap=False)
+
+        print(f"sampling DEM over {len(nodes):,} nodes / {len(interior):,} interior points "
+              f"across {len(grid.all_cell_ids()):,} cells ...", flush=True)
+        node_ele, interior_ele = _sample_all_points(args.dem, nodes, cell_index, interior, grid, timer)
+
+        with timer.step("write"):
+            binfmt.save_array(base_graph_dir / "node_ele.npy", node_ele)
+            binfmt.save_array(base_graph_dir / "interior_ele.npy", interior_ele)
+        print(f"written {base_graph_dir / 'node_ele.npy'}, {base_graph_dir / 'interior_ele.npy'}",
+              flush=True)
+
+        print(f"computing time_s/ascent_m/descent_m for {len(edges):,} edges ...", flush=True)
+        time_s, ascent_m, descent_m = _fill_edge_time_and_elevation(
+            edges, nodes, interior, node_ele, interior_ele, args.smoothing_kernel_m,
+            config["graph"]["speedModel"], timer,
+        )
+        edges["time_s"] = time_s
+        edges["ascent_m"] = ascent_m
+        edges["descent_m"] = descent_m
+
+        with timer.step("write"):
+            binfmt.save_array(base_graph_dir / "edges.npy", edges)
+        print(f"rewritten {base_graph_dir / 'edges.npy'} with time_s/ascent_m/descent_m", flush=True)
+        meta.update(timer.as_meta())
+    print(f"step totals: {timer.summary()}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
