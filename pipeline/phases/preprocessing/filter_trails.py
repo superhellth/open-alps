@@ -7,6 +7,7 @@ nodes by default) - required for graph-building later. Requires osmium-tool inst
 Usage: python pipeline/phases/preprocessing/filter_trails.py
 """
 
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -15,7 +16,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 
 config = load_config()
-tag_filter = config["trailTagFilter"]
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--tag-filter", default=config["trailTagFilter"])
+args = parser.parse_args()
 
 for region in config["regions"]:
     name = region["name"]
@@ -23,6 +27,6 @@ for region in config["regions"]:
     dst = OSM_DIR / f"{name}-trails.osm.pbf"
     print(f"filtering {src} -> {dst}")
     subprocess.run(
-        ["osmium", "tags-filter", str(src), tag_filter, "-o", str(dst), "--overwrite"],
+        ["osmium", "tags-filter", str(src), args.tag_filter, "-o", str(dst), "--overwrite"],
         check=True,
     )

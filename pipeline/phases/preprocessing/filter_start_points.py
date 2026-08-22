@@ -10,6 +10,7 @@ expensive graph query. See docs/superpowers/specs/2026-08-19-pipeline-v2-design.
 Usage: python pipeline/phases/preprocessing/filter_start_points.py
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -54,6 +55,10 @@ def _load_layer(path: Path, point_type: str) -> list:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+    args = parser.parse_args()
+
     hut_coords = np.array(hut_points(OSM_DIR / "huts.geojson"))
     all_points = (
         _load_layer(OSM_DIR / "stations.geojson", "station")
@@ -61,7 +66,7 @@ if __name__ == "__main__":
     )
     print(f"start-point candidates: {len(all_points)}")
 
-    kept = filter_to_hut_range(all_points, hut_coords, config["graph"]["maxEdgeKm"])
+    kept = filter_to_hut_range(all_points, hut_coords, args.max_edge_km)
     print(f"kept within maxEdgeKm of a hut: {len(kept)}")
 
     arr = np.zeros(len(kept), dtype=[

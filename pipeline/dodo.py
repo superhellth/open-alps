@@ -13,10 +13,12 @@ Usage:
     doit info build_hub_edges              # show why a task would (not) run, without running it
 
 A task always reruns if any file in its file_dep changed (content hash, not mtime - doit hashes
-by default) or if pipeline.config.json changed (every task depends on it, so editing the config
-invalidates everything downstream of the values it actually touches, same as run_all.py's
-config-mtime check but per-task instead of global). verify_trails has no target (it's a gate, not
-a cacheable output) and declares `uptodate: [False]` to force a rerun every time it's selected.
+by default) or if the specific pipeline.config.json values it reads changed - each task pulls
+those into "params" (CLI flags defaulted from CONFIG) and tracks them with TaskOptionsChanged,
+never depends on the whole config file's bytes, so an edit to an unrelated key doesn't invalidate
+every task downstream of it (unlike run_all.py's old global config-mtime check). verify_trails has
+no target (it's a gate, not a cacheable output) and declares `uptodate: [False]` to force a rerun
+every time it's selected.
 build_profiles does too - it never reads the DEM (spec B4) and is usually run precisely to retune
 --profile-points, so a fresh run is always cheap (seconds). build_base_graph/build_hub_edges/
 add_base_elevation are NOT force-rerun despite add_base_elevation looking similarly cheap-to-retune
@@ -35,7 +37,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from lib.pipeline import CONFIG_PATH, DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
+from lib.pipeline import DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
 
 
 class TaskOptionsChanged:
@@ -104,8 +106,16 @@ def py(script, *args):
 def task_download_extracts():
     return {
         "actions": [py("phases/downloads/download_extracts.py")],
-        "file_dep": [str(CONFIG_PATH)],
+        # download_extracts.py reads config["regions"] directly (a list of {name, url} - not a
+        # sensible CLI flag), so this param exists only to track it via TaskOptionsChanged
+        # instead of the whole pipeline.config.json file - keep the key path here in sync with
+        # what the script actually reads.
+        "params": [
+            {"name": "regions_json", "long": "regions-json", "type": str,
+             "default": json.dumps(CONFIG["regions"], sort_keys=True)},
+        ],
         "targets": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -113,10 +123,17 @@ def task_download_extracts():
 
 def task_filter_trails():
     return {
-        "actions": [py("phases/preprocessing/filter_trails.py")],
-        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
-        + [str(CONFIG_PATH)],
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "preprocessing" / "filter_trails.py"}"'
+            " --tag-filter %(tag_filter)s"
+        ],
+        "params": [
+            {"name": "tag_filter", "long": "tag-filter", "type": str,
+             "default": CONFIG["trailTagFilter"]},
+        ],
+        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
         "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -145,8 +162,16 @@ def task_verify_trails():
 def task_fetch_huts():
     return {
         "actions": [py("phases/downloads/fetch_huts.py")],
-        "file_dep": [str(CONFIG_PATH)],
+        # fetch_huts.py reads config["bbox"] directly (a {minLng, minLat, maxLng, maxLat} dict -
+        # not a sensible CLI flag), so this param exists only to track it via TaskOptionsChanged
+        # instead of the whole pipeline.config.json file - keep the key path here in sync with
+        # what the script actually reads.
+        "params": [
+            {"name": "bbox_json", "long": "bbox-json", "type": str,
+             "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
+        ],
         "targets": [str(OSM_DIR / "huts.geojson")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -164,12 +189,21 @@ def task_fetch_stations_parking():
 
 def task_filter_start_points():
     return {
-        "actions": [py("phases/preprocessing/filter_start_points.py")],
+        "actions": [
+            f'"{sys.executable}" '
+            f'"{SCRIPT_DIR / "phases" / "preprocessing" / "filter_start_points.py"}"'
+            " --max-edge-km %(max_edge_km)s"
+        ],
+        "params": [
+            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
+             "default": CONFIG["graph"]["maxEdgeKm"]},
+        ],
         "file_dep": [
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "stations.geojson"),
-            str(OSM_DIR / "parking.geojson"), str(CONFIG_PATH),
+            str(OSM_DIR / "parking.geojson"),
         ],
         "targets": [str(OSM_DIR / "start_points.npy"), str(OSM_DIR / "start_points_id_table.json")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -230,8 +264,18 @@ def task_build_hub_edges():
 def task_fetch_dem():
     return {
         "actions": [py("phases/downloads/fetch_dem.py")],
-        "file_dep": [str(CONFIG_PATH)],
+        # fetch_dem.py reads config["dem"] (provider name + provider-specific nested config) and
+        # config["bbox"] directly - neither is a sensible CLI flag, so these params exist only to
+        # track them via TaskOptionsChanged instead of the whole pipeline.config.json file - keep
+        # the key paths here in sync with what the script actually reads.
+        "params": [
+            {"name": "dem_json", "long": "dem-json", "type": str,
+             "default": json.dumps(CONFIG["dem"], sort_keys=True)},
+            {"name": "bbox_json", "long": "bbox-json", "type": str,
+             "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
+        ],
         "targets": [str(DEM_DIR / "fetch_manifest.json")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
