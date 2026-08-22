@@ -15,8 +15,10 @@ NODE_DTYPE = np.dtype([("lon", "f8"), ("lat", "f8"), ("cell_id", "i4")])
 CELL_INDEX_DTYPE = np.dtype([("start_offset", "i8"), ("count", "i4")])
 NODE_EDGE_INDEX_DTYPE = np.dtype([("start_offset", "i8"), ("count", "i4")])
 EDGE_DTYPE = np.dtype([
-    ("u", "i8"), ("v", "i8"), ("dist", "f8"), ("weight", "f8"), ("road_m", "f8"),
-    ("sac_rank", "i1"), ("via_ferrata", "bool"),
+    ("u", "i8"), ("v", "i8"), ("dist", "f8"), ("road_m", "f8"),
+    ("ungraded_m", "f8"), ("inferred_m", "f8"),
+    ("time_s", "f8"), ("ascent_m", "f4"), ("descent_m", "f4"),
+    ("sac_rank", "i1"), ("via_ferrata", "bool"), ("constrained_ok", "bool"),
     ("interior_offset", "i8"), ("interior_count", "i4"), ("edge_id", "i8"),
 ])
 COORD_DTYPE = np.dtype([("lon", "f8"), ("lat", "f8")])
@@ -33,9 +35,17 @@ PROFILE_DTYPE = np.dtype("f4")
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
-VARIANT_SHORTEST = 0
 
-UNSET = -1.0  # sentinel for ascent_m/descent_m before add_elevation.py runs
+# Variant grid rows (spec C2/C3). Phase 1 builds the "fastest" objective column only; a ROAD_*
+# column appends here if the post-rebuild road-share measurement justifies it.
+VARIANT_FAST_ANY = 0
+VARIANT_FAST_T2 = 1
+VARIANT_FAST_T3 = 2
+VARIANT_NAMES = {
+    VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
+}
+
+UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before add_base_elevation.py runs
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

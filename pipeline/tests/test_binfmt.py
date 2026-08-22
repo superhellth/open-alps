@@ -47,3 +47,19 @@ def test_build_csr_index_empty_group_has_zero_count():
     order, index = binfmt.build_csr_index(group_ids, n_groups=3)
     assert index["count"][1] == 0
     assert index["count"][2] == 0
+
+
+def test_edge_dtype_has_time_and_grading_columns_and_no_weight():
+    names = binfmt.EDGE_DTYPE.names
+    for field in ("time_s", "ascent_m", "descent_m", "ungraded_m", "inferred_m", "constrained_ok"):
+        assert field in names, field
+    # spec A3: dropping the field (not repurposing it) makes a stale cache fail loudly with a
+    # KeyError instead of feeding penalised metres to a router reading seconds
+    assert "weight" not in names
+
+
+def test_variant_constants_replace_variant_shortest():
+    assert binfmt.VARIANT_FAST_ANY == 0
+    assert binfmt.VARIANT_FAST_T2 == 1
+    assert binfmt.VARIANT_FAST_T3 == 2
+    assert not hasattr(binfmt, "VARIANT_SHORTEST")
