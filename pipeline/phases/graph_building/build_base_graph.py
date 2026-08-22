@@ -17,7 +17,7 @@ import numpy as np
 import osmium
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib import binfmt  # noqa: E402
+from lib import binfmt, grading  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
@@ -37,25 +37,19 @@ def haversine_m_vec(lon1, lat1, lon2, lat2):
     return 2 * r * np.arcsin(np.sqrt(a))
 
 
-SAC_SCALE_RANK = {
-    "strolling": 0, "hiking": 1, "mountain_hiking": 2, "demanding_mountain_hiking": 3,
-    "alpine_hiking": 4, "demanding_alpine_hiking": 5, "difficult_alpine_hiking": 6,
-}
-
-
 class WayGraphHandler(osmium.SimpleHandler):
     """Identical streaming shape to build_hut_graph.py's old handler - kept unchanged since
     nothing about hub sets affects how raw ways are turned into raw node/edge arrays."""
 
-    def __init__(self, road_tags, road_penalty_factor, progress_every=100_000):
+    def __init__(self, road_tags, progress_every=100_000):
         super().__init__()
         self.road_tags = set(road_tags)
-        self.road_penalty_factor = road_penalty_factor
         self.node_id_to_idx = {}
         self.coords = []
         self.edges_i, self.edges_j = [], []
-        self.edges_dist, self.edges_w = [], []
-        self.edges_road, self.edges_sac_rank, self.edges_via_ferrata = [], [], []
+        self.edges_dist = []
+        self.edges_road, self.edges_ungraded, self.edges_inferred = [], [], []
+        self.edges_sac_rank, self.edges_via_ferrata, self.edges_constrained_ok = [], [], []
         self.progress_every = progress_every
         self.n_ways = 0
 
@@ -79,19 +73,29 @@ class WayGraphHandler(osmium.SimpleHandler):
             idxs[k] = self._idx_for(n.ref, lon, lat)
             lons[k], lats[k] = lon, lat
         dists = haversine_m_vec(lons[:-1], lats[:-1], lons[1:], lats[1:])
-        highway = w.tags.get("highway", "")
+        tags = dict(w.tags)
+        highway = tags.get("highway", "")
         is_road = highway in self.road_tags
-        costs = dists * self.road_penalty_factor if is_road else dists
-        sac_rank = SAC_SCALE_RANK.get(w.tags.get("sac_scale", ""), -1)
-        is_via_ferrata = highway == "via_ferrata" or "via_ferrata_scale" in w.tags
+        grade = grading.classify_way(tags)
+        is_via_ferrata = highway == "via_ferrata" or "via_ferrata_scale" in tags
+        constrained_ok = (
+            grade.tier != grading.TIER_UNGRADED
+            and not is_via_ferrata
+            and not grading.excluded_from_constrained(tags)
+        )
         n_edges = len(nodes) - 1
+        zeros = [0.0] * n_edges
+        ungraded = dists.tolist() if grade.tier == grading.TIER_UNGRADED else zeros
+        inferred = dists.tolist() if grade.tier == grading.TIER_INFERRED else zeros
         self.edges_i.extend(idxs[:-1].tolist())
         self.edges_j.extend(idxs[1:].tolist())
         self.edges_dist.extend(dists.tolist())
-        self.edges_w.extend(costs.tolist())
         self.edges_road.extend([is_road] * n_edges)
-        self.edges_sac_rank.extend([sac_rank] * n_edges)
+        self.edges_ungraded.extend(ungraded)
+        self.edges_inferred.extend(inferred)
+        self.edges_sac_rank.extend([grade.sac_rank] * n_edges)
         self.edges_via_ferrata.extend([is_via_ferrata] * n_edges)
+        self.edges_constrained_ok.extend([constrained_ok] * n_edges)
 
         self.n_ways += 1
         if self.progress_every and self.n_ways % self.progress_every == 0:
@@ -101,9 +105,7 @@ class WayGraphHandler(osmium.SimpleHandler):
 
 def stream_osm(trails_path, config):
     print(f"streaming {trails_path} ...", flush=True)
-    handler = WayGraphHandler(
-        config["graph"]["roadHighwayTags"], config["graph"]["roadPenaltyFactor"]
-    )
+    handler = WayGraphHandler(config["graph"]["roadHighwayTags"])
     with phase(SCRIPT_NAME, "stream_osm") as meta:
         with rss_sampler() as sample:
             handler.apply_file(trails_path, locations=True)
@@ -113,7 +115,7 @@ def stream_osm(trails_path, config):
 
 
 def handler_to_arrays(handler, timer: StepTimer = None):
-    """The eight numpy arrays contract_structural takes, in order. Split out from contract() so
+    """The ten numpy arrays contract_structural takes, in order. Split out from contract() so
     main() can drop the handler - and with it ~12 GB of now-dead raw Python lists (40M coord
     tuples, 41M-element int/float lists) - BEFORE contraction starts rather than after. See
     docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md."""
@@ -124,10 +126,12 @@ def handler_to_arrays(handler, timer: StepTimer = None):
             np.array(handler.edges_i, dtype=np.int64),
             np.array(handler.edges_j, dtype=np.int64),
             np.array(handler.edges_dist, dtype=np.float64),
-            np.array(handler.edges_w, dtype=np.float64),
             np.array(handler.edges_road, dtype=bool),
+            np.array(handler.edges_ungraded, dtype=np.float64),
+            np.array(handler.edges_inferred, dtype=np.float64),
             np.array(handler.edges_sac_rank, dtype=np.int8),
             np.array(handler.edges_via_ferrata, dtype=bool),
+            np.array(handler.edges_constrained_ok, dtype=bool),
         )
 
 
@@ -183,10 +187,15 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
         edges_arr["u"] = old_to_new[contracted.edges_u]
         edges_arr["v"] = old_to_new[contracted.edges_v]
         edges_arr["dist"] = contracted.edges_dist
-        edges_arr["weight"] = contracted.edges_weight
         edges_arr["road_m"] = contracted.edges_road_m
+        edges_arr["ungraded_m"] = contracted.edges_ungraded_m
+        edges_arr["inferred_m"] = contracted.edges_inferred_m
+        edges_arr["time_s"] = binfmt.UNSET
+        edges_arr["ascent_m"] = binfmt.UNSET
+        edges_arr["descent_m"] = binfmt.UNSET
         edges_arr["sac_rank"] = contracted.edges_sac_rank
         edges_arr["via_ferrata"] = contracted.edges_via_ferrata
+        edges_arr["constrained_ok"] = contracted.edges_constrained_ok
         edges_arr["interior_offset"] = interior_offsets
         edges_arr["interior_count"] = interior_counts
         edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id

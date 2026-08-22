@@ -49,10 +49,12 @@ def test_profile_one_writes_a_prof_file_and_returns_a_table(tmp_path):
         edges_u=np.array([0, 1], dtype=np.int64),
         edges_v=np.array([1, 2], dtype=np.int64),
         edges_dist=np.array([100.0, 200.0]),
-        edges_weight=np.array([130.0, 200.0]),
         edges_road_m=np.array([100.0, 0.0]),
+        edges_ungraded_m=np.array([0.0, 0.0]),
+        edges_inferred_m=np.array([100.0, 0.0]),
         edges_sac_rank=np.array([2, -1], dtype=np.int8),
         edges_via_ferrata=np.array([False, True]),
+        edges_constrained_ok=np.array([True, True]),
         interior_coords=[[(11.05, 47.05)], []],
     )
     graph_dir = tmp_path / "base_graph"

@@ -17,9 +17,9 @@ NOTE ON THE ANALYSIS CONTRACT: this script does not have a production function t
 the grading classifier it measures does not exist yet - it is the rule being *proposed*. The
 classifier below is therefore the specification's tier table written out, deliberately in one
 place, and it is the thing under measurement rather than a copy of something under phases/. What
-it does reuse from production is real: build_base_graph.py's SAC_SCALE_RANK and haversine_m_vec,
-and the persisted binfmt arrays. If the rule is adopted, the classifier moves into
-build_base_graph.py's way handler and this script should then import it from there.
+it does reuse from production is real: lib/grading.py's SAC_SCALE_RANK and build_base_graph.py's
+haversine_m_vec, and the persisted binfmt arrays. If the rule is adopted, the classifier moves
+into build_base_graph.py's way handler and this script should then import it from there.
 
 APPROXIMATION - segment attribution is by coordinate identity. A stored hut-edge polyline is
 built from base-graph edges whose points are original OSM node coordinates, so each consecutive
@@ -55,13 +55,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases" / "grap
 import build_base_graph as bbg  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib import binfmt  # noqa: E402
+from lib import binfmt, grading  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 
 DATA_DIR = OSM_DIR.parent
 OUT_PATH = DATA_DIR / "analysis" / "grading_coverage.json"
 
-# --- The proposed tier table (spec C4). Ranks are SAC ranks, matching bbg.SAC_SCALE_RANK. ---
+# --- The proposed tier table (spec C4). Ranks are SAC ranks, matching grading.SAC_SCALE_RANK. ---
 
 TIER_EXPLICIT, TIER_IMPLIED, TIER_UNGRADED = 0, 1, 2
 TIER_NAMES = {TIER_EXPLICIT: "explicit", TIER_IMPLIED: "inferred", TIER_UNGRADED: "ungraded"}
@@ -98,7 +98,7 @@ def classify_way(tags):
     if highway == "via_ferrata" or "via_ferrata_scale" in tags:
         excluded_reasons.append("via_ferrata")
 
-    explicit = bbg.SAC_SCALE_RANK.get(tags.get("sac_scale", ""), -1)
+    explicit = grading.SAC_SCALE_RANK.get(tags.get("sac_scale", ""), -1)
     if explicit >= 0:
         tier, rank = TIER_EXPLICIT, explicit
     elif highway in IMPLIED_BY_HIGHWAY:

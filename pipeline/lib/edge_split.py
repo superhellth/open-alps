@@ -1,9 +1,9 @@
 """Mid-chain edge splitting: build_base_graph.py contracts purely structurally (lib/
 contraction.py), so a hub may need to snap to a point partway along a chain edge's interior
 polyline rather than at an existing graph node. This module finds that point and splits the
-edge's dist/weight/road_m proportionally by real (haversine) distance along the polyline - not
-by vertex count or naive endpoint interpolation, since interior vertices are real, unevenly
-spaced trail points."""
+edge's dist/road_m/ungraded_m/inferred_m proportionally by real (haversine) distance along the
+polyline - not by vertex count or naive endpoint interpolation, since interior vertices are real,
+unevenly spaced trail points."""
 
 import math
 from dataclasses import dataclass
@@ -45,16 +45,19 @@ class SplitResult:
     split_coord: tuple
     dist_to_u: float
     dist_to_v: float
-    weight_to_u: float
-    weight_to_v: float
     road_m_to_u: float
     road_m_to_v: float
+    ungraded_m_to_u: float
+    ungraded_m_to_v: float
+    inferred_m_to_u: float
+    inferred_m_to_v: float
     interior_to_u: list
     interior_to_v: list
 
 
-def split_edge_at_point(u_coord, v_coord, interior: list, dist_m: float, weight_m: float,
-                         road_m: float, segment_index: int, fraction: float) -> SplitResult:
+def split_edge_at_point(u_coord, v_coord, interior: list, dist_m: float, road_m: float,
+                         ungraded_m: float, inferred_m: float, segment_index: int,
+                         frac: float) -> SplitResult:
     full_polyline = [u_coord, *interior, v_coord]
     seg_lengths = [
         _haversine_m(*full_polyline[i], *full_polyline[i + 1])
@@ -64,19 +67,21 @@ def split_edge_at_point(u_coord, v_coord, interior: list, dist_m: float, weight_
 
     ax, ay = full_polyline[segment_index]
     bx, by = full_polyline[segment_index + 1]
-    split_coord = (ax + fraction * (bx - ax), ay + fraction * (by - ay))
+    split_coord = (ax + frac * (bx - ax), ay + frac * (by - ay))
 
-    dist_to_split = sum(seg_lengths[:segment_index]) + fraction * seg_lengths[segment_index]
+    dist_to_split = sum(seg_lengths[:segment_index]) + frac * seg_lengths[segment_index]
     ratio_to_u = dist_to_split / total
 
     return SplitResult(
         split_coord=split_coord,
         dist_to_u=dist_m * ratio_to_u,
         dist_to_v=dist_m * (1 - ratio_to_u),
-        weight_to_u=weight_m * ratio_to_u,
-        weight_to_v=weight_m * (1 - ratio_to_u),
         road_m_to_u=road_m * ratio_to_u,
         road_m_to_v=road_m * (1 - ratio_to_u),
+        ungraded_m_to_u=ungraded_m * ratio_to_u,
+        ungraded_m_to_v=ungraded_m * (1 - ratio_to_u),
+        inferred_m_to_u=inferred_m * ratio_to_u,
+        inferred_m_to_v=inferred_m * (1 - ratio_to_u),
         interior_to_u=list(interior[:segment_index]),
         interior_to_v=list(interior[segment_index:]),
     )

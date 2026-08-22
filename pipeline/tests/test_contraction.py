@@ -15,12 +15,14 @@ def _chain_fixture():
     edges_i = np.array([0, 1, 2, 3])
     edges_j = np.array([1, 2, 3, 4])
     edges_dist = np.array([100.0, 100.0, 100.0, 100.0])
-    edges_weight = np.array([100.0, 100.0, 130.0, 100.0])  # segment 2-3 road-penalized
     edges_road = np.array([False, False, True, False])
+    edges_ungraded = np.array([100.0, 0.0, 0.0, 0.0])
+    edges_inferred = np.array([0.0, 100.0, 0.0, 100.0])
     edges_sac_rank = np.array([1, 1, -1, 2], dtype=np.int8)
     edges_via_ferrata = np.array([False, False, False, True])
-    return coords, edges_i, edges_j, edges_dist, edges_weight, edges_road, edges_sac_rank, \
-        edges_via_ferrata
+    edges_constrained_ok = np.array([False, True, True, True])
+    return coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred, \
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok
 
 
 def test_straight_chain_collapses_to_one_edge():
@@ -57,15 +59,37 @@ def test_junction_node_is_not_contracted():
     edges_i = np.array([0, 1, 1])
     edges_j = np.array([1, 2, 3])
     edges_dist = np.array([100.0, 100.0, 50.0])
-    edges_weight = edges_dist.copy()
     edges_road = np.array([False, False, False])
+    edges_ungraded = np.array([100.0, 100.0, 50.0])
+    edges_inferred = np.array([0.0, 0.0, 0.0])
     edges_sac_rank = np.array([-1, -1, -1], dtype=np.int8)
     edges_via_ferrata = np.array([False, False, False])
+    edges_constrained_ok = np.array([False, False, False])
 
     result = contract_structural(
-        coords, edges_i, edges_j, edges_dist, edges_weight, edges_road, edges_sac_rank,
-        edges_via_ferrata,
+        coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred,
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
     )
 
     assert len(result.coords) == 4  # nothing contracted away
     assert len(result.edges_u) == 3
+
+
+def test_contract_sums_grading_metres_along_a_chain():
+    # 3-node chain, middle node degree 2 -> one contracted edge carrying the sums
+    contracted = contract_structural(
+        coords=np.array([[0.0, 0.0], [0.001, 0.0], [0.002, 0.0]]),
+        edges_i=np.array([0, 1]), edges_j=np.array([1, 2]),
+        edges_dist=np.array([100.0, 150.0]),
+        edges_road=np.array([False, False]),
+        edges_ungraded=np.array([100.0, 0.0]),
+        edges_inferred=np.array([0.0, 150.0]),
+        edges_sac_rank=np.array([-1, 1], dtype=np.int8),
+        edges_via_ferrata=np.array([False, False]),
+        edges_constrained_ok=np.array([False, True]),
+        progress_every=0,
+    )
+    assert contracted.edges_ungraded_m[0] == 100.0
+    assert contracted.edges_inferred_m[0] == 150.0
+    # one ungraded segment poisons the whole contracted edge for every constrained row
+    assert bool(contracted.edges_constrained_ok[0]) is False

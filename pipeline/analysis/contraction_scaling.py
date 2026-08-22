@@ -42,7 +42,7 @@ from lib import binfmt  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
-from lib.pipeline import DATA_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import DATA_DIR, OSM_DIR  # noqa: E402
 from reconstruct_raw_graph import reconstruct_raw, select_edges_in_cells  # noqa: E402
 
 
@@ -84,7 +84,6 @@ def _load(base_graph_dir):
 
 
 def run_sweep(base_graph_dir, fractions, out_path):
-    config = load_config()
     nodes, edges, interior, grid = _load(base_graph_dir)
     n_cells = len(grid.all_cell_ids())
 
@@ -92,8 +91,7 @@ def run_sweep(base_graph_dir, fractions, out_path):
     sets = pick_cell_sets(nodes, n_cells, fractions)
     for step, (frac, cells) in enumerate(sets, start=1):
         edge_ids = select_edges_in_cells(nodes, edges, set(cells))
-        raw = reconstruct_raw(nodes, edges, interior, edge_ids,
-                              config["graph"]["roadPenaltyFactor"])
+        raw = reconstruct_raw(nodes, edges, interior, edge_ids)
         print(f"[{step}/{len(sets)}] fraction {frac:.0%}: {len(cells)} cells -> "
               f"{len(raw.coords):,} raw nodes / {len(raw.edges_i):,} raw edges, "
               f"contracting ...", flush=True)
@@ -142,12 +140,11 @@ def profile_one(base_graph_dir, fraction, out_path):
     overhead makes long runs pointless, and what matters here is the SHARE of time in the walk's
     hot spots (_neighbors' per-node .tolist(), the two scalar coords[] reads per interior node),
     not the absolute seconds."""
-    config = load_config()
     nodes, edges, interior, grid = _load(base_graph_dir)
 
     _, cells = pick_cell_sets(nodes, len(grid.all_cell_ids()), [fraction])[0]
     edge_ids = select_edges_in_cells(nodes, edges, set(cells))
-    raw = reconstruct_raw(nodes, edges, interior, edge_ids, config["graph"]["roadPenaltyFactor"])
+    raw = reconstruct_raw(nodes, edges, interior, edge_ids)
     print(f"profiling contraction over {len(raw.edges_i):,} raw edges "
           f"({len(cells)} cells) ...", flush=True)
 

@@ -14,7 +14,7 @@ from elevation.add_elevation import (  # noqa: E402
 
 def _one_record_fixture():
     records = np.zeros(1, dtype=binfmt.RECORD_DTYPE)
-    records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, binfmt.VARIANT_SHORTEST,
+    records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, binfmt.VARIANT_FAST_ANY,
                   1000.0, 0.0, binfmt.UNSET, binfmt.UNSET, -1, False, 0, 3, 0, 0)
     geometry = np.zeros(3, dtype=binfmt.COORD_DTYPE)
     geometry["lon"] = [0.0, 0.005, 0.01]

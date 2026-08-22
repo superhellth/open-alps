@@ -7,11 +7,14 @@ stream_osm (914s per attempt). Each chain edge e is the raw path u -> interior[o
 count) -> v; interior_offset is monotone in edge order, so raw node ids fall out as
 n_junctions + flat_interior_index with no bookkeeping.
 
-TIMING ONLY - NOT AN EQUIVALENCE FIXTURE. One field cannot be recovered: which segments of a
-partially-road chain were road (162,169 chain edges have 0 < road_m < dist). This sets the
-per-segment road flag from road_m > 0 for the whole chain, so reconstructed road_m totals differ
-from the originals. Topology, coordinates, per-segment distances, sac_rank and via_ferrata are
-exact, which is everything contraction's cost depends on.
+TIMING ONLY - NOT AN EQUIVALENCE FIXTURE. Three fields cannot be recovered at per-segment
+granularity: which segments of a partially-road/ungraded/inferred chain carried that flag (chain
+totals survive contraction; per-segment attribution does not, same reasoning as
+lib/contraction.py's docstring). This sets each per-segment flag from the corresponding chain
+total > 0, so reconstructed road_m/ungraded_m/inferred_m totals differ from the originals.
+constrained_ok is chain-level already (an AND-fold, not a sum), so it broadcasts exactly.
+Topology, coordinates, per-segment distances, sac_rank and via_ferrata are exact, which is
+everything contraction's cost depends on.
 
 See docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md.
 
@@ -28,24 +31,27 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import OSM_DIR  # noqa: E402
 
 
 @dataclass
 class RawGraph:
-    """Exactly contract_structural's eight positional arguments, in order."""
+    """Exactly contract_structural's ten positional arguments, in order."""
     coords: np.ndarray
     edges_i: np.ndarray
     edges_j: np.ndarray
     edges_dist: np.ndarray
-    edges_weight: np.ndarray
     edges_road: np.ndarray
+    edges_ungraded: np.ndarray
+    edges_inferred: np.ndarray
     edges_sac_rank: np.ndarray
     edges_via_ferrata: np.ndarray
+    edges_constrained_ok: np.ndarray
 
     def as_args(self):
-        return (self.coords, self.edges_i, self.edges_j, self.edges_dist, self.edges_weight,
-                self.edges_road, self.edges_sac_rank, self.edges_via_ferrata)
+        return (self.coords, self.edges_i, self.edges_j, self.edges_dist, self.edges_road,
+                self.edges_ungraded, self.edges_inferred, self.edges_sac_rank,
+                self.edges_via_ferrata, self.edges_constrained_ok)
 
 
 def _haversine_m_vec(lon1, lat1, lon2, lat2):
@@ -71,7 +77,7 @@ def select_edges_in_cells(nodes, edges, cell_ids) -> np.ndarray:
     return np.flatnonzero(wanted[u_cells]).astype(np.int64)
 
 
-def reconstruct_raw(nodes, edges, interior, edge_ids, road_penalty_factor) -> RawGraph:
+def reconstruct_raw(nodes, edges, interior, edge_ids) -> RawGraph:
     edge_ids = np.asarray(edge_ids, dtype=np.int64)
     sel = edges[edge_ids]
     n_j = len(nodes)
@@ -109,14 +115,17 @@ def reconstruct_raw(nodes, edges, interior, edge_ids, road_penalty_factor) -> Ra
     edges_dist = _haversine_m_vec(coords[edges_i, 0], coords[edges_i, 1],
                                   coords[edges_j, 0], coords[edges_j, 1])
 
-    # per-chain fields broadcast to that chain's segments; road is the lossy one (see docstring)
+    # per-chain fields broadcast to that chain's segments; road/ungraded/inferred are lossy (see
+    # docstring) - only their per-chain totals survive contraction, not per-segment attribution.
     edges_road = (np.asarray(sel["road_m"]) > 0)[eidx]
-    edges_weight = np.where(edges_road, edges_dist * road_penalty_factor, edges_dist)
+    edges_ungraded = np.where((np.asarray(sel["ungraded_m"]) > 0)[eidx], edges_dist, 0.0)
+    edges_inferred = np.where((np.asarray(sel["inferred_m"]) > 0)[eidx], edges_dist, 0.0)
     edges_sac_rank = np.asarray(sel["sac_rank"], dtype=np.int8)[eidx]
     edges_via_ferrata = np.asarray(sel["via_ferrata"], dtype=bool)[eidx]
+    edges_constrained_ok = np.asarray(sel["constrained_ok"], dtype=bool)[eidx]
 
-    return RawGraph(coords, edges_i, edges_j, edges_dist, edges_weight,
-                    edges_road, edges_sac_rank, edges_via_ferrata)
+    return RawGraph(coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded,
+                    edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok)
 
 
 def main(argv=None):
@@ -124,7 +133,6 @@ def main(argv=None):
     parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"))
     args = parser.parse_args(argv)
 
-    config = load_config()
     d = Path(args.base_graph)
     nodes = binfmt.load_array(d / "nodes.npy")
     edges = binfmt.load_array(d / "edges.npy")
@@ -132,8 +140,7 @@ def main(argv=None):
     print(f"base_graph: {len(nodes):,} nodes, {len(edges):,} chain edges, "
           f"{len(interior):,} interior points", flush=True)
 
-    raw = reconstruct_raw(nodes, edges, interior, np.arange(len(edges)),
-                          config["graph"]["roadPenaltyFactor"])
+    raw = reconstruct_raw(nodes, edges, interior, np.arange(len(edges)))
     print(f"reconstructed raw: {len(raw.coords):,} nodes, {len(raw.edges_i):,} edges", flush=True)
 
     expected_nodes = len(nodes) + len(interior)

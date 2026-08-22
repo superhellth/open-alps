@@ -24,7 +24,10 @@ def _line_subgraph():
     nodes[0] = (0.0, 0.0, 0)
     nodes[1] = (0.009, 0.0, 0)  # ~1000m east at the equator
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
-    edges[0] = (0, 1, 1000.0, 1000.0, 0.0, -1, False, 0, 0, 0)
+    # u, v, dist, road_m, ungraded_m, inferred_m, time_s, ascent_m, descent_m, sac_rank,
+    # via_ferrata, constrained_ok, interior_offset, interior_count, edge_id
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -58,7 +61,8 @@ def _line_subgraph_with_interior():
     interior[0] = (0.003, 0.0)
     interior[1] = (0.006, 0.0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
-    edges[0] = (0, 1, 1000.0, 1000.0, 0.0, -1, False, 0, 2, 0)  # interior_offset=0, count=2
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 2, 0)  # interior_offset=0, count=2
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,

@@ -188,7 +188,8 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         if d <= max_snap_m and (best_edge is None or d < best_edge[0]):
             split = split_edge_at_point(
                 (u["lon"], u["lat"]), (v["lon"], v["lat"]), interior,
-                float(e["dist"]), float(e["weight"]), float(e["road_m"]), seg_idx, frac,
+                float(e["dist"]), float(e["road_m"]), float(e["ungraded_m"]),
+                float(e["inferred_m"]), seg_idx, frac,
             )
             best_edge = (d, ei, split)
 
@@ -206,8 +207,11 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
     fields build_hut_graph.py's pass2 reads off its contracted chain edges."""
     n_base = len(subgraph.local_nodes)
     edges_uv = list(zip(subgraph.local_edges["u"].tolist(), subgraph.local_edges["v"].tolist()))
-    weights = subgraph.local_edges["weight"].tolist()
+    # Routes on real distance for now - EDGE_DTYPE dropped the road-penalised `weight` column
+    # (spec A3) and time_s isn't populated until add_base_elevation.py runs; lib/variants.py
+    # switches this to time_s once it exists.
     dists = subgraph.local_edges["dist"].tolist()
+    weights = list(dists)
     road_ms = subgraph.local_edges["road_m"].tolist()
     sac_ranks = subgraph.local_edges["sac_rank"].tolist()
     via_ferratas = subgraph.local_edges["via_ferrata"].tolist()
@@ -238,14 +242,14 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
         base_sac_rank = int(subgraph.local_edges["sac_rank"][ei])
         base_via_ferrata = bool(subgraph.local_edges["via_ferrata"][ei])
         edges_uv.append((u, vid))
-        weights.append(split.weight_to_u)
+        weights.append(split.dist_to_u)
         dists.append(split.dist_to_u)
         road_ms.append(split.road_m_to_u)
         sac_ranks.append(base_sac_rank)
         via_ferratas.append(base_via_ferrata)
         interiors.append(list(split.interior_to_u))
         edges_uv.append((vid, v))
-        weights.append(split.weight_to_v)
+        weights.append(split.dist_to_v)
         dists.append(split.dist_to_v)
         road_ms.append(split.road_m_to_v)
         sac_ranks.append(base_sac_rank)
