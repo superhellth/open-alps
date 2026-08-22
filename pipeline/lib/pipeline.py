@@ -69,7 +69,7 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
         nodata = src.nodata
 
     args = [
-        "gdal_translate", "-of", "GTiff",
+        "gdal_translate", "-of", "GTiff", "-progress",
         "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "PREDICTOR=3",
         "-co", "BIGTIFF=IF_SAFER", "-co", "NUM_THREADS=ALL_CPUS",
         "--config", "GDAL_NUM_THREADS", "ALL_CPUS",
@@ -77,6 +77,7 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
     if nodata is not None:
         args += ["-a_nodata", str(nodata)]
     args += [str(vrt_path), str(out_path)]
+    print(f"materializing {vrt_path} -> {out_path} ...", flush=True)
     subprocess.run(args, check=True)
     return out_path
 
