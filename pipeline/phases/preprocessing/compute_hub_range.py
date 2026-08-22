@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""Computes the "hub range" - a rectangle enclosing every hut in huts.geojson, padded by
-graph.maxEdgeKm - and writes it to data/osm/hub_range.json. filter_trails.py clips each region's
-trail extract to this rectangle: no trail node farther than maxEdgeKm beeline from every hut can
-ever appear on a valid hut-to-hut/hut-to-start edge (build_hub_edges.py's real-distance cutoff can
-only be >= beeline distance), so anything outside it is provably irrelevant - the same bound
-filter_start_points.py already applies to station/parking points.
+"""Computes the "hub range" - the union of a graph.maxEdgeKm-radius circle around every hut in
+huts.geojson - and writes it as a GeoJSON Polygon/MultiPolygon to data/osm/hub_range.geojson.
+filter_trails.py clips each region's trail extract to this shape via `osmium extract --polygon`:
+no trail farther than maxEdgeKm beeline from every hut can ever appear on a valid hut-to-hut/
+hut-to-start edge (build_hub_edges.py's real-distance cutoff can only be >= beeline distance) -
+the same bound filter_start_points.py already applies to station/parking points.
 
-A single bounding rectangle (not a tighter per-hut-buffered union of circles) trades some over-
-inclusion at the corners for a plain `osmium extract --bbox` in filter_trails.py - acceptable here
-because the point is to stop paying for trail data (and, via the DEM footprint that depends on it)
-terrain nowhere near any hut, not to hit a tight bound. See lib.pipeline.bbox_from_huts()'s
-docstring for why this same rectangle shape is a poor fit for bavaria_dgm.py's tile-per-request DEM
-fetch (which already uses a real per-point buffer via tiles_for_points()).
+The radius includes HUB_RANGE_SAFETY_MARGIN (lib.pipeline) so this shape and bavaria-dgm5's
+per-hut DEM tile buffer (dem_providers/composite.py) are guaranteed to agree - see
+docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md.
 
 Usage: python pipeline/phases/preprocessing/compute_hub_range.py
 """
@@ -21,22 +18,25 @@ import json
 import sys
 from pathlib import Path
 
+from shapely.geometry import mapping
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, bbox_from_huts, load_config  # noqa: E402
+from lib.pipeline import HUB_RANGE_SAFETY_MARGIN, OSM_DIR, hub_range_polygon, load_config  # noqa: E402
 
 config = load_config()
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+parser.add_argument("--osm-dir", type=Path, default=OSM_DIR)
 args = parser.parse_args()
 
-deg_per_km = 1 / 111.320  # same approximation filter_start_points.py uses
-buffer_deg = args.max_edge_km * deg_per_km
+radius_km = args.max_edge_km * HUB_RANGE_SAFETY_MARGIN
+polygon = hub_range_polygon(args.osm_dir / "huts.geojson", radius_km)
 
-hub_range = bbox_from_huts(OSM_DIR / "huts.geojson", buffer_deg=buffer_deg)
-
-out_path = OSM_DIR / "hub_range.json"
+out_path = args.osm_dir / "hub_range.geojson"
 with open(out_path, "w", encoding="utf-8") as f:
-    json.dump(hub_range, f)
-print(f"hub range (maxEdgeKm={args.max_edge_km} -> {buffer_deg:.3f} deg buffer): {hub_range}")
+    json.dump(mapping(polygon), f)
+print(f"hub range (maxEdgeKm={args.max_edge_km} -> {radius_km:.3f} km radius, "
+      f"{'MultiPolygon' if polygon.geom_type == 'MultiPolygon' else 'Polygon'}): "
+      f"{len(polygon.geoms) if polygon.geom_type == 'MultiPolygon' else 1} piece(s)")
 print(f"written {out_path}")

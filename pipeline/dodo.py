@@ -196,7 +196,7 @@ def task_compute_hub_range():
              "default": CONFIG["graph"]["maxEdgeKm"]},
         ],
         "file_dep": [str(OSM_DIR / "huts.geojson")],
-        "targets": [str(OSM_DIR / "hub_range.json")],
+        "targets": [str(OSM_DIR / "hub_range.geojson")],
         "uptodate": [TaskOptionsChanged()],
     }
 
