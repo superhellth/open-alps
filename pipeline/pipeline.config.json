@@ -18,6 +18,10 @@
     "providerConfig": {
       "regions": [
         {
+          "provider": "copernicus-glo-30",
+          "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 }
+        },
+        {
           "provider": "bavaria-dgm5",
           "bbox": { "minLng": 8.9, "maxLng": 13.9, "minLat": 47.2, "maxLat": 50.6 },
           "bboxFromHuts": true
