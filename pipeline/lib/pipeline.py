@@ -2,12 +2,16 @@
 one source of truth for hyperparameters (bbox, regions, tag filter, graph thresholds)."""
 
 import json
+import math
 import platform
 import re
 import shlex
 import shutil
 import subprocess
 from pathlib import Path
+
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = SCRIPTS_DIR.parent
@@ -226,3 +230,49 @@ def bbox_from_huts(huts_path, filter_bbox=None, buffer_deg=0.05):
         "minLat": min(lats) - buffer_deg,
         "maxLat": max(lats) + buffer_deg,
     }
+
+
+# Safety margin applied by callers ON TOP OF graph.maxEdgeKm before passing radius_km to
+# circle_polygon()/hub_range_polygon() (compute_hub_range.py) and into bavaria-dgm5's per-hut
+# tile buffer (dem_providers/composite.py) - the ONE place both sides' radius is derived from, so
+# they cannot independently drift the way the old bufferKm/bufferDeg mismatch did
+# (docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md). Covers circle_polygon's
+# n_points=32 polygon-approximation shortfall at the flat spots between vertices
+# (cos(pi/32) ~= 0.9952, ~0.5% under the true radius there) plus a little headroom - tile-grid
+# quantization (bavaria_dgm.tiles_for_utm_bounds) already rounds outward and needs no
+# compensation.
+HUB_RANGE_SAFETY_MARGIN = 1.01
+
+
+def circle_polygon(lng: float, lat: float, radius_km: float, n_points: int = 32) -> Polygon:
+    """Approximates a real-world radius_km circle around (lng, lat) as an n_points-vertex
+    polygon, using per-point local flat-earth trig rather than shapely's Point.buffer() (which
+    operates in raw degree space). One degree of longitude is only cos(lat) as many real km as
+    one degree of latitude away from the equator, so a naive degree-radius buffer becomes an
+    ellipse that UNDER-covers east-west at any latitude away from the equator - exactly the wrong
+    direction for a bound meant to be a safe over-approximation. Flat-earth error at
+    graph.maxEdgeKm's ~30km scale is negligible, and this is computed per-hut-locally (using that
+    hut's own latitude), not from one global scale factor, so it stays accurate everywhere in the
+    pipeline's scope."""
+    deg_per_km_lat = 1 / 111.320
+    deg_per_km_lng = 1 / (111.320 * math.cos(math.radians(lat)))
+    ring = [
+        (
+            lng + radius_km * math.sin(theta) * deg_per_km_lng,
+            lat + radius_km * math.cos(theta) * deg_per_km_lat,
+        )
+        for theta in (2 * math.pi * i / n_points for i in range(n_points))
+    ]
+    ring.append(ring[0])
+    return Polygon(ring)
+
+
+def hub_range_polygon(huts_path, radius_km: float, n_points: int = 32):
+    """Unions a circle_polygon() (real-world radius_km) around every hut in huts_path into one
+    (Multi)Polygon - the shape filter_trails.py clips trail extraction to, and (via the same
+    radius_km) what bavaria-dgm5's per-hut DEM tile buffer must at least match. Returns a Polygon
+    when hut circles overlap enough to merge, a MultiPolygon otherwise - callers must handle
+    both (shapely.geometry.mapping() does, transparently)."""
+    points = hut_points(huts_path)
+    circles = [circle_polygon(lng, lat, radius_km, n_points) for lng, lat in points]
+    return unary_union(circles)
