@@ -115,6 +115,8 @@ def main():
     result = {
         "caveat": "routed under the distance cost with roadPenaltyFactor active; the time-based "
                   "cost of spec A1 can only increase these shares. Floor, not prediction.",
+        # .get(), not [] - roadPenaltyFactor is deleted from config post-rebuild (spec A3), and
+        # None here is the correct post-rebuild value, not a masked missing-key bug.
         "road_penalty_factor_at_build_time": load_config()["graph"].get("roadPenaltyFactor"),
         "road_highway_tags": load_config()["graph"]["roadHighwayTags"],
     }

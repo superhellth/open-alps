@@ -8,7 +8,6 @@
   "graph": {
     "maxEdgeKm": 30,
     "maxSnapM": 100,
-    "roadPenaltyFactor": 1.3,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
     "tileSizeKm": 60
   },
