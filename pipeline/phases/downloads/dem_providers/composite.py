@@ -20,7 +20,7 @@ from pathlib import Path
 from . import get_provider
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
-from lib.pipeline import OSM_DIR, edge_points, hut_points  # noqa: E402
+from lib.pipeline import HUB_RANGE_SAFETY_MARGIN, OSM_DIR, edge_points, hut_points  # noqa: E402
 
 
 def _points_for_region(filter_bbox: dict) -> list[list[float]]:
@@ -34,11 +34,14 @@ def _points_for_region(filter_bbox: dict) -> list[list[float]]:
     return hut_points(OSM_DIR / "huts.geojson", filter_bbox=filter_bbox)
 
 
-def fetch_regions(provider_config: dict, dem_dir: Path) -> list[dict]:
+def fetch_regions(provider_config: dict, dem_dir: Path, max_edge_km: float) -> list[dict]:
     """Resolves each configured region's bbox/points and downloads its raw tiles, returning a
     JSON-serializable manifest ([{"provider", "raw_dir", "region_vrt", "tile_paths"}, ...]) -
     lib.pipeline.build_dem_vrt() consumes this to do the actual reprojection/merge, with no
-    network access of its own. See module docstring for why fetch and build are separate scripts."""
+    network access of its own. max_edge_km (graph.maxEdgeKm) sizes any bboxFromHuts region's
+    per-hut buffer - see HUB_RANGE_SAFETY_MARGIN's docstring for why this must be the same value
+    compute_hub_range.py uses for filter_trails.py's clip, not an independently-set number. See
+    module docstring for why fetch and build are separate scripts."""
     manifest = []
     for i, region_config in enumerate(provider_config["regions"]):
         if region_config.get("bboxFromHuts"):
@@ -48,7 +51,11 @@ def fetch_regions(provider_config: dict, dem_dir: Path) -> list[dict]:
             # `_resolve_region_bbox()` did that dead work anyway (removed 2026-08-22, found while
             # debugging add_base_elevation's DEM-coverage gap - see
             # docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md open question 5).
-            region_config = {**region_config, "points": _points_for_region(region_config["bbox"])}
+            region_config = {
+                **region_config,
+                "points": _points_for_region(region_config["bbox"]),
+                "bufferKm": max_edge_km * HUB_RANGE_SAFETY_MARGIN,
+            }
         provider = get_provider(region_config["provider"])
         raw_dir = dem_dir / "raw" / f"region_{i}_{region_config['provider']}"
         region_vrt = dem_dir / f"region_{i}_{region_config['provider']}.vrt"

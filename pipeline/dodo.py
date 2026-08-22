@@ -289,16 +289,24 @@ def task_build_hub_edges():
 
 def task_fetch_dem():
     return {
-        "actions": [py("phases/downloads/fetch_dem.py")],
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "downloads" / "fetch_dem.py"}"'
+            " --max-edge-km %(max_edge_km)s"
+        ],
         # fetch_dem.py reads config["dem"] (provider name + provider-specific nested config) and
         # config["bbox"] directly - neither is a sensible CLI flag, so these params exist only to
         # track them via TaskOptionsChanged instead of the whole pipeline.config.json file - keep
-        # the key paths here in sync with what the script actually reads.
+        # the key paths here in sync with what the script actually reads. max_edge_km IS a real
+        # flag (unlike the two above) - it sizes bavaria-dgm5's per-hut buffer (see
+        # dem_providers/composite.py's fetch_regions), so a maxEdgeKm change must invalidate this
+        # task too, not just compute_hub_range/filter_trails.
         "params": [
             {"name": "dem_json", "long": "dem-json", "type": str,
              "default": json.dumps(CONFIG["dem"], sort_keys=True)},
             {"name": "bbox_json", "long": "bbox-json", "type": str,
              "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
+            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
+             "default": CONFIG["graph"]["maxEdgeKm"]},
         ],
         "targets": [str(DEM_DIR / "fetch_manifest.json")],
         "uptodate": [TaskOptionsChanged()],

@@ -16,6 +16,7 @@ entirely on a build-only rerun, not just the actual downloads.
 Usage: python pipeline/phases/downloads/fetch_dem.py
 """
 
+import argparse
 import json
 import sys
 from pathlib import Path
@@ -26,6 +27,11 @@ from dem_providers import get_provider  # noqa: E402
 from lib.pipeline import DEM_DIR, load_config  # noqa: E402
 
 config = load_config()
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+args = parser.parse_args()
+
 dem_config = config["dem"]
 provider_name = dem_config.get("provider", "copernicus-glo-30")
 
@@ -36,7 +42,7 @@ DEM_DIR.mkdir(parents=True, exist_ok=True)
 
 if provider_name == "composite":
     from dem_providers.composite import fetch_regions  # noqa: E402
-    manifest = fetch_regions(provider_config, DEM_DIR)
+    manifest = fetch_regions(provider_config, DEM_DIR, max_edge_km=args.max_edge_km)
 else:
     print(f"fetching DEM tiles via provider {provider_name!r} ...")
     provider = get_provider(provider_name)
