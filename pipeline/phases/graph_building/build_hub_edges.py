@@ -14,6 +14,7 @@ import math
 import os
 import sys
 import time
+from collections import namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -235,6 +236,21 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         ]
         for e in subgraph.local_edges
     ]
+    # Absolute elevation, not a delta - max over the edge's own two endpoints plus every interior
+    # point, so a col strictly between two graph nodes (not itself a vertex, after
+    # build_base_graph.py's structural contraction) is still caught. A mid-chain snap inherits its
+    # parent's value on both synthetic halves rather than re-deriving one per half (no per-point
+    # elevation survives split_edge_at_point's distance-ratio apportionment, same limitation
+    # ascent_m/descent_m already accept there - spec C9).
+    node_ele = subgraph.local_node_ele
+    max_ele_ms = [
+        float(max(
+            node_ele[e["u"]], node_ele[e["v"]],
+            *(subgraph.interior_ele[e["interior_offset"]:e["interior_offset"] + e["interior_count"]]
+              .tolist() or [float("-inf")]),
+        ))
+        for e in subgraph.local_edges
+    ]
     kept_mask = (
         [True] * len(subgraph.local_edges) if edge_mask is None else edge_mask.tolist()
     )
@@ -259,6 +275,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         base_via_ferrata = bool(subgraph.local_edges["via_ferrata"][ei])
         base_constrained_ok = bool(subgraph.local_edges["constrained_ok"][ei])
         base_kept = kept_mask[ei]
+        base_max_ele = max_ele_ms[ei]
         edges_uv.append((u, vid))
         weights.append(split.dist_to_u)
         dists.append(split.dist_to_u)
@@ -273,6 +290,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_u))
         kept_mask.append(base_kept)
+        max_ele_ms.append(base_max_ele)
         edges_uv.append((vid, v))
         weights.append(split.dist_to_v)
         dists.append(split.dist_to_v)
@@ -287,6 +305,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_v))
         kept_mask.append(base_kept)
+        max_ele_ms.append(base_max_ele)
         hub_vertex[hub_key] = vid
 
     n_orig = len(subgraph.local_edges)
@@ -299,24 +318,41 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         "weight": _filter(weights), "dist": _filter(dists), "time_s": _filter(times),
         "road_m": _filter(road_ms), "ungraded_m": _filter(ungraded_ms),
         "inferred_m": _filter(inferred_ms), "ascent_m": _filter(ascent_ms),
-        "descent_m": _filter(descent_ms),
+        "descent_m": _filter(descent_ms), "max_ele_m": _filter(max_ele_ms),
         "sac_rank": _filter(sac_ranks), "via_ferrata": _filter(via_ferratas),
         "constrained_ok": _filter(constrained_oks), "interior": _filter(interiors),
     }, directed=False)
     return graph, hub_vertex, vertex_coords
 
 
-def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int):
-    """Walks the weight-shortest src_v->tgt_v path (road-penalized, mirroring
-    build_hut_graph.py's pass2) and returns (trail_coords, distance_m, road_m, sac_rank,
-    via_ferrata) - trail_coords excludes the hub endpoints themselves, which the caller
-    prepends/appends."""
+PathResult = namedtuple(
+    "PathResult",
+    "coords distance_m road_m ungraded_m inferred_m ascent_m descent_m max_ele_m sac_rank "
+    "via_ferrata",
+)
+
+
+def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
+    """Walks the time-shortest src_v->tgt_v path (spec A3/A1 - `weight` == `time_s`) and
+    accumulates every scalar RECORD_DTYPE needs off the SAME edges the router used (spec B3:
+    routing and display cannot disagree, because they are the same numbers). `coords` excludes
+    the hub endpoints themselves, which the caller prepends/appends.
+
+    ascent_m/descent_m are stored per base-graph edge in a fixed u->v direction (spec-neutral, not
+    tied to any particular traversal), so a path walking an edge v->u must swap them - otherwise a
+    descent reported for the forward direction would silently become the reported ascent for the
+    reverse one."""
     if src_v == tgt_v:
-        return [], 0.0, 0.0, -1, False
+        return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False)
     epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
     trail_coords = []
     distance_m = 0.0
     road_m = 0.0
+    ungraded_m = 0.0
+    inferred_m = 0.0
+    ascent_m = 0.0
+    descent_m = 0.0
+    max_ele_m = float("-inf")
     max_sac_rank = -1
     has_via_ferrata = False
     cur = src_v
@@ -329,13 +365,22 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int):
         trail_coords.extend(interior)
         distance_m += e["dist"]
         road_m += e["road_m"]
+        ungraded_m += e["ungraded_m"]
+        inferred_m += e["inferred_m"]
+        ascent_m += e["ascent_m"] if forward else e["descent_m"]
+        descent_m += e["descent_m"] if forward else e["ascent_m"]
+        if e["max_ele_m"] > max_ele_m:
+            max_ele_m = e["max_ele_m"]
         if e["sac_rank"] > max_sac_rank:
             max_sac_rank = e["sac_rank"]
         if e["via_ferrata"]:
             has_via_ferrata = True
         cur = nxt
     trail_coords.append(vertex_coords[cur])
-    return trail_coords, distance_m, road_m, max_sac_rank, has_via_ferrata
+    return PathResult(
+        trail_coords, distance_m, road_m, ungraded_m, inferred_m, ascent_m, descent_m,
+        max_ele_m, max_sac_rank, has_via_ferrata,
+    )
 
 
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
@@ -428,24 +473,24 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                         continue
                     seen_hut_pairs.add(pair_key)
                 with timer.step("paths"):
-                    trail_coords, distance_m, road_m, sac_rank, via_ferrata = _path_for(
-                        graph, vertex_coords, src_v, tv
-                    )
+                    path = _path_for(graph, vertex_coords, src_v, tv)
                 # spec C8: the cutoff above ran on `dist`, but `_path_for` walks the TIME-shortest
                 # path, whose distance_m can exceed the cap - re-check on the routed path itself.
-                if distance_m > max_edge_m:
+                if path.distance_m > max_edge_m:
                     continue
-                geometry = [(hub["lon"], hub["lat"]), *trail_coords, (t["lon"], t["lat"])]
+                geometry = [(hub["lon"], hub["lat"]), *path.coords, (t["lon"], t["lat"])]
                 records.append({
                     "from_id": hub["id"], "from_type": hub["type"],
                     "to_id": t["id"], "to_type": t["type"],
                     "variant": variant.code,
-                    "distance_m": float(distance_m),
-                    "road_m": float(road_m),
-                    "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
-                    "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
-                    "sac_rank": int(sac_rank),
-                    "via_ferrata": bool(via_ferrata),
+                    "distance_m": float(path.distance_m),
+                    "road_m": float(path.road_m),
+                    "ascent_m": float(path.ascent_m), "descent_m": float(path.descent_m),
+                    "max_ele_m": float(path.max_ele_m) if np.isfinite(path.max_ele_m) else 0.0,
+                    "ungraded_m": float(path.ungraded_m), "inferred_m": float(path.inferred_m),
+                    "snap_m": 0.0,
+                    "sac_rank": int(path.sac_rank),
+                    "via_ferrata": bool(path.via_ferrata),
                     "geometry": geometry,
                 })
     return records

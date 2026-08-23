@@ -24,6 +24,15 @@ class LocalSubgraph:
     local_nodes: np.ndarray
     local_edges: np.ndarray
     interior: np.ndarray
+    # Absolute elevation (m) per point, aligned with local_nodes / the full interior array
+    # respectively - not deltas (those live on local_edges as ascent_m/descent_m already).
+    # Needed separately because a path's max elevation (max_ele_m, spec D1) can't be recovered
+    # from per-edge ascent/descent sums alone: a col midway along a chain edge would be invisible
+    # to a signed-delta sum, only to the absolute profile. Zeros (never None) when
+    # node_ele.npy/interior_ele.npy don't exist yet (pre-elevation-pass base graph, or a test
+    # fixture) so callers never need a None check.
+    local_node_ele: np.ndarray
+    interior_ele: np.ndarray
 
 
 def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: float) -> LocalSubgraph:
@@ -34,6 +43,12 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
     node_edge_ids = binfmt.load_array(base_graph_dir / "node_edge_ids.npy")
     edges = binfmt.load_array(base_graph_dir / "edges.npy")
     interior = binfmt.load_array(base_graph_dir / "interior.npy")
+    node_ele_path = base_graph_dir / "node_ele.npy"
+    interior_ele_path = base_graph_dir / "interior_ele.npy"
+    node_ele = (binfmt.load_array(node_ele_path) if node_ele_path.exists()
+                else np.zeros(len(nodes), dtype=np.float32))
+    interior_ele = (binfmt.load_array(interior_ele_path) if interior_ele_path.exists()
+                     else np.zeros(len(interior), dtype=np.float32))
 
     padded = grid.padded_bounds(cell_id, buffer_km)
     overlapping_cells = grid.cell_ids_overlapping(padded)
@@ -84,4 +99,7 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
         # copying the whole (hundreds of MB for AT+Bayern) array on every call - only the slices
         # snap_hub_to_subgraph actually touches get paged in.
         interior=interior,
+        local_node_ele=np.array(node_ele[global_node_ids]),
+        # same "stay a lazy view, indexed by the untouched global offsets" reasoning as interior.
+        interior_ele=interior_ele,
     )

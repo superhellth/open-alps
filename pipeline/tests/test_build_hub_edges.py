@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
@@ -12,8 +13,8 @@ from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    _build_igraph_with_snaps, _write_edge_output, compute_hub_edges_for_cell, merge_and_dedup,
-    snap_hub_to_subgraph,
+    _build_igraph_with_snaps, _path_for, _write_edge_output, compute_hub_edges_for_cell,
+    merge_and_dedup, snap_hub_to_subgraph,
 )
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
@@ -35,6 +36,8 @@ def _line_subgraph():
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
     )
 
 
@@ -69,6 +72,8 @@ def _line_subgraph_with_interior():
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
     )
 
 
@@ -188,6 +193,8 @@ def _two_edge_subgraph():
     return LocalSubgraph(
         global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
         interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
     )
 
 
@@ -238,6 +245,8 @@ def _line_subgraph_t2_graded():
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
     )
 
 
@@ -307,6 +316,8 @@ def test_a_variant_with_no_obeying_path_emits_no_record():
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
     )
     core_hubs = [
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
@@ -317,3 +328,72 @@ def test_a_variant_with_no_obeying_path_emits_no_record():
         variants=[variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
     )
     assert records == []
+
+
+def _col_subgraph():
+    # 3 nodes in a line; node 1 (the middle) sits ABOVE both endpoints - a col. Edge 0->1 climbs
+    # 500m (ascent), edge 1->2 drops 300m (descent); edge 0 also carries ungraded/inferred metres
+    # so the summing test has something to sum.
+    nodes = np.zeros(3, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    nodes[2] = (0.018, 0.0, 0)
+    edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
+    # u, v, dist, road_m, ungraded_m, inferred_m, time_s, ascent_m, descent_m, sac_rank,
+    # via_ferrata, constrained_ok, interior_offset, interior_count, edge_id
+    edges[0] = (0, 1, 1000.0, 0.0, 100.0, 0.0, 500.0, 500.0, 0.0, -1, False, True, 0, 0, 0)
+    edges[1] = (1, 2, 1000.0, 0.0, 0.0, 50.0, 300.0, 0.0, 300.0, -1, False, True, 0, 0, 1)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.array([1000.0, 1500.0, 1200.0], dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+
+
+def test_path_sums_ungraded_and_inferred_metres_like_road_m():
+    subgraph = _col_subgraph()
+    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    result = _path_for(graph, vertex_coords, 0, 2)
+    assert result.ungraded_m == pytest.approx(100.0)
+    assert result.inferred_m == pytest.approx(50.0)
+
+
+def test_constrained_row_paths_have_zero_ungraded_metres():
+    # the invariant the whole passability design rests on (spec C4/D1)
+    subgraph = _line_subgraph_t2_graded()
+    mask = variants.edge_mask(subgraph.local_edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
+    graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, {}, edge_mask=mask)
+    result = _path_for(graph, vertex_coords, 0, 1)
+    assert result.ungraded_m == 0.0
+
+
+def test_max_ele_is_the_path_maximum_not_an_endpoint():
+    # a path over a col must report the col, not the higher of the two huts
+    subgraph = _col_subgraph()
+    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    result = _path_for(graph, vertex_coords, 0, 2)
+    ele_at_src, ele_at_tgt = 1000.0, 1200.0
+    assert result.max_ele_m > max(ele_at_src, ele_at_tgt)
+    assert result.max_ele_m == pytest.approx(1500.0)
+
+
+def test_ascent_and_descent_swap_on_reverse_traversal():
+    subgraph = _col_subgraph()
+    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    fwd = _path_for(graph, vertex_coords, 0, 2)
+    rev = _path_for(graph, vertex_coords, 2, 0)
+    assert rev.ascent_m == pytest.approx(fwd.descent_m)
+    assert rev.descent_m == pytest.approx(fwd.ascent_m)
+
+
+def test_ascent_is_the_sum_the_router_used():
+    # spec B3: routing and display cannot disagree, because they are the same numbers - a
+    # straight 0->1->2 line where every edge is traversed forward, so the sum of each edge's own
+    # ascent_m attr (what the router's path actually walked) must equal the reported total.
+    subgraph = _col_subgraph()
+    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    epath = graph.get_shortest_paths(0, to=2, weights="weight", output="epath")[0]
+    result = _path_for(graph, vertex_coords, 0, 2)
+    assert result.ascent_m == pytest.approx(sum(graph.es[e]["ascent_m"] for e in epath))

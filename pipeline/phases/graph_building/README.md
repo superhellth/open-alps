@@ -108,9 +108,22 @@ worker module in each child). Each worker, independently:
    while directional access→hut records are kept as-is (a station/parking point is always stored
    as the origin, never merged symmetrically with a hut).
 
-**Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`; `ascent_m`/`descent_m`/`max_ele_m`/
-`ungraded_m`/`inferred_m`/`snap_m`/`profile_*` left at `0`/`UNSET` here, filled in by the
-elevation-pass scripts under `phases/elevation/`):
+**Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`). `distance_m`/`road_m`/`ascent_m`/
+`descent_m`/`max_ele_m`/`ungraded_m`/`inferred_m`/`sac_rank`/`via_ferrata` are all accumulated
+directly off the SAME base-graph edges the router walked (`_path_for()`'s `PathResult`, spec B3 -
+routing and display can't disagree because they're the same numbers), so they're only meaningful
+once `phases/elevation/compute_edge_profiles.py` has already filled `ascent_m`/`descent_m` on the
+base graph and `phases/elevation/sample_base_elevation.py` has filled `node_ele.npy`/
+`interior_ele.npy` (`lib/subgraph.py`'s `gather_padded_subgraph()` reads both, defaulting to zeros
+if they don't exist yet - a base graph without an elevation pass still gets valid `dist`/`road_m`/
+`ungraded_m`/`inferred_m` records, just with `ascent_m`/`descent_m`/`max_ele_m` at 0). `ascent_m`/
+`descent_m` swap per edge when a path traverses it v→u instead of u→v, since the base graph stores
+them in a fixed direction. `max_ele_m` is a per-edge max over both endpoints' and every interior
+point's absolute elevation, not a delta, so a col strictly inside one contracted base-graph edge
+(not itself a graph vertex) is still caught; a mid-chain hub snap inherits its parent edge's
+`max_ele_m` on both synthetic halves rather than re-deriving one per half (same limitation
+`ascent_m`/`descent_m`/`sac_rank`/`via_ferrata` already accept there, spec C9). `snap_m` and
+`profile_offset`/`profile_count` are left at `0`/`UNSET`, filled in by a later pass.
 
 - `data/osm/hut_edges/{records.npy, geometry.npy}` — hut-to-hut edges, one record per
   `(pair, variant)`.
