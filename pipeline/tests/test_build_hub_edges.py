@@ -11,7 +11,7 @@ from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph,
+    _build_igraph_with_snaps, compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph,
 )
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
@@ -163,6 +163,40 @@ def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
     assert len(records) == 1
     assert records[0]["from_type"] == binfmt.TYPE_STATION
     assert records[0]["to_type"] == binfmt.TYPE_HUT
+
+
+def _two_edge_subgraph():
+    # 3 nodes in a line, two distinct edges (0-1, 1-2) with different time_s, so the mask test
+    # can drop one edge and the weight test can check every edge's weight against its own time_s.
+    nodes = np.zeros(3, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    nodes[2] = (0.018, 0.0, 0)
+    edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 100.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 0)
+    edges[1] = (1, 2, 1000.0, 0.0, 0.0, 0.0, 200.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 1)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+    )
+
+
+def test_igraph_routes_on_time_not_distance():
+    subgraph = _two_edge_subgraph()
+    graph, hub_vertex, coords = _build_igraph_with_snaps(subgraph, {})
+    assert graph.es["weight"] == graph.es["time_s"]
+
+
+def test_edge_mask_removes_edges_from_the_built_graph():
+    subgraph = _two_edge_subgraph()
+    graph_all, _, _ = _build_igraph_with_snaps(subgraph, {}, edge_mask=None)
+    graph_filtered, _, _ = _build_igraph_with_snaps(
+        subgraph, {}, edge_mask=np.array([True, False])
+    )
+    assert graph_filtered.ecount() < graph_all.ecount()
 
 
 def test_compute_hub_edges_for_cell_fills_the_step_timer():

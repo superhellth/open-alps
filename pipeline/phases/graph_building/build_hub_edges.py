@@ -199,20 +199,31 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
     return SnapResult(edge_local_index=edge_local_index, split=split)
 
 
-def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
+def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask: np.ndarray = None):
     """hub_snaps: {hub_key: SnapResult}. Returns (graph, hub_key -> igraph vertex id,
     vertex_id -> (lon, lat) for every vertex including virtual snap points), inserting a
     virtual vertex per mid-chain snap (edge_local_index != None). Edge attrs carry everything
-    pass-2 path reconstruction needs (dist/road_m/sac_rank/via_ferrata/interior polyline), same
-    fields build_hut_graph.py's pass2 reads off its contracted chain edges."""
+    pass-2 path reconstruction needs (dist/road_m/ungraded_m/inferred_m/ascent_m/descent_m/
+    sac_rank/via_ferrata/interior polyline), same fields build_hut_graph.py's pass2 reads off its
+    contracted chain edges.
+
+    Routes on time_s (spec A3/A1) - EDGE_DTYPE dropped the road-penalised `weight` column and
+    add_base_elevation.py fills time_s for every edge.
+
+    edge_mask: optional boolean array over subgraph.local_edges (lib/variants.py's edge_mask()),
+    ANDed into the existing mid-chain-snap `_filter` so a constrained row's igraph never contains
+    an edge that row forbids. A snap that split a masked-out edge inherits its parent's mask value
+    on both synthetic halves - a hub cannot snap its way onto forbidden terrain."""
     n_base = len(subgraph.local_nodes)
     edges_uv = list(zip(subgraph.local_edges["u"].tolist(), subgraph.local_edges["v"].tolist()))
-    # Routes on real distance for now - EDGE_DTYPE dropped the road-penalised `weight` column
-    # (spec A3) and time_s isn't populated until compute_edge_profiles.py runs; lib/variants.py
-    # switches this to time_s once it exists.
     dists = subgraph.local_edges["dist"].tolist()
-    weights = list(dists)
+    times = subgraph.local_edges["time_s"].tolist()
+    weights = list(times)
     road_ms = subgraph.local_edges["road_m"].tolist()
+    ungraded_ms = subgraph.local_edges["ungraded_m"].tolist()
+    inferred_ms = subgraph.local_edges["inferred_m"].tolist()
+    ascent_ms = subgraph.local_edges["ascent_m"].tolist()
+    descent_ms = subgraph.local_edges["descent_m"].tolist()
     sac_ranks = subgraph.local_edges["sac_rank"].tolist()
     via_ferratas = subgraph.local_edges["via_ferrata"].tolist()
     interiors = [
@@ -222,6 +233,9 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
         ]
         for e in subgraph.local_edges
     ]
+    kept_mask = (
+        [True] * len(subgraph.local_edges) if edge_mask is None else edge_mask.tolist()
+    )
 
     vertex_coords = {i: (float(n["lon"]), float(n["lat"])) for i, n in enumerate(subgraph.local_nodes)}
 
@@ -241,30 +255,46 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
         vertex_coords[vid] = split.split_coord
         base_sac_rank = int(subgraph.local_edges["sac_rank"][ei])
         base_via_ferrata = bool(subgraph.local_edges["via_ferrata"][ei])
+        base_kept = kept_mask[ei]
         edges_uv.append((u, vid))
         weights.append(split.dist_to_u)
         dists.append(split.dist_to_u)
+        times.append(split.dist_to_u)
         road_ms.append(split.road_m_to_u)
+        ungraded_ms.append(split.ungraded_m_to_u)
+        inferred_ms.append(split.inferred_m_to_u)
+        ascent_ms.append(0.0)
+        descent_ms.append(0.0)
         sac_ranks.append(base_sac_rank)
         via_ferratas.append(base_via_ferrata)
         interiors.append(list(split.interior_to_u))
+        kept_mask.append(base_kept)
         edges_uv.append((vid, v))
         weights.append(split.dist_to_v)
         dists.append(split.dist_to_v)
+        times.append(split.dist_to_v)
         road_ms.append(split.road_m_to_v)
+        ungraded_ms.append(split.ungraded_m_to_v)
+        inferred_ms.append(split.inferred_m_to_v)
+        ascent_ms.append(0.0)
+        descent_ms.append(0.0)
         sac_ranks.append(base_sac_rank)
         via_ferratas.append(base_via_ferrata)
         interiors.append(list(split.interior_to_v))
+        kept_mask.append(base_kept)
         hub_vertex[hub_key] = vid
 
     n_orig = len(subgraph.local_edges)
 
     def _filter(lst):
-        kept = [x for i, x in enumerate(lst[:n_orig]) if i not in edges_to_remove]
-        return kept + lst[n_orig:]
+        kept = [x for i, x in enumerate(lst[:n_orig]) if i not in edges_to_remove and kept_mask[i]]
+        return kept + [x for i, x in enumerate(lst[n_orig:], start=n_orig) if kept_mask[i]]
 
     graph = ig.Graph(n=next_vertex, edges=_filter(edges_uv), edge_attrs={
-        "weight": _filter(weights), "dist": _filter(dists), "road_m": _filter(road_ms),
+        "weight": _filter(weights), "dist": _filter(dists), "time_s": _filter(times),
+        "road_m": _filter(road_ms), "ungraded_m": _filter(ungraded_ms),
+        "inferred_m": _filter(inferred_ms), "ascent_m": _filter(ascent_ms),
+        "descent_m": _filter(descent_ms),
         "sac_rank": _filter(sac_ranks), "via_ferrata": _filter(via_ferratas),
         "interior": _filter(interiors),
     }, directed=False)
