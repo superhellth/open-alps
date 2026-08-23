@@ -45,3 +45,20 @@ def test_build_profiles_never_declares_the_dem():
     # spec B4: profilePoints retuning must not force a re-route or a DEM read
     deps = dodo.task_build_profiles()["file_dep"]
     assert not any("dem" in d for d in deps)
+
+
+def test_build_hub_edges_tracks_the_variant_grid():
+    # build_hub_edges.py reads config["graph"]["variants"] directly (variants_lib.enabled_variants)
+    # with no corresponding CLI flag, so without a tracked param a three-row -> four-row config
+    # edit leaves TaskOptionsChanged() reporting "up to date" and silently skips the rebuild.
+    param_names = {p["name"] for p in dodo.task_build_hub_edges()["params"]}
+    assert "variants_json" in param_names
+
+
+def test_build_base_graph_and_hub_edges_track_schema_version():
+    # binfmt.SCHEMA_VERSION exists so a code-only EDGE_DTYPE/RECORD_DTYPE change (no config edit
+    # at all) still changes the tracked digest and forces a rebuild instead of needing `doit
+    # forget` by hand.
+    for task_fn in (dodo.task_build_base_graph, dodo.task_build_hub_edges):
+        param_names = {p["name"] for p in task_fn()["params"]}
+        assert "schema_version" in param_names

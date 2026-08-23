@@ -58,6 +58,12 @@ VARIANT_NAMES = {
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
 
+# Bump on any EDGE_DTYPE/RECORD_DTYPE change. Tracked as a dodo.py task param (see
+# task_build_base_graph/task_build_hub_edges) purely so TaskOptionsChanged sees a code-only dtype
+# change and forces a rebuild - there is no CLI flag for it, the same "tracking-only param" pattern
+# already used for regions_json/bbox_json.
+SCHEMA_VERSION = 2
+
 
 def save_array(path: Path, array: np.ndarray) -> None:
     path = Path(path)

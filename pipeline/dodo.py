@@ -38,6 +38,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lib import binfmt  # noqa: E402
 from lib.pipeline import DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
 
 
@@ -272,6 +273,10 @@ def task_build_base_graph():
         "params": [
             {"name": "tile_size_km", "long": "tile-size-km", "type": float,
              "default": CONFIG["graph"]["tileSizeKm"]},
+            # tracking-only, no CLI flag (see binfmt.SCHEMA_VERSION's docstring): a code-only
+            # EDGE_DTYPE change must still force this task's multi-hour rebuild.
+            {"name": "schema_version", "long": "schema-version", "type": int,
+             "default": binfmt.SCHEMA_VERSION},
         ],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
         "targets": [str(OSM_DIR / "base_graph" / "manifest.json")],
@@ -295,6 +300,14 @@ def task_build_hub_edges():
              "default": CONFIG["graph"]["maxSnapM"]},
             {"name": "max_snap_ascent_m", "long": "max-snap-ascent-m", "type": float,
              "default": CONFIG["graph"]["maxSnapAscentM"]},
+            # tracking-only, no CLI flag: build_hub_edges.py reads config["graph"]["variants"]
+            # directly (variants_lib.enabled_variants), so without this a three-row -> four-row
+            # grid edit would report "up to date" and silently skip the rebuild.
+            {"name": "variants_json", "long": "variants-json", "type": str,
+             "default": json.dumps(CONFIG["graph"]["variants"], sort_keys=True)},
+            # tracking-only, no CLI flag: see task_build_base_graph's schema_version param.
+            {"name": "schema_version", "long": "schema-version", "type": int,
+             "default": binfmt.SCHEMA_VERSION},
         ],
         # task_dep (not just file_dep) on compute_edge_profiles: edges.npy's time_s/ascent_m/
         # descent_m are rewritten in place by that task but aren't one of its declared targets
