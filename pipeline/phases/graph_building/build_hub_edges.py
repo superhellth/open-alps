@@ -25,11 +25,12 @@ import numpy as np
 from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib import variants as variants_lib  # noqa: E402
 from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402
-from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
+from lib.pipeline import DEM_DIR, OSM_DIR, hut_points, load_config  # noqa: E402
 from lib.subgraph import LocalSubgraph, gather_padded_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
@@ -75,6 +76,12 @@ class SnapResult:
     node_index: int = None
     edge_local_index: int = None
     split: object = None  # lib.edge_split.SplitResult, only set when node_index is None
+    # Straight-line hub-to-trail distance (spec E3: "the gap is currently free" - _path_for sums
+    # only routed edges, so this contributes zero to distance/ascent/descent unless folded in by
+    # the caller). gap_dz_m is hub_ele_m minus the snap point's own elevation (positive: hub sits
+    # above the trail); it stays 0.0 - flat, not unknown - when the caller has no hub elevation.
+    gap_m: float = 0.0
+    gap_dz_m: float = 0.0
 
 
 def _project_m(lon, lat, km_per_deg_lng: float):
@@ -161,7 +168,11 @@ def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: floa
 
 
 def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
-                          max_snap_m: float) -> SnapResult | None:
+                          max_snap_m: float, hub_ele_m: float = None) -> SnapResult | None:
+    """hub_ele_m: the hub's own elevation (spec E3), sampled from the SAME DEM as
+    local_node_ele/interior_ele so gap_dz_m measures real terrain rather than the offset between
+    two independently-sourced elevation datasets. None (the default) means unknown - gap_dz_m
+    stays 0.0 rather than guessing."""
     # An existing graph node within range always wins over a mid-chain split, even if some
     # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
     # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
@@ -172,7 +183,9 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         )
         best_i = int(np.argmin(node_dists))
         if node_dists[best_i] <= max_snap_m:
-            return SnapResult(node_index=best_i)
+            gap_dz_m = (0.0 if hub_ele_m is None
+                        else float(hub_ele_m) - float(subgraph.local_node_ele[best_i]))
+            return SnapResult(node_index=best_i, gap_m=float(node_dists[best_i]), gap_dz_m=gap_dz_m)
 
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
@@ -194,12 +207,23 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
                 float(e["dist"]), float(e["road_m"]), float(e["ungraded_m"]),
                 float(e["inferred_m"]), seg_idx, frac,
             )
-            best_edge = (d, ei, split)
+            best_edge = (d, ei, split, e["u"], e["v"])
 
     if best_edge is None:
         return None
-    _, edge_local_index, split = best_edge
-    return SnapResult(edge_local_index=edge_local_index, split=split)
+    d, edge_local_index, split, u_idx, v_idx = best_edge
+    gap_dz_m = 0.0
+    if hub_ele_m is not None:
+        # Snap-point elevation: the same distance-ratio blend split_edge_at_point already uses to
+        # apportion ungraded_m/inferred_m across the two synthetic halves - not either endpoint's
+        # raw value, since the split point usually sits strictly between them.
+        u_ele = float(subgraph.local_node_ele[u_idx])
+        v_ele = float(subgraph.local_node_ele[v_idx])
+        total = split.dist_to_u + split.dist_to_v
+        ratio = split.dist_to_u / total if total > 0 else 0.0
+        snap_ele = u_ele + (v_ele - u_ele) * ratio
+        gap_dz_m = float(hub_ele_m) - snap_ele
+    return SnapResult(edge_local_index=edge_local_index, split=split, gap_m=float(d), gap_dz_m=gap_dz_m)
 
 
 def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask: np.ndarray = None):
@@ -422,7 +446,8 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
             key = (hub["type"], hub["id"])
             if key in snaps:
                 continue
-            snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m)
+            snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m,
+                                        hub_ele_m=hub.get("ele"))
             if snap is not None:
                 snaps[key] = snap
     timer.count("snap_hubs", len(snaps))
@@ -479,17 +504,28 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                 # path, whose distance_m can exceed the cap - re-check on the routed path itself.
                 if path.distance_m > max_edge_m:
                     continue
+                # spec E3: _path_for sums only routed edges, so the hub-to-trail gap at both ends
+                # is priced in here - it was contributing zero distance/ascent/descent otherwise.
+                src_snap = snaps[src_key]
+                tgt_snap = snaps[(t["type"], t["id"])]
+                snap_m = src_snap.gap_m + tgt_snap.gap_m
+                # Departure (src): climbing from hub up to the trail (hub below its snap point,
+                # gap_dz_m < 0) is ascent; descending down to the trail (gap_dz_m > 0) is descent.
+                # Arrival (tgt): climbing from the trail up to the hub (gap_dz_m > 0) is ascent;
+                # descending down off the trail to the hub (gap_dz_m < 0) is descent.
+                ascent_m = path.ascent_m + max(0.0, -src_snap.gap_dz_m) + max(0.0, tgt_snap.gap_dz_m)
+                descent_m = path.descent_m + max(0.0, src_snap.gap_dz_m) + max(0.0, -tgt_snap.gap_dz_m)
                 geometry = [(hub["lon"], hub["lat"]), *path.coords, (t["lon"], t["lat"])]
                 records.append({
                     "from_id": hub["id"], "from_type": hub["type"],
                     "to_id": t["id"], "to_type": t["type"],
                     "variant": variant.code,
-                    "distance_m": float(path.distance_m),
+                    "distance_m": float(path.distance_m + snap_m),
                     "road_m": float(path.road_m),
-                    "ascent_m": float(path.ascent_m), "descent_m": float(path.descent_m),
+                    "ascent_m": float(ascent_m), "descent_m": float(descent_m),
                     "max_ele_m": float(path.max_ele_m) if np.isfinite(path.max_ele_m) else 0.0,
                     "ungraded_m": float(path.ungraded_m), "inferred_m": float(path.inferred_m),
-                    "snap_m": 0.0,
+                    "snap_m": float(snap_m),
                     "sac_rank": int(path.sac_rank),
                     "via_ferrata": bool(path.via_ferrata),
                     "geometry": geometry,
@@ -557,6 +593,48 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
 
 
+def _sample_hub_elevations(dem_path: Path, hubs: list, grid: Grid, buffer_km: float = 0.2) -> None:
+    """Fills each hub dict's "ele" key in place by sampling data/dem/dem.tif at the hub's own
+    coordinate (spec E3), bilinear, per grid cell - same sampler and windowing strategy as
+    elevation/sample_base_elevation.py's node/interior pass, so a hub's elevation and its snap
+    point's elevation (node_ele.npy/interior_ele.npy, sampled from the same raster) agree on
+    terrain rather than on two independently-sourced elevation datasets. Measured 2026-08-23
+    against the ArcGIS hut layer's own `meereshoehe` field: median disagreement 3.9 m, but the
+    tail (p99 265 m) is ArcGIS's own field being missing or wrong for entries that aren't real
+    Alpine Club huts, not DEM error - and this project's snap point is already on this DEM, so
+    sampling the hub from anywhere else would just import a second dataset's noise into gap_dz_m.
+
+    Left at None when a hub falls outside DEM coverage - snap_hub_to_subgraph already treats
+    hub_ele_m=None as "unknown" (gap_dz_m stays 0.0), not "flat"."""
+    import rasterio
+    import rasterio.windows
+
+    from elevation.sample_base_elevation import sample_bilinear
+
+    by_cell = {}
+    for h in hubs:
+        by_cell.setdefault(grid.cell_id_for_point(h["lon"], h["lat"]), []).append(h)
+
+    with rasterio.open(dem_path) as dem:
+        nodata = dem.nodata
+        for cell_id, cell_hubs in by_cell.items():
+            bounds = grid.padded_bounds(cell_id, buffer_km)
+            window = rasterio.windows.from_bounds(
+                bounds["minLng"], bounds["minLat"], bounds["maxLng"], bounds["maxLat"],
+                transform=dem.transform,
+            ).round_offsets().round_lengths()
+            window = window.intersection(rasterio.windows.Window(0, 0, dem.width, dem.height))
+            if window.width <= 0 or window.height <= 0:
+                continue
+            band = dem.read(1, window=window)
+            window_transform = rasterio.windows.transform(window, dem.transform)
+            lons = np.array([h["lon"] for h in cell_hubs])
+            lats = np.array([h["lat"] for h in cell_hubs])
+            eles = sample_bilinear(band, window_transform, lons, lats)
+            for h, ele in zip(cell_hubs, eles.tolist()):
+                h["ele"] = None if (nodata is not None and ele == nodata) else float(ele)
+
+
 def _run_cell(args):
     base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
         max_snap_m, variants = args
@@ -583,6 +661,7 @@ if __name__ == "__main__":
     parser.add_argument("--out-dir", default=str(OSM_DIR))
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
     parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
+    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args()
 
@@ -603,6 +682,14 @@ if __name__ == "__main__":
         for htype, coords_by_id in all_hub_coords_by_type.items()
         for hid, (lon, lat) in coords_by_id.items()
     ]
+
+    dem_path = Path(args.dem)
+    if dem_path.exists():
+        print(f"sampling {len(all_hubs_flat):,} hub elevations from {dem_path} ...", flush=True)
+        _sample_hub_elevations(dem_path, all_hubs_flat, grid)
+    else:
+        print(f"WARNING: {dem_path} not found - snap gaps priced without a vertical component",
+              flush=True)
 
     hubs_by_cell = {}
     for hub in all_hubs_flat:

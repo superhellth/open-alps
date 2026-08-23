@@ -94,6 +94,57 @@ def test_snap_returns_none_when_out_of_range():
     assert result is None
 
 
+def test_snap_result_reports_the_gap():
+    # hub sits ~55.6m north of node 0 (0.0005 deg lat at the equator) - within max_snap_m, so the
+    # node branch wins and the gap is the straight-line hub-to-node distance (spec E3).
+    subgraph = _line_subgraph()
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0)
+    assert result.gap_m == pytest.approx(55.6, rel=0.05)
+
+
+def test_snap_gap_dz_is_zero_when_hub_elevation_is_not_given():
+    # gap_dz_m defaults to 0.0 (not unknown -> treated as flat) when the caller has no elevation
+    # for the hub - callers that don't pass hub_ele_m keep working unchanged.
+    subgraph = _line_subgraph()
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0)
+    assert result.gap_dz_m == 0.0
+
+
+def test_snap_gap_dz_is_hub_minus_snap_point_elevation():
+    subgraph = _line_subgraph()  # local_node_ele defaults to [0.0, 0.0]
+    result = snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0, hub_ele_m=940.0
+    )
+    assert result.node_index == 0
+    assert result.gap_dz_m == pytest.approx(940.0)
+
+
+def test_snap_gap_dz_mid_chain_interpolates_along_the_edge():
+    # hub snaps mid-chain, past max_snap_m of either node - snap-point elevation is the
+    # distance-ratio blend of the two endpoint elevations (same ratio split_edge_at_point already
+    # uses to apportion ungraded_m/inferred_m), not either endpoint's raw value.
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 0)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    subgraph = LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.array([1000.0, 2000.0], dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
+    )
+    # hub sits opposite the midpoint (~0.0045 lon), out of node-snap range of either endpoint
+    result = snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0045, hub_lat=0.0002, max_snap_m=50.0, hub_ele_m=1600.0
+    )
+    assert result.split is not None
+    # midpoint snap elevation ~= 1500.0 (halfway between 1000 and 2000)
+    assert result.gap_dz_m == pytest.approx(100.0, abs=5.0)
+
+
 def test_compute_hub_edges_for_cell_connects_two_huts_on_the_line():
     subgraph = _line_subgraph()
     core_hubs = [
@@ -123,6 +174,52 @@ def test_compute_hub_edges_for_cell_returns_full_path_geometry():
     assert len(geometry) >= 2
     assert geometry[0] == (core_hubs[0]["lon"], core_hubs[0]["lat"])
     assert geometry[-1] == (core_hubs[1]["lon"], core_hubs[1]["lat"])
+
+
+def test_record_distance_includes_both_snap_gaps():
+    # both huts sit off the trail line - the shipped distance_m must be the routed trail distance
+    # (the edge's explicit dist=1000.0) PLUS both ends' hub-to-trail gaps, not just the trail leg
+    # (spec E3: "the gap is currently free").
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
+    )
+    assert len(records) == 1
+    r = records[0]
+    assert r["snap_m"] > 0
+    assert r["distance_m"] == pytest.approx(1000.0 + r["snap_m"], rel=1e-3)
+
+
+def test_snap_gap_climb_lands_in_ascent_not_only_distance():
+    # hub 1 sits 40m below its own snap point (a valley hut reached by climbing UP to the trail),
+    # hub 2 sits exactly at its snap point's elevation (isolates the effect to one end).
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 0.0, -1, False, True, 0, 0, 0)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    subgraph = LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.array([1000.0, 1000.0], dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
+    )
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004, "ele": 960.0},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003, "ele": 1000.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
+    )
+    assert len(records) == 1
+    assert records[0]["ascent_m"] >= 40.0
 
 
 def test_merge_and_dedup_drops_duplicate_hut_pairs():
