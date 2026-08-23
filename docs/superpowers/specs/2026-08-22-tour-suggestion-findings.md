@@ -88,4 +88,15 @@ than a guarantee.
 
 ## Task 9 timing
 
-_To be filled in after `doit build_base_graph add_base_elevation` runs._
+`build_base_graph` (re-run after the hub-range clipping work): `stream_osm` 354.0 s, `contract_structural`
+106.1 s, total 502.9 s (`data/timings.jsonl`, ts 2026-08-23T07:14). `add_base_elevation` (new task):
+**392.0 s** total — `smooth` dominates at 366.0 s (59 grid cells), `read_dem`/`sample`/`write`
+combined under 21 s, `ascent_descent` under 1 s. Feeds Task 11's probe budget and Task 24's rebuild
+estimate: base graph + elevation together are ~15 min, well under the hours `build_hub_edges` alone
+costs.
+
+Verification (`edges.npy`, 4,729,589 edges): no field left at the `UNSET` (-1.0) sentinel;
+`time_s`/`ascent_m`/`descent_m`/`ungraded_m`/`inferred_m` all populated with sane ranges.
+`constrained_ok` share over the first 1M edges: **92.6%**, consistent with the network tier mass
+above (explicit 4.56% + inferred 89.52% = 94.08% graded) — no reconciliation needed with the
+production classifier.
