@@ -95,7 +95,7 @@ DOIT_CONFIG = {
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "build_hub_edges", "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
-        "build_approach_table",
+        "build_approach_table", "build_edge_payload",
         "copy_public_data",
     ],
 }
@@ -116,6 +116,8 @@ PUBLIC_FILES = [
     "unsnapped_huts.json",
     "approaches.bin",
     "approaches.json",
+    "hut-edge-payload.bin",
+    "hut-edge-payload.json",
 ]
 
 
@@ -523,6 +525,25 @@ def task_build_approach_table():
             str(OSM_DIR / "start_points_id_table.json"),
         ],
         "targets": [str(OSM_DIR / "approaches.bin"), str(OSM_DIR / "approaches.json")],
+    }
+
+
+# ---- 11b: pack + ship the hut-edge payload ---------------------------------
+
+def task_build_edge_payload():
+    return {
+        "actions": [
+            py(
+                "phases/postprocessing/build_edge_payload.py",
+                f"--edges-dir {OSM_DIR / 'hut_edges'}",
+                f"--huts {OSM_DIR / 'huts.geojson'}",
+                f"--out-bin {OSM_DIR / 'hut-edge-payload.bin'}",
+                f"--out-manifest {OSM_DIR / 'hut-edge-payload.json'}",
+            )
+        ],
+        "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
+        "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "huts.geojson")],
+        "targets": [str(OSM_DIR / "hut-edge-payload.bin"), str(OSM_DIR / "hut-edge-payload.json")],
     }
 
 
