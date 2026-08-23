@@ -103,3 +103,39 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
         # same "stay a lazy view, indexed by the untouched global offsets" reasoning as interior.
         interior_ele=interior_ele,
     )
+
+
+def save_local_subgraph(subgraph: LocalSubgraph, cell_dir: Path) -> None:
+    """Persists one gather_padded_subgraph() result so a later process can reload it without
+    re-running the cell union / one-hop closure / array-copy work (gather_route_subgraphs.py's
+    whole point - see its module docstring). Only global_node_ids/local_nodes/local_edges/
+    local_node_ele are written - these are the real per-cell COPIES gather_padded_subgraph makes.
+    `interior`/`interior_ele` are deliberately NOT duplicated here (they stay the lazy, shared
+    mmap view over the whole base graph's interior.npy/interior_ele.npy - see this module's
+    top-of-file docstring on gather's cost breakdown); load_local_subgraph reopens those globally
+    instead."""
+    cell_dir = Path(cell_dir)
+    cell_dir.mkdir(parents=True, exist_ok=True)
+    binfmt.save_array(cell_dir / "global_node_ids.npy", subgraph.global_node_ids)
+    binfmt.save_array(cell_dir / "local_nodes.npy", subgraph.local_nodes)
+    binfmt.save_array(cell_dir / "local_edges.npy", subgraph.local_edges)
+    binfmt.save_array(cell_dir / "local_node_ele.npy", subgraph.local_node_ele)
+
+
+def load_local_subgraph(cell_dir: Path, base_graph_dir: Path) -> LocalSubgraph:
+    """Inverse of save_local_subgraph - reloads a cached per-cell gather, re-attaching the shared
+    global interior/interior_ele arrays (never persisted per-cell, see save_local_subgraph)."""
+    cell_dir = Path(cell_dir)
+    base_graph_dir = Path(base_graph_dir)
+    interior = binfmt.load_array(base_graph_dir / "interior.npy")
+    interior_ele_path = base_graph_dir / "interior_ele.npy"
+    interior_ele = (binfmt.load_array(interior_ele_path) if interior_ele_path.exists()
+                     else np.zeros(len(interior), dtype=np.float32))
+    return LocalSubgraph(
+        global_node_ids=binfmt.load_array(cell_dir / "global_node_ids.npy", mmap=False),
+        local_nodes=binfmt.load_array(cell_dir / "local_nodes.npy", mmap=False),
+        local_edges=binfmt.load_array(cell_dir / "local_edges.npy", mmap=False),
+        interior=interior,
+        local_node_ele=binfmt.load_array(cell_dir / "local_node_ele.npy", mmap=False),
+        interior_ele=interior_ele,
+    )

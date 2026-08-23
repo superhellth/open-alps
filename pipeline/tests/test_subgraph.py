@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
-from lib.subgraph import gather_padded_subgraph  # noqa: E402
+from lib.subgraph import gather_padded_subgraph, load_local_subgraph, save_local_subgraph  # noqa: E402
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
 
@@ -112,6 +112,31 @@ def test_gather_preserves_interior_offsets_for_downstream_lookup():
     # u/v were remapped to local indices via searchsorted over global_node_ids
     assert int(edge0["u"]) == int(np.searchsorted(result.global_node_ids, 0))
     assert int(edge0["v"]) == int(np.searchsorted(result.global_node_ids, 1))
+
+
+def test_save_and_load_local_subgraph_round_trips():
+    # gather_route_subgraphs.py's whole premise: a cached gather must reload identically to the
+    # freshly-gathered one, including interior/interior_ele - which are deliberately NOT persisted
+    # per-cell (save_local_subgraph's docstring) and must still resolve via the shared global
+    # arrays reopened from base_graph_dir.
+    fine_grid = Grid(BBOX, tile_size_km=20.0)
+    base_graph_dir = _write_fixture_base_graph_with_interior(_tmp_path_fixture(), fine_grid)
+    cell_id = fine_grid.cell_id_for_point(0.05, 0.05)
+    original = gather_padded_subgraph(base_graph_dir, fine_grid, cell_id, buffer_km=1.0)
+
+    cell_dir = _tmp_path_fixture() / "cell_cache"
+    save_local_subgraph(original, cell_dir)
+    reloaded = load_local_subgraph(cell_dir, base_graph_dir)
+
+    assert reloaded.global_node_ids.tolist() == original.global_node_ids.tolist()
+    assert reloaded.local_edges.tolist() == original.local_edges.tolist()
+    assert reloaded.local_node_ele.tolist() == original.local_node_ele.tolist()
+    # interior wasn't copied per-cell - reloaded via the shared base_graph_dir instead - but must
+    # still resolve to the same points through the (unchanged) interior_offset/count on edge 0.
+    edge0 = reloaded.local_edges[reloaded.local_edges["edge_id"] == 0][0]
+    offset, count = int(edge0["interior_offset"]), int(edge0["interior_count"])
+    pts = reloaded.interior[offset:offset + count]
+    assert list(zip(pts["lon"].tolist(), pts["lat"].tolist())) == [(0.35, 0.05), (0.65, 0.05)]
 
 
 def _tmp_path_fixture():

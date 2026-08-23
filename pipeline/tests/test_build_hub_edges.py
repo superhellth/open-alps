@@ -14,9 +14,11 @@ from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    SnapRejection, SnapResult, _build_igraph_with_snaps, _path_for, _write_edge_output,
+    SnapRejection, SnapResult, _build_base_igraph_arrays, _build_igraph_from_base,
+    _build_igraph_with_snaps, _cell_workload_score, _path_for, _write_edge_output,
     compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, write_unsnapped_report,
 )
+from graph_building.gather_route_subgraphs import cell_dir_for  # noqa: E402
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
 FAST_ANY_ONLY = [variants.VARIANTS[binfmt.VARIANT_FAST_ANY]]
@@ -570,6 +572,53 @@ def test_ascent_and_descent_swap_on_reverse_traversal():
     assert rev.descent_m == pytest.approx(fwd.ascent_m)
 
 
+def test_base_igraph_arrays_reused_across_variants_matches_per_call_build():
+    # opt #1: _build_base_igraph_arrays is computed once per cell and reused across variants via
+    # _build_igraph_from_base - must produce the exact same graph as the old
+    # (single-call-per-variant) _build_igraph_with_snaps for each mask.
+    subgraph = _line_subgraph_t2_graded()
+    base = _build_base_igraph_arrays(subgraph, {})
+    mask = variants.edge_mask(subgraph.local_edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
+
+    reused_graph, reused_hub_vertex, reused_coords = _build_igraph_from_base(base, edge_mask=mask)
+    direct_graph, direct_hub_vertex, direct_coords = _build_igraph_with_snaps(
+        subgraph, {}, edge_mask=mask
+    )
+
+    assert reused_graph.ecount() == direct_graph.ecount()
+    assert reused_graph.es["time_s"] == direct_graph.es["time_s"]
+    assert reused_hub_vertex == direct_hub_vertex
+    assert reused_coords == direct_coords
+
+
+def test_base_igraph_arrays_reuse_keeps_variants_independent():
+    # a mask applied via one _build_igraph_from_base call must not leak into the next - each call
+    # must derive kept_mask fresh from base.edge_source, not mutate anything on `base`.
+    subgraph = _two_edge_subgraph()
+    base = _build_base_igraph_arrays(subgraph, {})
+    all_kept, _, _ = _build_igraph_from_base(base, edge_mask=None)
+    one_dropped, _, _ = _build_igraph_from_base(base, edge_mask=np.array([True, False]))
+    all_kept_again, _, _ = _build_igraph_from_base(base, edge_mask=None)
+    assert one_dropped.ecount() < all_kept.ecount()
+    assert all_kept_again.ecount() == all_kept.ecount()
+
+
+def test_batched_paths_match_per_target_path_for():
+    # opt #2: compute_hub_edges_for_cell now fetches every in-cutoff target's path for a hub in
+    # one get_shortest_paths call instead of one call per target - the per-pair result must be
+    # identical to the old one-call-per-target _path_for.
+    subgraph = _col_subgraph()
+    graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    individual = [_path_for(graph, vertex_coords, 0, tv) for tv in (1, 2)]
+    epaths = graph.get_shortest_paths(0, to=[1, 2], weights="weight", output="epath")
+    from graph_building.build_hub_edges import _accumulate_path
+    batched = [
+        _accumulate_path(graph, vertex_coords, 0, tv, epath)
+        for tv, epath in zip([1, 2], epaths)
+    ]
+    assert individual == batched
+
+
 def test_ascent_is_the_sum_the_router_used():
     # spec B3: routing and display cannot disagree, because they are the same numbers - a
     # straight 0->1->2 line where every edge is traversed forward, so the sum of each edge's own
@@ -579,3 +628,31 @@ def test_ascent_is_the_sum_the_router_used():
     epath = graph.get_shortest_paths(0, to=2, weights="weight", output="epath")[0]
     result = _path_for(graph, vertex_coords, 0, 2)
     assert result.ascent_m == pytest.approx(sum(graph.es[e]["ascent_m"] for e in epath))
+
+
+def test_cell_workload_score_scales_with_cached_subgraph_size(tmp_path):
+    # gather_route_subgraphs.py already wrote local_edges.npy for this cell before build_hub_edges
+    # ever runs - the score must read its byte size straight off disk, no array load.
+    big_dir = cell_dir_for(tmp_path, 1)
+    small_dir = cell_dir_for(tmp_path, 2)
+    big_dir.mkdir(parents=True)
+    small_dir.mkdir(parents=True)
+    (big_dir / "local_edges.npy").write_bytes(b"\x00" * 1000)
+    (small_dir / "local_edges.npy").write_bytes(b"\x00" * 10)
+    assert (_cell_workload_score(tmp_path, 1, n_hubs=1)
+            > _cell_workload_score(tmp_path, 2, n_hubs=1))
+
+
+def test_cell_workload_score_scales_with_hub_count(tmp_path):
+    cell_dir = cell_dir_for(tmp_path, 1)
+    cell_dir.mkdir(parents=True)
+    (cell_dir / "local_edges.npy").write_bytes(b"\x00" * 1000)
+    assert (_cell_workload_score(tmp_path, 1, n_hubs=5)
+            > _cell_workload_score(tmp_path, 1, n_hubs=1))
+
+
+def test_cell_workload_score_is_zero_for_an_uncached_cell(tmp_path):
+    # Defensive only - every hub-bearing cell is guaranteed a cached local_edges.npy by
+    # gather_route_subgraphs.py (build_hub_edges.py's task_dep), so this path shouldn't be hit in
+    # practice, but a missing file must not crash the sort.
+    assert _cell_workload_score(tmp_path, 999, n_hubs=3) == 0

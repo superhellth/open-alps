@@ -1,298 +1,93 @@
 #!/usr/bin/env python3
-"""Replaces build_hut_graph.py's pass1/pass2: loads the persisted base graph (build_base_graph.py,
-lib/binfmt.py) and the combined hub list (huts.geojson + start_points.npy from
-filter_start_points.py), partitions the bbox into lib/grid.py cells, and runs one worker process
-per cell via ProcessPoolExecutor - each mmap-slicing only its own padded region
-(lib/subgraph.py) rather than sharing one big in-process graph. See docs/superpowers/specs/
-2026-08-19-pipeline-v2-design.md.
+"""Routing pass of the old build_hub_edges.py, now split into three tasks (see
+docs/superpowers/plans/2026-08-23-split-build-hub-edges.md): snap_hubs.py (hub->base-graph
+snapping, cached in hub_snaps.npy/hub_snap_interior.npy - lib/hub_snap.py) and
+gather_route_subgraphs.py (per-cell max-edge-km-padded subgraphs, cached under
+data/osm/route_subgraphs/ - lib/subgraph.py's save_local_subgraph/load_local_subgraph) both run
+first and are independent of --max-edge-km/pipeline.config.json's graph.variants respectively (the
+former) or of graph.variants alone (the latter - it DOES depend on --max-edge-km). This script
+just reloads both caches and does the actual per-cell, per-variant routing (build_igraph +
+distances + paths), the one stage whose cost genuinely scales with the variant grid.
 
-Usage: python pipeline/phases/graph_building/build_hub_edges.py [--max-edge-km 30] [--max-snap-m 100] [--workers N]
+Usage: python pipeline/phases/graph_building/build_hub_edges.py [--max-edge-km 30] [--workers N]
 """
 
 import argparse
 import dataclasses
 import hashlib
-import json
-import math
 import os
 import sys
 import time
-from collections import namedtuple
+from collections import Counter, namedtuple
 from concurrent.futures import ProcessPoolExecutor, as_completed
-from dataclasses import dataclass
 from pathlib import Path
 
 import igraph as ig
 import numpy as np
-from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
+from lib import hub_snap  # noqa: E402
 from lib import variants as variants_lib  # noqa: E402
-from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noqa: E402
-from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, hut_points, load_config  # noqa: E402
-from lib.subgraph import LocalSubgraph, gather_padded_subgraph  # noqa: E402
+from lib.grid import Grid  # noqa: E402
+from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
+from lib.subgraph import LocalSubgraph, load_local_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
+from graph_building.gather_route_subgraphs import cell_dir_for  # noqa: E402
+
+# Re-exported for callers/tests that used to import these off this module (they moved to
+# lib/hub_snap.py when snap_hubs.py split out - see this module's docstring).
+SnapResult = hub_snap.SnapResult
+SnapRejection = hub_snap.SnapRejection
+snap_hub_to_subgraph = hub_snap.snap_hub_to_subgraph
+write_unsnapped_report = hub_snap.write_unsnapped_report
 
 SCRIPT_NAME = "build_hub_edges.py"
 
 
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+@dataclasses.dataclass
+class _BaseIgraphArrays:
+    """Everything _build_igraph_with_snaps used to recompute from scratch on EVERY variant, even
+    though none of it actually depends on the variant - only which edges end up kept does (spec
+    C2's masked-subgraph-per-row). Built once per cell by _build_base_igraph_arrays; each variant
+    then only needs to compute its own boolean kept-mask and re-run ig.Graph's cheap C-level
+    filter/construction, instead of redoing the Python-level tolist()/max()/interior-list-comp
+    work (subgraph.local_edges columns, once per variant = O(variants * edges) before this)."""
+    next_vertex: int
+    n_orig: int
+    edges_uv: list
+    dists: list
+    times: list
+    road_ms: list
+    ungraded_ms: list
+    inferred_ms: list
+    ascent_ms: list
+    descent_ms: list
+    sac_ranks: list
+    via_ferratas: list
+    constrained_oks: list
+    interiors: list
+    max_ele_ms: list
+    vertex_coords: dict
+    hub_vertex: dict
+    edges_to_remove: set
+    # edge_source[i] is which ORIGINAL local edge index (0..n_orig-1) edge i's mask value should
+    # come from: i itself for i < n_orig, or the parent edge a synthetic (split) edge inherited
+    # its terrain from for i >= n_orig - a variant's edge_mask() only covers the n_orig original
+    # edges, so a synthetic edge has no mask entry of its own.
+    edge_source: list
 
 
-def _haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Same formula as _haversine_m, but against an array of points in one numpy call instead of
-    a Python-level loop - used in snap_hub_to_subgraph's node scan, the hot path (one call per hub
-    per cell against every candidate node)."""
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + math.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
-
-
-def _haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
-                            lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Fully-vectorized haversine over paired arrays (both endpoints vary per element), unlike
-    _haversine_m_vec (one fixed point vs an array) - used by _build_edge_spatial_index to compute
-    every polyline segment length in a cell in one call."""
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
-
-
-@dataclass
-class SnapResult:
-    node_index: int = None
-    edge_local_index: int = None
-    split: object = None  # lib.edge_split.SplitResult, only set when node_index is None
-    # Straight-line hub-to-trail distance (spec E3: "the gap is currently free" - _path_for sums
-    # only routed edges, so this contributes zero to distance/ascent/descent unless folded in by
-    # the caller). gap_dz_m is hub_ele_m minus the snap point's own elevation (positive: hub sits
-    # above the trail); it stays 0.0 - flat, not unknown - when the caller has no hub elevation.
-    gap_m: float = 0.0
-    gap_dz_m: float = 0.0
-
-
-@dataclass
-class SnapRejection:
-    """A hub that could not be snapped (spec E3) - returned by snap_hub_to_subgraph instead of
-    None, so it becomes a counted, reported fact (write_unsnapped_report) rather than a silent
-    drop. hub_id/hub_type/name are filled in by the caller (snap_hub_to_subgraph only knows the
-    hub's coordinate, not its identity); gap_m/dz_m/reason describe why it failed.
-
-    reason:
-      "no_trail_data"  - the padded cell around the hub has no trail data at all.
-      "gap_too_far"    - trail data exists, but nothing is within max_snap_m.
-      "vertical_offset" - a candidate is within max_snap_m, but |gap_dz_m| exceeds
-                          max_snap_ascent_m (a hub joined to a trail it cannot physically reach,
-                          e.g. across a gorge or up a face - not caught by a horizontal cap at
-                          any setting, spec E3)."""
-    gap_m: float
-    dz_m: float
-    reason: str
-    hub_id: int = None
-    hub_type: int = None
-    name: str = ""
-
-
-def _project_m(lon, lat, km_per_deg_lng: float):
-    """Local equirectangular projection to meters, accurate enough at the scale of one padded
-    cell (tens of km) - same simplification nearest_point_on_polyline already relies on."""
-    return lon * km_per_deg_lng * 1000.0, lat * KM_PER_DEG_LAT * 1000.0
-
-
-def _build_edge_spatial_index(subgraph: LocalSubgraph):
-    """Indexes every polyline vertex (endpoints + interior points) of every local edge in a
-    cKDTree, tagged with the owning edge_local_index, so snap_hub_to_subgraph's edge scan can
-    query a small candidate set instead of looping every edge. Built once per cell (called once,
-    then cached on the subgraph) rather than once per hub - this is what turns the old
-    candidates * edges Python loop into edges (build) + candidates * log(edges) (query).
-
-    Correctness: the true nearest point on a polyline segment can lie strictly between its two
-    vertices, so a hub within max_snap_m of that point isn't necessarily within max_snap_m of a
-    vertex - it can be up to max_snap_m + segment_length away from the nearest vertex (triangle
-    inequality). Query radius therefore pads max_snap_m by this cell's longest single segment
-    (max_seg_len_m), computed once here, not by max_snap_m alone.
-
-    Vectorized (binfmt.gather_ragged/ragged_positions) rather than a per-edge Python loop with
-    per-point scalar structured-array access - was the hot path on a 60km cell with thousands of
-    edges * tens-hundreds of interior points each."""
-    local_edges = subgraph.local_edges
-    n_edges = len(local_edges)
-    if n_edges == 0:
-        return None
-    ref_lat = float(np.mean(subgraph.local_nodes["lat"])) if len(subgraph.local_nodes) else 0.0
-    km_per_deg_lng = KM_PER_DEG_LAT * math.cos(math.radians(ref_lat))
-
-    u_lon = subgraph.local_nodes["lon"][local_edges["u"]]
-    u_lat = subgraph.local_nodes["lat"][local_edges["u"]]
-    v_lon = subgraph.local_nodes["lon"][local_edges["v"]]
-    v_lat = subgraph.local_nodes["lat"][local_edges["v"]]
-
-    # Every edge's interior points gathered in one pass; group_ids[k] is which local edge
-    # interior_pts[k] belongs to, in original (offset) order within each edge.
-    interior_pts, group_ids = binfmt.gather_ragged(
-        subgraph.interior, local_edges["interior_offset"], local_edges["interior_count"],
-    )
-    interior_lon, interior_lat = interior_pts["lon"], interior_pts["lat"]
-
-    # Point order doesn't matter for the KDTree itself (only the edge_id tag per point does) -
-    # true polyline order is only needed below, for max_seg_len_m.
-    all_lon = np.concatenate([u_lon, interior_lon, v_lon])
-    all_lat = np.concatenate([u_lat, interior_lat, v_lat])
-    edge_ids = np.concatenate([np.arange(n_edges), group_ids, np.arange(n_edges)])
-    xs, ys = _project_m(all_lon, all_lat, km_per_deg_lng)
-
-    # True per-edge polyline order (u -> interior in offset order -> v), reconstructed via a
-    # position key + lexsort, needed only to compute real consecutive-segment lengths.
-    counts = local_edges["interior_count"].astype(np.int64)
-    pos = np.concatenate([np.zeros(n_edges, dtype=np.int64),
-                           binfmt.ragged_positions(counts) + 1, counts + 1])
-    order = np.lexsort((pos, edge_ids))
-    ordered_edge_ids, ordered_lon, ordered_lat = edge_ids[order], all_lon[order], all_lat[order]
-    max_seg_len_m = 0.0
-    if len(ordered_edge_ids) > 1:
-        same_next = ordered_edge_ids[:-1] == ordered_edge_ids[1:]
-        if np.any(same_next):
-            seg_lens = _haversine_m_vec_pairs(
-                ordered_lon[:-1][same_next], ordered_lat[:-1][same_next],
-                ordered_lon[1:][same_next], ordered_lat[1:][same_next],
-            )
-            max_seg_len_m = float(seg_lens.max())
-
-    tree = cKDTree(np.column_stack([xs, ys]))
-    return tree, edge_ids, max_seg_len_m, km_per_deg_lng
-
-
-def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
-                           max_snap_m: float) -> list:
-    index = getattr(subgraph, "_edge_spatial_index", "unset")
-    if index == "unset":
-        index = _build_edge_spatial_index(subgraph)
-        subgraph._edge_spatial_index = index
-    if index is None:
-        return []
-    tree, edge_ids, max_seg_len_m, km_per_deg_lng = index
-    x, y = _project_m(hub_lon, hub_lat, km_per_deg_lng)
-    point_idxs = tree.query_ball_point([x, y], r=max_snap_m + max_seg_len_m)
-    return sorted(set(edge_ids[point_idxs].tolist()))
-
-
-def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
-                          max_snap_m: float, hub_ele_m: float = None,
-                          max_snap_ascent_m: float = None) -> "SnapResult | SnapRejection":
-    """hub_ele_m: the hub's own elevation (spec E3), sampled from the SAME DEM as
-    local_node_ele/interior_ele so gap_dz_m measures real terrain rather than the offset between
-    two independently-sourced elevation datasets. None (the default) means unknown - gap_dz_m
-    stays 0.0 rather than guessing, and no vertical check is possible.
-
-    max_snap_ascent_m: reject a within-range candidate whose |gap_dz_m| exceeds it - only
-    enforced when hub_ele_m is also given (spec E3: a horizontal cap alone cannot tell "18m
-    across a terrace" from "18m up a wall", but it can't check what it doesn't know either).
-
-    Never returns bare None: a hub that cannot snap - at any distance, or past the vertical cap -
-    comes back as a SnapRejection instead, so it's counted rather than silently vanishing."""
-    no_trail_data = len(subgraph.local_nodes) == 0 and len(subgraph.local_edges) == 0
-    node_dists = None
-    # An existing graph node within range always wins over a mid-chain split, even if some
-    # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
-    # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
-    # right next to it.
-    if len(subgraph.local_nodes) > 0:
-        node_dists = _haversine_m_vec(
-            hub_lon, hub_lat, subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
-        )
-        best_i = int(np.argmin(node_dists))
-        if node_dists[best_i] <= max_snap_m:
-            gap_m = float(node_dists[best_i])
-            gap_dz_m = (0.0 if hub_ele_m is None
-                        else float(hub_ele_m) - float(subgraph.local_node_ele[best_i]))
-            if (max_snap_ascent_m is not None and hub_ele_m is not None
-                    and abs(gap_dz_m) > max_snap_ascent_m):
-                return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
-            return SnapResult(node_index=best_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
-
-    best_edge = None  # (dist_m, edge_local_index, split)
-    for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
-        e = subgraph.local_edges[ei]
-        interior = [
-            (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
-            for j in range(e["interior_offset"], e["interior_offset"] + e["interior_count"])
-        ]
-        u = subgraph.local_nodes[e["u"]]
-        v = subgraph.local_nodes[e["v"]]
-        polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
-        seg_idx, frac = nearest_point_on_polyline(polyline, (hub_lon, hub_lat))
-        px = polyline[seg_idx][0] + frac * (polyline[seg_idx + 1][0] - polyline[seg_idx][0])
-        py = polyline[seg_idx][1] + frac * (polyline[seg_idx + 1][1] - polyline[seg_idx][1])
-        d = _haversine_m(hub_lon, hub_lat, px, py)
-        if d <= max_snap_m and (best_edge is None or d < best_edge[0]):
-            split = split_edge_at_point(
-                (u["lon"], u["lat"]), (v["lon"], v["lat"]), interior,
-                float(e["dist"]), float(e["road_m"]), float(e["ungraded_m"]),
-                float(e["inferred_m"]), seg_idx, frac,
-            )
-            best_edge = (d, ei, split, e["u"], e["v"])
-
-    if best_edge is None:
-        # A node within max_snap_m (if any nodes exist at all) is the most informative distance
-        # to report even though it lost - it tells the report how far away the nearest trail data
-        # actually was, not just that nothing qualified.
-        fallback_gap_m = (float(node_dists[int(np.argmin(node_dists))])
-                           if node_dists is not None and len(node_dists) else float("inf"))
-        reason = "no_trail_data" if no_trail_data else "gap_too_far"
-        return SnapRejection(gap_m=fallback_gap_m, dz_m=0.0, reason=reason)
-    d, edge_local_index, split, u_idx, v_idx = best_edge
-    gap_dz_m = 0.0
-    if hub_ele_m is not None:
-        # Snap-point elevation: the same distance-ratio blend split_edge_at_point already uses to
-        # apportion ungraded_m/inferred_m across the two synthetic halves - not either endpoint's
-        # raw value, since the split point usually sits strictly between them.
-        u_ele = float(subgraph.local_node_ele[u_idx])
-        v_ele = float(subgraph.local_node_ele[v_idx])
-        total = split.dist_to_u + split.dist_to_v
-        ratio = split.dist_to_u / total if total > 0 else 0.0
-        snap_ele = u_ele + (v_ele - u_ele) * ratio
-        gap_dz_m = float(hub_ele_m) - snap_ele
-    if (max_snap_ascent_m is not None and hub_ele_m is not None
-            and abs(gap_dz_m) > max_snap_ascent_m):
-        return SnapRejection(gap_m=float(d), dz_m=gap_dz_m, reason="vertical_offset")
-    return SnapResult(edge_local_index=edge_local_index, split=split, gap_m=float(d), gap_dz_m=gap_dz_m)
-
-
-def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask: np.ndarray = None):
-    """hub_snaps: {hub_key: SnapResult}. Returns (graph, hub_key -> igraph vertex id,
-    vertex_id -> (lon, lat) for every vertex including virtual snap points), inserting a
-    virtual vertex per mid-chain snap (edge_local_index != None). Edge attrs carry everything
-    pass-2 path reconstruction needs (dist/road_m/ungraded_m/inferred_m/ascent_m/descent_m/
-    sac_rank/via_ferrata/interior polyline), same fields build_hut_graph.py's pass2 reads off its
-    contracted chain edges.
-
-    Routes on time_s (spec A3/A1) - EDGE_DTYPE dropped the road-penalised `weight` column and
-    add_base_elevation.py fills time_s for every edge.
-
-    edge_mask: optional boolean array over subgraph.local_edges (lib/variants.py's edge_mask()),
-    ANDed into the existing mid-chain-snap `_filter` so a constrained row's igraph never contains
-    an edge that row forbids. A snap that split a masked-out edge inherits its parent's mask value
-    on both synthetic halves - a hub cannot snap its way onto forbidden terrain."""
+def _build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> _BaseIgraphArrays:
+    """The variant-independent half of building a routable igraph for this cell: base edge
+    columns + every mid-chain snap's inserted vertex/synthetic-edge pair (topology only - hub
+    locations and split geometry don't depend on a routing constraint, only which resulting edges
+    a given variant keeps does, see _build_igraph_from_base)."""
     n_base = len(subgraph.local_nodes)
     edges_uv = list(zip(subgraph.local_edges["u"].tolist(), subgraph.local_edges["v"].tolist()))
     dists = subgraph.local_edges["dist"].tolist()
     times = subgraph.local_edges["time_s"].tolist()
-    weights = list(times)
     road_ms = subgraph.local_edges["road_m"].tolist()
     ungraded_ms = subgraph.local_edges["ungraded_m"].tolist()
     inferred_ms = subgraph.local_edges["inferred_m"].tolist()
@@ -323,11 +118,11 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         ))
         for e in subgraph.local_edges
     ]
-    kept_mask = (
-        [True] * len(subgraph.local_edges) if edge_mask is None else edge_mask.tolist()
-    )
 
     vertex_coords = {i: (float(n["lon"]), float(n["lat"])) for i, n in enumerate(subgraph.local_nodes)}
+
+    n_orig = len(subgraph.local_edges)
+    edge_source = list(range(n_orig))
 
     hub_vertex = {}
     next_vertex = n_base
@@ -346,10 +141,8 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         base_sac_rank = int(subgraph.local_edges["sac_rank"][ei])
         base_via_ferrata = bool(subgraph.local_edges["via_ferrata"][ei])
         base_constrained_ok = bool(subgraph.local_edges["constrained_ok"][ei])
-        base_kept = kept_mask[ei]
         base_max_ele = max_ele_ms[ei]
         edges_uv.append((u, vid))
-        weights.append(split.dist_to_u)
         dists.append(split.dist_to_u)
         times.append(split.dist_to_u)
         road_ms.append(split.road_m_to_u)
@@ -361,10 +154,9 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         via_ferratas.append(base_via_ferrata)
         constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_u))
-        kept_mask.append(base_kept)
         max_ele_ms.append(base_max_ele)
+        edge_source.append(ei)
         edges_uv.append((vid, v))
-        weights.append(split.dist_to_v)
         dists.append(split.dist_to_v)
         times.append(split.dist_to_v)
         road_ms.append(split.road_m_to_v)
@@ -376,25 +168,70 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         via_ferratas.append(base_via_ferrata)
         constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_v))
-        kept_mask.append(base_kept)
         max_ele_ms.append(base_max_ele)
+        edge_source.append(ei)
         hub_vertex[hub_key] = vid
 
-    n_orig = len(subgraph.local_edges)
+    return _BaseIgraphArrays(
+        next_vertex=next_vertex, n_orig=n_orig, edges_uv=edges_uv, dists=dists, times=times,
+        road_ms=road_ms, ungraded_ms=ungraded_ms, inferred_ms=inferred_ms, ascent_ms=ascent_ms,
+        descent_ms=descent_ms, sac_ranks=sac_ranks, via_ferratas=via_ferratas,
+        constrained_oks=constrained_oks, interiors=interiors, max_ele_ms=max_ele_ms,
+        vertex_coords=vertex_coords, hub_vertex=hub_vertex, edges_to_remove=edges_to_remove,
+        edge_source=edge_source,
+    )
+
+
+def _build_igraph_from_base(base: _BaseIgraphArrays, edge_mask: np.ndarray = None):
+    """The per-variant half: apply this variant's edge_mask (lib/variants.py's edge_mask(), over
+    just the n_orig ORIGINAL edges) to base's precomputed topology and construct the igraph.
+    Cheap (one bool-list build + igraph's own C-level filtering), unlike _build_base_igraph_arrays
+    - see that function's docstring for why the split exists.
+
+    edge_mask: ANDed into the mid-chain-snap `_filter` so a constrained row's igraph never
+    contains an edge that row forbids. A snap that split a masked-out edge inherits its parent's
+    mask value on both synthetic halves (via base.edge_source) - a hub cannot snap its way onto
+    forbidden terrain."""
+    orig_kept = [True] * base.n_orig if edge_mask is None else edge_mask.tolist()
+    kept_mask = [orig_kept[s] for s in base.edge_source]
 
     def _filter(lst):
-        kept = [x for i, x in enumerate(lst[:n_orig]) if i not in edges_to_remove and kept_mask[i]]
-        return kept + [x for i, x in enumerate(lst[n_orig:], start=n_orig) if kept_mask[i]]
+        kept = [
+            x for i, x in enumerate(lst[:base.n_orig])
+            if i not in base.edges_to_remove and kept_mask[i]
+        ]
+        return kept + [
+            x for i, x in enumerate(lst[base.n_orig:], start=base.n_orig) if kept_mask[i]
+        ]
 
-    graph = ig.Graph(n=next_vertex, edges=_filter(edges_uv), edge_attrs={
-        "weight": _filter(weights), "dist": _filter(dists), "time_s": _filter(times),
-        "road_m": _filter(road_ms), "ungraded_m": _filter(ungraded_ms),
-        "inferred_m": _filter(inferred_ms), "ascent_m": _filter(ascent_ms),
-        "descent_m": _filter(descent_ms), "max_ele_m": _filter(max_ele_ms),
-        "sac_rank": _filter(sac_ranks), "via_ferrata": _filter(via_ferratas),
-        "constrained_ok": _filter(constrained_oks), "interior": _filter(interiors),
+    graph = ig.Graph(n=base.next_vertex, edges=_filter(base.edges_uv), edge_attrs={
+        "weight": _filter(base.times), "dist": _filter(base.dists), "time_s": _filter(base.times),
+        "road_m": _filter(base.road_ms), "ungraded_m": _filter(base.ungraded_ms),
+        "inferred_m": _filter(base.inferred_ms), "ascent_m": _filter(base.ascent_ms),
+        "descent_m": _filter(base.descent_ms), "max_ele_m": _filter(base.max_ele_ms),
+        "sac_rank": _filter(base.sac_ranks), "via_ferrata": _filter(base.via_ferratas),
+        "constrained_ok": _filter(base.constrained_oks), "interior": _filter(base.interiors),
     }, directed=False)
-    return graph, hub_vertex, vertex_coords
+    return graph, base.hub_vertex, base.vertex_coords
+
+
+def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask: np.ndarray = None):
+    """hub_snaps: {hub_key: SnapResult}. Returns (graph, hub_key -> igraph vertex id,
+    vertex_id -> (lon, lat) for every vertex including virtual snap points), inserting a
+    virtual vertex per mid-chain snap (edge_local_index != None). Edge attrs carry everything
+    pass-2 path reconstruction needs (dist/road_m/ungraded_m/inferred_m/ascent_m/descent_m/
+    sac_rank/via_ferrata/interior polyline), same fields build_hut_graph.py's pass2 reads off its
+    contracted chain edges.
+
+    Routes on time_s (spec A3/A1) - EDGE_DTYPE dropped the road-penalised `weight` column and
+    add_base_elevation.py fills time_s for every edge.
+
+    Thin single-variant convenience wrapper over _build_base_igraph_arrays +
+    _build_igraph_from_base (kept for tests/callers routing exactly one variant); a caller routing
+    several variants over the same subgraph+snaps should call _build_base_igraph_arrays ONCE and
+    reuse it across _build_igraph_from_base calls instead - see compute_hub_edges_for_cell."""
+    base = _build_base_igraph_arrays(subgraph, hub_snaps)
+    return _build_igraph_from_base(base, edge_mask=edge_mask)
 
 
 PathResult = namedtuple(
@@ -404,11 +241,15 @@ PathResult = namedtuple(
 )
 
 
-def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
-    """Walks the time-shortest src_v->tgt_v path (spec A3/A1 - `weight` == `time_s`) and
-    accumulates every scalar RECORD_DTYPE needs off the SAME edges the router used (spec B3:
-    routing and display cannot disagree, because they are the same numbers). `coords` excludes
-    the hub endpoints themselves, which the caller prepends/appends.
+def _accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: list) -> PathResult:
+    """Shared by _path_for (one src->tgt pair) and compute_hub_edges_for_cell's batched path query
+    (opt #2: one src_v -> many targets get_shortest_paths call instead of one call per target -
+    igraph's single-target get_shortest_paths still runs a full one-to-many Dijkstra from src_v
+    internally, so N separate per-target calls from the same source repeated that Dijkstra N times
+    for no reason; graph.distances() already batches this way for the cutoff pass above, this
+    makes the path pass do the same). Accumulates every scalar RECORD_DTYPE needs off the SAME
+    edges the router used (spec B3: routing and display cannot disagree, because they are the same
+    numbers). `coords` excludes the hub endpoints themselves, which the caller prepends/appends.
 
     ascent_m/descent_m are stored per base-graph edge in a fixed u->v direction (spec-neutral, not
     tied to any particular traversal), so a path walking an edge v->u must swap them - otherwise a
@@ -416,7 +257,6 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
     reverse one."""
     if src_v == tgt_v:
         return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False)
-    epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
     trail_coords = []
     distance_m = 0.0
     road_m = 0.0
@@ -455,11 +295,22 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
     )
 
 
+def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
+    """Walks the time-shortest src_v->tgt_v path (spec A3/A1 - `weight` == `time_s`). Single-pair
+    convenience wrapper over _accumulate_path - a caller walking several targets from the same
+    src_v (compute_hub_edges_for_cell's per-hub loop) should batch one get_shortest_paths call
+    across all of them instead of calling this once per target, see _accumulate_path's docstring."""
+    if src_v == tgt_v:
+        return _accumulate_path(graph, vertex_coords, src_v, tgt_v, [])
+    epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
+    return _accumulate_path(graph, vertex_coords, src_v, tgt_v, epath)
+
+
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                                 all_hubs: list, max_edge_km: float,
-                                max_snap_m: float, variants: list,
+                                max_snap_m: float = None, variants: list = None,
                                 timer: StepTimer = None, max_snap_ascent_m: float = None,
-                                rejections: list = None) -> list:
+                                rejections: list = None, precomputed_snaps: dict = None) -> list:
     """all_hubs: candidate targets already filtered (by the caller) to hubs whose straight-line
     distance to this cell could possibly be within max_edge_km of trail distance - trail distance
     is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
@@ -486,7 +337,12 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     max_snap_ascent_m: forwarded to snap_hub_to_subgraph (spec E3). rejections: optional list a
     caller can pass to collect every SnapRejection this cell produces (for
     write_unsnapped_report) - a hub that fails here is simply excluded from routing, same as
-    before, but is now a counted fact instead of a silent drop."""
+    before, but is now a counted fact instead of a silent drop. Both max_snap_m/max_snap_ascent_m/
+    rejections are only used when precomputed_snaps is None (the self-snapping fallback, kept for
+    tests and any standalone caller); build_hub_edges.py's own __main__ always passes
+    precomputed_snaps (snap_hubs.py's job now - see this module's docstring), in which case a hub
+    key missing from it is simply not routed (already reported by snap_hubs.py's own
+    unsnapped_huts.json)."""
     if not core_hubs:
         return []
     timer = timer if timer is not None else StepTimer()
@@ -498,6 +354,11 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
         for hub in core_hubs + hut_targets:
             key = (hub["type"], hub["id"])
             if key in snaps:
+                continue
+            if precomputed_snaps is not None:
+                snap = precomputed_snaps.get(key)
+                if snap is not None:
+                    snaps[key] = snap
                 continue
             snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m,
                                         hub_ele_m=hub.get("ele"),
@@ -512,12 +373,15 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
 
     max_edge_m = max_edge_km * 1000
     records = []
+    # Built once for this cell+snap set - _build_base_igraph_arrays' Python-level column/interior/
+    # max_ele_m work doesn't depend on the variant, only which resulting edges get kept does (opt
+    # #1: this used to rerun that work from scratch once per variant, see
+    # _BaseIgraphArrays' docstring).
+    base_arrays = _build_base_igraph_arrays(subgraph, snaps)
     for variant in variants:
         mask = variants_lib.edge_mask(subgraph.local_edges, variant)
         with timer.step("build_igraph"):
-            graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(
-                subgraph, snaps, edge_mask=mask
-            )
+            graph, hub_vertex, vertex_coords = _build_igraph_from_base(base_arrays, edge_mask=mask)
         # a hut-hut pair where both ends are core hubs of this cell is visited from both sides
         # below (hub->target and target->hub); collapse it to the one record merge_and_dedup
         # would otherwise keep anyway - core_hubs of a single cell call all belong to the same
@@ -548,6 +412,14 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
             timer.count("distance_targets", len(unique_target_vs))
             dist_by_vertex = dict(zip(unique_target_vs, unique_dists))
             cutoff_dists = [dist_by_vertex[tv] for tv in target_vs]
+
+            # opt #2: decide which targets even need a path FIRST (cutoff + hut-pair dedup), then
+            # fetch every surviving path for this hub in ONE get_shortest_paths call instead of
+            # one call per target - see _accumulate_path's docstring for why that matters
+            # (igraph's single-target get_shortest_paths still runs a full source-wide Dijkstra
+            # internally, so N per-target calls from the same src_v repeated that Dijkstra N
+            # times).
+            in_cutoff = []
             for t, tv, cutoff_d in zip(targets, target_vs, cutoff_dists):
                 if not np.isfinite(cutoff_d) or cutoff_d > max_edge_m:
                     continue
@@ -556,13 +428,29 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                     if pair_key in seen_hut_pairs:
                         continue
                     seen_hut_pairs.add(pair_key)
-                with timer.step("paths"):
-                    path = _path_for(graph, vertex_coords, src_v, tv)
-                # spec C8: the cutoff above ran on `dist`, but `_path_for` walks the TIME-shortest
-                # path, whose distance_m can exceed the cap - re-check on the routed path itself.
+                in_cutoff.append((t, tv))
+            if not in_cutoff:
+                continue
+
+            unique_path_vs = sorted({tv for _, tv in in_cutoff if tv != src_v})
+            with timer.step("paths"):
+                epaths = (
+                    graph.get_shortest_paths(src_v, to=unique_path_vs, weights="weight", output="epath")
+                    if unique_path_vs else []
+                )
+            path_by_vertex = {
+                tv: _accumulate_path(graph, vertex_coords, src_v, tv, epath)
+                for tv, epath in zip(unique_path_vs, epaths)
+            }
+
+            for t, tv in in_cutoff:
+                path = (path_by_vertex[tv] if tv != src_v
+                        else _accumulate_path(graph, vertex_coords, src_v, tv, []))
+                # spec C8: the cutoff above ran on `dist`, but the routed path is TIME-shortest,
+                # whose distance_m can exceed the cap - re-check on the routed path itself.
                 if path.distance_m > max_edge_m:
                     continue
-                # spec E3: _path_for sums only routed edges, so the hub-to-trail gap at both ends
+                # spec E3: the path sums only routed edges, so the hub-to-trail gap at both ends
                 # is priced in here - it was contributing zero distance/ascent/descent otherwise.
                 src_snap = snaps[src_key]
                 tgt_snap = snaps[(t["type"], t["id"])]
@@ -651,81 +539,41 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
 
 
-def write_unsnapped_report(path: Path, rejections: list) -> None:
-    """Emits data/osm/unsnapped_huts.json (spec E3) - the report that turns a hub failing to
-    snap into a countable, visible fact instead of a silent drop (956 hubs measured, 205
-    unsnapped, data/analysis/snap_stats.json - before any vertical cap even applied). Sorted by
-    |dz_m| descending so the worst vertical outliers (bivouac boxes on walls) surface first."""
-    rows = sorted(rejections, key=lambda r: abs(r.dz_m), reverse=True)
-    payload = [
-        {"hub_id": r.hub_id, "hub_type": r.hub_type, "name": r.name,
-         "gap_m": r.gap_m, "dz_m": r.dz_m, "reason": r.reason}
-        for r in rows
-    ]
-    path.write_text(json.dumps(payload), encoding="utf-8")
-
-
-def _sample_hub_elevations(dem_path: Path, hubs: list, grid: Grid, buffer_km: float = 0.2) -> None:
-    """Fills each hub dict's "ele" key in place by sampling data/dem/dem.tif at the hub's own
-    coordinate (spec E3), bilinear, per grid cell - same sampler and windowing strategy as
-    elevation/sample_base_elevation.py's node/interior pass, so a hub's elevation and its snap
-    point's elevation (node_ele.npy/interior_ele.npy, sampled from the same raster) agree on
-    terrain rather than on two independently-sourced elevation datasets. Measured 2026-08-23
-    against the ArcGIS hut layer's own `meereshoehe` field: median disagreement 3.9 m, but the
-    tail (p99 265 m) is ArcGIS's own field being missing or wrong for entries that aren't real
-    Alpine Club huts, not DEM error - and this project's snap point is already on this DEM, so
-    sampling the hub from anywhere else would just import a second dataset's noise into gap_dz_m.
-
-    Left at None when a hub falls outside DEM coverage - snap_hub_to_subgraph already treats
-    hub_ele_m=None as "unknown" (gap_dz_m stays 0.0), not "flat"."""
-    import rasterio
-    import rasterio.windows
-
-    from elevation.sample_base_elevation import sample_bilinear
-
-    by_cell = {}
-    for h in hubs:
-        by_cell.setdefault(grid.cell_id_for_point(h["lon"], h["lat"]), []).append(h)
-
-    with rasterio.open(dem_path) as dem:
-        nodata = dem.nodata
-        for cell_id, cell_hubs in by_cell.items():
-            bounds = grid.padded_bounds(cell_id, buffer_km)
-            window = rasterio.windows.from_bounds(
-                bounds["minLng"], bounds["minLat"], bounds["maxLng"], bounds["maxLat"],
-                transform=dem.transform,
-            ).round_offsets().round_lengths()
-            window = window.intersection(rasterio.windows.Window(0, 0, dem.width, dem.height))
-            if window.width <= 0 or window.height <= 0:
-                continue
-            band = dem.read(1, window=window)
-            window_transform = rasterio.windows.transform(window, dem.transform)
-            lons = np.array([h["lon"] for h in cell_hubs])
-            lats = np.array([h["lat"] for h in cell_hubs])
-            eles = sample_bilinear(band, window_transform, lons, lats)
-            for h, ele in zip(cell_hubs, eles.tolist()):
-                h["ele"] = None if (nodata is not None and ele == nodata) else float(ele)
+def _cell_workload_score(route_subgraphs_dir: Path, cell_id: int, n_hubs: int) -> int:
+    """Cheap LPT (longest-processing-time-first) scheduling proxy for a cell's __main__ task, read
+    with no extra I/O beyond a stat() call: gather_route_subgraphs.py already cached this cell's
+    local_edges.npy, and its on-disk byte size is an exact proxy for subgraph edge count - the
+    dominant driver of build_igraph/distances/paths cost per variant (see
+    compute_hub_edges_for_cell). Multiplying by n_hubs (how many of this cell's hubs get routed
+    out of that subgraph) accounts for routing cost also scaling with hub count, not just subgraph
+    size. Sorting tasks by this score, largest first, before submitting to ProcessPoolExecutor
+    minimizes makespan on the fixed worker pool: an unsorted or arbitrarily-ordered submission can
+    leave a big cell as a straggler near the end, with every other worker idle waiting on it."""
+    edges_path = cell_dir_for(route_subgraphs_dir, cell_id) / "local_edges.npy"
+    try:
+        size = edges_path.stat().st_size
+    except OSError:
+        size = 0
+    return size * max(1, n_hubs)
 
 
 def _run_cell(args):
-    base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
-        max_snap_m, variants, max_snap_ascent_m = args
+    route_subgraphs_dir, base_graph_dir, cell_id, core_hubs, candidate_hubs, max_edge_km, \
+        variants, local_persisted = args
     t0 = time.time()
-    # One StepTimer per worker process, returned to the parent (it holds plain dicts, so it
-    # pickles back through ProcessPoolExecutor) rather than each worker appending its own
-    # timings.jsonl line - see lib/timing.py's StepTimer docstring.
     timer = StepTimer()
     with timer.step("gather_subgraph"):
-        subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
-    rejections = []
+        subgraph = load_local_subgraph(cell_dir_for(route_subgraphs_dir, cell_id), base_graph_dir)
+    hut_targets = [h for h in candidate_hubs if h["type"] == binfmt.TYPE_HUT]
+    keys = {(h["type"], h["id"]) for h in core_hubs} | {(h["type"], h["id"]) for h in hut_targets}
+    local_snaps = hub_snap.reconstruct_local_snaps(subgraph, keys, local_persisted)
     records = compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
-                                          max_snap_m, variants, timer=timer,
-                                          max_snap_ascent_m=max_snap_ascent_m,
-                                          rejections=rejections)
+                                          variants=variants, timer=timer,
+                                          precomputed_snaps=local_snaps)
     return {
         "cell_id": cell_id, "elapsed_s": time.time() - t0, "n_core_hubs": len(core_hubs),
         "n_nodes": len(subgraph.local_nodes), "n_edges": len(subgraph.local_edges),
-        "records": records, "timer": timer, "rejections": rejections,
+        "records": records, "timer": timer,
     }
 
 
@@ -733,12 +581,9 @@ if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--route-subgraphs-dir", default=str(OSM_DIR / "route_subgraphs"))
     parser.add_argument("--out-dir", default=str(OSM_DIR))
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
-    parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
-    parser.add_argument("--max-snap-ascent-m", type=float,
-                         default=config["graph"]["maxSnapAscentM"])
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args()
 
@@ -747,14 +592,6 @@ if __name__ == "__main__":
 
     hut_coords = hut_points(OSM_DIR / "huts.geojson")
     hut_coords_by_id = {i: tuple(c) for i, c in enumerate(hut_coords)}
-    # hut_points() reads huts.geojson's features in the same order it enumerates here, so a
-    # second pass over the same file for names lines up with hut_coords_by_id's ids for free -
-    # only unsnapped_huts.json needs a name (spec E3), so nothing else carries this.
-    with open(OSM_DIR / "huts.geojson", encoding="utf-8") as f:
-        hut_names_by_id = {
-            i: feat["properties"].get("name", "")
-            for i, feat in enumerate(json.load(f)["features"])
-        }
     start_points = binfmt.load_array(OSM_DIR / "start_points.npy", mmap=False)
     start_by_id = {}
     for p in start_points:
@@ -763,19 +600,17 @@ if __name__ == "__main__":
     all_hub_coords_by_type = {binfmt.TYPE_HUT: hut_coords_by_id, **start_by_id}
 
     all_hubs_flat = [
-        {"id": hid, "type": htype, "lon": lon, "lat": lat,
-         "name": hut_names_by_id.get(hid, "") if htype == binfmt.TYPE_HUT else ""}
+        {"id": hid, "type": htype, "lon": lon, "lat": lat}
         for htype, coords_by_id in all_hub_coords_by_type.items()
         for hid, (lon, lat) in coords_by_id.items()
     ]
 
-    dem_path = Path(args.dem)
-    if dem_path.exists():
-        print(f"sampling {len(all_hubs_flat):,} hub elevations from {dem_path} ...", flush=True)
-        _sample_hub_elevations(dem_path, all_hubs_flat, grid)
-    else:
-        print(f"WARNING: {dem_path} not found - snap gaps priced without a vertical component",
-              flush=True)
+    print(f"loading persisted hub snaps from {args.out_dir} ...", flush=True)
+    hub_snaps_arr = binfmt.load_array(Path(args.out_dir) / "hub_snaps.npy", mmap=False)
+    hub_snap_interior_arr = binfmt.load_array(
+        Path(args.out_dir) / "hub_snap_interior.npy", mmap=False
+    )
+    persisted_snaps = hub_snap.load_persisted_snaps(hub_snaps_arr, hub_snap_interior_arr)
 
     hubs_by_cell = {}
     for hub in all_hubs_flat:
@@ -794,11 +629,29 @@ if __name__ == "__main__":
 
     active_variants = variants_lib.enabled_variants(config)
 
-    tasks = [
-        (args.base_graph_dir, grid, cid, args.max_edge_km, hubs, _candidate_hubs_for_cell(cid),
-         args.max_edge_km, args.max_snap_m, active_variants, args.max_snap_ascent_m)
-        for cid, hubs in hubs_by_cell.items()
-    ]
+    tasks = []
+    for cid, hubs in hubs_by_cell.items():
+        candidate_hubs = _candidate_hubs_for_cell(cid)
+        hut_targets = [h for h in candidate_hubs if h["type"] == binfmt.TYPE_HUT]
+        keys = {(h["type"], h["id"]) for h in hubs} | {(h["type"], h["id"]) for h in hut_targets}
+        # Filter the persisted-snaps dict down to just this cell's relevant hubs before pickling
+        # it into the worker - the full dict is small (one row per hub, not per edge), but there's
+        # no reason to ship every other cell's rows to this one.
+        local_persisted = {k: persisted_snaps[k] for k in keys if k in persisted_snaps}
+        tasks.append((
+            Path(args.route_subgraphs_dir), Path(args.base_graph_dir), cid, hubs, candidate_hubs,
+            args.max_edge_km, active_variants, local_persisted,
+        ))
+
+    # Largest cells first (LPT scheduling, see _cell_workload_score's docstring) - the fixed-km
+    # Grid produces very unevenly loaded cells (hub/hut density isn't uniform), and the plain
+    # hubs_by_cell insertion order above has no relationship to per-cell cost, so a big cell
+    # could otherwise land near the end and straggle with every other worker idle.
+    route_subgraphs_dir_path = Path(args.route_subgraphs_dir)
+    tasks.sort(
+        key=lambda t: _cell_workload_score(route_subgraphs_dir_path, t[2], len(t[3])),
+        reverse=True,
+    )
 
     total = len(tasks)
     n_huts = sum(1 for h in all_hubs_flat if h["type"] == binfmt.TYPE_HUT)
@@ -811,17 +664,14 @@ if __name__ == "__main__":
     # to more than the wall clock - the reading that matters is the ratio between steps (snap vs.
     # distances vs. paths), not the absolute number.
     run_timer = StepTimer()
-    all_rejections = []
     with phase(SCRIPT_NAME, "hub_edge_query", n_cells=total, n_huts=n_huts,
                n_access_points=len(all_hubs_flat) - n_huts,
-               workers=args.workers or os.cpu_count(), max_edge_km=args.max_edge_km,
-               max_snap_m=args.max_snap_m, max_snap_ascent_m=args.max_snap_ascent_m) as meta:
+               workers=args.workers or os.cpu_count(), max_edge_km=args.max_edge_km) as meta:
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             futures = [pool.submit(_run_cell, t) for t in tasks]
             for fut in as_completed(futures):
                 result = fut.result()
                 shard_records.append(result["records"])
-                all_rejections.extend(result["rejections"])
                 run_timer.merge(result["timer"])
                 completed += 1
                 overall_elapsed = time.time() - t_start
@@ -843,18 +693,6 @@ if __name__ == "__main__":
 
     print(f"step totals (summed over workers): {run_timer.summary()}", flush=True)
 
-    # A hub is snapped independently in every cell where it appears (its own cell as a core hub,
-    # every neighbouring cell where it's a candidate target) - the same real-world geometry gives
-    # the same outcome each time (the padded window around any cell that considers it always
-    # contains its own nearby trail data), so de-duplicate by identity rather than reporting the
-    # same hub once per cell that happened to see it.
-    unique_rejections = list({(r.hub_type, r.hub_id): r for r in all_rejections}.values())
-    reason_counts = {}
-    for r in unique_rejections:
-        reason_counts[r.reason] = reason_counts.get(r.reason, 0) + 1
-    print(f"unsnapped hubs: {len(unique_rejections)} ({reason_counts})", flush=True)
-    write_unsnapped_report(Path(args.out_dir) / "unsnapped_huts.json", unique_rejections)
-
     merged = merge_and_dedup(shard_records)
     hut_records = [r for r in merged if r["to_type"] == binfmt.TYPE_HUT and r["from_type"] == binfmt.TYPE_HUT]
     # "access edges": station/parking <-> hut. Stored access->hut by convention (that is the
@@ -865,6 +703,14 @@ if __name__ == "__main__":
 
     print(f"hut-hut edges: {len(hut_records)}, "
           f"access edges (station/parking <-> hut): {len(access_records)}")
+    # Per-variant breakdown (spec C2's grid, active_variants above) - build_hub_edges.py is the
+    # one place that runs every row, so this is the cheapest place to sanity-check a variant's
+    # row actually produced edges rather than reloading records.npy separately afterward.
+    hut_counts_by_variant = Counter(r["variant"] for r in hut_records)
+    access_counts_by_variant = Counter(r["variant"] for r in access_records)
+    for variant in active_variants:
+        print(f"  {variant.name}: hut-hut {hut_counts_by_variant.get(variant.code, 0)}, "
+              f"access {access_counts_by_variant.get(variant.code, 0)}")
 
     out_dir = Path(args.out_dir)
     _write_edge_output(hut_records, out_dir / "hut_edges")

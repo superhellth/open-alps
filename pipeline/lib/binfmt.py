@@ -37,6 +37,28 @@ RECORD_DTYPE = np.dtype([
 ])
 PROFILE_DTYPE = np.dtype("f4")
 
+# Persisted hub->base-graph snap (snap_hubs.py's output, consumed by build_hub_edges.py). Keyed
+# by global ids that stay valid across ANY subgraph gather - node/edge local indices (as returned
+# by snap_hub_to_subgraph) are only meaningful within the one LocalSubgraph they were computed
+# against, but global_node_id (a row index into base_graph/nodes.npy, same as
+# LocalSubgraph.global_node_ids) and global_edge_id (EDGE_DTYPE's own "edge_id" field) are stable
+# regardless of which cell/buffer gathered them - see lib/hub_snap.py's reconstruct_local_snaps.
+SNAP_KIND_NODE = 0
+SNAP_KIND_EDGE = 1
+HUB_SNAP_DTYPE = np.dtype([
+    ("hub_type", "u1"), ("hub_id", "i8"), ("kind", "u1"),
+    ("global_node_id", "i8"),  # valid iff kind == SNAP_KIND_NODE, else -1
+    ("global_edge_id", "i8"),  # valid iff kind == SNAP_KIND_EDGE, else -1
+    ("split_lon", "f8"), ("split_lat", "f8"),
+    ("dist_to_u", "f8"), ("dist_to_v", "f8"),
+    ("road_m_to_u", "f8"), ("road_m_to_v", "f8"),
+    ("ungraded_m_to_u", "f8"), ("ungraded_m_to_v", "f8"),
+    ("inferred_m_to_u", "f8"), ("inferred_m_to_v", "f8"),
+    ("interior_to_u_offset", "i8"), ("interior_to_u_count", "i4"),
+    ("interior_to_v_offset", "i8"), ("interior_to_v_count", "i4"),
+    ("gap_m", "f8"), ("gap_dz_m", "f8"),
+])
+
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2

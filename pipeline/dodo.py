@@ -94,7 +94,8 @@ DOIT_CONFIG = {
         "merge_trails", "verify_trails",
         "fetch_stations_parking", "filter_start_points",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
-        "compute_edge_profiles", "build_hub_edges", "build_profiles",
+        "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
+        "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "build_approach_table", "build_edge_payload",
         "copy_public_data",
@@ -273,6 +274,15 @@ def task_build_base_graph():
         "params": [
             {"name": "tile_size_km", "long": "tile-size-km", "type": float,
              "default": CONFIG["graph"]["tileSizeKm"]},
+            # tracking-only, no CLI flag: build_base_graph.py reads config["graph"]
+            # ["roadHighwayTags"] directly (WayGraphHandler's is_road classification) and
+            # config["bbox"] directly (pack_and_write's Grid, which decides every node's cell_id) -
+            # without these, editing either in pipeline.config.json would silently leave the
+            # multi-hour rebuild un-triggered.
+            {"name": "road_highway_tags_json", "long": "road-highway-tags-json", "type": str,
+             "default": json.dumps(CONFIG["graph"]["roadHighwayTags"])},
+            {"name": "bbox_json", "long": "bbox-json", "type": str,
+             "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
             # tracking-only, no CLI flag (see binfmt.SCHEMA_VERSION's docstring): a code-only
             # EDGE_DTYPE change must still force this task's multi-hour rebuild.
             {"name": "schema_version", "long": "schema-version", "type": int,
@@ -284,27 +294,23 @@ def task_build_base_graph():
     }
 
 
-# ---- 06b: build hut-hut / start-hut edges (tiled, multiprocess) -----------
+# ---- 06b1: snap every hub onto the base graph (independent of max_edge_km/variants) -------
+# Split out of build_hub_edges.py (docs/superpowers/plans/2026-08-23-split-build-hub-edges.md):
+# snapping only needs trail data within max_snap_m, not max_edge_km, and doesn't depend on
+# graph.variants at all - see snap_hubs.py's module docstring for why this used to force a full
+# re-snap on every --max-edge-km/variants retune.
 
-def task_build_hub_edges():
+def task_snap_hubs():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "build_hub_edges.py"}"'
-            " --max-edge-km %(max_edge_km)s --max-snap-m %(max_snap_m)s"
-            " --max-snap-ascent-m %(max_snap_ascent_m)s"
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "snap_hubs.py"}"'
+            " --max-snap-m %(max_snap_m)s --max-snap-ascent-m %(max_snap_ascent_m)s"
         ],
         "params": [
-            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
-             "default": CONFIG["graph"]["maxEdgeKm"]},
             {"name": "max_snap_m", "long": "max-snap-m", "type": float,
              "default": CONFIG["graph"]["maxSnapM"]},
             {"name": "max_snap_ascent_m", "long": "max-snap-ascent-m", "type": float,
              "default": CONFIG["graph"]["maxSnapAscentM"]},
-            # tracking-only, no CLI flag: build_hub_edges.py reads config["graph"]["variants"]
-            # directly (variants_lib.enabled_variants), so without this a three-row -> four-row
-            # grid edit would report "up to date" and silently skip the rebuild.
-            {"name": "variants_json", "long": "variants-json", "type": str,
-             "default": json.dumps(CONFIG["graph"]["variants"], sort_keys=True)},
             # tracking-only, no CLI flag: see task_build_base_graph's schema_version param.
             {"name": "schema_version", "long": "schema-version", "type": int,
              "default": binfmt.SCHEMA_VERSION},
@@ -317,13 +323,77 @@ def task_build_hub_edges():
         "file_dep": [
             str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
-            # spec E3: hub elevation is now sampled directly from the DEM (same raster as
-            # node_ele.npy/interior_ele.npy), a real new dependency this task didn't have before.
+            # spec E3: hub elevation is sampled directly from the DEM (same raster as
+            # node_ele.npy/interior_ele.npy).
             str(DEM_DIR / "dem.tif"),
         ],
         "targets": [
-            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+            str(OSM_DIR / "hub_snaps.npy"), str(OSM_DIR / "hub_snap_interior.npy"),
             str(OSM_DIR / "unsnapped_huts.json"),
+        ],
+        "uptodate": [TaskOptionsChanged()],
+    }
+
+
+# ---- 06b2: gather + cache per-cell max-edge-km-padded subgraphs -----------
+# Split out of build_hub_edges.py: this is the expensive part of gather_padded_subgraph (cell
+# union + one-hop closure + array copy - see lib/subgraph.py's module docstring), cached so a
+# graph.variants-only retune of build_hub_edges doesn't repeat it - see
+# gather_route_subgraphs.py's module docstring. Depends on max_edge_km (unlike snap_hubs above),
+# so an edge-km retune still invalidates this task, same as before the split.
+
+def task_gather_route_subgraphs():
+    return {
+        "actions": [
+            f'"{sys.executable}" '
+            f'"{SCRIPT_DIR / "phases" / "graph_building" / "gather_route_subgraphs.py"}"'
+            " --max-edge-km %(max_edge_km)s"
+        ],
+        "params": [
+            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
+             "default": CONFIG["graph"]["maxEdgeKm"]},
+            {"name": "schema_version", "long": "schema-version", "type": int,
+             "default": binfmt.SCHEMA_VERSION},
+        ],
+        "task_dep": ["compute_edge_profiles"],  # same in-place-edit reasoning as task_snap_hubs
+        "file_dep": [
+            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
+            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
+        ],
+        "targets": [str(OSM_DIR / "route_subgraphs" / "manifest.json")],
+        "uptodate": [TaskOptionsChanged()],
+    }
+
+
+# ---- 06c: build hut-hut / start-hut edges (tiled, multiprocess) -----------
+
+def task_build_hub_edges():
+    return {
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "build_hub_edges.py"}"'
+            " --max-edge-km %(max_edge_km)s"
+        ],
+        "params": [
+            {"name": "max_edge_km", "long": "max-edge-km", "type": float,
+             "default": CONFIG["graph"]["maxEdgeKm"]},
+            # tracking-only, no CLI flag: build_hub_edges.py reads config["graph"]["variants"]
+            # directly (variants_lib.enabled_variants), so without this a three-row -> four-row
+            # grid edit would report "up to date" and silently skip the rebuild.
+            {"name": "variants_json", "long": "variants-json", "type": str,
+             "default": json.dumps(CONFIG["graph"]["variants"], sort_keys=True)},
+            # tracking-only, no CLI flag: see task_build_base_graph's schema_version param.
+            {"name": "schema_version", "long": "schema-version", "type": int,
+             "default": binfmt.SCHEMA_VERSION},
+        ],
+        "task_dep": ["snap_hubs", "gather_route_subgraphs"],
+        "file_dep": [
+            str(OSM_DIR / "base_graph" / "manifest.json"),
+            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
+            str(OSM_DIR / "hub_snaps.npy"), str(OSM_DIR / "hub_snap_interior.npy"),
+            str(OSM_DIR / "route_subgraphs" / "manifest.json"),
+        ],
+        "targets": [
+            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
         ],
         "uptodate": [TaskOptionsChanged()],
     }
@@ -460,19 +530,41 @@ def task_build_trail_tiles():
         "actions": [
             py(
                 "phases/postprocessing/build_trail_tiles.py",
-                f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
-                f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
+                "--min-zoom %(min_zoom)s",
+                "--max-zoom %(max_zoom)s",
             )
+        ],
+        # was baked straight into the action string with no params/uptodate - same doit gap as
+        # build_approach_table's --k (see its comment): retuning trailTiles zoom never reran this.
+        "params": [
+            {"name": "min_zoom", "long": "min-zoom", "type": int,
+             "default": tiles_cfg.get("minZoom", 6)},
+            {"name": "max_zoom", "long": "max-zoom", "type": int,
+             "default": tiles_cfg.get("maxZoom", 14)},
         ],
         "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
         "targets": [str(OSM_DIR / "trails.pmtiles")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
 # ---- 11: build hut-edge / start-edge vector tiles + stats -----------------
 
-def task_build_hut_edge_tiles():
+# tracking-only param builder shared by both edge-tile tasks below - config["hutEdgeTiles"] used
+# to be baked straight into each action's f-string with no params/uptodate at all, so retuning
+# zoom/hover-tolerance never reran either task (same doit gap as build_approach_table's --k, see
+# its comment).
+def _hut_edge_tiles_params():
     tiles_cfg = CONFIG.get("hutEdgeTiles", {})
+    return [
+        {"name": "min_zoom", "long": "min-zoom", "type": int, "default": tiles_cfg.get("minZoom", 6)},
+        {"name": "max_zoom", "long": "max-zoom", "type": int, "default": tiles_cfg.get("maxZoom", 14)},
+        {"name": "hover_simplify_tolerance_deg", "long": "hover-simplify-tolerance-deg",
+         "type": float, "default": tiles_cfg.get("hoverSimplifyToleranceDeg", 0.0003)},
+    ]
+
+
+def task_build_hut_edge_tiles():
     return {
         "actions": [
             py(
@@ -482,11 +574,12 @@ def task_build_hut_edge_tiles():
                 "--layer-name hut_edges",
                 f"--out-tiles {OSM_DIR / 'hut-edges.pmtiles'}",
                 f"--out-stats {OSM_DIR / 'hut-edge-stats.json'}",
-                f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
-                f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
-                f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
+                "--min-zoom %(min_zoom)s",
+                "--max-zoom %(max_zoom)s",
+                "--hover-simplify-tolerance-deg %(hover_simplify_tolerance_deg)s",
             )
         ],
+        "params": _hut_edge_tiles_params(),
         # task_dep (not just file_dep) on build_profiles: records.npy's profile_offset/
         # profile_count are rewritten in place by that task but aren't one of its declared
         # targets (see task_build_profiles's comment), so doit's file-hash freshness check alone
@@ -494,11 +587,11 @@ def task_build_hut_edge_tiles():
         "task_dep": ["build_profiles"],
         "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "hut-edges.pmtiles"), str(OSM_DIR / "hut-edge-stats.json")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
 def task_build_start_edge_tiles():
-    tiles_cfg = CONFIG.get("hutEdgeTiles", {})
     return {
         "actions": [
             py(
@@ -508,14 +601,16 @@ def task_build_start_edge_tiles():
                 "--layer-name start_edges",
                 f"--out-tiles {OSM_DIR / 'start-edges.pmtiles'}",
                 f"--out-stats {OSM_DIR / 'start-edge-stats.json'}",
-                f"--min-zoom {tiles_cfg.get('minZoom', 6)}",
-                f"--max-zoom {tiles_cfg.get('maxZoom', 14)}",
-                f"--hover-simplify-tolerance-deg {tiles_cfg.get('hoverSimplifyToleranceDeg', 0.0003)}",
+                "--min-zoom %(min_zoom)s",
+                "--max-zoom %(max_zoom)s",
+                "--hover-simplify-tolerance-deg %(hover_simplify_tolerance_deg)s",
             )
         ],
+        "params": _hut_edge_tiles_params(),
         "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
         "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -528,16 +623,24 @@ def task_build_approach_table():
                 "phases/postprocessing/build_approach_table.py",
                 f"--edges-dir {OSM_DIR / 'start_edges'}",
                 f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
-                f"--k {CONFIG['approach']['k']}",
+                "--k %(k)s",
                 f"--out-bin {OSM_DIR / 'approaches.bin'}",
                 f"--out-manifest {OSM_DIR / 'approaches.json'}",
             )
+        ],
+        # was hardcoded straight into the action string with no params/uptodate at all - doit's
+        # up-to-date check never diffs the action string itself, only file_dep hashes and declared
+        # uptodate checks (see doit/dependency.py's get_status), so a config["approach"]["k"]
+        # retune silently never reran this task.
+        "params": [
+            {"name": "k", "long": "k", "type": int, "default": CONFIG["approach"]["k"]},
         ],
         "file_dep": [
             str(OSM_DIR / "start_edges" / "records.npy"),
             str(OSM_DIR / "start_points_id_table.json"),
         ],
         "targets": [str(OSM_DIR / "approaches.bin"), str(OSM_DIR / "approaches.json")],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
