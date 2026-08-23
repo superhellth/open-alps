@@ -95,6 +95,7 @@ DOIT_CONFIG = {
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "build_hub_edges", "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
+        "build_approach_table",
         "copy_public_data",
     ],
 }
@@ -113,6 +114,8 @@ PUBLIC_FILES = [
     "stations.geojson",
     "parking.geojson",
     "unsnapped_huts.json",
+    "approaches.bin",
+    "approaches.json",
 ]
 
 
@@ -498,6 +501,28 @@ def task_build_start_edge_tiles():
         "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
         "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
         "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
+    }
+
+
+# ---- 11a: approach/exit table + loop-closure reverse index ----------------
+
+def task_build_approach_table():
+    return {
+        "actions": [
+            py(
+                "phases/postprocessing/build_approach_table.py",
+                f"--edges-dir {OSM_DIR / 'start_edges'}",
+                f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
+                f"--k {CONFIG['approach']['k']}",
+                f"--out-bin {OSM_DIR / 'approaches.bin'}",
+                f"--out-manifest {OSM_DIR / 'approaches.json'}",
+            )
+        ],
+        "file_dep": [
+            str(OSM_DIR / "start_edges" / "records.npy"),
+            str(OSM_DIR / "start_points_id_table.json"),
+        ],
+        "targets": [str(OSM_DIR / "approaches.bin"), str(OSM_DIR / "approaches.json")],
     }
 
 
