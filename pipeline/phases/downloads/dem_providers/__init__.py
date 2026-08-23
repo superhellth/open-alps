@@ -1,5 +1,5 @@
-"""Registry mapping a dem.provider config name to its provider module. See base.py for what every
-provider module must implement."""
+"""Registry mapping a provider name (dem.providerConfig.regions[].provider) to its provider
+module. See base.py for what every provider module must implement."""
 
 from . import at_bev, bavaria_dgm, copernicus
 

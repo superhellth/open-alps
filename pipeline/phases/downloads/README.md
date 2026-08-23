@@ -39,13 +39,11 @@ new network download):
 
 ## `fetch_dem.py` — elevation raster tiles
 
-- Reads `config["dem"]` (`provider`, `providerConfig`, with `bbox` defaulted from the top-level
-  `config["bbox"]`).
-- If `provider == "composite"`: delegates to `dem_providers.composite.fetch_regions()`, which runs
-  each sub-region's own provider's `fetch()` and returns one manifest entry per sub-region
-  (`{provider, raw_dir, region_vrt, tile_paths}`).
-- Otherwise: calls `dem_providers.get_provider(name).fetch(config, raw_dir)` directly (one
-  manifest entry).
+- Reads `config["dem"]["providerConfig"]` (`bbox` defaulted from the top-level `config["bbox"]`)
+  and always delegates to `dem_providers.composite.fetch_regions()`, which runs each configured
+  sub-region's own provider's `fetch()` and returns one manifest entry per sub-region
+  (`{provider, raw_dir, region_vrt, tile_paths}`) — even a single-region scope is just
+  `providerConfig.regions` with one entry, so there is no separate single-provider code path.
 - Every provider's `fetch()` skips tiles already on disk (idempotent). Does **not**
   reproject/merge/materialize — that's `phases/elevation/build_dem_vrt.py`, split out so retuning
   reprojection or rerunning after a fresh tile download never re-triggers a provider's own

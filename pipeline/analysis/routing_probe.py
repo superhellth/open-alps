@@ -279,15 +279,19 @@ def run_probe(n_pairs: int, seed: int, direction_sample: int) -> dict:
                     wall_time_s[col].append(elapsed)
                 results[(row, col)] = result
 
-        for col in COLUMNS:
-            baseline = results.get((binfmt.VARIANT_FAST_ANY, col))
-            if baseline is None:
-                continue
+        # Every one of the nine cells is compared against the SAME single reference - the one path
+        # that actually ships today (FAST_ANY row, FAST column) - never against another cell's own
+        # column. Comparing (FAST_ANY, SHORT) to (FAST_ANY, FAST) is what answers "does SHORT ever
+        # produce a different route at all"; comparing it to itself (col-matched baseline) would be
+        # trivially 0 by construction and silently hide the real answer to that question.
+        reference = results.get((binfmt.VARIANT_FAST_ANY, "FAST"))
+        if reference is not None:
             for row in ROWS:
-                r = results.get((row, col))
-                substitution_total[(row, col)] += 1
-                if r is not None and is_substitution(baseline["coords"], r["coords"]):
-                    substitution_hits[(row, col)] += 1
+                for col in COLUMNS:
+                    r = results.get((row, col))
+                    substitution_total[(row, col)] += 1
+                    if r is not None and is_substitution(reference["coords"], r["coords"]):
+                        substitution_hits[(row, col)] += 1
 
         for row in (binfmt.VARIANT_FAST_T2, binfmt.VARIANT_FAST_T3):
             baseline_violates_total[row] += 1

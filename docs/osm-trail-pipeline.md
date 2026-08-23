@@ -114,8 +114,8 @@ single provider covers this pipeline's whole AT+Bayern scope) and needing more
 download/storage/runtime than Copernicus's one flat global tileset. The `composite` meta-provider
 exists to combine them per sub-region without forcing one DEM source on the whole bbox — see
 `pipeline/dem_providers/base.py` for the provider contract every source implements, and
-`pipeline/README.md`'s Config section for the registered providers and how to select one via
-`pipeline.config.json`'s `dem.provider`/`dem.providerConfig`.
+`pipeline/README.md`'s Config section for the registered providers and how to select them via
+`pipeline.config.json`'s `dem.providerConfig.regions`.
 
 ## Not done yet
 

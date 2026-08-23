@@ -21,7 +21,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
   "graph": { "maxEdgeKm": 10, "maxSnapM": 200, "tileSizeKm": 60 },
-  "dem": { "provider": "composite", "providerConfig": { "regions": [ ... ] }, "eleNoiseThresholdM": 4 },
+  "dem": { "providerConfig": { "regions": [ ... ] }, "eleNoiseThresholdM": 4 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }
 ```
@@ -56,8 +56,13 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     `build_base_graph.py`, which assigns every graph node to a cell at write time so
     `build_hub_edges.py` can look cells up identically at query time.
 - `dem` — inputs to the elevation pass (`fetch_dem.py`/`build_dem_vrt.py`/`add_elevation.py`):
-  - **`provider`** / **`providerConfig`** — which DEM source `fetch_dem.py` fetches from, and that
-    provider's own config. Registered providers (`pipeline/phases/downloads/dem_providers/`):
+  - **`providerConfig.regions`** — `fetch_dem.py` always fetches through the `composite`
+    meta-provider (`dem_providers/composite.py`), which resolves each configured region's own
+    provider and stitches their per-region VRTs into one final `dem.vrt` — even a one-region scope
+    is just `regions` with a single entry, so there's no separate single-provider code path or
+    config field. Region order matters where two regions' bboxes overlap — see `composite.py`'s
+    own docstring for which one wins. Each region is `{"provider": "...", "bbox": {...}, ...that
+    provider's own config keys}`. Registered providers (`pipeline/phases/downloads/dem_providers/`):
     - **`copernicus-glo-30`** — global 30m coverage (AWS Open Data, no auth). `providerConfig: {}`
       (uses the top-level `bbox`). The safe default; systematically underestimates ascent/descent
       on switchback-heavy alpine trails because 30m can't resolve terrain that narrow (see
@@ -69,11 +74,6 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
       served as one small (~200KB) direct-download zip per 1km tile; tile IDs are computed from
       `providerConfig.bbox` (no tile-index file needed), so keeping that bbox tight matters: see
       `bboxFromHuts` below.
-    - **`composite`** — meta-provider stitching per-sub-region VRTs from *different* providers
-      into one final `dem.vrt` (e.g. Austria via `at-bev-dgm`, Bavaria via `bavaria-dgm5`).
-      `providerConfig: {"regions": [{"provider": "...", "bbox": {...}, ...that provider's own
-      config keys}, ...]}`. Region order matters where two regions' bboxes overlap —
-      `gdalbuildvrt` keeps the first-listed source's pixels.
   - **`bboxFromHuts`** (per-region, `composite` only, default false) — a region's `bbox` is
     normally just a coarse political-boundary filter used to pick out which huts belong to that
     region (`data/osm/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
