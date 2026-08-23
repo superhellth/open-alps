@@ -21,12 +21,13 @@ no target (it's a gate, not a cacheable output) and declares `uptodate: [False]`
 every time it's selected.
 build_profiles does too - it never reads the DEM (spec B4) and is usually run precisely to retune
 --profile-points, so a fresh run is always cheap (seconds). build_base_graph/build_hub_edges/
-add_base_elevation are NOT force-rerun despite add_base_elevation looking similarly cheap-to-retune
-- their predecessor build_hut_graph.py was measured at ~4.1 hours (data/timings.jsonl,
-2026-08-15), and add_base_elevation genuinely reads the whole DEM and re-routes every base edge
-- so they're freshness-checked normally, each with a TaskOptionsChanged uptodate check on its own
-params so passing a different flag still reruns it without needing `doit forget` first (see the
-docstrings above those tasks and TaskOptionsChanged's own docstring below).
+sample_base_elevation/compute_edge_profiles are NOT force-rerun despite compute_edge_profiles
+looking similarly cheap-to-retune - their predecessor build_hut_graph.py was measured at ~4.1
+hours (data/timings.jsonl, 2026-08-15), and sample_base_elevation genuinely reads the whole DEM
+and compute_edge_profiles re-routes every base edge - so they're freshness-checked normally, each
+with a TaskOptionsChanged uptodate check on its own params so passing a different flag still
+reruns it without needing `doit forget` first (see the docstrings above those tasks and
+TaskOptionsChanged's own docstring below).
 
 CLAUDE.md's "never run a pipeline step without asking" rule applies here exactly as it did to
 run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
@@ -50,8 +51,9 @@ class TaskOptionsChanged:
     `lambda task, values: config_changed(...)(task, values)` hides it behind a plain lambda,
     so the digest never gets saved and the task shows "not up to date" on every single future
     run, forever, even immediately after a clean success. That silently defeated caching for
-    build_base_graph/build_hub_edges/add_base_elevation - the three tasks this pipeline most
-    needs NOT to rerun by accident (see this module's docstring).
+    build_base_graph/build_hub_edges/compute_edge_profiles (add_base_elevation at the time this
+    was fixed, later split into sample_base_elevation + compute_edge_profiles) - among the tasks
+    this pipeline most needs NOT to rerun by accident (see this module's docstring).
 
     Second, unrelated bug this class works around: doit only calls Task.init_options() (which
     populates task.options from parsed CLI flags/defaults - see doit/task.py) for tasks named
@@ -63,7 +65,10 @@ class TaskOptionsChanged:
     the command line, every time - defeating the cache exactly for the deep, expensive tasks
     (downloads, merges) that most need it. init_options() is idempotent (task.py: only acts
     `if self.options is None`), so calling it here is a safe way to guarantee options are
-    populated before comparing, regardless of whether doit already did it."""
+    populated before comparing, regardless of whether doit already did it.
+
+    Note this only applies to tasks with real params (compute_edge_profiles, build_base_graph,
+    build_hub_edges) - sample_base_elevation has none, so it doesn't need this at all."""
 
     def configure_task(self, task):
         task.value_savers.append(
@@ -87,8 +92,8 @@ DOIT_CONFIG = {
         "download_extracts", "fetch_huts", "compute_hub_range", "filter_trails",
         "merge_trails", "verify_trails",
         "fetch_stations_parking", "filter_start_points",
-        "build_base_graph", "fetch_dem", "build_dem_vrt", "add_base_elevation",
-        "build_hub_edges", "build_profiles",
+        "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
+        "compute_edge_profiles", "build_hub_edges", "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "copy_public_data",
     ],
@@ -282,11 +287,11 @@ def task_build_hub_edges():
             {"name": "max_snap_m", "long": "max-snap-m", "type": float,
              "default": CONFIG["graph"]["maxSnapM"]},
         ],
-        # task_dep (not just file_dep) on add_base_elevation: edges.npy's time_s/ascent_m/
+        # task_dep (not just file_dep) on compute_edge_profiles: edges.npy's time_s/ascent_m/
         # descent_m are rewritten in place by that task but aren't one of its declared targets
         # (build_base_graph already owns edges.npy as a target, and doit forbids two tasks
         # sharing one target) - node_ele.npy is the completion signal instead.
-        "task_dep": ["add_base_elevation"],
+        "task_dep": ["compute_edge_profiles"],
         "file_dep": [
             str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
@@ -337,17 +342,15 @@ def task_build_dem_vrt():
 # ---- 06c: elevation per base edge (in-place edit of base_graph/edges.npy) --
 # NOT force-rerun - reads the whole DEM and re-derives time_s/ascent_m/descent_m for every base
 # edge, the thing that makes the next `build_hub_edges` run the multi-hour job (see dodo.py's
-# module docstring and Task 22's schema_version fingerprint).
+# module docstring and Task 22's schema_version fingerprint). Split into two tasks because only
+# sample_base_elevation reads the DEM - compute_edge_profiles only reacts to
+# --smoothing-kernel-m, and used to force a full DEM resample on every retune when this was one
+# task (add_base_elevation).
 
-def task_add_base_elevation():
+def task_sample_base_elevation():
     return {
         "actions": [
-            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "add_base_elevation.py"}"'
-            " --smoothing-kernel-m %(smoothing_kernel_m)s"
-        ],
-        "params": [
-            {"name": "smoothing_kernel_m", "long": "smoothing-kernel-m", "type": float,
-             "default": CONFIG["dem"]["smoothingKernelM"]},
+            py("phases/elevation/sample_base_elevation.py"),
         ],
         # spec B5: the elevation pass genuinely needs the DEM, so declare it - the previous
         # numbering-convention ordering let a stale dem.tif through silently.
@@ -355,6 +358,28 @@ def task_add_base_elevation():
         "targets": [
             str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
         ],
+    }
+
+
+def task_compute_edge_profiles():
+    return {
+        "actions": [
+            f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "compute_edge_profiles.py"}"'
+            " --smoothing-kernel-m %(smoothing_kernel_m)s"
+        ],
+        "params": [
+            {"name": "smoothing_kernel_m", "long": "smoothing-kernel-m", "type": float,
+             "default": CONFIG["dem"]["smoothingKernelM"]},
+        ],
+        "task_dep": ["sample_base_elevation"],
+        "file_dep": [
+            str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
+        ],
+        # edges.npy is rewritten in place but can't be this task's target - build_base_graph
+        # already owns it as a target, and doit forbids two tasks sharing one target (same
+        # reason build_hub_edges below signals off node_ele.npy instead of edges.npy). This
+        # stamp file is the completion signal instead.
+        "targets": [str(OSM_DIR / "base_graph" / "edge_profiles.stamp")],
         "uptodate": [TaskOptionsChanged()],
     }
 

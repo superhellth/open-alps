@@ -252,69 +252,111 @@ VRT_NODATA = -9999.0
 def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # Source is an ungeoreferenced ASCII XYZ grid, implicitly in EPSG:25832 (UTM 32N) - unlike
     # at_bev.py's GeoTIFF source, gdalwarp needs -s_srs since the XYZ driver can't read a CRS off
-    # the file itself. Same warp-then-mosaic pattern otherwise.
+    # the file itself.
+    #
+    # Mosaic-then-warp, not warp-then-mosaic: each tile has real UTM32N easting/northing posts, so
+    # it carries a valid geotransform without needing a CRS tag - gdalbuildvrt only needs
+    # consistent extents/pixel size to mosaic, not SRS, so the raw (still-25832) tiles can be
+    # merged into one mosaic VRT for free (no pixel data touched) before the one reprojection that
+    # actually costs CPU. This used to be one gdalwarp subprocess per tile (tens of thousands for a
+    # full-coverage run) - at ~11 tiles/sec even with a 12-way thread pool, that process-spawn
+    # overhead alone dominated the runtime (data/timings.jsonl). A single gdalwarp over the merged
+    # mosaic does the same reprojection work in 2 process spawns total instead of tens of
+    # thousands. Since output here is -of VRT (a lazy warped VRT, not materialized pixels), the
+    # actual resampling doesn't run at this call - it's deferred to whenever something reads real
+    # pixels through it (materialize_geotiff() in lib/pipeline.py). -wo NUM_THREADS=ALL_CPUS is a
+    # warp option, though, and GDAL persists warp options into the output VRT's XML - so it's not
+    # wasted, it configures that later, deferred read to multithread the real resampling when it
+    # finally happens (-multi, by contrast, only affects immediate chunked I/O at call time, which
+    # doesn't exist for a VRT-output call - left out as dead weight).
+    #
+    # This also shrinks a correctness issue, not just speed: a UTM square doesn't stay
+    # axis-aligned once reprojected to EPSG:4326 (it becomes a slightly rotated quadrilateral), but
+    # gdalwarp's output is always an axis-aligned rectangle - the corner slivers outside that
+    # rotated footprint get filled with 0 unless -dstnodata is set. Warping per-tile (the old
+    # approach) hit this at *every one* of tens of thousands of tile boundaries, injecting fake
+    # sea-level readings throughout the coverage (a trail edge sampling one showed up as a ~1500m
+    # round-trip to/from 0m, wildly inflating ascent_m/descent_m). Warping the merged mosaic once
+    # means only the *outer* boundary of the whole region has rotated corners - internal tile-to-
+    # tile seams no longer exist to leak nodata at all.
     #
     # The XYZ grid has no NoData tag of its own (the ASCII driver can't carry one), but the
     # *values* aren't all real either: a downloaded tile's own void/no-coverage posts are written
     # right into the data as literal -9999.00 rows (checked a raw tile - 1335/1530 posts were
-    # -9999.00). Passing -srcnodata here is what turns those into recognized gaps instead of
-    # elevation readings of about -9999m; without it they used to trip gdalwarp's "Value -9999 in
-    # the source dataset has been changed ... to avoid being treated as NoData" warning per
-    # colliding post, and - worse than the warning - GDAL was nudging each one by a tiny epsilon
-    # to *keep* it as data, which fed a wall of fake sub-sea-level elevation into the mosaic and
-    # from there into add_elevation.py's ascent/descent calc wherever a trail edge crossed one.
+    # -9999.00). -srcnodata on the mosaic build is what turns those into recognized gaps instead of
+    # elevation readings of about -9999m; without it gdalwarp used to nudge each one by a tiny
+    # epsilon to *keep* it as data (its "Value -9999 ... has been changed" warning), feeding a wall
+    # of fake sub-sea-level elevation into add_elevation.py's ascent/descent calc downstream.
+    # Passed again on the warp step too rather than trusted to propagate implicitly through the
+    # VRT's NoDataValue metadata (see materialize_geotiff()'s docstring on why this codebase
+    # doesn't trust NoData passthrough across a GDAL step without saying so explicitly).
     #
     # Separate issue, also handled below: existing_tile_ids() only downloads tiles that actually
     # exist - 1km cells with no coverage (e.g. ones straddling the Austrian border, see module
     # docstring) are simply absent from tile_paths. The mosaic's overall extent still spans the
     # bounding rectangle of every tile, so those absent cells are gaps *inside* that rectangle.
-    # Without an explicit NoData value, gdalbuildvrt fills uncovered pixels with 0 instead of
-    # flagging them - composite.py's final merge (and add_elevation.py's own nodata check) then
-    # can't distinguish that 0 from a real elevation reading, so a gap here silently stomps valid
-    # data from other sources it's merged with. -vrtnodata makes gdalbuildvrt fill gaps with
-    # VRT_NODATA instead, so they read as proper NoData throughout the rest of the pipeline.
+    # -vrtnodata makes gdalbuildvrt fill those with VRT_NODATA instead of 0, so they read as proper
+    # NoData throughout the rest of the pipeline rather than silently stomping valid data from
+    # other sources composite.py merges this with.
     #
-    # And a third, separate issue: warp_one() below reprojects each 1km UTM32N tile individually -
-    # a UTM square doesn't stay axis-aligned once reprojected to EPSG:4326 (it becomes a slightly
-    # rotated quadrilateral), but gdalwarp's output is always an axis-aligned rectangle. Without an
-    # explicit -dstnodata, gdalwarp fills the corner slivers outside that rotated footprint with
-    # 0 - inside *every* tile, not just at real coverage gaps, since it happens per-tile before
-    # any mosaicking. That silently injected thousands of fake sea-level readings across Bavaria's
-    # whole coverage (a trail edge sampling one shows up as a ~1500m round-trip to/from 0m, wildly
-    # inflating ascent_m/descent_m). -dstnodata VRT_NODATA on the per-tile warp fixes this at the
-    # source, using the same sentinel the outer gdalbuildvrt above already expects.
+    # Mosaicking is NOT free the way it first looked: the XYZ ASCII format has no header, so
+    # gdalbuildvrt must open and scan *every* tile's full row set just to learn its extent, before
+    # it can even start mosaicking - benchmarked at ~123ms/tile. gdalbuildvrt itself has no
+    # multithreading option, so a single gdalbuildvrt call over all tiles serializes that scan onto
+    # one core (~76min projected for a full run - worse than the old all-per-tile-gdalwarp
+    # approach, because that at least spread the same scan cost across a 12-way process pool).
+    # Fix: chunk the tile list across workers, gdalbuildvrt each chunk in parallel (restores the
+    # scan parallelism), then one more gdalbuildvrt to combine the N partial mosaics - still only
+    # ~N+2 process spawns total (N chunk builds + 1 combine + 1 warp) instead of tens of thousands,
+    # but the actual scanning work is spread across all cores again.
     warped_dir = out_vrt_path.parent / "bavaria_dgm_warped"
     warped_dir.mkdir(exist_ok=True)
 
-    def warp_one(tile: Path) -> Path:
-        warped = warped_dir / f"{tile.stem}_4326.vrt"
+    def build_chunk_mosaic(item: tuple[int, list[Path]]) -> Path:
+        idx, chunk = item
+        list_path = warped_dir / f"chunk_{idx:03d}_files.txt"
+        list_path.write_text("\n".join(str(p) for p in chunk), encoding="utf-8")
+        mosaic_path = warped_dir / f"chunk_{idx:03d}_25832.vrt"
         subprocess.run(
-            ["gdalwarp", "-q", "-s_srs", "EPSG:25832", "-t_srs", "EPSG:4326", "-of", "VRT",
-             "-srcnodata", str(VRT_NODATA), "-dstnodata", str(VRT_NODATA),
-             "-overwrite", str(tile), str(warped)],
+            ["gdalbuildvrt", "-overwrite", "-srcnodata", str(VRT_NODATA), "-vrtnodata", str(VRT_NODATA),
+             "-input_file_list", str(list_path), str(mosaic_path)],
             check=True,
         )
-        return warped
+        return mosaic_path
 
-    warped_paths = []
-    warped_count = 0
+    workers = os.cpu_count() or 4
+    chunk_size = math.ceil(len(tile_paths) / workers)
+    chunks = list(enumerate(
+        [tile_paths[i:i + chunk_size] for i in range(0, len(tile_paths), chunk_size)]
+    ))
+    print(f"mosaicking {len(tile_paths)} raw Bavaria DGM5 tiles (EPSG:25832) "
+          f"across {len(chunks)} parallel chunks ...", flush=True)
+    chunk_count = 0
     lock = threading.Lock()
-    with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as pool:
-        for warped in pool.map(warp_one, tile_paths):
-            warped_paths.append(warped)
+    chunk_mosaics = []
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for mosaic_path in pool.map(build_chunk_mosaic, chunks):
+            chunk_mosaics.append(mosaic_path)
             with lock:
-                warped_count += 1
-                if warped_count % 500 == 0:
-                    print(f"  warped {warped_count}/{len(tile_paths)} tiles")
+                chunk_count += 1
+                print(f"  chunk mosaic {chunk_count}/{len(chunks)} done", flush=True)
 
-    # gdalbuildvrt's own argv, not a shell, so this isn't a shell-length limit - it's Windows'
-    # CreateProcess argv cap (~32KB total), which thousands of warped tile paths blow past.
-    # -input_file_list sidesteps that by reading paths from a file instead of argv.
-    file_list_path = warped_dir / "warped_files.txt"
-    file_list_path.write_text("\n".join(str(p) for p in warped_paths), encoding="utf-8")
+    combined_list_path = warped_dir / "chunk_mosaics.txt"
+    combined_list_path.write_text("\n".join(str(p) for p in chunk_mosaics), encoding="utf-8")
+    raw_mosaic_path = warped_dir / "raw_mosaic_25832.vrt"
     subprocess.run(
         ["gdalbuildvrt", "-overwrite", "-vrtnodata", str(VRT_NODATA),
-         "-input_file_list", str(file_list_path), str(out_vrt_path)],
+         "-input_file_list", str(combined_list_path), str(raw_mosaic_path)],
+        check=True,
+    )
+
+    print(f"reprojecting mosaic {raw_mosaic_path} -> {out_vrt_path} (EPSG:25832 -> EPSG:4326) ...",
+          flush=True)
+    subprocess.run(
+        ["gdalwarp", "-s_srs", "EPSG:25832", "-t_srs", "EPSG:4326",
+         "-srcnodata", str(VRT_NODATA), "-dstnodata", str(VRT_NODATA),
+         "-wo", "NUM_THREADS=ALL_CPUS",
+         "-of", "VRT", "-overwrite", str(raw_mosaic_path), str(out_vrt_path)],
         check=True,
     )
     return out_vrt_path

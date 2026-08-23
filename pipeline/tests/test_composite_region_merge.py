@@ -49,6 +49,10 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
 
     monkeypatch.setattr(dem_providers, "get_provider", lambda name: fake_provider)
     monkeypatch.setattr(pipeline_lib, "normalize_colorinterp", lambda p: p)
+    monkeypatch.setattr(
+        pipeline_lib, "materialize_geotiff",
+        lambda vrt_path, out_path: calls.append(("materialize_geotiff", vrt_path, out_path)) or out_path
+    )
 
     merge_calls = []
     monkeypatch.setattr(
@@ -76,7 +80,8 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
 
     assert result == out_vrt
     assert sum(1 for c in calls if c[0] == "to_4326_vrt") == 2
-    assert len(merge_calls) == 1  # final gdalbuildvrt over the two regional VRTs
+    assert sum(1 for c in calls if c[0] == "materialize_geotiff") == 2  # one per region, parallel
+    assert len(merge_calls) == 1  # final gdalbuildvrt over the two materialized region GeoTIFFs
 
 
 def test_fetch_regions_computes_bufferkm_from_max_edge_km_for_bboxfromhuts_region(

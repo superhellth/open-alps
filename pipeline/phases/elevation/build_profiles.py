@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Builds display-only elevation profiles for hut_edges/ and start_edges/ records, interpolated
 onto config["dem"]["profilePoints"] evenly-spaced distances per record (spec B4). Never opens the
-DEM: every point's elevation comes from add_base_elevation.py's already-persisted
+DEM: every point's elevation comes from sample_base_elevation.py's already-persisted
 base_graph/{node_ele.npy, interior_ele.npy} (spec B2/B3 - routing and display read the same
 numbers), looked up by exact (quantized) coordinate identity - the same coordinate-identity
 attribution technique analysis/grading_coverage.py already uses to attribute a stored polyline
@@ -13,10 +13,10 @@ split_coord). Both are filled by carrying the nearest matched neighbour's elevat
 polyline - a reasonable approximation for a DISPLAY profile, not the routing cost.
 
 Retuning --profile-points is meant to be cheap (no re-route, no DEM read) - this script alone
-owns that retune path; add_base_elevation.py stays untouched by it.
+owns that retune path; sample_base_elevation.py/compute_edge_profiles.py stay untouched by it.
 
 Usage: python pipeline/phases/elevation/build_profiles.py [--profile-points 30]
-Requires data/osm/base_graph/{node_ele.npy,interior_ele.npy} (add_base_elevation.py) and
+Requires data/osm/base_graph/{node_ele.npy,interior_ele.npy} (sample_base_elevation.py) and
 data/osm/{hut_edges,start_edges}/{records.npy,geometry.npy} (build_hub_edges.py).
 """
 

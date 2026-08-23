@@ -5,7 +5,7 @@ pipeline.config.json, then clips to the hub range (data/osm/hub_range.geojson,
 compute_hub_range.py's output - the union of a graph.maxEdgeKm-radius circle around every hut).
 No trail farther than that from every hut can ever appear on a valid hut-to-hut/hut-to-start edge
 (see compute_hub_range.py's docstring), so dropping it here means stream_osm/contract_structural
-in build_base_graph.py never have to process it, and add_base_elevation.py never needs DEM
+in build_base_graph.py never have to process it, and sample_base_elevation.py never needs DEM
 coverage for it either.
 
 Preserves full node/way topology at both steps (osmium tags-filter keeps referenced nodes by

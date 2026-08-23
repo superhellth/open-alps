@@ -208,7 +208,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict):
     n_base = len(subgraph.local_nodes)
     edges_uv = list(zip(subgraph.local_edges["u"].tolist(), subgraph.local_edges["v"].tolist()))
     # Routes on real distance for now - EDGE_DTYPE dropped the road-penalised `weight` column
-    # (spec A3) and time_s isn't populated until add_base_elevation.py runs; lib/variants.py
+    # (spec A3) and time_s isn't populated until compute_edge_profiles.py runs; lib/variants.py
     # switches this to time_s once it exists.
     dists = subgraph.local_edges["dist"].tolist()
     weights = list(dists)

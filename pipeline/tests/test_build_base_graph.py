@@ -121,7 +121,7 @@ def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
     assert set(edges["u"].tolist()) | set(edges["v"].tolist()) == {0, 1, 2}
     assert sorted(edges["dist"].tolist()) == [100.0, 200.0]
     assert interior["lon"][0] == pytest.approx(11.05)
-    # time_s/ascent_m/descent_m are UNSET here - add_base_elevation.py fills them in a later pass
+    # time_s/ascent_m/descent_m are UNSET here - compute_edge_profiles.py fills them in a later pass
     assert (edges["time_s"] == binfmt.UNSET).all()
 
 

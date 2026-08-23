@@ -8,6 +8,8 @@ import re
 import shlex
 import shutil
 import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from shapely.geometry import Polygon
@@ -50,14 +52,16 @@ def _to_wsl_path(arg: str) -> str:
 def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
     """Bakes a (possibly lazily-reprojecting) VRT into a real, tiled/compressed GeoTIFF.
 
-    dem.vrt's composite provider chains several layers of on-the-fly `gdalwarp`-built VRTs (each
-    region's per-tile reprojection from its native CRS into EPSG:4326) - reading from it, as
-    add_elevation.py does, re-runs that reprojection math for every pixel touched, every time.
-    Timed at ~750s for a read covering AT+Bavaria (data/timings.jsonl, phase read_dem_window) -
-    almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles are already local. Materializing
-    once here means step 07 (already freshness-cached, rarely rerun) pays that reprojection cost
-    instead of every step 08 run - and 08 is explicitly the step people rerun repeatedly, to
-    retune --ele-noise-threshold-m.
+    Called twice per build_dem_vrt.py run, at two different costs: once per region inside
+    build_dem_vrt() (in parallel, one call per provider - see that function's docstring for why),
+    where it pays whichever region's own warp cost; and once more at the end of build_dem_vrt.py
+    on the merged dem.vrt, which by then is just a mosaic of already-real region GeoTIFFs (no warp
+    left to do, so that final call is cheap regardless of how many regions there are).
+
+    The underlying cost this exists to avoid: reading a lazily-reprojecting VRT (as the old
+    add_elevation.py used to do directly against dem.vrt) re-runs that reprojection math for every
+    pixel touched, on every read. Almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles
+    are already local.
 
     -a_nodata copies NoDataValue from vrt_path explicitly (see composite.py's
     _normalize_colorinterp for why this isn't left to gdal_translate's implicit passthrough).
@@ -120,7 +124,23 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
     files (no network), so it's safe - and fast - to rerun on its own after tweaking a provider's
     to_4326_vrt() (e.g. bavaria_dgm.py's -srcnodata fix) without re-fetching. See
     fetch_dem.py / build_dem_vrt.py for why fetching and building are split into separate
-    scripts in the first place."""
+    scripts in the first place.
+
+    Each region is materialized to a real GeoTIFF here, one at a time per region but all regions
+    in parallel (ThreadPoolExecutor around subprocess.run - threads, not processes, since the
+    actual parallel work happens in each child gdal_translate process; the GIL isn't held while a
+    thread blocks on subprocess.run). This is what makes the regions' warp cost (bavaria/at-bev's
+    CRS reprojection, the expensive part - see materialize_geotiff()'s docstring) run on multiple
+    cores at once. Before this, dem.vrt merged the regions' still-lazy warped VRTs directly, so
+    ALL of that warp math was deferred onto materialize_geotiff()'s single final gdal_translate
+    call, on one core - measured at 8462s wall time for a 3-region AT+Bavaria+Copernicus run
+    (data/timings.jsonl, 2026-08-23), pegging one core at ~99% the whole time despite
+    NUM_THREADS=ALL_CPUS (that flag only threads the GTiff compression step, never gdal's
+    warp/resample read path - confirmed live: 43s of CPU burned in a 45s window while dem.tif's
+    byte size didn't move at all, i.e. genuine single-core compute, not I/O wait). Once every
+    region is real pixels, this function's own final gdalbuildvrt merge is just mosaic bookkeeping
+    (no resampling), and build_dem_vrt.py's later materialize_geotiff(dem.vrt, dem.tif) call
+    becomes a cheap compress+copy instead of the multi-hour step."""
     # local import: dem_providers.composite imports lib.pipeline at module level, so importing
     # dem_providers back at this module's top level would be a circular import
     from downloads.dem_providers import get_provider
@@ -133,9 +153,23 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
         provider.to_4326_vrt(tile_paths, region_vrt)
         region_vrts.append(normalize_colorinterp(region_vrt))
 
+    region_tifs = [v.with_suffix(".tif") for v in region_vrts]
+
+    def _timed_materialize(args: tuple[Path, Path]) -> float:
+        region_vrt, region_tif = args
+        t0 = time.monotonic()
+        materialize_geotiff(region_vrt, region_tif)
+        return time.monotonic() - t0
+
+    print(f"materializing {len(region_vrts)} region(s) in parallel ...", flush=True)
+    with ThreadPoolExecutor(max_workers=len(region_vrts)) as pool:
+        elapsed = list(pool.map(_timed_materialize, zip(region_vrts, region_tifs)))
+    for entry, secs in zip(manifest, elapsed):
+        print(f"  {entry['provider']}: materialized in {secs:.1f}s", flush=True)
+
     out_vrt_path = dem_dir / "dem.vrt"
     subprocess.run(
-        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(v) for v in region_vrts]],
+        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(t) for t in region_tifs]],
         check=True,
     )
     return out_vrt_path

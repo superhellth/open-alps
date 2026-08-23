@@ -45,7 +45,7 @@ VARIANT_NAMES = {
     VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
 }
 
-UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before add_base_elevation.py runs
+UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

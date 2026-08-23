@@ -49,7 +49,7 @@ def fetch_regions(provider_config: dict, dem_dir: Path, max_edge_km: float) -> l
             # provider using bboxFromHuts) always prefers points over bbox when both are present,
             # so a resolved/tightened bbox here would just be computed and discarded. A previous
             # `_resolve_region_bbox()` did that dead work anyway (removed 2026-08-22, found while
-            # debugging add_base_elevation's DEM-coverage gap - see
+            # debugging sample_base_elevation's DEM-coverage gap - see
             # docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md open question 5).
             region_config = {
                 **region_config,

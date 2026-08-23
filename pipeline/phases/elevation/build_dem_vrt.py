@@ -31,9 +31,12 @@ with open(manifest_path, encoding="utf-8") as f:
 
 n_tiles = sum(len(r["tile_paths"]) for r in manifest)
 print(f"building dem.vrt from {n_tiles} tiles across {len(manifest)} region(s) ...")
-vrt_path = build_dem_vrt(manifest, DEM_DIR)
+with phase(SCRIPT_NAME, "materialize_regions", n_regions=len(manifest)):
+    vrt_path = build_dem_vrt(manifest, DEM_DIR)
 print(f"written {vrt_path}")
 
+# Cheap by this point: build_dem_vrt() already materialized every region to real pixels, so this
+# is just a mosaic compress+copy, not a reprojection - see materialize_geotiff()'s docstring.
 tif_path = DEM_DIR / "dem.tif"
 print(f"materializing {vrt_path} -> {tif_path} ...")
 with phase(SCRIPT_NAME, "materialize_geotiff"):
