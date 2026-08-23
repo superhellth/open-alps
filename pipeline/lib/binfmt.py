@@ -41,8 +41,14 @@ TYPE_PARKING = 2
 VARIANT_FAST_ANY = 0
 VARIANT_FAST_T2 = 1
 VARIANT_FAST_T3 = 2
+# Fourth row (spec H fallback), added by Task 11 per docs/superpowers/specs/
+# 2026-08-22-tour-suggestion-findings.md: the ungraded connectivity gate measured 31.7%/36.9% of
+# huts losing their last T2/T3 connection under the strict ungraded_m==0 rule, both far over the
+# 5% threshold that would have kept the grid at three rows.
+VARIANT_FAST_T3_UNGRADED = 3
 VARIANT_NAMES = {
     VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
+    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED",
 }
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs

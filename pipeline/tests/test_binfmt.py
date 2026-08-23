@@ -63,3 +63,11 @@ def test_variant_constants_replace_variant_shortest():
     assert binfmt.VARIANT_FAST_T2 == 1
     assert binfmt.VARIANT_FAST_T3 == 2
     assert not hasattr(binfmt, "VARIANT_SHORTEST")
+
+
+def test_variant_fast_t3_ungraded_is_the_fourth_row():
+    # findings doc 2026-08-22-tour-suggestion-findings.md §3/§4: 31.7%/36.9% of huts lose their
+    # last T2/T3 connection under the strict ungraded_m==0 rule, both far over the 5% threshold -
+    # the fourth row is required, not optional.
+    assert binfmt.VARIANT_FAST_T3_UNGRADED == 3
+    assert binfmt.VARIANT_NAMES[binfmt.VARIANT_FAST_T3_UNGRADED] == "FAST_T3_UNGRADED"

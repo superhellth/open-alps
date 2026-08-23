@@ -51,3 +51,28 @@ def test_untagged_rank_can_never_satisfy_a_ceiling():
     # spec C5: -1 is "unknown", not "easy" - a <= comparison alone would admit it
     edges = _edges(sac_rank=[-1], constrained_ok=[True], via_ferrata=[False])
     assert not variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])[0]
+
+
+def test_fast_t3_ungraded_permits_ungraded_terrain_ft3_forbids():
+    # findings doc: FAST_T3_UNGRADED relaxes ONLY the ungraded_m==0 guarantee, not the ceiling
+    edges = _edges(sac_rank=[-1], constrained_ok=[False], via_ferrata=[False])
+    t3 = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
+    t3u = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
+    assert t3.tolist() == [False]
+    assert t3u.tolist() == [True]
+
+
+def test_fast_t3_ungraded_still_forbids_via_ferrata_and_t4_plus():
+    edges = _edges(sac_rank=[-1, -1, 4], constrained_ok=[False, False, True],
+                   via_ferrata=[True, False, False])
+    mask = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
+    #                    via ferrata (even though ungraded)  ungraded, ok   T4 graded, over ceiling
+    assert mask.tolist() == [False, True, False]
+
+
+def test_fast_t3_ungraded_still_forbids_a_graded_edge_excluded_by_downgrade_tag():
+    # a KNOWN grade with a downgrade tag (e.g. trail_visibility=horrible) is still safety-excluded
+    # - only the "we don't know the grade at all" case is relaxed by this row
+    edges = _edges(sac_rank=[2], constrained_ok=[False], via_ferrata=[False])
+    mask = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
+    assert mask.tolist() == [False]

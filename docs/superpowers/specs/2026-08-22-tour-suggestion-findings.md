@@ -100,3 +100,60 @@ Verification (`edges.npy`, 4,729,589 edges): no field left at the `UNSET` (-1.0)
 `constrained_ok` share over the first 1M edges: **92.6%**, consistent with the network tier mass
 above (explicit 4.56% + inferred 89.52% = 94.08% graded) — no reconciliation needed with the
 production classifier.
+
+## 5. Sizing probe (open questions 1, 2, 4, 5) — `data/analysis/routing_probe.json`
+
+`python pipeline/analysis/routing_probe.py --pairs 200`, seed 42, ~992.6s wall time (~46 distinct
+grid cells dominate — `_build_igraph_with_snaps`'s per-edge Python construction on a ~670k-edge
+padded cell, ~12-15s each; bounded by cell count, not pair count past that).
+
+**Substitution rate** (fraction of pairs whose path differs from the true production baseline,
+`FAST_ANY` routed on `FAST`/`time_s`):
+
+| cell | substitution rate |
+|---|---|
+| `FAST_ANY` × `SHORT` | 93.4% |
+| `FAST_ANY` × `ROAD_AVOID` (×4 time penalty on road-tagged edges) | 86.9% |
+| `FAST_T2` × `FAST` | 52.6% |
+| `FAST_T3` × `FAST` | 55.5% |
+
+`SHORT`/`ROAD_AVOID` diverge from `FAST` on the large majority of pairs at essentially the same
+routing cost (wall-time ratio to `FAST`: `SHORT` 0.94×, `ROAD_AVOID` 0.96×) — a real signal for the
+deferred `ROAD_*` decision (open question 1), though not itself a decision: high substitution says
+a road-avoiding column would frequently produce a *different* route, not that the difference is
+one users would want, and the measured aggregate road share is only 9.7% (§1) — most legs don't
+have much road to avoid in the first place. Left for Task 24's post-rebuild re-run, as originally
+planned; this is supporting evidence, not new grounds to move it earlier.
+
+**Baseline violation**: `FAST_ANY`/`FAST` itself already violates `FAST_T2`'s constraint on 88.1%
+of pairs, `FAST_T3`'s on 87.4% — consistent with §3's 12.7%-fully-graded figure on stored edges.
+
+**Ungraded blocker rate** (open question 2, corroborating §3's connectivity-gate measurement from a
+different angle — probe-routed pairs, not stored-edge attribution): of 145 T2/T3 pairs where the
+`FAST` column found no path, **66 were blocked by ungraded terrain alone** (relaxing the
+`ungraded_m == 0` rule opens a path), 10 by genuine difficulty alone (relaxing the ceiling opens a
+path), 1 by both, and 68 were disconnected under either relaxation (no path exists in this padded
+cell regardless — a `maxEdgeKm`/connectivity question, not a passability one). Ungraded terrain is
+the dominant *passability* blocker (66 vs 10), reinforcing §3/§4's decision: `FAST_T3_UNGRADED` is
+required, and the 5% threshold was crossed by a wide margin from two independent measurements.
+
+**Duration calibration (open question 5)** — routed `FAST_ANY` time (`time_s` summed along the
+path) vs `speed.din_duration_h` on the same path's aggregates, 137 pairs with `distance_m > 0`:
+least-squares scale factor **`routed ≈ 0.6689 × din`** (residual std 2.26h, noisy at n=137 across
+widely varying leg lengths, but the central estimate is what matters here). The placeholder
+constants (`v0=6.0, k=3.5, s0=0.05`) route **faster** than DIN by that factor — applying the scale
+uniformly to `v0` (time ∝ 1/v for a fixed curve shape, so `new_v0 = v0 × scale` reproduces exactly
+`new_time = old_time / scale`) gives **`v0 = 6.0 × 0.6689 = 4.013`**, landing almost exactly on DIN
+33466's own stated flat-ground rate (`distance_m / 4000` ⇒ 4.0 km/h, `lib/speed.py`'s
+`din_duration_h`) — a clean cross-check that the calibration is doing something sensible, not an
+artifact. `k`/`s0` (the curve's shape) are unchanged: this is a uniform-scale fit, not a full
+nonlinear refit (`routing_probe.py`'s `_fit_speed_constants` docstring records this as a deliberate
+probe-scope limitation — a full refit was out of scope for a minutes-long probe).
+
+**Decision:** `graph.speedModel` becomes `{v0: 4.013, k: 3.5, s0: 0.05}` (was
+`{v0: 6.0, k: 3.5, s0: 0.05}`). `graph.variants` becomes
+`["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]`.
+
+**Direction spread (open question 4)**: 30 pairs routed both directions — **100% identical
+geometry**, cost ratio 1.0 (undirected graph, as expected; asymmetric ascent/descent is a display
+concern, not a routing/storage one — §D4's "one record per unordered pair" stands unmodified).

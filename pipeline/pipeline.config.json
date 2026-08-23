@@ -10,7 +10,8 @@
     "maxSnapM": 100,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
     "tileSizeKm": 60,
-    "speedModel": { "v0": 6.0, "k": 3.5, "s0": 0.05 }
+    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
+    "variants": ["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]
   },
   "dem": {
     "providerConfig": {
