@@ -84,36 +84,47 @@ worker module in each child). Each worker, independently:
    edge's interior polyline is found (`lib/edge_split.py`'s `nearest_point_on_polyline()`) and the
    edge is split there (`split_edge_at_point()`), inserting a virtual vertex. A hub with no node
    within `--max-snap-m` is skipped entirely — not force-matched to a distant trail.
-3. **Builds an in-process `igraph.Graph`** over the region (base nodes + virtual snap vertices),
-   then for each core hub in the region: computes real-distance shortest-path *distances*
-   (`weights="dist"`) to every *hut* in range and discards any pair over `--max-edge-km`
-   (mirrors an "all-pairs cutoff" pass), then for surviving pairs fetches the road-penalized
-   shortest *path* (`weights="weight"`, `get_shortest_paths(..., output="epath")`) and walks its
-   edge list to build full path geometry, summing real `dist`/`road_m` and tracking max `sac_rank`
-   and any `via_ferrata` crossing along the path.
+3. **Routes each enabled variant row** (`pipeline.config.json`'s `graph.variants`, `lib/variants.py`
+   — currently `FAST_ANY`, `FAST_T2`, `FAST_T3`, `FAST_T3_UNGRADED`) separately over the same
+   snapped hubs: `lib/variants.py`'s `edge_mask()` turns the row's constraint (max `sac_rank`,
+   whether ungraded terrain is admitted) into a boolean mask over the region's edges, and
+   `_build_igraph_with_snaps()` builds one `igraph.Graph` per row from only the unmasked edges
+   (base nodes + virtual snap vertices). For each core hub: computes real-distance shortest-path
+   *distances* (`weights="dist"`, on that row's masked graph) to every *hut* in range and discards
+   any pair over `--max-edge-km` (mirrors an "all-pairs cutoff" pass), then for surviving pairs
+   fetches the *time*-shortest path (`weights="weight"` == `time_s`, spec A3 — never the
+   road-penalized distance the pre-V2 pipeline used) and walks its edge list to build full path
+   geometry, summing real `dist`/`road_m` and tracking max `sac_rank` and any `via_ferrata`
+   crossing along the path. The routed path's own `distance_m` is re-checked against
+   `--max-edge-km` after the fact (spec C8): the cutoff above ran on the *unconstrained* shortest
+   distance, which the time-shortest path can exceed. A row with no legal path for a pair emits
+   nothing for it — never a silent fallback to a laxer row.
    Only huts are ever routed *to*: the two shipped edge sets are hut-hut and access-point-to-hut,
    so a station↔parking pair is work nothing consumes, and a hut→access-point pair would just
    duplicate the access→hut record the access point's own cell already emits.
 4. **`merge_and_dedup()`** combines every worker's records: undirected hut↔hut pairs are
-   deduplicated on `(type, id)` (not id alone — hut/station/parking id spaces can collide), while
-   directional access→hut records are kept as-is (a station/parking point is always stored as the
-   origin, never merged symmetrically with a hut).
+   deduplicated on `(variant, type, id)` (not id alone — hut/station/parking id spaces can
+   collide, and two variant rows for the same pair are two distinct records, not duplicates),
+   while directional access→hut records are kept as-is (a station/parking point is always stored
+   as the origin, never merged symmetrically with a hut).
 
-**Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`; `ascent_m`/`descent_m`/`profile_*`
-left at `UNSET`(-1.0)/0 here, filled in by `phases/elevation/add_elevation.py`):
+**Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`; `ascent_m`/`descent_m`/`max_ele_m`/
+`ungraded_m`/`inferred_m`/`snap_m`/`profile_*` left at `0`/`UNSET` here, filled in by the
+elevation-pass scripts under `phases/elevation/`):
 
-- `data/osm/hut_edges/{records.npy, geometry.npy}` — hut-to-hut edges.
+- `data/osm/hut_edges/{records.npy, geometry.npy}` — hut-to-hut edges, one record per
+  `(pair, variant)`.
 - `data/osm/start_edges/{records.npy, geometry.npy}` — access edges (station/parking ↔ hut), same
   shape. Named "start" for historical reasons; the edge is undirected — the same record serves a
   trip that *starts* at the station and one that *ends* there. It is only stored access→hut.
 
 `RECORD_DTYPE = (from_id i8, to_id i8, from_type u1, to_type u1, variant u1, distance_m f4,
-road_m f4, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, geom_offset i8, geom_count
-i4, profile_offset i8, profile_count i4)` — `from_type`/`to_type` are `binfmt.TYPE_HUT` (0) /
-`TYPE_STATION` (1) / `TYPE_PARKING` (2); `variant` is currently always `VARIANT_SHORTEST` (0), a
-reserved extensibility hook for a future second route variant per pair (not computed yet).
-`geom_offset`/`geom_count` slice into the sibling `geometry.npy` (`COORD_DTYPE`), a flat polyline
-vertex pool exactly like `base_graph/interior.npy`.
+road_m f4, ascent_m f4, descent_m f4, max_ele_m f4, ungraded_m f4, inferred_m f4, snap_m f4,
+sac_rank i1, via_ferrata bool, geom_offset i8, geom_count i4, profile_offset i8, profile_count
+i4)` — `from_type`/`to_type` are `binfmt.TYPE_HUT` (0) / `TYPE_STATION` (1) / `TYPE_PARKING` (2);
+`variant` is one of `binfmt.VARIANT_*` (`lib/variants.py`'s `VARIANTS` dict has the per-row
+definitions). `geom_offset`/`geom_count` slice into the sibling `geometry.npy` (`COORD_DTYPE`), a
+flat polyline vertex pool exactly like `base_graph/interior.npy`.
 
 **Timing**: the whole cell-pool loop is one `lib/timing.py` `phase("build_hub_edges.py",
 "hub_edge_query", ...)` record. Each worker fills a `StepTimer` with its own

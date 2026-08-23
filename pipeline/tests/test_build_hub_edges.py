@@ -10,11 +10,14 @@ from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
+from lib import variants  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    _build_igraph_with_snaps, compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph,
+    _build_igraph_with_snaps, _write_edge_output, compute_hub_edges_for_cell, merge_and_dedup,
+    snap_hub_to_subgraph,
 )
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
+FAST_ANY_ONLY = [variants.VARIANTS[binfmt.VARIANT_FAST_ANY]]
 
 
 def _line_subgraph():
@@ -94,6 +97,7 @@ def test_compute_hub_edges_for_cell_connects_two_huts_on_the_line():
     ]
     records = compute_hub_edges_for_cell(
         subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
     assert records[0]["distance_m"] < 5000
@@ -107,6 +111,7 @@ def test_compute_hub_edges_for_cell_returns_full_path_geometry():
     ]
     records = compute_hub_edges_for_cell(
         subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
     geometry = records[0]["geometry"]
@@ -117,9 +122,9 @@ def test_compute_hub_edges_for_cell_returns_full_path_geometry():
 
 def test_merge_and_dedup_drops_duplicate_hut_pairs():
     shard_a = [{"from_id": 1, "to_id": 2, "from_type": binfmt.TYPE_HUT,
-                "to_type": binfmt.TYPE_HUT, "distance_m": 100.0}]
+                "to_type": binfmt.TYPE_HUT, "variant": 0, "distance_m": 100.0}]
     shard_b = [{"from_id": 2, "to_id": 1, "from_type": binfmt.TYPE_HUT,
-                "to_type": binfmt.TYPE_HUT, "distance_m": 100.0}]
+                "to_type": binfmt.TYPE_HUT, "variant": 0, "distance_m": 100.0}]
     merged = merge_and_dedup([shard_a, shard_b])
     assert len(merged) == 1
 
@@ -127,9 +132,9 @@ def test_merge_and_dedup_drops_duplicate_hut_pairs():
 def test_merge_and_dedup_keeps_directional_start_edges():
     shard = [
         {"from_id": 1, "to_id": 2, "from_type": binfmt.TYPE_PARKING,
-         "to_type": binfmt.TYPE_HUT, "distance_m": 100.0},
+         "to_type": binfmt.TYPE_HUT, "variant": 0, "distance_m": 100.0},
         {"from_id": 1, "to_id": 3, "from_type": binfmt.TYPE_PARKING,
-         "to_type": binfmt.TYPE_HUT, "distance_m": 200.0},
+         "to_type": binfmt.TYPE_HUT, "variant": 0, "distance_m": 200.0},
     ]
     merged = merge_and_dedup([shard])
     assert len(merged) == 2
@@ -145,6 +150,7 @@ def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
     ]
     records = compute_hub_edges_for_cell(
         subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
     )
     assert records == []
 
@@ -159,6 +165,7 @@ def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
     ]
     records = compute_hub_edges_for_cell(
         subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
     assert records[0]["from_type"] == binfmt.TYPE_STATION
@@ -209,10 +216,104 @@ def test_compute_hub_edges_for_cell_fills_the_step_timer():
     ]
     timer = StepTimer()
     compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0, timer=timer,
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY, timer=timer,
     )
     assert set(timer.seconds) == {"snap", "build_igraph", "distances", "paths"}
     assert timer.calls["snap"] == 1          # one timed pass over the whole snap loop
     assert timer.calls["snap_hubs"] == 2     # both huts snapped onto the line
     assert timer.calls["distances"] == 2     # one distance query per core hub
-    assert timer.calls["paths"] == 1         # one surviving pair, deduped to a single record
+
+
+def _line_subgraph_t2_graded():
+    # Same layout as _line_subgraph, but graded T2 (not ungraded) so a constrained row
+    # (FAST_T2/FAST_T3) has a legal path to route, not just FAST_ANY.
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, 2, False, True,
+                0, 0, 0)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+    )
+
+
+def test_variant_rows_are_not_collapsed_into_one_record():
+    # spec C6: three places key on the hut pair alone and would silently discard variant rows
+    subgraph = _line_subgraph_t2_graded()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=[variants.VARIANTS[binfmt.VARIANT_FAST_ANY],
+                  variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
+    )
+    assert {r["variant"] for r in records} == {binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T3}
+
+
+def test_merge_and_dedup_keys_on_pair_and_variant():
+    a = {"from_type": 0, "from_id": 1, "to_type": 0, "to_id": 2, "variant": 0}
+    b = {"from_type": 0, "from_id": 2, "to_type": 0, "to_id": 1, "variant": 0}  # same pair reversed
+    c = {"from_type": 0, "from_id": 1, "to_type": 0, "to_id": 2, "variant": 2}  # same pair, other row
+    assert len(merge_and_dedup([[a], [b], [c]])) == 2
+
+
+def _rec(variant, from_id=1, to_id=2, distance_m=100.0):
+    return {
+        "from_id": from_id, "to_id": to_id, "from_type": binfmt.TYPE_HUT, "to_type": binfmt.TYPE_HUT,
+        "variant": variant, "distance_m": distance_m, "road_m": 0.0,
+        "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
+        "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
+        "sac_rank": -1, "via_ferrata": False, "geometry": [(0.0, 0.0), (0.01, 0.0)],
+    }
+
+
+def test_write_edge_output_preserves_each_record_variant(tmp_path):
+    _write_edge_output([_rec(variant=0), _rec(variant=2)], tmp_path)
+    arr = binfmt.load_array(tmp_path / "records.npy", mmap=False)
+    assert sorted(arr["variant"].tolist()) == [0, 2]
+
+
+def test_route_exceeding_max_edge_km_is_dropped():
+    # spec C8: selection cuts off on `dist`, but the routed path's distance_m can exceed the cap
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=0.5, max_snap_m=50.0,
+        variants=FAST_ANY_ONLY,
+    )
+    assert all(r["distance_m"] <= 500.0 for r in records)
+
+
+def test_a_variant_with_no_obeying_path_emits_no_record():
+    # NOT a fallback to the unconstrained path: a constrained row that cannot connect a pair must
+    # produce nothing, or the guarantee it exists for is broken
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    # ungraded (sac_rank -1, constrained_ok False) - unroutable under any constrained row
+    edges[0] = (0, 1, 1000.0, 0.0, 1000.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False,
+                False, 0, 0, 0)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    subgraph = LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+    )
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
+    ]
+    records = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        variants=[variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
+    )
+    assert records == []

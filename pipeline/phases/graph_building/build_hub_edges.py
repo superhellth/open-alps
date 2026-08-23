@@ -24,6 +24,7 @@ from scipy.spatial import cKDTree
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
+from lib import variants as variants_lib  # noqa: E402
 from lib.edge_split import nearest_point_on_polyline, split_edge_at_point  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT, Grid  # noqa: E402
 from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
@@ -339,7 +340,8 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int):
 
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                                 all_hubs: list, max_edge_km: float,
-                                max_snap_m: float, timer: StepTimer = None) -> list:
+                                max_snap_m: float, variants: list,
+                                timer: StepTimer = None) -> list:
     """all_hubs: candidate targets already filtered (by the caller) to hubs whose straight-line
     distance to this cell could possibly be within max_edge_km of trail distance - trail distance
     is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
@@ -352,6 +354,11 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     whose result nothing consumes, and a hut->access-point pair duplicates the access->hut record
     the access point's own cell already emits. Restricting targets to huts also keeps the
     non-core access points out of the snap loop entirely.
+
+    variants: list of lib/variants.py Variant rows to route (spec C2). Snapping is shared across
+    rows - a hub's location doesn't depend on a routing constraint - but each row gets its own
+    masked igraph and its own cutoff/path pass, because a constrained row can only ever be a
+    smaller subgraph than FAST_ANY (never the same distances).
 
     timer: optional lib/timing.py StepTimer, filled with the per-step split (snap / build_igraph /
     distances / paths) so the parent can merge every worker's totals and report where the run
@@ -374,63 +381,73 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                 snaps[key] = snap
     timer.count("snap_hubs", len(snaps))
 
-    with timer.step("build_igraph"):
-        graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, snaps)
-
     max_edge_m = max_edge_km * 1000
     records = []
-    # a hut-hut pair where both ends are core hubs of this cell is visited from both sides
-    # below (hub->target and target->hub); collapse it to the one record merge_and_dedup would
-    # otherwise keep anyway - core_hubs of a single cell call all belong to the same shard, so
-    # merge_and_dedup's cross-shard dedup never sees the in-shard duplicate to drop it.
-    seen_hut_pairs = set()
-    for hub in core_hubs:
-        src_key = (hub["type"], hub["id"])
-        if src_key not in hub_vertex:
-            continue
-        src_v = hub_vertex[src_key]
-        targets = [h for h in hut_targets if (h["type"], h["id"]) != (hub["type"], hub["id"])
-                   and (h["type"], h["id"]) in hub_vertex]
-        if not targets:
-            continue
-        target_vs = [hub_vertex[(t["type"], t["id"])] for t in targets]
-        # Two different hubs can snap to the same graph vertex (both within max_snap_m of one
-        # existing node), so target_vs can contain duplicates - igraph's distances() rejects a
-        # target list with duplicates, so query only the unique vertex set and fan the results
-        # back out per-hub by vertex id.
-        unique_target_vs = sorted(set(target_vs))
-        # cutoff uses real-distance ("dist") weights, same as build_hut_graph.py's pass1 -
-        # max-edge-km stays a guarantee about actual trail length, unaffected by the
-        # road-penalty cost ("weight") used to pick the routed path below.
-        with timer.step("distances"):
-            unique_dists = graph.distances(
-                source=[src_v], target=unique_target_vs, weights="dist"
-            )[0]
-        timer.count("distance_targets", len(unique_target_vs))
-        dist_by_vertex = dict(zip(unique_target_vs, unique_dists))
-        cutoff_dists = [dist_by_vertex[tv] for tv in target_vs]
-        for t, tv, cutoff_d in zip(targets, target_vs, cutoff_dists):
-            if not np.isfinite(cutoff_d) or cutoff_d > max_edge_m:
+    for variant in variants:
+        mask = variants_lib.edge_mask(subgraph.local_edges, variant)
+        with timer.step("build_igraph"):
+            graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(
+                subgraph, snaps, edge_mask=mask
+            )
+        # a hut-hut pair where both ends are core hubs of this cell is visited from both sides
+        # below (hub->target and target->hub); collapse it to the one record merge_and_dedup
+        # would otherwise keep anyway - core_hubs of a single cell call all belong to the same
+        # shard, so merge_and_dedup's cross-shard dedup never sees the in-shard duplicate to drop
+        # it. Reset per variant: a pair dropped by one row must still be tried by the next.
+        seen_hut_pairs = set()
+        for hub in core_hubs:
+            src_key = (hub["type"], hub["id"])
+            if src_key not in hub_vertex:
                 continue
-            if hub["type"] == binfmt.TYPE_HUT and t["type"] == binfmt.TYPE_HUT:
-                pair_key = tuple(sorted([(hub["type"], hub["id"]), (t["type"], t["id"])]))
-                if pair_key in seen_hut_pairs:
+            src_v = hub_vertex[src_key]
+            targets = [h for h in hut_targets if (h["type"], h["id"]) != (hub["type"], hub["id"])
+                       and (h["type"], h["id"]) in hub_vertex]
+            if not targets:
+                continue
+            target_vs = [hub_vertex[(t["type"], t["id"])] for t in targets]
+            # Two different hubs can snap to the same graph vertex (both within max_snap_m of one
+            # existing node), so target_vs can contain duplicates - igraph's distances() rejects a
+            # target list with duplicates, so query only the unique vertex set and fan the results
+            # back out per-hub by vertex id.
+            unique_target_vs = sorted(set(target_vs))
+            # cutoff uses real-distance ("dist") weights on THIS variant's masked subgraph - a
+            # constrained row's cutoff can only be a subset of FAST_ANY's, never wider (spec C2).
+            with timer.step("distances"):
+                unique_dists = graph.distances(
+                    source=[src_v], target=unique_target_vs, weights="dist"
+                )[0]
+            timer.count("distance_targets", len(unique_target_vs))
+            dist_by_vertex = dict(zip(unique_target_vs, unique_dists))
+            cutoff_dists = [dist_by_vertex[tv] for tv in target_vs]
+            for t, tv, cutoff_d in zip(targets, target_vs, cutoff_dists):
+                if not np.isfinite(cutoff_d) or cutoff_d > max_edge_m:
                     continue
-                seen_hut_pairs.add(pair_key)
-            with timer.step("paths"):
-                trail_coords, distance_m, road_m, sac_rank, via_ferrata = _path_for(
-                    graph, vertex_coords, src_v, tv
-                )
-            geometry = [(hub["lon"], hub["lat"]), *trail_coords, (t["lon"], t["lat"])]
-            records.append({
-                "from_id": hub["id"], "from_type": hub["type"],
-                "to_id": t["id"], "to_type": t["type"],
-                "distance_m": float(distance_m),
-                "road_m": float(road_m),
-                "sac_rank": int(sac_rank),
-                "via_ferrata": bool(via_ferrata),
-                "geometry": geometry,
-            })
+                if hub["type"] == binfmt.TYPE_HUT and t["type"] == binfmt.TYPE_HUT:
+                    pair_key = tuple(sorted([(hub["type"], hub["id"]), (t["type"], t["id"])]))
+                    if pair_key in seen_hut_pairs:
+                        continue
+                    seen_hut_pairs.add(pair_key)
+                with timer.step("paths"):
+                    trail_coords, distance_m, road_m, sac_rank, via_ferrata = _path_for(
+                        graph, vertex_coords, src_v, tv
+                    )
+                # spec C8: the cutoff above ran on `dist`, but `_path_for` walks the TIME-shortest
+                # path, whose distance_m can exceed the cap - re-check on the routed path itself.
+                if distance_m > max_edge_m:
+                    continue
+                geometry = [(hub["lon"], hub["lat"]), *trail_coords, (t["lon"], t["lat"])]
+                records.append({
+                    "from_id": hub["id"], "from_type": hub["type"],
+                    "to_id": t["id"], "to_type": t["type"],
+                    "variant": variant.code,
+                    "distance_m": float(distance_m),
+                    "road_m": float(road_m),
+                    "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
+                    "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
+                    "sac_rank": int(sac_rank),
+                    "via_ferrata": bool(via_ferrata),
+                    "geometry": geometry,
+                })
     return records
 
 
@@ -440,7 +457,9 @@ def merge_and_dedup(shard_records: list) -> list:
     for shard in shard_records:
         for r in shard:
             if r["from_type"] == binfmt.TYPE_HUT and r["to_type"] == binfmt.TYPE_HUT:
-                key = tuple(sorted([(r["from_type"], r["from_id"]), (r["to_type"], r["to_id"])]))
+                key = (r["variant"], tuple(sorted(
+                    [(r["from_type"], r["from_id"]), (r["to_type"], r["to_id"])]
+                )))
                 if key in seen:
                     continue
                 seen.add(key)
@@ -452,16 +471,17 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     """Packs merge_and_dedup's dict records into binfmt.RECORD_DTYPE + a flat geometry.npy
     (binfmt.COORD_DTYPE), mirroring how build_base_graph.py packs contracted-edge interior
     polylines: one growing geometry array, each record's geom_offset/geom_count pointing into
-    it. ascent_m/descent_m/profile_offset/profile_count stay UNSET/0 here - add_elevation.py
-    (Task 9) fills those in a later pass over this same records.npy."""
+    it. profile_offset/profile_count stay 0 here - the elevation profile pass fills those in a
+    later pass over this same records.npy."""
     records_arr = np.zeros(len(records), dtype=binfmt.RECORD_DTYPE)
     flat_geometry = []
     cursor = 0
     for i, r in enumerate(records):
         geom = r["geometry"]
         records_arr[i] = (
-            r["from_id"], r["to_id"], r["from_type"], r["to_type"], binfmt.VARIANT_SHORTEST,
-            r["distance_m"], r["road_m"], binfmt.UNSET, binfmt.UNSET, r["sac_rank"],
+            r["from_id"], r["to_id"], r["from_type"], r["to_type"], r["variant"],
+            r["distance_m"], r["road_m"], r["ascent_m"], r["descent_m"], r["max_ele_m"],
+            r["ungraded_m"], r["inferred_m"], r["snap_m"], r["sac_rank"],
             r["via_ferrata"], cursor, len(geom), 0, 0,
         )
         flat_geometry.extend(geom)
@@ -478,7 +498,7 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
 
 def _run_cell(args):
     base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
-        max_snap_m = args
+        max_snap_m, variants = args
     t0 = time.time()
     # One StepTimer per worker process, returned to the parent (it holds plain dicts, so it
     # pickles back through ProcessPoolExecutor) rather than each worker appending its own
@@ -487,7 +507,7 @@ def _run_cell(args):
     with timer.step("gather_subgraph"):
         subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
     records = compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
-                                          max_snap_m, timer=timer)
+                                          max_snap_m, variants, timer=timer)
     return {
         "cell_id": cell_id, "elapsed_s": time.time() - t0, "n_core_hubs": len(core_hubs),
         "n_nodes": len(subgraph.local_nodes), "n_edges": len(subgraph.local_edges),
@@ -538,9 +558,11 @@ if __name__ == "__main__":
             if b["minLng"] <= h["lon"] <= b["maxLng"] and b["minLat"] <= h["lat"] <= b["maxLat"]
         ]
 
+    active_variants = variants_lib.enabled_variants(config)
+
     tasks = [
         (args.base_graph_dir, grid, cid, args.max_edge_km, hubs, _candidate_hubs_for_cell(cid),
-         args.max_edge_km, args.max_snap_m)
+         args.max_edge_km, args.max_snap_m, active_variants)
         for cid, hubs in hubs_by_cell.items()
     ]
 
