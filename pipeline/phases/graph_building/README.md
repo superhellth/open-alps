@@ -19,22 +19,31 @@ re-streaming/re-contracting the OSM extract every run. Params: `--tile-size-km` 
 **Algorithm, in three passes:**
 
 1. **`stream_osm`** — streams `trails.osm.pbf` once via `pyosmium` (`osmium.SimpleHandler`) into
-   flat numpy arrays: node coordinates, edge endpoint indices, per-edge haversine distance, a
-   road-penalized routing "weight" (real distance × `roadPenaltyFactor` when `highway` is in
-   `config.graph.roadHighwayTags`), a road boolean, a ranked `sac_scale` value
-   (`SAC_SCALE_RANK`, easiest→hardest), and a `via_ferrata` boolean (`highway=via_ferrata` or a
-   `via_ferrata_scale` tag present).
+   flat numpy arrays: node coordinates, edge endpoint indices, per-edge haversine distance, a road
+   boolean (`highway` in `config.graph.roadHighwayTags`), per-way passability grading
+   (`lib/grading.py`'s `classify_way()` — `sac_rank` plus `ungraded_m`/`inferred_m` metres, so an
+   edge's ungraded terrain is a summable fact rather than lost under `sac_rank`'s max), a
+   `constrained_ok` boolean (`excluded_from_constrained() OR via_ferrata OR ungraded`, precomputed
+   once here so Task 13's filtered-graph build per variant per cell is a boolean mask, not a
+   re-derivation), and a `via_ferrata` boolean (`highway=via_ferrata` or a `via_ferrata_scale` tag
+   present). `time_s`/`ascent_m`/`descent_m` are left at `binfmt.UNSET` here — they're filled later,
+   per base edge, by `phases/elevation/compute_edge_profiles.py` (see that phase's README), not by
+   this streaming pass. There is no routing "weight" column any more (spec A3): a road is no longer
+   penalized inside a distance the client displays — if `ROAD_*` is ever built (deferred pending
+   Task 24's post-rebuild road-share measurement) it will be a separate objective column, not a
+   revived penalty.
 2. **`contract_structural`** (`lib/contraction.py`) — collapses every maximal run of degree-2
    nodes (a pure pass-through chain, no junction) into a single chain edge. This is a lossless
-   transform: a degree-2 node has no alternate route, so summing distance/weight/road-length along
-   the chain and taking the max `sac_scale` rank walked preserves every shortest-path cost
-   *exactly*, while shrinking node/edge count by (measured) an order of magnitude or more (~40M
-   raw nodes/edges → far fewer chain edges for AT+Bavaria). Unlike an earlier version, contraction
-   here is **structural only** — no hub-snap-point exception, since hub sets aren't known yet at
-   this stage; mid-chain hub snapping is deferred to `lib/edge_split.py`, invoked at
-   `build_hub_edges.py` query time. Built via CSR-style adjacency (`lib/binfmt.py`'s
-   `build_csr_index()` — one stable sort over doubled endpoint arrays plus bincount/cumsum for
-   offsets, no Python dict-of-lists), so it scales without per-node Python object overhead.
+   transform: a degree-2 node has no alternate route, so summing distance/road-length/`ungraded_m`/
+   `inferred_m` along the chain, AND-folding `constrained_ok`, and taking the max `sac_rank` walked
+   preserves every shortest-path cost *exactly*, while shrinking node/edge count by (measured) an
+   order of magnitude or more (~40M raw nodes/edges → far fewer chain edges for AT+Bavaria). Unlike
+   an earlier version, contraction here is **structural only** — no hub-snap-point exception, since
+   hub sets aren't known yet at this stage; mid-chain hub snapping is deferred to
+   `lib/edge_split.py`, invoked at `build_hub_edges.py` query time. Built via CSR-style adjacency
+   (`lib/binfmt.py`'s `build_csr_index()` — one stable sort over doubled endpoint arrays plus
+   bincount/cumsum for offsets, no Python dict-of-lists), so it scales without per-node Python
+   object overhead.
 3. **Spatial indexing** — every surviving node is assigned a `lib/grid.py` `Grid` cell id
    (row-major partition of the bbox into `config.graph.tileSizeKm` cells), and nodes are re-sorted
    by cell so `cell_index.npy` addresses one contiguous slice per cell. This is what lets
@@ -50,13 +59,15 @@ memory-mappable via `np.load(..., mmap_mode="r")`):
 | `cell_index.npy` | `CELL_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per grid cell → slice into `nodes.npy` |
 | `node_edge_index.npy` | `NODE_EDGE_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per node → slice into `node_edge_ids.npy` (adjacency) |
 | `node_edge_ids.npy` | `i8` | flat adjacency list, CSR-indexed by `node_edge_index.npy` |
-| `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, weight f8, road_m f8, sac_rank i1, via_ferrata bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row |
+| `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, road_m f8, ungraded_m f8, inferred_m f8, time_s f8, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, constrained_ok bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row. `time_s`/`ascent_m`/`descent_m` sit at `binfmt.UNSET` until `phases/elevation/compute_edge_profiles.py` runs |
 | `interior.npy` | `COORD_DTYPE = (lon f8, lat f8)` | flat polyline vertex pool for every chain edge's interior geometry, sliced via `interior_offset`/`interior_count` |
 | `manifest.json` | — | grid params (bbox, `tileSizeKm`) needed to reconstruct the same `Grid` at query time, plus array shapes |
 
 - **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[base_graph/manifest.json]`. `uptodate`
-  uses `config_changed` over the task's own params, so a changed `--tile-size-km` triggers a
-  rerun without `doit forget`. **Not** force-rerun (unlike `add_elevation`) — freshness-checked
+  uses `TaskOptionsChanged()` over the task's own params (`--tile-size-km` plus a tracking-only
+  `schema_version`, `dodo.py`'s `binfmt.SCHEMA_VERSION` — bumped on any `EDGE_DTYPE` change so a
+  code-only dtype edit still forces a rerun), so a changed param triggers a rerun without `doit
+  forget`. **Not** force-rerun (unlike the deleted V1 `add_elevation.py`) — freshness-checked
   normally given its ~4.1h cost.
 
 ## `build_hub_edges.py` — per-hub shortest paths, tiled + multiprocess
@@ -146,7 +157,14 @@ the parent merges them all into the phase meta (`<step>_s`, `<step>_calls`) and 
 `step totals` line, with the same split per cell in the progress line. Summed across workers, so
 the columns exceed wall clock — read the ratios.
 
-- **doit wiring**: `file_dep=[base_graph/manifest.json, huts.geojson, start_points.npy]`,
-  `targets=[hut_edges/records.npy, start_edges/records.npy]`. `uptodate` uses `config_changed`
-  over the task's own params, so `--max-edge-km`/`--max-snap-m` changes trigger a rerun
-  automatically.
+- **doit wiring**: `task_dep=[compute_edge_profiles]` (edges.npy's `time_s`/`ascent_m`/`descent_m`
+  are rewritten in place by that task but aren't one of its declared targets, so `node_ele.npy`'s
+  file-hash freshness alone doesn't guarantee ordering — see `task_build_hub_edges`'s comment in
+  `dodo.py`), `file_dep=[base_graph/manifest.json, base_graph/node_ele.npy, huts.geojson,
+  start_points.npy, dem.tif]` (the DEM is a real new dependency here: hub elevation is sampled
+  directly from it, spec E3), `targets=[hut_edges/records.npy, start_edges/records.npy,
+  unsnapped_huts.json]`. `uptodate` uses `TaskOptionsChanged()` over the task's own params
+  (`--max-edge-km`/`--max-snap-m`/`--max-snap-ascent-m` plus two tracking-only params with no CLI
+  flag: `variants_json`, so a `config.graph.variants` grid edit is seen even though the script
+  reads it straight from config, and `schema_version`, `binfmt.SCHEMA_VERSION` again), so any of
+  those changes trigger a rerun automatically.

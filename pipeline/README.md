@@ -19,9 +19,16 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
   ],
-  "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary",
-  "graph": { "maxEdgeKm": 10, "maxSnapM": 200, "tileSizeKm": 60 },
-  "dem": { "providerConfig": { "regions": [ ... ] }, "eleNoiseThresholdM": 4 },
+  "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary,via_ferrata",
+  "graph": {
+    "maxEdgeKm": 30, "maxSnapM": 100, "maxSnapAscentM": 25,
+    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
+    "tileSizeKm": 60,
+    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
+    "variants": ["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]
+  },
+  "dem": { "providerConfig": { "regions": [ ... ] }, "smoothingKernelM": 30, "profilePoints": 30 },
+  "approach": { "k": 3 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 }
 }
 ```
@@ -34,15 +41,21 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
   `merge_trails.py` loop over this list, so adding a region (e.g. Switzerland) is just adding
   `{ "name": "switzerland", "url": "..." }` here.
 - `trailTagFilter` — the `osmium tags-filter` expression `filter_trails.py` applies.
-- `graph.maxEdgeKm` / `graph.maxSnapM` — defaults for `build_hub_edges.py`'s `--max-edge-km` /
-  `--max-snap-m`; still overridable per-run via those flags. What they actually control:
-  - **`maxSnapM`** (meters, default 200) — how far a hub may be from the nearest OSM trail node
+- `graph.maxEdgeKm` / `graph.maxSnapM` / `graph.maxSnapAscentM` — defaults for
+  `build_hub_edges.py`'s `--max-edge-km` / `--max-snap-m` / `--max-snap-ascent-m`; still
+  overridable per-run via those flags. What they actually control:
+  - **`maxSnapM`** (meters, default 100) — how far a hub may be from the nearest OSM trail node
     to count as "on the trail network" at all. `build_hub_edges.py` snaps each hub to its closest
     trail node via a KDTree; if that nearest node is farther than `maxSnapM`, the hub is skipped
     entirely (no edges computed for it) rather than force-matched to a trail it isn't really on.
     Raising this includes more hubs (e.g. huts set back from the mapped path) at the cost of
     snapping some to a trail node that isn't really their access point.
-  - **`maxEdgeKm`** (kilometers, default 10) — the longest hut-to-hut trail distance (walking
+  - **`maxSnapAscentM`** (meters, default 25) — a second, vertical check on top of `maxSnapM`'s
+    horizontal one: a candidate snap point is also rejected if it sits more than this far above or
+    below the hub's own DEM elevation, since a horizontally-close trail node can still be on a
+    different terrace/switchback. Every rejection is reported, not silently dropped — see
+    `unsnapped_huts.json`.
+  - **`maxEdgeKm`** (kilometers, default 30) — the longest hut-to-hut trail distance (walking
     distance along the graph, not beeline) that's kept as an edge. It's a deliberate cutoff, not
     just a performance knob: a hut-to-hut edge is meant to represent one day-hike leg, so anything
     longer should be multiple hops through intermediate huts, not one edge (see `docs/
@@ -55,7 +68,19 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     keeps per-tile work non-trivial relative to the fixed buffer overhead. Also read by
     `build_base_graph.py`, which assigns every graph node to a cell at write time so
     `build_hub_edges.py` can look cells up identically at query time.
-- `dem` — inputs to the elevation pass (`fetch_dem.py`/`build_dem_vrt.py`/`add_elevation.py`):
+  - **`speedModel`** (`{v0, k, s0}`) — the pointwise Tobler-shaped routing weight
+    (`lib/speed.py`'s `edge_time_s()`), calibrated against DIN 33466 by
+    `analysis/routing_probe.py`, not inherited as-is from the textbook Tobler constants. Read
+    directly by `compute_edge_profiles.py`; every value here is its own tracked `dodo.py` param
+    (`--speed-v0`/`--speed-k`/`--speed-s0`) so a retune reruns that task.
+  - **`variants`** — the `graph.variants` row list `build_hub_edges.py` routes
+    (`lib/variants.py`), e.g. `["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]`. Tracked as
+    a tracking-only `dodo.py` param (`variants_json`, no CLI flag) so a grid edit is seen even
+    though the script reads this straight from config.
+- `approach.k` — how many best approach edges `build_approach_table.py` keeps per hut (see
+  `phases/postprocessing/README.md`).
+- `dem` — inputs to the elevation pass (`fetch_dem.py`/`build_dem_vrt.py`/
+  `sample_base_elevation.py`/`compute_edge_profiles.py`):
   - **`providerConfig.regions`** — `fetch_dem.py` always fetches through the `composite`
     meta-provider (`dem_providers/composite.py`), which resolves each configured region's own
     provider and stitches their per-region VRTs into one final `dem.vrt` — even a one-region scope
@@ -81,11 +106,16 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     `bufferDeg`, default 0.05°) instead of the full political box — matters for request-per-tile
     providers like `bavaria-dgm5`, whose full state bbox is ~80,000 1km tiles even though huts
     only exist in the southern Alpine strip near the Austrian border.
-  - **`eleNoiseThresholdM`** (meters, default 2) — `add_elevation.py`'s threshold-hysteresis
-    cutoff: a direction change only counts toward ascent/descent once cumulative drift since the
-    last counted point exceeds this, so per-sample DEM noise doesn't inflate totals. Lower = more
+  - **`smoothingKernelM`** (meters, default 30) — `compute_edge_profiles.py`'s
+    distance-weighted triangular smoothing kernel width applied to each base edge's elevation
+    profile before summing `ascent_m`/`descent_m` as plain signed-delta sums. Replaces the old
+    `eleNoiseThresholdM` threshold-hysteresis cutoff (retired — no threshold, no hysteresis loop
+    any more): metres, not points, since point spacing varies ~7x across base edges. Lower = more
     sensitive to real short climbs but noisier; higher = smoother but can flatten genuinely short
-    steep sections. Still overridable per-run via `--ele-noise-threshold-m`.
+    steep sections. Still overridable per-run via `--smoothing-kernel-m`.
+  - **`profilePoints`** (default 30) — how many evenly-spaced distance points
+    `build_profiles.py` interpolates each record's display elevation profile onto. Cheap to retune
+    (seconds, never reopens the DEM) — see `phases/elevation/README.md`.
 - `trailTiles.minZoom` / `trailTiles.maxZoom` — defaults for `build_trail_tiles.py`'s `--min-zoom`
   / `--max-zoom`, the zoom range `tippecanoe` builds vector tiles for. Below `minZoom` the layer
   just isn't rendered; above `maxZoom` Leaflet oversamples the highest tile that exists (standard
@@ -138,13 +168,18 @@ doit list                               # see every task + up-to-date status
 doit info <task>                        # see why a task would (not) run
 ```
 
-`doit` skips any task whose `targets` already exist and whose `file_dep` (including
-`pipeline.config.json`) haven't changed. Delete an output file (or edit the config) to force that
-task and everything downstream to rerun. `add_elevation` always reruns when selected (cheap,
-~90-100s — usually run to retune `--ele-noise-threshold-m`). `build_base_graph`/`build_hub_edges`
+`doit` skips any task whose `targets` already exist and whose own tracked params (each task's
+`TaskOptionsChanged()` check, `dodo.py`) haven't changed since its last successful run — not a
+whole-config-file hash, so an edit to an unrelated `pipeline.config.json` key doesn't invalidate
+every task downstream of it. `build_profiles` always reruns when selected (cheap, seconds — never
+reopens the DEM, usually run to retune `--profile-points`). `build_base_graph`/`build_hub_edges`
 are freshness-checked normally (`build_base_graph` alone measured ~4.1h — see `pipeline/CLAUDE.md`
 for why you must ask before running it), but still pick up a changed `--tile-size-km`/
-`--max-edge-km`/`--max-snap-m` automatically.
+`--max-edge-km`/`--max-snap-m`/`--max-snap-ascent-m`, a `graph.variants` grid edit, or a bumped
+`binfmt.SCHEMA_VERSION` automatically. `sample_base_elevation`/`compute_edge_profiles` are the
+elevation-pass split of the old `add_elevation` — freshness-checked the same way, with
+`compute_edge_profiles` also tracking every `speedModel` constant so a routing-probe recalibration
+reruns it.
 
 `doit copy_public_data` (included in the default run) copies every output the app reads into
 `huts/public/data/` — run it alone to re-sync after hand-running individual scripts.

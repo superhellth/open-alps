@@ -42,8 +42,8 @@ effective result with zero extra infrastructure.
 
 One script, invoked twice by `dodo.py` (`--edges-dir`/`--layer-name` swapped) — once over
 `hut_edges/`, once over `start_edges/` — splitting each edge set's `records.npy`/`geometry.npy`/
-`profiles.npy` (post-`add_elevation.py`) into two smaller app-facing assets instead of shipping the
-raw binary arrays directly.
+`profiles.npy` (post-`elevation/compute_edge_profiles.py`+`build_profiles.py`) into two smaller
+app-facing assets instead of shipping the raw binary arrays directly.
 
 - **Per edge** (`edge_id` = array index into `records.npy`): writes a tiling-input feature
   stripped to just `{edge_id}` properties, plus computes an iterative/vectorized
@@ -66,6 +66,46 @@ raw binary arrays directly.
 - **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`),
   `targets=[hut-edges.pmtiles, hut-edge-stats.json]` (resp. `start-edges.pmtiles`,
   `start-edge-stats.json`).
+
+## `build_approach_table.py` — approach/exit table + loop-closure reverse index
+
+Reduces `start_edges/records.npy` (92,426 records over 27,261 parkings + 3,025 stations for
+AT+Bayern — neither shippable nor seedable as-is) to two things, written into `approaches.bin`/
+`approaches.json`:
+
+1. **k-best-per-hut approach table** (`--k`, default `config.approach.k`) — "k fastest" is
+   deliberately not what this ranks: the fastest edge into a hut is systematically its highest,
+   most remote trailhead, while a driver wants the valley trailhead they can actually reach.
+   Selection is time-ranked among survivors of a hard access drop, with one slot reserved per
+   source type (parking/station) where both exist, so the client's car/transit split has something
+   to work with. Only `VARIANT_FAST_ANY` records are candidates — an approach is a fastest,
+   unconstrained leg to the hub, not a difficulty-graded one. `maxApproachTime` is not
+   reintroduced (root `CLAUDE.md`) — an approach is bounded by the same `maxEdgeKm` range cap as
+   any hut-hut edge, filtered client-side.
+2. **Loop-closure reverse index** — the client's car mode requires exit start-point == entry
+   start-point, and the k≈3 tables of a tour's first and last hut essentially never share a start
+   id, so a post-filter would annihilate the result set. Every `start_edges` record whose start
+   point appears in *any* hut's retained approach ships too (all variants, since closure needs
+   whatever the client already has open), keyed both hut→starts and start→huts.
+
+- **doit wiring**: `file_dep=[start_edges/records.npy, start_points_id_table.json]`,
+  `targets=[approaches.bin, approaches.json]`.
+
+## `build_edge_payload.py` — pack + ship the hut-edge payload
+
+Packs `hut_edges/records.npy` into the columnar binary the client loads once, up front (never
+per-edge, unlike geometry — that stays lazily fetched from `hut-edges.pmtiles`, and no duration
+column ships: the client computes DIN itself at load from `distance_m`/`ascent_m`/`descent_m`,
+spec D3). Columns laid out per-column, not interleaved, so gzip sees each column's own byte
+pattern uninterrupted; hut ids narrow `RECORD_DTYPE`'s `i8` down to `u2` (well under 65,536 huts).
+Measured, not assumed (`data/analysis/payload_sizing.json`): 3 variants × 6,067 edges × 13 columns
+= 693 KB raw, 43.4 KB gzipped — a byte-shuffle filter made it *worse* (46.4 KB), so this doesn't
+add one; quantisation is out of scope on the same measurement.
+
+- **doit wiring**: `task_dep=[build_profiles]` (records.npy's `profile_offset`/`profile_count` are
+  rewritten in place, not a declared target — see `build_edge_tiles.py`'s comment above),
+  `file_dep=[hut_edges/records.npy, huts.geojson]`,
+  `targets=[hut-edge-payload.bin, hut-edge-payload.json]`.
 
 ## Timing
 

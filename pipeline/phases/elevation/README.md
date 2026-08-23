@@ -74,6 +74,27 @@ signal instead, same pattern `build_hub_edges` uses `node_ele.npy` for its `task
   `targets=[base_graph/edge_profiles.stamp]`, `uptodate=[TaskOptionsChanged()]` — a
   `--smoothing-kernel-m` retune reruns this task alone, never `sample_base_elevation`.
 
+## `build_profiles.py` (display-only profiles for hut_edges/ and start_edges/)
+
+Params: `--profile-points` (default `config.dem.profilePoints`, 30). Never opens the DEM: every
+point's elevation is looked up in `sample_base_elevation.py`'s already-persisted `node_ele.npy`/
+`interior_ele.npy` by exact (quantized) coordinate identity — routing and display read the same
+numbers (spec B2/B3). A record's own hub/access-point endpoints and any mid-chain hub-snap point
+never match that lookup (they aren't base-graph points at all); both are filled by carrying the
+nearest matched neighbour's elevation along the polyline, an approximation acceptable for a
+DISPLAY profile only, never the routing cost.
+
+Interpolates onto `--profile-points` evenly-spaced distances per record and writes
+`hut_edges/profiles.npy` / `start_edges/profiles.npy`, plus `profile_offset`/`profile_count`
+written back into the two `records.npy` in place. Exists as its own script specifically so
+retuning `--profile-points` is cheap (no re-route, no DEM read) — `sample_base_elevation.py`/
+`compute_edge_profiles.py` stay untouched by it.
+
+- **doit wiring**: `task_dep=[build_hub_edges]` (for the in-place `records.npy` rewrite, not
+  visible to doit's file-hash check alone), `file_dep=[interior_ele.npy, hut_edges/records.npy,
+  start_edges/records.npy]`, `targets=[hut_edges/profiles.npy, start_edges/profiles.npy]`,
+  `uptodate=[False]` — always reruns when selected, seconds either way.
+
 ## Timing instrumentation
 
 Every script under `phases/elevation/` uses `lib/timing.py`'s `phase(script, name, **meta)`
