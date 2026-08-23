@@ -365,11 +365,22 @@ def task_compute_edge_profiles():
     return {
         "actions": [
             f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "elevation" / "compute_edge_profiles.py"}"'
-            " --smoothing-kernel-m %(smoothing_kernel_m)s"
+            " --smoothing-kernel-m %(smoothing_kernel_m)s --speed-v0 %(speed_v0)s"
+            " --speed-k %(speed_k)s --speed-s0 %(speed_s0)s"
         ],
         "params": [
             {"name": "smoothing_kernel_m", "long": "smoothing-kernel-m", "type": float,
              "default": CONFIG["dem"]["smoothingKernelM"]},
+            # speedModel is read directly by compute_edge_profiles.py's time_s computation - every
+            # value it uses from there must be its own tracked param, or TaskOptionsChanged()
+            # can't see a speedModel-only config edit (e.g. a routing_probe.py recalibration) and
+            # reports "up to date" while edges.npy's time_s stays stale under the old constants.
+            {"name": "speed_v0", "long": "speed-v0", "type": float,
+             "default": CONFIG["graph"]["speedModel"]["v0"]},
+            {"name": "speed_k", "long": "speed-k", "type": float,
+             "default": CONFIG["graph"]["speedModel"]["k"]},
+            {"name": "speed_s0", "long": "speed-s0", "type": float,
+             "default": CONFIG["graph"]["speedModel"]["s0"]},
         ],
         "task_dep": ["sample_base_elevation"],
         "file_dep": [

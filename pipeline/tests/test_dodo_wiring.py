@@ -31,6 +31,16 @@ def test_compute_edge_profiles_depends_on_sample_base_elevation_outputs():
     assert not any(d.endswith("dem.tif") for d in deps)
 
 
+def test_compute_edge_profiles_tracks_speed_model_params():
+    # this task reads config["graph"]["speedModel"] directly (compute_edge_profiles.py) but its
+    # only tracked param used to be smoothing_kernel_m - a speedModel-only retune (e.g. Task 11's
+    # v0 calibration) would leave TaskOptionsChanged() reporting "up to date" and silently skip
+    # recomputing time_s under the new constants. Every value the script reads from speedModel
+    # must be a declared param so TaskOptionsChanged actually sees it change.
+    param_names = {p["name"] for p in dodo.task_compute_edge_profiles()["params"]}
+    assert {"speed_v0", "speed_k", "speed_s0"} <= param_names
+
+
 def test_build_profiles_never_declares_the_dem():
     # spec B4: profilePoints retuning must not force a re-route or a DEM read
     deps = dodo.task_build_profiles()["file_dep"]

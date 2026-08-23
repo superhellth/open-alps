@@ -122,15 +122,24 @@ def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele
 
 def main(argv=None):
     config = load_config()
+    speed_model = config["graph"]["speedModel"]
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
     parser.add_argument("--smoothing-kernel-m", type=float,
                         default=config["dem"]["smoothingKernelM"])
+    # Declared as CLI args (not read from config directly) so dodo.py's TaskOptionsChanged can
+    # track them - see task_compute_edge_profiles's comment for why a speedModel-only config edit
+    # must invalidate this task's cache.
+    parser.add_argument("--speed-v0", type=float, default=speed_model["v0"])
+    parser.add_argument("--speed-k", type=float, default=speed_model["k"])
+    parser.add_argument("--speed-s0", type=float, default=speed_model["s0"])
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)
+    resolved_speed_model = {"v0": args.speed_v0, "k": args.speed_k, "s0": args.speed_s0}
     timer = StepTimer()
-    with phase(SCRIPT_NAME, "compute_edge_profiles", smoothing_kernel_m=args.smoothing_kernel_m) as meta:
+    with phase(SCRIPT_NAME, "compute_edge_profiles", smoothing_kernel_m=args.smoothing_kernel_m,
+               **resolved_speed_model) as meta:
         with timer.step("load_arrays"):
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
@@ -141,7 +150,7 @@ def main(argv=None):
         print(f"computing time_s/ascent_m/descent_m for {len(edges):,} edges ...", flush=True)
         time_s, ascent_m, descent_m = _fill_edge_time_and_elevation(
             edges, nodes, interior, node_ele, interior_ele, args.smoothing_kernel_m,
-            config["graph"]["speedModel"], timer,
+            resolved_speed_model, timer,
         )
         edges["time_s"] = time_s
         edges["ascent_m"] = ascent_m
