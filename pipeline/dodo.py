@@ -51,7 +51,19 @@ class TaskOptionsChanged:
     so the digest never gets saved and the task shows "not up to date" on every single future
     run, forever, even immediately after a clean success. That silently defeated caching for
     build_base_graph/build_hub_edges/add_base_elevation - the three tasks this pipeline most
-    needs NOT to rerun by accident (see this module's docstring)."""
+    needs NOT to rerun by accident (see this module's docstring).
+
+    Second, unrelated bug this class works around: doit only calls Task.init_options() (which
+    populates task.options from parsed CLI flags/defaults - see doit/task.py) for tasks named
+    directly in the command-line selection (TaskControl._process_filter, doit/control.py). A
+    task reached only transitively, as someone else's file_dep/task_dep - e.g. download_extracts
+    when you run `doit build_base_graph` - never gets init_options() called, so task.options
+    stays None. json.dumps(None) ('null') then never matches the saved digest, so __call__ below
+    would return False unconditionally, forcing a full rerun of every upstream task not named on
+    the command line, every time - defeating the cache exactly for the deep, expensive tasks
+    (downloads, merges) that most need it. init_options() is idempotent (task.py: only acts
+    `if self.options is None`), so calling it here is a safe way to guarantee options are
+    populated before comparing, regardless of whether doit already did it."""
 
     def configure_task(self, task):
         task.value_savers.append(
@@ -59,6 +71,7 @@ class TaskOptionsChanged:
         )
 
     def __call__(self, task, values):
+        task.init_options()
         return values.get("_task_options") == json.dumps(task.options, sort_keys=True)
 
 DOIT_CONFIG = {

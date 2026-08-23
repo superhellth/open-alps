@@ -67,3 +67,15 @@ first asking the user and getting explicit confirmation.** `build_hut_graph` alo
 freshness check can still decide it's stale and silently kick off a multi-hour job. This applies
 even to tasks that look cheap or read-only. (`add_elevation` is hardcoded to always run when
 selected, but is genuinely cheap — ~90-100s.)
+
+## No git worktrees, no subagent-driven development
+
+**Never create or remove a git worktree in this repo, for any reason.** `git worktree remove`
+deletes the entire worktree directory from disk, including gitignored content — it destroyed
+`data/`'s multi-hour pipeline outputs (raw OSM extracts, DEM, base graph) because `DATA_DIR`
+resolves relative to each worktree's own path, so nothing was shared with the main checkout.
+Work directly on branches in the main checkout instead.
+
+**Never use `superpowers:subagent-driven-development` or any other approach that spins up
+worktrees/subagents to execute plan tasks in this repo, even if a skill recommends it.** Execute
+plan tasks directly, in-session, on the current checkout.

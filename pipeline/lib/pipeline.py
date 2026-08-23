@@ -69,7 +69,7 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
         nodata = src.nodata
 
     args = [
-        "gdal_translate", "-of", "GTiff", "-progress",
+        "gdal_translate", "-of", "GTiff",
         "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "PREDICTOR=3",
         "-co", "BIGTIFF=IF_SAFER", "-co", "NUM_THREADS=ALL_CPUS",
         "--config", "GDAL_NUM_THREADS", "ALL_CPUS",
