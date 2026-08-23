@@ -10,6 +10,7 @@ Usage: python pipeline/phases/graph_building/build_hub_edges.py [--max-edge-km 3
 """
 
 import argparse
+import hashlib
 import math
 import os
 import sys
@@ -517,20 +518,35 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     (binfmt.COORD_DTYPE), mirroring how build_base_graph.py packs contracted-edge interior
     polylines: one growing geometry array, each record's geom_offset/geom_count pointing into
     it. profile_offset/profile_count stay 0 here - the elevation profile pass fills those in a
-    later pass over this same records.npy."""
+    later pass over this same records.npy.
+
+    A constrained row frequently routes the exact same polyline as FAST_ANY (spec C7) - identical
+    coordinate runs are deduplicated by content hash so those variants share one geom_offset
+    instead of the geometry file growing linearly in variant count for zero new information.
+    No collision re-check against the stored run: blake2b-128 over the run counts this pipeline
+    will ever see has a collision probability far below floating-point noise in the coordinates
+    themselves - deliberate, not an oversight."""
     records_arr = np.zeros(len(records), dtype=binfmt.RECORD_DTYPE)
     flat_geometry = []
     cursor = 0
+    seen_geoms = {}   # blake2b of the packed coordinate run -> geom_offset
     for i, r in enumerate(records):
         geom = r["geometry"]
+        key = hashlib.blake2b(
+            np.asarray(geom, dtype=np.float64).tobytes(), digest_size=16
+        ).digest()
+        offset = seen_geoms.get(key)
+        if offset is None:
+            offset = cursor
+            seen_geoms[key] = offset
+            flat_geometry.extend(geom)
+            cursor += len(geom)
         records_arr[i] = (
             r["from_id"], r["to_id"], r["from_type"], r["to_type"], r["variant"],
             r["distance_m"], r["road_m"], r["ascent_m"], r["descent_m"], r["max_ele_m"],
             r["ungraded_m"], r["inferred_m"], r["snap_m"], r["sac_rank"],
-            r["via_ferrata"], cursor, len(geom), 0, 0,
+            r["via_ferrata"], offset, len(geom), 0, 0,
         )
-        flat_geometry.extend(geom)
-        cursor += len(geom)
 
     geometry_arr = np.zeros(len(flat_geometry), dtype=binfmt.COORD_DTYPE)
     if flat_geometry:

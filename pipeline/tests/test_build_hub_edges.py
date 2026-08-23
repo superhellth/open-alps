@@ -272,13 +272,14 @@ def test_merge_and_dedup_keys_on_pair_and_variant():
     assert len(merge_and_dedup([[a], [b], [c]])) == 2
 
 
-def _rec(variant, from_id=1, to_id=2, distance_m=100.0):
+def _rec(variant, from_id=1, to_id=2, distance_m=100.0, geometry=None):
     return {
         "from_id": from_id, "to_id": to_id, "from_type": binfmt.TYPE_HUT, "to_type": binfmt.TYPE_HUT,
         "variant": variant, "distance_m": distance_m, "road_m": 0.0,
         "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
         "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
-        "sac_rank": -1, "via_ferrata": False, "geometry": [(0.0, 0.0), (0.01, 0.0)],
+        "sac_rank": -1, "via_ferrata": False,
+        "geometry": geometry if geometry is not None else [(0.0, 0.0), (0.01, 0.0)],
     }
 
 
@@ -286,6 +287,24 @@ def test_write_edge_output_preserves_each_record_variant(tmp_path):
     _write_edge_output([_rec(variant=0), _rec(variant=2)], tmp_path)
     arr = binfmt.load_array(tmp_path / "records.npy", mmap=False)
     assert sorted(arr["variant"].tolist()) == [0, 2]
+
+
+def test_identical_variant_geometries_share_one_offset(tmp_path):
+    geom = [(0.0, 0.0), (0.001, 0.0)]
+    _write_edge_output([_rec(variant=0, geometry=geom), _rec(variant=2, geometry=geom)], tmp_path)
+    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
+    geometry = binfmt.load_array(tmp_path / "geometry.npy", mmap=False)
+    assert records["geom_offset"][0] == records["geom_offset"][1]
+    assert len(geometry) == 2   # one shared run, not two copies
+
+
+def test_differing_geometries_do_not_share(tmp_path):
+    _write_edge_output([
+        _rec(variant=0, geometry=[(0.0, 0.0), (0.001, 0.0)]),
+        _rec(variant=2, geometry=[(0.0, 0.0), (0.001, 0.001)]),
+    ], tmp_path)
+    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
+    assert records["geom_offset"][0] != records["geom_offset"][1]
 
 
 def test_route_exceeding_max_edge_km_is_dropped():
