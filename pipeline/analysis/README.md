@@ -115,3 +115,34 @@ silently ignoring.
 
 Requires `hut_edges/records.npy`, `start_edges/records.npy`, `parking.geojson`, `stations.geojson`.
 Writes `data/analysis/payload_sizing.json`. Seconds.
+
+## `routing_probe.py` — the sizing probe that gates the variant rebuild (spec §H)
+
+Samples ~200 hut pairs, stratified by each grid cell's node-elevation spread so flat, hub-dense
+cells don't dominate, and routes every pair over all nine grid combinations: the three real
+constraint rows (`FAST_ANY`/`FAST_T2`/`FAST_T3`, via `lib/variants.py`'s actual `edge_mask()`)
+times three objective columns. Only the `FAST` column (route on `time_s`) exists in production;
+`SHORT` (route on `dist`) and `ROAD_AVOID` (route on `time_s` times a multiplicative road penalty)
+are simulated in-probe, purely to measure whether either would ever be worth building — this is the
+one script here (besides `grading_coverage.py`) whose weighting has no production counterpart.
+
+Reports: wall time per column (ratio to `FAST`), substitution rate per row×column (does the path
+actually differ from `FAST_ANY`/`FAST`, and does `FAST_ANY` itself already violate each constrained
+row), the ungraded-vs-difficulty-vs-disconnected blocker classification for every pair a constrained
+row can't connect, a routed-time-vs-DIN-33466-duration scale fit (feeds Task 11's `speedModel`
+calibration), and same-direction geometry/cost spread on a subset routed both ways.
+
+Calls the real production functions (`lib.subgraph.gather_padded_subgraph`,
+`build_hub_edges.snap_hub_to_subgraph`/`_build_igraph_with_snaps`/`_path_for`, `lib.variants.edge_mask`,
+`lib.speed.din_duration_h`) — never reimplements routing. Groups sampled pairs by the source hub's
+grid cell and builds each cell's graph once (`_build_igraph_with_snaps` is the expensive per-edge
+Python step, ~12s on a real ~670k-edge padded cell — see its own comment), deriving the two
+constrained rows from that one graph via igraph's `subgraph_edges` rather than rebuilding from
+scratch, since a naive per-pair rebuild measured ~15s/pair and would have blown the "minutes" budget
+at 200 pairs. Cell count is bounded (46 cells with huts today), so wall time plateaus well under
+the pair count.
+
+Requires `data/osm/base_graph/` **with `add_base_elevation.py` already run** (routes on `time_s`,
+needs `node_ele.npy`) and `data/osm/huts.geojson`. Writes `data/analysis/routing_probe.json`.
+**Minutes** at the default `--pairs 200` (~46 cell-graph builds dominate, ~12s each); linear in
+`--pairs` only through the (cheap) per-pair Dijkstra calls once past ~46 pairs.

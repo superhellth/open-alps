@@ -226,6 +226,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
     descent_ms = subgraph.local_edges["descent_m"].tolist()
     sac_ranks = subgraph.local_edges["sac_rank"].tolist()
     via_ferratas = subgraph.local_edges["via_ferrata"].tolist()
+    constrained_oks = subgraph.local_edges["constrained_ok"].tolist()
     interiors = [
         [
             (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
@@ -255,6 +256,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         vertex_coords[vid] = split.split_coord
         base_sac_rank = int(subgraph.local_edges["sac_rank"][ei])
         base_via_ferrata = bool(subgraph.local_edges["via_ferrata"][ei])
+        base_constrained_ok = bool(subgraph.local_edges["constrained_ok"][ei])
         base_kept = kept_mask[ei]
         edges_uv.append((u, vid))
         weights.append(split.dist_to_u)
@@ -267,6 +269,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         descent_ms.append(0.0)
         sac_ranks.append(base_sac_rank)
         via_ferratas.append(base_via_ferrata)
+        constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_u))
         kept_mask.append(base_kept)
         edges_uv.append((vid, v))
@@ -280,6 +283,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         descent_ms.append(0.0)
         sac_ranks.append(base_sac_rank)
         via_ferratas.append(base_via_ferrata)
+        constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_v))
         kept_mask.append(base_kept)
         hub_vertex[hub_key] = vid
@@ -296,7 +300,7 @@ def _build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask
         "inferred_m": _filter(inferred_ms), "ascent_m": _filter(ascent_ms),
         "descent_m": _filter(descent_ms),
         "sac_rank": _filter(sac_ranks), "via_ferrata": _filter(via_ferratas),
-        "interior": _filter(interiors),
+        "constrained_ok": _filter(constrained_oks), "interior": _filter(interiors),
     }, directed=False)
     return graph, hub_vertex, vertex_coords
 
