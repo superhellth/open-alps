@@ -24,7 +24,8 @@ def test_rdp_keep_indices_preserves_a_corner():
 
 def test_build_stats_resolves_ids_via_id_table():
     records = np.zeros(1, dtype=binfmt.RECORD_DTYPE)
-    records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, 0, 1000.0, 0.0, 50.0, 10.0, 2, False,
+    records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, 0, 1000.0, 0.0, 50.0, 10.0,
+                  1500.0, 0.0, 0.0, 0.0, 2, False,
                   0, 2, 0, 3)
     geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
     geometry["lon"], geometry["lat"] = [0.0, 0.01], [0.0, 0.0]

@@ -26,7 +26,12 @@ COORD_DTYPE = np.dtype([("lon", "f8"), ("lat", "f8")])
 RECORD_DTYPE = np.dtype([
     ("from_id", "i8"), ("to_id", "i8"), ("from_type", "u1"), ("to_type", "u1"),
     ("variant", "u1"), ("distance_m", "f4"), ("road_m", "f4"),
-    ("ascent_m", "f4"), ("descent_m", "f4"), ("sac_rank", "i1"), ("via_ferrata", "bool"),
+    ("ascent_m", "f4"), ("descent_m", "f4"),
+    ("max_ele_m", "f4"),   # scalar, so the client never scans a profile to apply an altitude cap
+    ("ungraded_m", "f4"),  # zero by construction on every constrained row (spec C4)
+    ("inferred_m", "f4"),  # separate from ungraded_m: they support different claims
+    ("snap_m", "f4"),      # hub-to-trail gap, both ends; already folded into distance/ascent
+    ("sac_rank", "i1"), ("via_ferrata", "bool"),
     ("geom_offset", "i8"), ("geom_count", "i4"),
     ("profile_offset", "i8"), ("profile_count", "i4"),
 ])

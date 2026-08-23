@@ -71,3 +71,15 @@ def test_variant_fast_t3_ungraded_is_the_fourth_row():
     # the fourth row is required, not optional.
     assert binfmt.VARIANT_FAST_T3_UNGRADED == 3
     assert binfmt.VARIANT_NAMES[binfmt.VARIANT_FAST_T3_UNGRADED] == "FAST_T3_UNGRADED"
+
+
+def test_record_dtype_carries_the_scalar_filter_columns():
+    for field in ("max_ele_m", "ungraded_m", "inferred_m", "snap_m"):
+        assert field in binfmt.RECORD_DTYPE.names, field
+
+
+def test_record_dtype_has_no_stored_duration():
+    # spec D3: reported duration is direction-dependent. A stored scalar guarantees something
+    # reads it for a leg walked backwards and is wrong by the full ascent/descent rate gap.
+    assert "time_min" not in binfmt.RECORD_DTYPE.names
+    assert "time_s" not in binfmt.RECORD_DTYPE.names
