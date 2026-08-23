@@ -10,7 +10,9 @@ Usage: python pipeline/phases/graph_building/build_hub_edges.py [--max-edge-km 3
 """
 
 import argparse
+import dataclasses
 import hashlib
+import json
 import math
 import os
 import sys
@@ -82,6 +84,28 @@ class SnapResult:
     # above the trail); it stays 0.0 - flat, not unknown - when the caller has no hub elevation.
     gap_m: float = 0.0
     gap_dz_m: float = 0.0
+
+
+@dataclass
+class SnapRejection:
+    """A hub that could not be snapped (spec E3) - returned by snap_hub_to_subgraph instead of
+    None, so it becomes a counted, reported fact (write_unsnapped_report) rather than a silent
+    drop. hub_id/hub_type/name are filled in by the caller (snap_hub_to_subgraph only knows the
+    hub's coordinate, not its identity); gap_m/dz_m/reason describe why it failed.
+
+    reason:
+      "no_trail_data"  - the padded cell around the hub has no trail data at all.
+      "gap_too_far"    - trail data exists, but nothing is within max_snap_m.
+      "vertical_offset" - a candidate is within max_snap_m, but |gap_dz_m| exceeds
+                          max_snap_ascent_m (a hub joined to a trail it cannot physically reach,
+                          e.g. across a gorge or up a face - not caught by a horizontal cap at
+                          any setting, spec E3)."""
+    gap_m: float
+    dz_m: float
+    reason: str
+    hub_id: int = None
+    hub_type: int = None
+    name: str = ""
 
 
 def _project_m(lon, lat, km_per_deg_lng: float):
@@ -168,11 +192,21 @@ def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: floa
 
 
 def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
-                          max_snap_m: float, hub_ele_m: float = None) -> SnapResult | None:
+                          max_snap_m: float, hub_ele_m: float = None,
+                          max_snap_ascent_m: float = None) -> "SnapResult | SnapRejection":
     """hub_ele_m: the hub's own elevation (spec E3), sampled from the SAME DEM as
     local_node_ele/interior_ele so gap_dz_m measures real terrain rather than the offset between
     two independently-sourced elevation datasets. None (the default) means unknown - gap_dz_m
-    stays 0.0 rather than guessing."""
+    stays 0.0 rather than guessing, and no vertical check is possible.
+
+    max_snap_ascent_m: reject a within-range candidate whose |gap_dz_m| exceeds it - only
+    enforced when hub_ele_m is also given (spec E3: a horizontal cap alone cannot tell "18m
+    across a terrace" from "18m up a wall", but it can't check what it doesn't know either).
+
+    Never returns bare None: a hub that cannot snap - at any distance, or past the vertical cap -
+    comes back as a SnapRejection instead, so it's counted rather than silently vanishing."""
+    no_trail_data = len(subgraph.local_nodes) == 0 and len(subgraph.local_edges) == 0
+    node_dists = None
     # An existing graph node within range always wins over a mid-chain split, even if some
     # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
     # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
@@ -183,9 +217,13 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         )
         best_i = int(np.argmin(node_dists))
         if node_dists[best_i] <= max_snap_m:
+            gap_m = float(node_dists[best_i])
             gap_dz_m = (0.0 if hub_ele_m is None
                         else float(hub_ele_m) - float(subgraph.local_node_ele[best_i]))
-            return SnapResult(node_index=best_i, gap_m=float(node_dists[best_i]), gap_dz_m=gap_dz_m)
+            if (max_snap_ascent_m is not None and hub_ele_m is not None
+                    and abs(gap_dz_m) > max_snap_ascent_m):
+                return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
+            return SnapResult(node_index=best_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
 
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
@@ -210,7 +248,13 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
             best_edge = (d, ei, split, e["u"], e["v"])
 
     if best_edge is None:
-        return None
+        # A node within max_snap_m (if any nodes exist at all) is the most informative distance
+        # to report even though it lost - it tells the report how far away the nearest trail data
+        # actually was, not just that nothing qualified.
+        fallback_gap_m = (float(node_dists[int(np.argmin(node_dists))])
+                           if node_dists is not None and len(node_dists) else float("inf"))
+        reason = "no_trail_data" if no_trail_data else "gap_too_far"
+        return SnapRejection(gap_m=fallback_gap_m, dz_m=0.0, reason=reason)
     d, edge_local_index, split, u_idx, v_idx = best_edge
     gap_dz_m = 0.0
     if hub_ele_m is not None:
@@ -223,6 +267,9 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         ratio = split.dist_to_u / total if total > 0 else 0.0
         snap_ele = u_ele + (v_ele - u_ele) * ratio
         gap_dz_m = float(hub_ele_m) - snap_ele
+    if (max_snap_ascent_m is not None and hub_ele_m is not None
+            and abs(gap_dz_m) > max_snap_ascent_m):
+        return SnapRejection(gap_m=float(d), dz_m=gap_dz_m, reason="vertical_offset")
     return SnapResult(edge_local_index=edge_local_index, split=split, gap_m=float(d), gap_dz_m=gap_dz_m)
 
 
@@ -411,7 +458,8 @@ def _path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
 def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                                 all_hubs: list, max_edge_km: float,
                                 max_snap_m: float, variants: list,
-                                timer: StepTimer = None) -> list:
+                                timer: StepTimer = None, max_snap_ascent_m: float = None,
+                                rejections: list = None) -> list:
     """all_hubs: candidate targets already filtered (by the caller) to hubs whose straight-line
     distance to this cell could possibly be within max_edge_km of trail distance - trail distance
     is always >= straight-line distance, so a bbox padded by max_edge_km around the cell is a safe
@@ -433,7 +481,12 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     timer: optional lib/timing.py StepTimer, filled with the per-step split (snap / build_igraph /
     distances / paths) so the parent can merge every worker's totals and report where the run
     actually went - snapping and graph traversal scale with different things (hub count vs.
-    subgraph size x pair count), so a single per-cell wall-clock number cannot tell them apart."""
+    subgraph size x pair count), so a single per-cell wall-clock number cannot tell them apart.
+
+    max_snap_ascent_m: forwarded to snap_hub_to_subgraph (spec E3). rejections: optional list a
+    caller can pass to collect every SnapRejection this cell produces (for
+    write_unsnapped_report) - a hub that fails here is simply excluded from routing, same as
+    before, but is now a counted fact instead of a silent drop."""
     if not core_hubs:
         return []
     timer = timer if timer is not None else StepTimer()
@@ -447,9 +500,14 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
             if key in snaps:
                 continue
             snap = snap_hub_to_subgraph(subgraph, hub["lon"], hub["lat"], max_snap_m,
-                                        hub_ele_m=hub.get("ele"))
-            if snap is not None:
+                                        hub_ele_m=hub.get("ele"),
+                                        max_snap_ascent_m=max_snap_ascent_m)
+            if isinstance(snap, SnapResult):
                 snaps[key] = snap
+            elif rejections is not None:
+                rejections.append(dataclasses.replace(
+                    snap, hub_id=hub["id"], hub_type=hub["type"], name=hub.get("name", "")
+                ))
     timer.count("snap_hubs", len(snaps))
 
     max_edge_m = max_edge_km * 1000
@@ -593,6 +651,20 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
 
 
+def write_unsnapped_report(path: Path, rejections: list) -> None:
+    """Emits data/osm/unsnapped_huts.json (spec E3) - the report that turns a hub failing to
+    snap into a countable, visible fact instead of a silent drop (956 hubs measured, 205
+    unsnapped, data/analysis/snap_stats.json - before any vertical cap even applied). Sorted by
+    |dz_m| descending so the worst vertical outliers (bivouac boxes on walls) surface first."""
+    rows = sorted(rejections, key=lambda r: abs(r.dz_m), reverse=True)
+    payload = [
+        {"hub_id": r.hub_id, "hub_type": r.hub_type, "name": r.name,
+         "gap_m": r.gap_m, "dz_m": r.dz_m, "reason": r.reason}
+        for r in rows
+    ]
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
 def _sample_hub_elevations(dem_path: Path, hubs: list, grid: Grid, buffer_km: float = 0.2) -> None:
     """Fills each hub dict's "ele" key in place by sampling data/dem/dem.tif at the hub's own
     coordinate (spec E3), bilinear, per grid cell - same sampler and windowing strategy as
@@ -637,7 +709,7 @@ def _sample_hub_elevations(dem_path: Path, hubs: list, grid: Grid, buffer_km: fl
 
 def _run_cell(args):
     base_graph_dir, grid, cell_id, buffer_km, core_hubs, candidate_hubs, max_edge_km, \
-        max_snap_m, variants = args
+        max_snap_m, variants, max_snap_ascent_m = args
     t0 = time.time()
     # One StepTimer per worker process, returned to the parent (it holds plain dicts, so it
     # pickles back through ProcessPoolExecutor) rather than each worker appending its own
@@ -645,12 +717,15 @@ def _run_cell(args):
     timer = StepTimer()
     with timer.step("gather_subgraph"):
         subgraph = gather_padded_subgraph(base_graph_dir, grid, cell_id, buffer_km)
+    rejections = []
     records = compute_hub_edges_for_cell(subgraph, core_hubs, candidate_hubs, max_edge_km,
-                                          max_snap_m, variants, timer=timer)
+                                          max_snap_m, variants, timer=timer,
+                                          max_snap_ascent_m=max_snap_ascent_m,
+                                          rejections=rejections)
     return {
         "cell_id": cell_id, "elapsed_s": time.time() - t0, "n_core_hubs": len(core_hubs),
         "n_nodes": len(subgraph.local_nodes), "n_edges": len(subgraph.local_edges),
-        "records": records, "timer": timer,
+        "records": records, "timer": timer, "rejections": rejections,
     }
 
 
@@ -661,6 +736,8 @@ if __name__ == "__main__":
     parser.add_argument("--out-dir", default=str(OSM_DIR))
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
     parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
+    parser.add_argument("--max-snap-ascent-m", type=float,
+                         default=config["graph"]["maxSnapAscentM"])
     parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args()
@@ -670,6 +747,14 @@ if __name__ == "__main__":
 
     hut_coords = hut_points(OSM_DIR / "huts.geojson")
     hut_coords_by_id = {i: tuple(c) for i, c in enumerate(hut_coords)}
+    # hut_points() reads huts.geojson's features in the same order it enumerates here, so a
+    # second pass over the same file for names lines up with hut_coords_by_id's ids for free -
+    # only unsnapped_huts.json needs a name (spec E3), so nothing else carries this.
+    with open(OSM_DIR / "huts.geojson", encoding="utf-8") as f:
+        hut_names_by_id = {
+            i: feat["properties"].get("name", "")
+            for i, feat in enumerate(json.load(f)["features"])
+        }
     start_points = binfmt.load_array(OSM_DIR / "start_points.npy", mmap=False)
     start_by_id = {}
     for p in start_points:
@@ -678,7 +763,8 @@ if __name__ == "__main__":
     all_hub_coords_by_type = {binfmt.TYPE_HUT: hut_coords_by_id, **start_by_id}
 
     all_hubs_flat = [
-        {"id": hid, "type": htype, "lon": lon, "lat": lat}
+        {"id": hid, "type": htype, "lon": lon, "lat": lat,
+         "name": hut_names_by_id.get(hid, "") if htype == binfmt.TYPE_HUT else ""}
         for htype, coords_by_id in all_hub_coords_by_type.items()
         for hid, (lon, lat) in coords_by_id.items()
     ]
@@ -710,7 +796,7 @@ if __name__ == "__main__":
 
     tasks = [
         (args.base_graph_dir, grid, cid, args.max_edge_km, hubs, _candidate_hubs_for_cell(cid),
-         args.max_edge_km, args.max_snap_m, active_variants)
+         args.max_edge_km, args.max_snap_m, active_variants, args.max_snap_ascent_m)
         for cid, hubs in hubs_by_cell.items()
     ]
 
@@ -725,15 +811,17 @@ if __name__ == "__main__":
     # to more than the wall clock - the reading that matters is the ratio between steps (snap vs.
     # distances vs. paths), not the absolute number.
     run_timer = StepTimer()
+    all_rejections = []
     with phase(SCRIPT_NAME, "hub_edge_query", n_cells=total, n_huts=n_huts,
                n_access_points=len(all_hubs_flat) - n_huts,
                workers=args.workers or os.cpu_count(), max_edge_km=args.max_edge_km,
-               max_snap_m=args.max_snap_m) as meta:
+               max_snap_m=args.max_snap_m, max_snap_ascent_m=args.max_snap_ascent_m) as meta:
         with ProcessPoolExecutor(max_workers=args.workers) as pool:
             futures = [pool.submit(_run_cell, t) for t in tasks]
             for fut in as_completed(futures):
                 result = fut.result()
                 shard_records.append(result["records"])
+                all_rejections.extend(result["rejections"])
                 run_timer.merge(result["timer"])
                 completed += 1
                 overall_elapsed = time.time() - t_start
@@ -754,6 +842,18 @@ if __name__ == "__main__":
         meta.update(run_timer.as_meta())
 
     print(f"step totals (summed over workers): {run_timer.summary()}", flush=True)
+
+    # A hub is snapped independently in every cell where it appears (its own cell as a core hub,
+    # every neighbouring cell where it's a candidate target) - the same real-world geometry gives
+    # the same outcome each time (the padded window around any cell that considers it always
+    # contains its own nearby trail data), so de-duplicate by identity rather than reporting the
+    # same hub once per cell that happened to see it.
+    unique_rejections = list({(r.hub_type, r.hub_id): r for r in all_rejections}.values())
+    reason_counts = {}
+    for r in unique_rejections:
+        reason_counts[r.reason] = reason_counts.get(r.reason, 0) + 1
+    print(f"unsnapped hubs: {len(unique_rejections)} ({reason_counts})", flush=True)
+    write_unsnapped_report(Path(args.out_dir) / "unsnapped_huts.json", unique_rejections)
 
     merged = merge_and_dedup(shard_records)
     hut_records = [r for r in merged if r["to_type"] == binfmt.TYPE_HUT and r["from_type"] == binfmt.TYPE_HUT]

@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -13,8 +14,8 @@ from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    _build_igraph_with_snaps, _path_for, _write_edge_output, compute_hub_edges_for_cell,
-    merge_and_dedup, snap_hub_to_subgraph,
+    SnapRejection, SnapResult, _build_igraph_with_snaps, _path_for, _write_edge_output,
+    compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, write_unsnapped_report,
 )
 
 BBOX = {"minLng": 0.0, "maxLng": 1.0, "minLat": 0.0, "maxLat": 1.0}
@@ -88,10 +89,30 @@ def test_snap_hub_mid_chain_with_interior_polyline_picks_nearest_segment():
     assert result.edge_local_index == 0
 
 
-def test_snap_returns_none_when_out_of_range():
+def test_far_hub_is_rejected_with_the_distance_reason():
+    # Supersedes the old "returns None when out of range" behaviour (spec E3): a hub that cannot
+    # snap is now a counted, reported SnapRejection, never a silent None.
     subgraph = _line_subgraph()
-    result = snap_hub_to_subgraph(subgraph, hub_lon=0.5, hub_lat=0.5, max_snap_m=50.0)
-    assert result is None
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.5, hub_lat=0.5, max_snap_m=50.0,
+                                   max_snap_ascent_m=25.0)
+    assert isinstance(result, SnapRejection)
+    assert result.reason == "gap_too_far"
+
+
+def test_no_trail_data_at_all_gets_its_own_reason():
+    # Distinct from gap_too_far: this hub's padded cell has no trail data whatsoever, not just
+    # trail data that happens to be farther away than max_snap_m.
+    empty = LocalSubgraph(
+        global_node_ids=np.zeros(0, dtype=np.int64),
+        local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
+        local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
+        interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(0, dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+    result = snap_hub_to_subgraph(empty, hub_lon=0.0, hub_lat=0.0, max_snap_m=50.0)
+    assert isinstance(result, SnapRejection)
+    assert result.reason == "no_trail_data"
 
 
 def test_snap_result_reports_the_gap():
@@ -117,6 +138,51 @@ def test_snap_gap_dz_is_hub_minus_snap_point_elevation():
     )
     assert result.node_index == 0
     assert result.gap_dz_m == pytest.approx(940.0)
+
+
+def test_vertical_offset_rejects_a_wall_bivouac():
+    # spec E3, Watzmann-Ostwand-Biwak shape - a hub whose gap is well inside max_snap_m but whose
+    # vertical offset (30m here, chosen > the 25m cap; the real hut's measured 17m sits under the
+    # cap and only motivates why a horizontal-only check would have missed it) exceeds
+    # max_snap_ascent_m must be rejected even though the horizontal check alone would pass it.
+    subgraph = _line_subgraph()  # local_node_ele defaults to [0.0, 0.0]
+    result = snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0, max_snap_ascent_m=25.0,
+        hub_ele_m=30.0,
+    )
+    assert isinstance(result, SnapRejection)
+    assert result.reason == "vertical_offset"
+
+
+def test_ordinary_hut_on_steep_ground_still_snaps():
+    # Staufner Haus shape: steep terrain but only ~8m of vertical offset - under the cap.
+    subgraph = _line_subgraph()
+    result = snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0, max_snap_ascent_m=25.0,
+        hub_ele_m=8.0,
+    )
+    assert isinstance(result, SnapResult)
+
+
+def test_vertical_check_is_skipped_without_a_hub_elevation():
+    # hub_ele_m=None means "unknown", not "flat" - it must not be treated as a 0m offset that
+    # trivially passes, nor block snapping outright (spec E3 only asks to validate offsets it can
+    # actually measure).
+    subgraph = _line_subgraph()
+    result = snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0, hub_lat=0.0005, max_snap_m=100.0, max_snap_ascent_m=25.0,
+    )
+    assert isinstance(result, SnapResult)
+
+
+def test_unsnapped_report_records_every_rejection(tmp_path):
+    write_unsnapped_report(tmp_path / "unsnapped_huts.json", [
+        SnapRejection(hub_id=7, name="Schuesselkar-Biwak", gap_m=250.0, dz_m=258.0,
+                      reason="vertical_offset"),
+    ])
+    got = json.loads((tmp_path / "unsnapped_huts.json").read_text(encoding="utf-8"))
+    assert got[0]["reason"] == "vertical_offset"
+    assert got[0]["dz_m"] == 258.0
 
 
 def test_snap_gap_dz_mid_chain_interpolates_along_the_edge():

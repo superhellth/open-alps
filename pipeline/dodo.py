@@ -112,6 +112,7 @@ PUBLIC_FILES = [
     "trails.pmtiles",
     "stations.geojson",
     "parking.geojson",
+    "unsnapped_huts.json",
 ]
 
 
@@ -280,12 +281,15 @@ def task_build_hub_edges():
         "actions": [
             f'"{sys.executable}" "{SCRIPT_DIR / "phases" / "graph_building" / "build_hub_edges.py"}"'
             " --max-edge-km %(max_edge_km)s --max-snap-m %(max_snap_m)s"
+            " --max-snap-ascent-m %(max_snap_ascent_m)s"
         ],
         "params": [
             {"name": "max_edge_km", "long": "max-edge-km", "type": float,
              "default": CONFIG["graph"]["maxEdgeKm"]},
             {"name": "max_snap_m", "long": "max-snap-m", "type": float,
              "default": CONFIG["graph"]["maxSnapM"]},
+            {"name": "max_snap_ascent_m", "long": "max-snap-ascent-m", "type": float,
+             "default": CONFIG["graph"]["maxSnapAscentM"]},
         ],
         # task_dep (not just file_dep) on compute_edge_profiles: edges.npy's time_s/ascent_m/
         # descent_m are rewritten in place by that task but aren't one of its declared targets
@@ -295,9 +299,13 @@ def task_build_hub_edges():
         "file_dep": [
             str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
             str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
+            # spec E3: hub elevation is now sampled directly from the DEM (same raster as
+            # node_ele.npy/interior_ele.npy), a real new dependency this task didn't have before.
+            str(DEM_DIR / "dem.tif"),
         ],
         "targets": [
             str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+            str(OSM_DIR / "unsnapped_huts.json"),
         ],
         "uptodate": [TaskOptionsChanged()],
     }

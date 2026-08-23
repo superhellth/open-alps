@@ -8,6 +8,7 @@
   "graph": {
     "maxEdgeKm": 30,
     "maxSnapM": 100,
+    "maxSnapAscentM": 25,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
     "tileSizeKm": 60,
     "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
