@@ -62,8 +62,15 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
                  hover_tolerance_deg: float) -> list:
     inverse_id_table = {}
     for k, v in id_table.items():
-        prefix, raw_id = k.split(":", 1)
-        inverse_id_table[(prefix, int(raw_id))] = v
+        if ":" in k:
+            prefix, raw_id = k.split(":", 1)
+            inverse_id_table[(prefix, int(raw_id))] = v
+        else:
+            # filter_start_points.build_id_table's shape: {type: {str(id): {tag: value, ...}}}.
+            # The display id was always the numeric id itself (no separate display value), so
+            # resolve to that directly instead of the tag dict.
+            for raw_id in v:
+                inverse_id_table[(k, int(raw_id))] = int(raw_id)
 
     def resolve(record_id, record_type):
         return inverse_id_table.get((TYPE_PREFIX[record_type], int(record_id)), int(record_id))

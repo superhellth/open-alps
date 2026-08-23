@@ -36,7 +36,7 @@ LAYERS = [
     {
         "name": "parking",
         "tag_filter": "nwr/amenity=parking",
-        "keep_fields": ["name", "capacity", "fee", "access"],
+        "keep_fields": ["name", "capacity", "fee", "access", "motor_vehicle", "barrier"],
     },
 ]
 

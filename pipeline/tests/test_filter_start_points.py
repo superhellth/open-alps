@@ -7,7 +7,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from preprocessing.filter_start_points import _load_layer, filter_to_hut_range  # noqa: E402
+from preprocessing.filter_start_points import (  # noqa: E402
+    _load_layer,
+    build_id_table,
+    filter_to_hut_range,
+)
 
 HUT_COORDS = np.array([(10.0, 47.0), (11.0, 47.0)])
 
@@ -56,6 +60,23 @@ def test_load_layer_reads_top_level_feature_id(tmp_path):
     assert points[0]["osm_id"] == 8091317
     assert points[1]["osm_id"] == 21261052
     assert points[0]["lon"] == 16.31 and points[0]["lat"] == 48.21
+
+
+def test_start_points_retain_access_tags():
+    table = build_id_table([
+        {"type": "parking", "id": 1, "lon": 11.0, "lat": 47.0,
+         "properties": {"name": "P", "access": "private", "motor_vehicle": "no"}},
+    ])
+    assert table["parking"]["1"]["access"] == "private"
+    assert table["parking"]["1"]["motor_vehicle"] == "no"
+
+
+def test_missing_access_becomes_none_not_absent():
+    # spec E1: absent tag -> keep but mark access_unknown. Dropping the key makes "unknown"
+    # and "open" indistinguishable downstream.
+    table = build_id_table([{"type": "parking", "id": 2, "lon": 11.0, "lat": 47.0,
+                            "properties": {"name": "Q"}}])
+    assert table["parking"]["2"]["access"] is None
 
 
 def test_preserves_input_order_of_survivors():

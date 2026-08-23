@@ -50,8 +50,26 @@ def _load_layer(path: Path, point_type: str) -> list:
         if raw_id is None:
             continue
         lon, lat = feat["geometry"]["coordinates"]
-        points.append({"lon": lon, "lat": lat, "osm_id": int(raw_id[1:]), "type": point_type})
+        points.append({
+            "lon": lon, "lat": lat, "osm_id": int(raw_id[1:]), "type": point_type,
+            "properties": feat.get("properties", {}),
+        })
     return points
+
+
+def build_id_table(points: list) -> dict:
+    """type -> str(id) -> {access, motor_vehicle, barrier}, None (not absent) where a tag is
+    missing (spec E1) so build_approach_table.py can tell "unknown" apart from "open"."""
+    table = {}
+    for p in points:
+        pid = str(p["id"] if "id" in p else p["osm_id"])
+        props = p.get("properties", {})
+        table.setdefault(p["type"], {})[pid] = {
+            "access": props.get("access"),
+            "motor_vehicle": props.get("motor_vehicle"),
+            "barrier": props.get("barrier"),
+        }
+    return table
 
 
 if __name__ == "__main__":
@@ -77,7 +95,7 @@ if __name__ == "__main__":
         arr[i] = (p["lon"], p["lat"], p["osm_id"], type_code[p["type"]])
 
     binfmt.save_array(OSM_DIR / "start_points.npy", arr)
-    id_table = {f"{p['type']}:{p['osm_id']}": p["osm_id"] for p in kept}
+    id_table = build_id_table(kept)
     with open(OSM_DIR / "start_points_id_table.json", "w", encoding="utf-8") as f:
         json.dump(id_table, f)
     print(f"written {OSM_DIR / 'start_points.npy'}")
