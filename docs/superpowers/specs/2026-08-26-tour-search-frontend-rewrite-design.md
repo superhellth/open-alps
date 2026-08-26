@@ -163,6 +163,56 @@ New dependencies: `@mui/material`, `@emotion/react`, `@emotion/styled`.
 - `App.jsx`'s existing map (all ~1173 hut markers) is visually restyled to sit under the new shell
   but its rendering logic is untouched by this spec.
 
+### D1. Result presentation (added after user-perspective review)
+
+Sections A–B make the search exhaustive, nationwide *and* raise `legCountMax` from ~3 to 14. That
+multiplies the result count by orders of magnitude, so the results pane needs its own design — a
+plain `List` of every chain is unusable at that scale.
+
+- **Pagination / virtualization.** Render a bounded page of results (e.g. 25 per page, or a
+  virtualized list). Thousands of mounted `Card`s would reintroduce, in the DOM, exactly the stall
+  section B removes from the engine.
+- **Sort control.** The engine returns chains sorted by `totalDurationH` only. Expose a sort
+  selector over the already-present fields: duration, total ascent, total distance, leg count. This
+  is a client-side sort of `result.chains` — no engine change.
+- **Region filter (post-filter, not search scoping).** Nationwide search stays a hard requirement
+  (see "Rejected: start-region scoping" — that rejection was about *perf*, and still stands). But
+  the user needs to narrow the *output*: filter displayed results by proximity to a picked point or
+  by a named region, using the start-point coordinates already loaded from
+  `stations.geojson`/`parking.geojson`. Applied after `findTours`, so it cannot affect
+  exhaustiveness or perf.
+- **Variety knob.** `findTours`' `overlapThreshold` (default `0.5`, `index.js`) is currently
+  hardcoded at the call site. Surface it as a coarse UI control (e.g. "wenig/mittel/viel Varianz")
+  rather than a raw number.
+- **Per-leg breakdown per result.** Today only the totals are shown
+  (`h`, ↑m, ↓m, km). A user cannot choose between multi-day tours without seeing that day 3 is 9 h
+  and 1400 hm. Each result card expands to a per-leg list (from → to, duration, ascent, descent,
+  distance) — the data is already on the chain, no engine change.
+- **Named start and end points.** Especially in transit mode, where start ≠ end, both station names
+  must be prominent on the card, not implied by the arrow chain. (Start and end being far apart is
+  legitimate and is *not* filtered — see Non-goals.)
+- **`killCounters` must not be rendered raw.** `TourSearchPage.jsx` currently prints
+  `verworfen: maxLegTimeH: 412, sacCeiling: 88` — engine diagnostics in the user's face. Either
+  translate them into actionable empty-state guidance ("412 Etappen waren zu lang — Gehzeit
+  erhöhen") or drop them from the UI entirely. They stay in the `findTours` return value for tests
+  and debugging either way.
+
+### D2. Form details (added after user-perspective review)
+
+- **Label "Etappen" in terms the user thinks in.** *n* legs = *n*−1 huts = *n*−1 nights. The field
+  should state that relationship (helper text or a relabel), not leave the user to derive it.
+- **SAC ceiling gap.** The current select offers only T2 / T3 / beliebig, while `sacCeiling` is a
+  plain number. Include T1 (and any other grade the data actually carries) rather than a hand-picked
+  subset.
+- **Reset to defaults** button on the form.
+- **Sliders only where precision doesn't matter.** Leg time steps in 0.5 h; a bare `Slider` makes
+  exact entry awkward. Use paired `TextField`s, or a slider paired with a numeric field — do not
+  replace numeric entry with a slider alone.
+- **Guard the expensive end of the range.** Until section B's target is confirmed empirically, keep
+  the default `legCountMax` at today's modest value and mark high values in the UI as potentially
+  slow. With no Worker and no cancel (see above), an unexpected blowup at 14 freezes the tab rather
+  than merely slowing it.
+
 ## E. Map integration: selected tour → map
 
 Selecting a result in `TourSearchPage` draws that tour's route. Rather than lifting shared state
@@ -181,6 +231,13 @@ irrelevant to one tour), `TourSearchPage.tsx` embeds its **own**, smaller `react
 This keeps `App.jsx` untouched functionally and avoids introducing cross-hash-route shared state
 into the router for a single feature.
 
+**The polyline is schematic, and must be shown as such.** Real trail geometry is not part of the
+shipped hut-edge payload (see `docs/tour-suggestion-payload.md`); the polyline is a straight line
+between hut coordinates. Rendered as a plain solid route line, a user will read it as the actual
+path — across terrain the trail never crosses. Draw it dashed/de-emphasised with an explicit
+caption ("schematische Verbindung, nicht der reale Wegverlauf"). Shipping real geometry is a
+`pipeline/` concern, not a frontend one, and is out of scope here.
+
 ## F. Testing
 
 - **Engine**: vitest, as today — every existing `*.test.js` ports to `*.test.ts` unchanged in
@@ -198,10 +255,27 @@ into the router for a single feature.
   pipeline exists in this repo today per `CLAUDE.md` — "No test setup exists yet" is now stale and
   should be corrected there once this ships).
 
+## Deferred
+
+- **Shareable / restorable search state.** Putting the query (and the selected result) into the URL
+  hash so a search can be bookmarked, reloaded and sent to someone else. The hash router already
+  exists, so this is cheap — but it is a separate feature, not part of this rewrite.
+
 ## Non-goals
 
 - No backend/server — data sources unchanged (ArcGIS layer, OHRS, static pipeline outputs).
 - No change to `pipeline/` or the data contract in `docs/tour-suggestion-payload.md`.
+- **No frontend workarounds for data-quality problems.** Whether a station is actually served by
+  public transport, whether a hut snapped correctly, whether a duration is realistic — these are
+  `pipeline/`/data-contract concerns and get fixed there, never by a compensating client-side
+  filter (see "Fix problems at their root layer" in `.claude/CLAUDE.md`). Section A's transit fix is
+  in scope precisely because it is a *frontend engine* bug: the search allows a mixed
+  station/parking start-end pair.
+- **No geographic constraint between a transit tour's start and end station.** An open route that
+  starts and ends in different regions is a legitimate result, not a defect.
+- No bed-availability (OHRS) integration in the tour results. Multi-day hut tours obviously want it
+  and the endpoint exists (`docs/alpenverein-api.md`), but per-hut availability is one HTTP request
+  per hut per date — a separate feature with its own request-budget design.
 - No dark mode, no i18n beyond the existing German UI strings.
 - No Web Worker offload for the search call (see section D) — revisit only if pruning doesn't
   bring perceived latency down enough.
