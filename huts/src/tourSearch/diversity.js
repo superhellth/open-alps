@@ -17,3 +17,21 @@ export function dedupeReversePairs(chains) {
   }
   return [...bestBySignature.values()]
 }
+
+function hutOverlapFraction(a, b) {
+  const setA = new Set(a.huts)
+  const setB = new Set(b.huts)
+  let shared = 0
+  for (const h of setA) if (setB.has(h)) shared++
+  return shared / Math.min(setA.size, setB.size)
+}
+
+export function suppressSimilar(chains, overlapThreshold) {
+  const accepted = []
+  for (const candidate of chains) {
+    const tooSimilar = accepted.some((a) =>
+      a.startId === candidate.startId || hutOverlapFraction(a, candidate) > overlapThreshold)
+    if (!tooSimilar) accepted.push(candidate)
+  }
+  return accepted
+}
