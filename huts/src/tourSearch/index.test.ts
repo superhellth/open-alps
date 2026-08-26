@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { packColumns } from './binaryColumns.js'
 import { loadTourSearchData, findTours } from './index.js'
+import type { GraphData, Query } from './types.js'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -17,7 +18,7 @@ describe('loadTourSearchData', () => {
       1,
     )
     const fetchMock = vi.fn()
-      .mockImplementation((url) => {
+      .mockImplementation((url: string) => {
         if (url.endsWith('hut-edge-payload.json')) return Promise.resolve({ json: () => Promise.resolve({ ...hutEdgesFixture.manifest, variants: { 0: 'FAST_ANY' }, hut_ids: ['A', 'B'] }) })
         if (url.endsWith('hut-edge-payload.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgesFixture.buffer) })
         if (url.endsWith('approaches.json')) return Promise.resolve({ json: () => Promise.resolve({ ...approachesFixture.manifest, access_values: [null], reverse_index: { hut_to_starts: {}, start_to_huts: {} } }) })
@@ -38,11 +39,11 @@ describe('findTours', () => {
     // Two states that would collapse under dedupeReversePairs, seeded directly rather than via a
     // real search, to test the pipeline wiring in isolation from the DFS itself (Task 10 already
     // tests the DFS; this test is about ordering, not search correctness).
-    const graphData = {
+    const graphData: GraphData = {
       hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [] },
       approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
     }
-    const query = { mode: 'transit', legCountMin: 2, legCountMax: 2, maxLegTimeH: 5 }
+    const query: Query = { mode: 'transit', legCountMin: 2, legCountMax: 2, maxLegTimeH: 5 }
     const { chains, killCounters } = findTours(query, graphData)
     expect(chains).toEqual([])
     expect(killCounters).toBeDefined()
