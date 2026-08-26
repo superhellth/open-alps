@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { legPasses, createKillCounters } from './legFilters.js'
 
-const baseLeg = { durationH: 5, ascentM: 800, maxEleM: 2200, viaFerrata: false }
+const baseLeg = { durationH: 5, ascentM: 800, descentM: 800, distanceM: 12000, maxEleM: 2200, viaFerrata: false }
 const baseConstraints = { maxLegTimeH: 7, minLegTimeH: 2, legAscentCapM: 1000, maxEleM: 2500, allowViaFerrata: true }
 
 describe('legPasses', () => {
@@ -50,7 +50,7 @@ describe('legPasses', () => {
 
   it('a start leg with no maxEleM/viaFerrata fields is not rejected by those checks', () => {
     const counters = createKillCounters()
-    const startLeg = { durationH: 3, ascentM: 400 } // approach/exit legs carry no maxEleM/viaFerrata
+    const startLeg = { durationH: 3, ascentM: 400, descentM: 100, distanceM: 5000 } // approach/exit legs carry no maxEleM/viaFerrata
     expect(legPasses(startLeg, baseConstraints, counters)).toBe(true)
   })
 })
