@@ -150,7 +150,7 @@ Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start_ed
 because a client needs both a small per-hut table and a way to answer "does this loop close":
 
 **Approach table** (`approaches.bin`, columns per `approaches.json`'s `columns` manifest):
-`hut_id` (u2), `start_id` (u4), `source_type` (u1, `binfmt.TYPE_PARKING`/`TYPE_STATION`),
+`hut_id` (u2), `start_id` (u8 — raw OSM node id, exceeds u4 range), `source_type` (u1, `binfmt.TYPE_PARKING`/`TYPE_STATION`),
 `access_unknown` (u1, boolean), `distance_m`/`ascent_m`/`descent_m` (f4). The k best approaches per
 hut (k = `config.approach.k`, default 3), where "best" is **time-ranked** (DIN duration, §2), not
 distance-ranked, and restricted-access candidates (`access`/`motor_vehicle ∈ {private, no}`, gated

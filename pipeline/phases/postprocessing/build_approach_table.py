@@ -150,7 +150,7 @@ if __name__ == "__main__":
 
         columns = {
             "hut_id": ("u2", np.array([r["hut_id"] for r in approaches], dtype="u2")),
-            "start_id": ("u4", np.array([r["start_id"] for r in approaches], dtype="u4")),
+            "start_id": ("u8", np.array([r["start_id"] for r in approaches], dtype="u8")),
             "source_type": ("u1", np.array([r["source_type"] for r in approaches], dtype="u1")),
             "access_unknown": (
                 "u1", np.array([r["access_unknown"] for r in approaches], dtype="u1")
