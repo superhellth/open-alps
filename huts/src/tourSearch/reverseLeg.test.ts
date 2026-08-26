@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import { forwardHutLeg, reverseHutLeg, forwardStartLeg, reverseStartLeg } from './reverseLeg.js'
+import type { HutEdgeRecord, ApproachRecord } from './types.js'
+import { SOURCE_TYPE_STATION } from './types.js'
 
-const record = {
+const record: HutEdgeRecord = {
   fromIndex: 0, toIndex: 1, variant: 2, distanceM: 8000, ascentM: 600, descentM: 500,
   maxEleM: 2400, sacRank: 3, viaFerrata: false, roadM: 100, ungradedM: 0, inferredM: 50, snapM: 5,
 }
@@ -15,7 +17,8 @@ describe('reverseHutLeg', () => {
     expect(reversed.descentM).toBe(600)
     // reversed: distance 8000, ascent 500, descent 600 -> t_h=2, t_v=500/300+600/500=2.867 -> 2.867+1=3.867h
     expect(reversed.durationH).toBeCloseTo(3.8667, 3)
-    for (const field of ['distanceM', 'roadM', 'sacRank', 'viaFerrata', 'maxEleM', 'ungradedM', 'inferredM']) {
+    const fields: (keyof HutEdgeRecord)[] = ['distanceM', 'roadM', 'sacRank', 'viaFerrata', 'maxEleM', 'ungradedM', 'inferredM']
+    for (const field of fields) {
       expect(reversed[field]).toEqual(record[field])
     }
   })
@@ -31,7 +34,10 @@ describe('forwardHutLeg', () => {
 })
 
 describe('start-edge reversal (approach/exit)', () => {
-  const approach = { hutIndex: 15, startId: 32854131, sourceType: 1, distanceM: 4000, ascentM: 300, descentM: 100 }
+  const approach: ApproachRecord = {
+    hutIndex: 15, startId: 32854131, sourceType: SOURCE_TYPE_STATION, accessUnknown: false,
+    distanceM: 4000, ascentM: 300, descentM: 100, access: null,
+  }
 
   it('forwardStartLeg computes duration in the stored (start->hut) direction', () => {
     // t_h = 4000/4000 = 1.0, t_v = 300/300 + 100/500 = 1.2 -> max(1.2,1.0) + min(1.2,1.0)/2 = 1.7h
