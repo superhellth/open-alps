@@ -4,8 +4,11 @@
  * query, never a per-edge sac_rank comparison. Filtering sac_rank on an unconstrained row
  * does not support the "every metre graded" claim (docs/tour-suggestion-payload.md §5).
  */
-export function resolveVariant({ sacCeiling, allowUngraded = false } = {}, variantNames) {
-  const idByName = {}
+export function resolveVariant(
+  { sacCeiling, allowUngraded = false }: { sacCeiling?: number | null; allowUngraded?: boolean } = {},
+  variantNames: Record<string, string>,
+): number {
+  const idByName: Record<string, number> = {}
   for (const [id, name] of Object.entries(variantNames)) idByName[name] = Number(id)
 
   if (sacCeiling != null && sacCeiling <= 2) return idByName.FAST_T2
