@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Alert, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select,
-  Slider, TextField, Typography,
+  Alert, Box, Button, Card, CardActionArea, CardContent, Checkbox, CircularProgress,
+  FormControlLabel, MenuItem, Pagination, Select, Slider, Table, TableBody, TableCell,
+  TableHead, TableRow, TextField, Typography,
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import { loadTourSearchData, findTours } from './tourSearch/index.js'
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from './tourSearch/types.js'
-import type { GraphData, Query, SearchResult, TourMode } from './tourSearch/types.js'
+import type { GraphData, Query, SearchResult, TourMode, TourResult } from './tourSearch/types.js'
 import AppShell from './AppShell.js'
 
 const HUTS_URL = '/data/huts.geojson'
@@ -16,6 +17,68 @@ const STATIONS_URL = '/data/stations.geojson'
 const SOURCE_TYPE_LABEL: Record<number, string> = {
   [SOURCE_TYPE_STATION]: 'Bahnhof',
   [SOURCE_TYPE_PARKING]: 'Parkplatz',
+}
+
+const PAGE_SIZE = 25
+
+type SortKey = 'duration' | 'ascent' | 'distance' | 'legCount'
+
+const SORT_COMPARATORS: Record<SortKey, (a: TourResult, b: TourResult) => number> = {
+  duration: (a, b) => a.totalDurationH - b.totalDurationH,
+  ascent: (a, b) => a.totalAscentM - b.totalAscentM,
+  distance: (a, b) => a.totalDistanceM - b.totalDistanceM,
+  legCount: (a, b) => a.huts.length - b.huts.length,
+}
+
+const SORT_LABEL: Record<SortKey, string> = {
+  duration: 'Gesamtdauer',
+  ascent: 'Anstieg',
+  distance: 'Distanz',
+  legCount: 'Etappenzahl',
+}
+
+// Translates raw kill-counter keys into actionable German guidance (spec D1: killCounters must
+// not be rendered raw). Shown only in the empty-results state.
+const KILL_COUNTER_GUIDANCE: Record<string, (n: number) => string> = {
+  maxLegTime: (n) => `${n} Etappen waren zu lang — maximale Gehzeit erhöhen`,
+  minLegTime: (n) => `${n} Etappen waren zu kurz — minimale Gehzeit senken`,
+  legAscentCap: (n) => `${n} Etappen hatten zu viel Anstieg — Anstiegslimit erhöhen`,
+  maxEleM: (n) => `${n} Etappen lagen über der Maximalhöhe — Maximalhöhe erhöhen`,
+  viaFerrata: (n) => `${n} Etappen enthielten Klettersteige — "Klettersteige erlauben" aktivieren`,
+  revisit: () => '', // internal search bookkeeping, not user-actionable
+}
+
+function killCounterGuidance(killCounters: SearchResult['killCounters']): string[] {
+  return Object.entries(killCounters)
+    .filter(([key, n]) => n > 0 && KILL_COUNTER_GUIDANCE[key]?.(n))
+    .map(([key, n]) => KILL_COUNTER_GUIDANCE[key](n))
+}
+
+// Zips chain.legs (engine-side, name-agnostic) against the point sequence [start, ...huts, exit]
+// to produce one "from → to" label per leg, without the engine ever knowing about hut/start names.
+function legWaypointLabels(
+  chain: TourResult,
+  startLabel: (startId: number) => string,
+  hutNameById: Map<number, string>,
+): string[] {
+  const pointLabels = [
+    startLabel(chain.startId),
+    ...chain.huts.map((h) => hutNameById.get(h) ?? String(h)),
+    startLabel(chain.exitStartId),
+  ]
+  const labels: string[] = []
+  for (let i = 0; i < pointLabels.length - 1; i++) labels.push(`${pointLabels[i]} → ${pointLabels[i + 1]}`)
+  return labels
+}
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const R = 6371
+  const dLat = ((b.lat - a.lat) * Math.PI) / 180
+  const dLng = ((b.lng - a.lng) * Math.PI) / 180
+  const sinLat = Math.sin(dLat / 2)
+  const sinLng = Math.sin(dLng / 2)
+  const h = sinLat * sinLat + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * sinLng * sinLng
+  return 2 * R * Math.asin(Math.sqrt(h))
 }
 
 // legCountMax above this is flagged as potentially slow in the UI (spec D2: "guard the
@@ -95,6 +158,11 @@ function TourSearchPage() {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [searching, setSearching] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('duration')
+  const [page, setPage] = useState(1)
+  const [regionCenterId, setRegionCenterId] = useState<number | 'all'>('all')
+  const [regionRadiusKm, setRegionRadiusKm] = useState('50')
+  const [expandedChain, setExpandedChain] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -144,6 +212,30 @@ function TourSearchPage() {
     [startById],
   )
 
+  const displayedChains = useMemo(() => {
+    if (!result) return []
+    let chains = [...result.chains]
+    if (regionCenterId !== 'all') {
+      const center = startById.get(regionCenterId)
+      const radiusKm = toNumberOrDefault(regionRadiusKm, Infinity)
+      if (center) {
+        chains = chains.filter((c) => {
+          const start = startById.get(c.startId)
+          const end = startById.get(c.exitStartId)
+          return (
+            (start && haversineKm(center, start) <= radiusKm) ||
+            (end && haversineKm(center, end) <= radiusKm)
+          )
+        })
+      }
+    }
+    chains.sort(SORT_COMPARATORS[sortKey])
+    return chains
+  }, [result, sortKey, regionCenterId, regionRadiusKm, startById])
+
+  const pageCount = Math.max(1, Math.ceil(displayedChains.length / PAGE_SIZE))
+  const pageChains = displayedChains.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!graphData) return
@@ -155,6 +247,7 @@ function TourSearchPage() {
       const query = buildQuery(form)
       const overlapThreshold = OVERLAP_THRESHOLD_BY_VARIETY[form.overlapVariety]
       setResult(findTours(query, graphData, { overlapThreshold }))
+      setPage(1)
       setSearching(false)
     }, 0)
   }
@@ -304,8 +397,118 @@ function TourSearchPage() {
           </Box>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
-          {result && <pre>{JSON.stringify(result, (k, v) => (typeof v === 'bigint' ? v.toString() : v), 2)}</pre>}
+        <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {result && (
+            <>
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+                <Typography color="text.secondary">
+                  {displayedChains.length} Tour{displayedChains.length === 1 ? '' : 'en'} gefunden
+                </Typography>
+                <Select size="small" value={sortKey} onChange={(e: SelectChangeEvent) => setSortKey(e.target.value as SortKey)}>
+                  {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
+                    <MenuItem key={key} value={key}>
+                      Sortieren: {SORT_LABEL[key]}
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Select
+                  size="small"
+                  value={String(regionCenterId)}
+                  onChange={(e: SelectChangeEvent) => setRegionCenterId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                >
+                  <MenuItem value="all">Alle Regionen</MenuItem>
+                  {[...startById.entries()].map(([id, start]) => (
+                    <MenuItem key={id} value={id}>
+                      Nahe: {start.name ?? SOURCE_TYPE_LABEL[start.sourceType]}
+                    </MenuItem>
+                  ))}
+                </Select>
+                {regionCenterId !== 'all' && (
+                  <TextField
+                    size="small"
+                    type="number"
+                    label="Radius (km)"
+                    value={regionRadiusKm}
+                    onChange={(e) => setRegionRadiusKm(e.target.value)}
+                    sx={{ width: 120 }}
+                  />
+                )}
+              </Box>
+
+              {displayedChains.length === 0 && (
+                <Box>
+                  <Typography>Keine Touren gefunden. Filter lockern und erneut versuchen.</Typography>
+                  {killCounterGuidance(result.killCounters).map((msg, i) => (
+                    <Alert key={i} severity="info" sx={{ mt: 1 }}>
+                      {msg}
+                    </Alert>
+                  ))}
+                </Box>
+              )}
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {pageChains.map((chain, i) => {
+                  const chainIndex = (page - 1) * PAGE_SIZE + i
+                  const isExpanded = expandedChain === chainIndex
+                  return (
+                    <Card key={chainIndex} variant="outlined">
+                      <CardActionArea onClick={() => setExpandedChain(isExpanded ? null : chainIndex)}>
+                        <CardContent>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                            {startLabel(chain.startId)} → … → {startLabel(chain.exitStartId)}
+                          </Typography>
+                          <Typography color="text.secondary" variant="body2">
+                            {chain.totalDurationH.toFixed(1)} h · ↑{Math.round(chain.totalAscentM)}m ↓
+                            {Math.round(chain.totalDescentM)}m · {(chain.totalDistanceM / 1000).toFixed(1)} km ·{' '}
+                            {chain.huts.length} Etappen
+                          </Typography>
+                        </CardContent>
+                      </CardActionArea>
+                      {isExpanded && (
+                        <CardContent sx={{ pt: 0 }}>
+                          <Typography variant="body2" sx={{ mb: 1 }}>
+                            {startLabel(chain.startId)}
+                            {chain.huts.map((h) => ` → ${hutNameById.get(h) ?? h}`).join('')}
+                            {' → '}
+                            {startLabel(chain.exitStartId)}
+                          </Typography>
+                          <Table size="small">
+                            <TableHead>
+                              <TableRow>
+                                <TableCell>Etappe</TableCell>
+                                <TableCell align="right">Dauer</TableCell>
+                                <TableCell align="right">↑</TableCell>
+                                <TableCell align="right">↓</TableCell>
+                                <TableCell align="right">Distanz</TableCell>
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {legWaypointLabels(chain, startLabel, hutNameById).map((label, legIndex) => {
+                                const leg = chain.legs[legIndex]
+                                return (
+                                  <TableRow key={legIndex}>
+                                    <TableCell>{label}</TableCell>
+                                    <TableCell align="right">{leg.durationH.toFixed(1)} h</TableCell>
+                                    <TableCell align="right">{Math.round(leg.ascentM)}m</TableCell>
+                                    <TableCell align="right">{Math.round(leg.descentM)}m</TableCell>
+                                    <TableCell align="right">{(leg.distanceM / 1000).toFixed(1)} km</TableCell>
+                                  </TableRow>
+                                )
+                              })}
+                            </TableBody>
+                          </Table>
+                        </CardContent>
+                      )}
+                    </Card>
+                  )
+                })}
+              </Box>
+
+              {pageCount > 1 && (
+                <Pagination count={pageCount} page={page} onChange={(_e, p) => setPage(p)} sx={{ alignSelf: 'center' }} />
+              )}
+            </>
+          )}
         </Box>
       </Box>
     </AppShell>
