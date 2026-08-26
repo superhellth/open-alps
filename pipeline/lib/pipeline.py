@@ -2,16 +2,27 @@
 one source of truth for hyperparameters (bbox, regions, tag filter, graph thresholds)."""
 
 import json
+import math
 import platform
 import re
 import shlex
 import shutil
 import subprocess
+import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+
+from shapely.geometry import Polygon
+from shapely.ops import unary_union
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
 REPO_ROOT = SCRIPTS_DIR.parent
-DATA_DIR = REPO_ROOT / "data"
+# .resolve() so a worktree's data/ symlink and the main checkout's real data/ dir produce
+# identical path strings - doit's dependency db is keyed by path text, and a checkout-relative
+# (unresolved) path here makes every file_dep look "moved" when run from a worktree, which
+# defeats the cache doit relies on for multi-hour tasks (see pipeline/CLAUDE.md "Timing pipeline
+# phases" and root CLAUDE.md's pipeline-task warning).
+DATA_DIR = (REPO_ROOT / "data").resolve()
 OSM_DIR = DATA_DIR / "osm"
 DEM_DIR = DATA_DIR / "dem"
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
@@ -41,14 +52,16 @@ def _to_wsl_path(arg: str) -> str:
 def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
     """Bakes a (possibly lazily-reprojecting) VRT into a real, tiled/compressed GeoTIFF.
 
-    dem.vrt's composite provider chains several layers of on-the-fly `gdalwarp`-built VRTs (each
-    region's per-tile reprojection from its native CRS into EPSG:4326) - reading from it, as
-    08-add-elevation.py does, re-runs that reprojection math for every pixel touched, every time.
-    Timed at ~750s for a read covering AT+Bavaria (data/timings.jsonl, phase read_dem_window) -
-    almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles are already local. Materializing
-    once here means step 07 (already freshness-cached, rarely rerun) pays that reprojection cost
-    instead of every step 08 run - and 08 is explicitly the step people rerun repeatedly, to
-    retune --ele-noise-threshold-m.
+    Called twice per build_dem_vrt.py run, at two different costs: once per region inside
+    build_dem_vrt() (in parallel, one call per provider - see that function's docstring for why),
+    where it pays whichever region's own warp cost; and once more at the end of build_dem_vrt.py
+    on the merged dem.vrt, which by then is just a mosaic of already-real region GeoTIFFs (no warp
+    left to do, so that final call is cheap regardless of how many regions there are).
+
+    The underlying cost this exists to avoid: reading a lazily-reprojecting VRT (as the old
+    add_elevation.py used to do directly against dem.vrt) re-runs that reprojection math for every
+    pixel touched, on every read. Almost all CPU, not I/O, since the underlying GeoTIFF/XYZ tiles
+    are already local.
 
     -a_nodata copies NoDataValue from vrt_path explicitly (see composite.py's
     _normalize_colorinterp for why this isn't left to gdal_translate's implicit passthrough).
@@ -62,12 +75,13 @@ def materialize_geotiff(vrt_path: Path, out_path: Path) -> Path:
     args = [
         "gdal_translate", "-of", "GTiff",
         "-co", "TILED=YES", "-co", "COMPRESS=DEFLATE", "-co", "PREDICTOR=3",
-        "-co", "BIGTIFF=IF_SAFER",
+        "-co", "BIGTIFF=IF_SAFER", "-co", "NUM_THREADS=ALL_CPUS",
         "--config", "GDAL_NUM_THREADS", "ALL_CPUS",
     ]
     if nodata is not None:
         args += ["-a_nodata", str(nodata)]
     args += [str(vrt_path), str(out_path)]
+    print(f"materializing {vrt_path} -> {out_path} ...", flush=True)
     subprocess.run(args, check=True)
     return out_path
 
@@ -106,14 +120,30 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
     """Reprojects each manifest region's already-downloaded tiles and merges them into
     dem_dir/dem.vrt. manifest is a list of {"provider", "raw_dir", "region_vrt", "tile_paths"}
     dicts - produced by dem_providers.composite.fetch_regions() for provider == "composite", or
-    written directly by 07-fetch-dem.py's single-region branch otherwise. Touches only local
+    written directly by fetch_dem.py's single-region branch otherwise. Touches only local
     files (no network), so it's safe - and fast - to rerun on its own after tweaking a provider's
     to_4326_vrt() (e.g. bavaria_dgm.py's -srcnodata fix) without re-fetching. See
-    07-fetch-dem.py / 07b-build-dem-vrt.py for why fetching and building are split into separate
-    scripts in the first place."""
+    fetch_dem.py / build_dem_vrt.py for why fetching and building are split into separate
+    scripts in the first place.
+
+    Each region is materialized to a real GeoTIFF here, one at a time per region but all regions
+    in parallel (ThreadPoolExecutor around subprocess.run - threads, not processes, since the
+    actual parallel work happens in each child gdal_translate process; the GIL isn't held while a
+    thread blocks on subprocess.run). This is what makes the regions' warp cost (bavaria/at-bev's
+    CRS reprojection, the expensive part - see materialize_geotiff()'s docstring) run on multiple
+    cores at once. Before this, dem.vrt merged the regions' still-lazy warped VRTs directly, so
+    ALL of that warp math was deferred onto materialize_geotiff()'s single final gdal_translate
+    call, on one core - measured at 8462s wall time for a 3-region AT+Bavaria+Copernicus run
+    (data/timings.jsonl, 2026-08-23), pegging one core at ~99% the whole time despite
+    NUM_THREADS=ALL_CPUS (that flag only threads the GTiff compression step, never gdal's
+    warp/resample read path - confirmed live: 43s of CPU burned in a 45s window while dem.tif's
+    byte size didn't move at all, i.e. genuine single-core compute, not I/O wait). Once every
+    region is real pixels, this function's own final gdalbuildvrt merge is just mosaic bookkeeping
+    (no resampling), and build_dem_vrt.py's later materialize_geotiff(dem.vrt, dem.tif) call
+    becomes a cheap compress+copy instead of the multi-hour step."""
     # local import: dem_providers.composite imports lib.pipeline at module level, so importing
     # dem_providers back at this module's top level would be a circular import
-    from dem_providers import get_provider
+    from downloads.dem_providers import get_provider
 
     region_vrts = []
     for entry in manifest:
@@ -123,9 +153,23 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
         provider.to_4326_vrt(tile_paths, region_vrt)
         region_vrts.append(normalize_colorinterp(region_vrt))
 
+    region_tifs = [v.with_suffix(".tif") for v in region_vrts]
+
+    def _timed_materialize(args: tuple[Path, Path]) -> float:
+        region_vrt, region_tif = args
+        t0 = time.monotonic()
+        materialize_geotiff(region_vrt, region_tif)
+        return time.monotonic() - t0
+
+    print(f"materializing {len(region_vrts)} region(s) in parallel ...", flush=True)
+    with ThreadPoolExecutor(max_workers=len(region_vrts)) as pool:
+        elapsed = list(pool.map(_timed_materialize, zip(region_vrts, region_tifs)))
+    for entry, secs in zip(manifest, elapsed):
+        print(f"  {entry['provider']}: materialized in {secs:.1f}s", flush=True)
+
     out_vrt_path = dem_dir / "dem.vrt"
     subprocess.run(
-        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(v) for v in region_vrts]],
+        ["gdalbuildvrt", "-overwrite", str(out_vrt_path), *[str(t) for t in region_tifs]],
         check=True,
     )
     return out_vrt_path
@@ -176,7 +220,7 @@ def hut_points(huts_path, filter_bbox=None):
 def edge_points(edges_path, filter_bbox=None):
     """Returns every trail-polyline vertex [lng, lat] in edges_path (script 06's hut-edges.geojson
     output), narrowed to filter_bbox if given. Vertices trace the actual trail geometry between
-    huts, not just the hut endpoints - this is exactly what 08-add-elevation.py samples, so a
+    huts, not just the hut endpoints - this is exactly what add_elevation.py samples, so a
     DEM-tile selection built from these points needs no separate assumption about how far a trail
     can wander from its endpoints (see bufferKm in bavaria_dgm.py's tiles_for_points - no longer
     needs to be sized off graph.maxEdgeKm)."""
@@ -198,26 +242,47 @@ def edge_points(edges_path, filter_bbox=None):
     return points
 
 
-def bbox_from_huts(huts_path, filter_bbox=None, buffer_deg=0.05):
-    """Computes a tight {minLng,maxLng,minLat,maxLat} covering every hut in huts_path, instead of
-    a hand-picked political-boundary box. buffer_deg pads the result so DEM coverage doesn't clip
-    right at a hut's coordinate; a hut's trail edges (see hut-edges.geojson) extend somewhat past
-    the hut point itself, and elevation sampling needs the trail's terrain, not just the
-    endpoint's.
+# Safety margin applied by callers ON TOP OF graph.maxEdgeKm before passing radius_km to
+# circle_polygon()/hub_range_polygon() (compute_hub_range.py) and into bavaria-dgm5's per-hut
+# tile buffer (dem_providers/composite.py) - the ONE place both sides' radius is derived from, so
+# they cannot independently drift the way the old bufferKm/bufferDeg mismatch did
+# (docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md). Covers circle_polygon's
+# n_points=32 polygon-approximation shortfall at the flat spots between vertices
+# (cos(pi/32) ~= 0.9952, ~0.5% under the true radius there) plus a little headroom - tile-grid
+# quantization (bavaria_dgm.tiles_for_utm_bounds) already rounds outward and needs no
+# compensation.
+HUB_RANGE_SAFETY_MARGIN = 1.01
 
-    Huts scattered across a wide area (e.g. Bavaria's alpine-fringe cluster plus a few outlying
-    non-alpine AV huts up near the Bavarian Forest) make this a poor shape for a per-tile DEM
-    fetch: the enclosing rectangle balloons to cover empty terrain between clusters. Callers doing
-    a tile-per-request fetch (bavaria_dgm.py) should use hut_points() + a per-point buffer instead
-    - this bbox is for providers that only need a coarse fetch extent (e.g. a single bulk
-    download)."""
-    points = hut_points(huts_path, filter_bbox)
-    lngs = [p[0] for p in points]
-    lats = [p[1] for p in points]
 
-    return {
-        "minLng": min(lngs) - buffer_deg,
-        "maxLng": max(lngs) + buffer_deg,
-        "minLat": min(lats) - buffer_deg,
-        "maxLat": max(lats) + buffer_deg,
-    }
+def circle_polygon(lng: float, lat: float, radius_km: float, n_points: int = 32) -> Polygon:
+    """Approximates a real-world radius_km circle around (lng, lat) as an n_points-vertex
+    polygon, using per-point local flat-earth trig rather than shapely's Point.buffer() (which
+    operates in raw degree space). One degree of longitude is only cos(lat) as many real km as
+    one degree of latitude away from the equator, so a naive degree-radius buffer becomes an
+    ellipse that UNDER-covers east-west at any latitude away from the equator - exactly the wrong
+    direction for a bound meant to be a safe over-approximation. Flat-earth error at
+    graph.maxEdgeKm's ~30km scale is negligible, and this is computed per-hut-locally (using that
+    hut's own latitude), not from one global scale factor, so it stays accurate everywhere in the
+    pipeline's scope."""
+    deg_per_km_lat = 1 / 111.320
+    deg_per_km_lng = 1 / (111.320 * math.cos(math.radians(lat)))
+    ring = [
+        (
+            lng + radius_km * math.sin(theta) * deg_per_km_lng,
+            lat + radius_km * math.cos(theta) * deg_per_km_lat,
+        )
+        for theta in (2 * math.pi * i / n_points for i in range(n_points))
+    ]
+    ring.append(ring[0])
+    return Polygon(ring)
+
+
+def hub_range_polygon(huts_path, radius_km: float, n_points: int = 32):
+    """Unions a circle_polygon() (real-world radius_km) around every hut in huts_path into one
+    (Multi)Polygon - the shape filter_trails.py clips trail extraction to, and (via the same
+    radius_km) what bavaria-dgm5's per-hut DEM tile buffer must at least match. Returns a Polygon
+    when hut circles overlap enough to merge, a MultiPolygon otherwise - callers must handle
+    both (shapely.geometry.mapping() does, transparently)."""
+    points = hut_points(huts_path)
+    circles = [circle_polygon(lng, lat, radius_km, n_points) for lng, lat in points]
+    return unary_union(circles)

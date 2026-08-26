@@ -58,7 +58,7 @@ Not committed to version control (no `.gitignore` exists yet since this repo has
 
 ```bash
 conda activate alpen-osm
-python pipeline/01-download-extracts.py
+python pipeline/download_extracts.py
 ```
 
 Sizes at time of writing: Austria ~807MB, Bavaria ~849MB. Geofabrik regenerates these regularly
@@ -68,7 +68,7 @@ geometry changes rarely, but note this if exact reproducibility across time matt
 ### 2. Filter each extract to hiking-relevant ways
 
 ```bash
-python pipeline/02-filter-trails.py
+python pipeline/filter_trails.py
 ```
 
 Runs `osmium tags-filter` (native binary, via `subprocess`) once per region in
@@ -82,7 +82,7 @@ selected tags.
 ### 3. Merge into one file
 
 ```bash
-python pipeline/03-merge-trails.py
+python pipeline/merge_trails.py
 ```
 
 Result: `data/osm/trails.osm.pbf`, 264MB.
@@ -90,10 +90,10 @@ Result: `data/osm/trails.osm.pbf`, 264MB.
 ### 4. Sanity-check
 
 ```bash
-python pipeline/04-verify-trails.py
+python pipeline/verify_trails.py
 ```
 
-Exits nonzero if the file is missing or empty (so `run_all.py` can gate on it), then prints
+Exits nonzero if the file is missing or empty (so pipeline's doit task can gate on it), then prints
 `osmium fileinfo -e`. Expected at time of writing: bbox lon 8.97–17.17 / lat 46.37–50.57
 (AT+Bayern), ~2.78M ways, ~26.5M nodes, 0 relations (route relations weren't pulled — only raw
 `highway=*` ways; add `r/route=hiking` to `trailTagFilter` later if named-route relations like
@@ -114,8 +114,8 @@ single provider covers this pipeline's whole AT+Bayern scope) and needing more
 download/storage/runtime than Copernicus's one flat global tileset. The `composite` meta-provider
 exists to combine them per sub-region without forcing one DEM source on the whole bbox — see
 `pipeline/dem_providers/base.py` for the provider contract every source implements, and
-`pipeline/README.md`'s Config section for the registered providers and how to select one via
-`pipeline.config.json`'s `dem.provider`/`dem.providerConfig`.
+`pipeline/README.md`'s Config section for the registered providers and how to select them via
+`pipeline.config.json`'s `dem.providerConfig.regions`.
 
 ## Not done yet
 

@@ -1,0 +1,41 @@
+import sys
+from pathlib import Path
+
+import numpy as np
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
+
+from lib import binfmt  # noqa: E402
+from postprocessing.build_edge_tiles import build_stats, rdp_keep_indices  # noqa: E402
+
+
+def test_rdp_keep_indices_collapses_straight_line():
+    coords = np.array([(0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 0.0)])
+    keep = rdp_keep_indices(coords, epsilon=0.01)
+    assert list(keep) == [0, 3]
+
+
+def test_rdp_keep_indices_preserves_a_corner():
+    coords = np.array([(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)])
+    keep = rdp_keep_indices(coords, epsilon=0.01)
+    assert 1 in keep
+
+
+def test_build_stats_resolves_ids_via_id_table():
+    records = np.zeros(1, dtype=binfmt.RECORD_DTYPE)
+    records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, 0, 1000.0, 0.0, 50.0, 10.0,
+                  1500.0, 0.0, 0.0, 0.0, 2, False,
+                  0, 2, 0, 3)
+    geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"], geometry["lat"] = [0.0, 0.01], [0.0, 0.0]
+    profiles = np.array([1000.0, 1010.0, 1005.0], dtype=binfmt.PROFILE_DTYPE)
+    id_table = {"hut:1": "hut-abc", "hut:2": "hut-xyz"}
+
+    stats = build_stats(records, geometry, profiles, id_table, hover_tolerance_deg=0.001)
+
+    assert len(stats) == 1
+    assert stats[0]["from_hut_id"] == "hut-abc"
+    assert stats[0]["to_hut_id"] == "hut-xyz"
+    assert stats[0]["ascent_m"] == 50.0
+    assert stats[0]["elevation_profile"] == [1000.0, 1010.0, 1005.0]
