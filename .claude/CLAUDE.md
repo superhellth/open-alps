@@ -77,6 +77,19 @@ freshness check can still decide it's stale and silently kick off a multi-hour j
 even to tasks that look cheap or read-only. (`build_profiles` is hardcoded to always run when
 selected, but is genuinely cheap — seconds, and never reopens the DEM.)
 
+## Fix problems at their root layer
+
+**The frontend must not paper over backend/data problems, and the pipeline must not paper over
+frontend problems.** If a defect's root cause is in `pipeline/` or the emitted data contract (bad,
+missing or unusable data — e.g. stations that aren't actually served, huts that failed to snap,
+wrong durations), the fix belongs in `pipeline/`, not in a client-side filter or workaround in
+`huts/`. Likewise, presentation/interaction problems are fixed in `huts/`, never by reshaping
+pipeline output to suit one UI.
+
+When reviewing or planning, classify each issue by its root layer first, and route it there — a
+scope boundary ("that's not this spec") is a reason to file it against the right layer, not a
+reason to fix it in the wrong one.
+
 ## No git worktrees, no subagent-driven development
 
 **Never create or remove a git worktree in this repo, for any reason.** `git worktree remove`
