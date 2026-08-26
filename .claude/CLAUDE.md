@@ -11,7 +11,10 @@ app fetches public third-party APIs directly from the browser.
 `caa.alpenverein.at.har` (29 MB) is the source network capture the endpoints were derived from.
 It is reference material, not build input.
 
-No test setup exists yet.
+`huts/` has a vitest test suite (`npm test`, `npm run typecheck`, `npm run lint` from `huts/`) —
+engine tests run under the default `node` environment, UI tests opt into `jsdom` per-file via a
+`// @vitest-environment jsdom` docblock (see `huts/src/TourSearchPage.test.tsx`). No CI pipeline
+runs these automatically yet.
 
 ## Data sources
 
