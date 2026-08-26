@@ -18,6 +18,24 @@ post-rebuild share can only be higher.
 
 **Decision:** `ROAD_*` deferred to the post-rebuild re-run (Task 24), per plan.
 
+**Post-rebuild re-measurement (Task 24 §4, `python pipeline/analysis/road_share.py`, ts
+2026-08-26):** the floor above was accurate — removing `roadPenaltyFactor` and routing on `time_s`
+(which rewards roads for being fast) pushed the aggregate road share up sharply: hut edges
+**9.7% → 22.1%** (median edge 4.3% → 15.8%, road-free share 29.4% → 20.6%), start edges
+**19.1% → 39.2%** (median 37.8%, road-free share collapses to 0.8%). Roughly 1 in 5 metres of a
+typical hut-to-hut route, and 2 in 5 of a typical trailhead approach, is now road under the fastest
+column.
+
+**`ROAD_*` decision (settled):** build it. The regression this rebuild introduced is real and
+larger than the pre-rebuild floor suggested, and §5's probe already measured that a road-avoiding
+column (`ROAD_AVOID`, ×4 time penalty on road-tagged edges) diverges from `FAST` on 86.9% of pairs
+at only 0.96× the routing cost — cheap and frequently a genuinely different route, not a rare
+edge case. Per the plan, this is a **multiplicative penalty on road-tagged segments' `time_s`**
+(factor ~3-5, `ROAD_AVOID` in the probe used ×4) added as a **new objective/variant column**, never
+a revived `roadPenaltyFactor` baked into `dist`/`time_s` itself. Building it means one more
+`build_hub_edges` pass (a 5th variant row) — an hours-scale `doit` run — and is scoped as a
+follow-up task, not folded into this rebuild's already-committed output; ask before running it.
+
 ## 2. Payload (open question 3) — `data/analysis/payload_sizing.json`
 
 3 variants × 6,067 hut edges × 13 columns = 693.2 KB raw, **43.4 KB gzipped** (46.4 KB with a
@@ -31,6 +49,16 @@ figures are floors — real variant data compresses worse than an all-zero/dupli
 so, both are far under any plausible payload budget.
 
 **Decision:** payload is not a constraint; build time is. No quantisation in scope.
+
+**Post-rebuild re-measurement (Task 24 §4, `python pipeline/analysis/payload_sizing.py`, ts
+2026-08-26, real 4-row variant data, not the zero-filled/duplicate-column floor above):** hut edge
+payload (4 variants × 12,416 rows × 13 columns): 472.9 KB raw / 140.5 KB gz for 1 variant, 1,418.6
+KB raw / 396.6 KB gz for the 3 constrained variants (shuffle still makes it worse — stays out of
+scope). Approach table (k=3, 2,142 rows): 52.3 KB raw / 31.6 KB gz — 0 of 714 huts fall short of
+k=3 approaches. Loop-closure reverse index: 636.5 KB raw / 330.7 KB gz. **Total client payload
+floor (shuffled gzip): 548.3 KB.** Real variant data compresses worse than the pre-rebuild
+all-identical-columns estimate predicted (43.4 KB → 396.6 KB for 3 variants), as flagged — still
+far under any plausible budget; decision unchanged.
 
 `access` tag distribution over 27,261+ parking points (`payload_sizing.json`): 21,058 unknown,
 3,293 `private`, 2,973 `yes`, 2,251 `customers`, 308 `permissive`, 154 `no`. `motor_vehicle` is not
@@ -157,3 +185,20 @@ probe-scope limitation — a full refit was out of scope for a minutes-long prob
 **Direction spread (open question 4)**: 30 pairs routed both directions — **100% identical
 geometry**, cost ratio 1.0 (undirected graph, as expected; asymmetric ascent/descent is a display
 concern, not a routing/storage one — §D4's "one record per unordered pair" stands unmodified).
+
+## 6. Task 24 — full rebuild output invariants
+
+`data/osm/hut_edges/records.npy`, 12,416 records across the 4-row grid:
+
+| variant | rows | max `ungraded_m` |
+|---|---|---|
+| 0 `FAST_ANY` | 5,074 | 22,186.5 (expected — unconstrained) |
+| 1 `FAST_T2` | 1,770 | **0.0** |
+| 2 `FAST_T3` | 2,307 | **0.0** |
+| 3 `FAST_T3_UNGRADED` | 3,265 | 22,186.5 (expected — ungraded permitted by design) |
+
+The §C4 guarantee holds: every constrained row (`FAST_T2`, `FAST_T3`) has `max ungraded_m == 0.0`,
+no leak. `unsnapped_huts.json`: 290 huts. Constrained rows (1,770 / 2,307) are well below `FAST_ANY`
+(5,074), consistent with the 31.7%/36.9% connectivity-loss figures in §3 — that gap is the deletion
+those rows exist to make explicit rather than the router silently substituting a road/ungraded
+detour.
