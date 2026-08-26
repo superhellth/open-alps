@@ -262,6 +262,9 @@ function GraphPage() {
         <a href="#" className="nav-link">
           Karte
         </a>
+        <a href="#tours" className="nav-link">
+          Tourensuche
+        </a>
         <span>
           {error
             ? `Fehler: ${error}`

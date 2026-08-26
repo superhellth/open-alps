@@ -69,6 +69,9 @@ function App() {
         <a href="#graph" className="nav-link">
           Trail-Graph
         </a>
+        <a href="#tours" className="nav-link">
+          Tourensuche
+        </a>
         <span>{error ? `Fehler: ${error}` : `${huts.length} Hütten`}</span>
         <label className="layer-toggle">
           <input
