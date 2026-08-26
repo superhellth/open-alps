@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { searchChains } from './search.js'
-import { SOURCE_TYPE_STATION } from './types.js'
-import type { GraphData } from './types.js'
+import { resolveVariant } from './resolveVariant.js'
+import { buildAdjacency } from './adjacency.js'
+import { getApproachLegs, getExitLegs } from './approaches.js'
+import { legPasses, createKillCounters } from './legFilters.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from './types.js'
+import type { GraphData, LegSummary, Query, TourResult } from './types.js'
 
 // A tiny 3-hut chain: start1 -> A -> B -> C -> start2, all within budget, all FAST_ANY.
 function edge(fromIndex: number, toIndex: number, distanceM: number) {
@@ -176,5 +180,120 @@ describe('mode-gated source types (Section A fixes)', () => {
     // start ids match (100 == 100) but both are SOURCE_TYPE_STATION, not SOURCE_TYPE_PARKING —
     // car must still reject.
     expect(chains.some((c) => c.huts.length === 3)).toBe(false)
+  })
+})
+
+/**
+ * Pre-pruning reference implementation (Task 12's fixed mode-gating, no dominance collapsing) —
+ * exists ONLY in this test file, to prove Task 13's pruning never drops a distinct final result.
+ * Do not import this into production code.
+ */
+function bruteForceSearchChains(query: Query, graphData: GraphData) {
+  const {
+    mode, legCountMin, legCountMax, sacCeiling, allowUngraded = false,
+    maxLegTimeH, minLegTimeH = 0, legAscentCapM = Infinity, maxEleM = null, allowViaFerrata = true,
+  } = query
+  const constraints = { maxLegTimeH, minLegTimeH, legAscentCapM, maxEleM, allowViaFerrata }
+  const killCounters = createKillCounters()
+  const gateSourceType = mode === 'transit' ? SOURCE_TYPE_STATION : mode === 'car' ? SOURCE_TYPE_PARKING : null
+
+  const variant = resolveVariant({ sacCeiling, allowUngraded }, graphData.hutEdges.variantNames)
+  const adjacency = buildAdjacency(graphData.hutEdges, variant)
+  const nightsMin = legCountMin - 1
+  const nightsMax = legCountMax - 1
+
+  interface State { path: number[]; startId: number; totalDurationH: number; totalAscentM: number; totalDescentM: number; totalDistanceM: number; legs: LegSummary[] }
+  function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number }): LegSummary {
+    return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM }
+  }
+  let layer = new Map<number, State[]>()
+  for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
+    for (const approachLeg of getApproachLegs(h, graphData.approaches)) {
+      if (gateSourceType != null && approachLeg.sourceType !== gateSourceType) continue
+      if (!legPasses(approachLeg, constraints, killCounters)) continue
+      const state: State = { path: [h], startId: approachLeg.startId, totalDurationH: approachLeg.durationH, totalAscentM: approachLeg.ascentM, totalDescentM: approachLeg.descentM, totalDistanceM: approachLeg.distanceM, legs: [legSummary(approachLeg)] }
+      if (!layer.has(h)) layer.set(h, [])
+      layer.get(h)!.push(state)
+    }
+  }
+
+  const finished: TourResult[] = []
+  const collectFinished = (n: number) => {
+    if (n < nightsMin) return
+    for (const [h, states] of layer) {
+      const exitLegs = getExitLegs(h, variant, graphData.approaches)
+      for (const s of states) {
+        for (const exitLeg of exitLegs) {
+          if (mode === 'car' && exitLeg.startId !== s.startId) continue
+          if (gateSourceType != null && exitLeg.sourceType !== gateSourceType) continue
+          if (!legPasses(exitLeg, constraints, killCounters)) continue
+          finished.push({ huts: [...s.path], startId: s.startId, exitStartId: exitLeg.startId, totalDurationH: s.totalDurationH + exitLeg.durationH, totalAscentM: s.totalAscentM + exitLeg.ascentM, totalDescentM: s.totalDescentM + exitLeg.descentM, totalDistanceM: s.totalDistanceM + exitLeg.distanceM, legs: [...s.legs, legSummary(exitLeg)] })
+        }
+      }
+    }
+  }
+
+  collectFinished(1)
+  for (let n = 1; n < nightsMax; n++) {
+    const nextLayer = new Map<number, State[]>()
+    for (const [h, states] of layer) {
+      const legs = adjacency.get(h) || []
+      for (const s of states) {
+        for (const leg of legs) {
+          const h2 = leg.toIndex
+          if (s.path.includes(h2)) { killCounters.revisit++; continue }
+          if (!legPasses(leg, constraints, killCounters)) continue
+          const next: State = { path: [...s.path, h2], startId: s.startId, totalDurationH: s.totalDurationH + leg.durationH, totalAscentM: s.totalAscentM + leg.ascentM, totalDescentM: s.totalDescentM + leg.descentM, totalDistanceM: s.totalDistanceM + leg.distanceM, legs: [...s.legs, legSummary(leg)] }
+          if (!nextLayer.has(h2)) nextLayer.set(h2, [])
+          nextLayer.get(h2)!.push(next)
+        }
+      }
+    }
+    layer = nextLayer
+    collectFinished(n + 1)
+  }
+
+  finished.sort((a, b) => a.totalDurationH - b.totalDurationH)
+  return { chains: finished, killCounters }
+}
+
+function normalizeForComparison(chains: TourResult[]): string[] {
+  const best = new Map<string, number>()
+  for (const c of chains) {
+    const key = `${[...c.huts].sort((a, b) => a - b).join(',')}|${c.startId}|${c.exitStartId}`
+    const prev = best.get(key)
+    if (prev === undefined || c.totalDurationH < prev) best.set(key, c.totalDurationH)
+  }
+  return [...best.entries()].map(([k, d]) => `${k}=${d.toFixed(4)}`).sort()
+}
+
+describe('dominance pruning (Section B) is exact', () => {
+  // Diamond graph: A(seed)->B, A->C, B->C, B->D, C->D, all variant 0. A->B->C->D and A->C->B->D
+  // both visit {A,B,C,D} and finish at D - exactly the case dominance pruning collapses.
+  function edge(fromIndex: number, toIndex: number, distanceM: number) {
+    return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 100, descentM: 100, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0 }
+  }
+  const diamondGraph: GraphData = {
+    hutEdges: {
+      hutIds: ['A', 'B', 'C', 'D'],
+      variantNames: { 0: 'FAST_ANY' },
+      records: [edge(0, 1, 3000), edge(0, 2, 4000), edge(1, 2, 2000), edge(1, 3, 3500), edge(2, 3, 3000)],
+    },
+    approaches: {
+      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null }],
+      reverseIndex: {
+        hut_to_starts: {
+          3: [{ hut_id: 3, start_id: 200, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 1000, ascent_m: 20, descent_m: 50 }],
+        },
+        start_to_huts: {},
+      },
+    },
+  }
+  const query: Query = { mode: 'transit', legCountMin: 1, legCountMax: 6, maxLegTimeH: 10, minLegTimeH: 0, legAscentCapM: 9999, maxEleM: null, allowViaFerrata: true }
+
+  it('produces the same normalized (hut-set, start, exit, best-duration) results as an unpruned reference', () => {
+    const pruned = searchChains(query, diamondGraph)
+    const unpruned = bruteForceSearchChains(query, diamondGraph)
+    expect(normalizeForComparison(pruned.chains)).toEqual(normalizeForComparison(unpruned.chains))
   })
 })

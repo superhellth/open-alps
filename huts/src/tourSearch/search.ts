@@ -40,23 +40,36 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
     totalDescentM: number
     totalDistanceM: number
     legs: LegSummary[]
+    visitedKey: bigint
   }
   function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number }): LegSummary {
     return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM }
   }
-  let layer = new Map<number, State[]>()
+
+  function insertDominant(bucket: Map<string, State>, key: string, state: State) {
+    const existing = bucket.get(key)
+    if (!existing || state.totalDurationH < existing.totalDurationH) bucket.set(key, state)
+  }
+
+  // layer: Map<hutIndex, Map<"startId|visitedKey", State>> — the inner map is the dominance
+  // structure: at most one surviving state per (hutIndex, startId, visitedSet), the one with
+  // the lower totalDurationH. hutIndex stays the outer key (unchanged from before) purely so
+  // getExitLegs/adjacency.get(h) are still looked up once per hut, not once per state.
+  let layer = new Map<number, Map<string, State>>()
   for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
     for (const approachLeg of getApproachLegs(h, graphData.approaches)) {
       if (gateSourceType != null && approachLeg.sourceType !== gateSourceType) continue
       if (!legPasses(approachLeg, constraints, killCounters)) continue
+      const visitedKey = 1n << BigInt(h)
       const state: State = {
         path: [h], startId: approachLeg.startId,
         totalDurationH: approachLeg.durationH, totalAscentM: approachLeg.ascentM,
         totalDescentM: approachLeg.descentM, totalDistanceM: approachLeg.distanceM,
         legs: [legSummary(approachLeg)],
+        visitedKey,
       }
-      if (!layer.has(h)) layer.set(h, [])
-      layer.get(h)!.push(state)
+      if (!layer.has(h)) layer.set(h, new Map())
+      insertDominant(layer.get(h)!, `${state.startId}|${visitedKey}`, state)
     }
   }
 
@@ -65,7 +78,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
     if (n < nightsMin) return
     for (const [h, states] of layer) {
       const exitLegs = getExitLegs(h, variant, graphData.approaches)
-      for (const s of states) {
+      for (const s of states.values()) {
         for (const exitLeg of exitLegs) {
           if (mode === 'car' && exitLeg.startId !== s.startId) continue
           if (gateSourceType != null && exitLeg.sourceType !== gateSourceType) continue
@@ -85,14 +98,15 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
 
   collectFinished(1)
   for (let n = 1; n < nightsMax; n++) {
-    const nextLayer = new Map<number, State[]>()
+    const nextLayer = new Map<number, Map<string, State>>()
     for (const [h, states] of layer) {
       const legs = adjacency.get(h) || []
-      for (const s of states) {
+      for (const s of states.values()) {
         for (const leg of legs) {
           const h2 = leg.toIndex
           if (s.path.includes(h2)) { killCounters.revisit++; continue }
           if (!legPasses(leg, constraints, killCounters)) continue
+          const nextVisitedKey = s.visitedKey | (1n << BigInt(h2))
           const next: State = {
             path: [...s.path, h2], startId: s.startId,
             totalDurationH: s.totalDurationH + leg.durationH,
@@ -100,9 +114,10 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
             totalDescentM: s.totalDescentM + leg.descentM,
             totalDistanceM: s.totalDistanceM + leg.distanceM,
             legs: [...s.legs, legSummary(leg)],
+            visitedKey: nextVisitedKey,
           }
-          if (!nextLayer.has(h2)) nextLayer.set(h2, [])
-          nextLayer.get(h2)!.push(next)
+          if (!nextLayer.has(h2)) nextLayer.set(h2, new Map())
+          insertDominant(nextLayer.get(h2)!, `${next.startId}|${nextVisitedKey}`, next)
         }
       }
     }
