@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { readColumns, packColumns } from './binaryColumns.js'
+import type { Dtype } from './binaryColumns.js'
 
 describe('binaryColumns', () => {
   it('reads columns at their declared byte offsets', () => {
@@ -8,7 +9,7 @@ describe('binaryColumns', () => {
     const view = new DataView(buffer)
     view.setUint8(0, 7); view.setUint8(1, 8); view.setUint8(2, 9)
     view.setFloat32(3, 1.5, true); view.setFloat32(7, 2.5, true); view.setFloat32(11, 3.5, true)
-    const manifest = { rows: 3, columns: { id: { dtype: 'u1', offset: 0 }, val: { dtype: 'f4', offset: 3 } } }
+    const manifest = { rows: 3, columns: { id: { dtype: 'u1' as Dtype, offset: 0 }, val: { dtype: 'f4' as Dtype, offset: 3 } } }
 
     const columns = readColumns(buffer, manifest)
 
@@ -20,13 +21,13 @@ describe('binaryColumns', () => {
   it('reads u8 as a safe Number, not a BigInt', () => {
     const buffer = new ArrayBuffer(8)
     new DataView(buffer).setBigUint64(0, 2986313292n, true)
-    const columns = readColumns(buffer, { rows: 1, columns: { startId: { dtype: 'u8', offset: 0 } } })
+    const columns = readColumns(buffer, { rows: 1, columns: { startId: { dtype: 'u8' as Dtype, offset: 0 } } })
     expect(columns.startId).toEqual([2986313292])
     expect(typeof columns.startId[0]).toBe('number')
   })
 
   it('throws on an unsupported dtype rather than silently misreading', () => {
-    expect(() => readColumns(new ArrayBuffer(4), { rows: 1, columns: { x: { dtype: 'f8', offset: 0 } } }))
+    expect(() => readColumns(new ArrayBuffer(4), { rows: 1, columns: { x: { dtype: 'f8' as Dtype, offset: 0 } } }))
       .toThrow(/unsupported dtype/)
   })
 
