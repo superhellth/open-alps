@@ -1,15 +1,19 @@
 import { readColumns } from './binaryColumns.js'
+import type { HutEdgesData, HutEdgeRecord } from './types.js'
 
-/** @typedef {{ fromIndex:number, toIndex:number, variant:number, distanceM:number, ascentM:number,
- *  descentM:number, maxEleM:number, sacRank:number, viaFerrata:boolean, roadM:number,
- *  ungradedM:number, inferredM:number, snapM:number }} HutEdgeRecord */
+interface HutEdgesManifest {
+  rows: number
+  columns: Record<string, { dtype: string; offset: number }>
+  hut_ids: string[]
+  variants: Record<string, string>
+}
 
-export async function loadHutEdgesData(baseUrl = '/data') {
-  const manifest = await (await fetch(`${baseUrl}/hut-edge-payload.json`)).json()
+export async function loadHutEdgesData(baseUrl = '/data'): Promise<HutEdgesData> {
+  const manifest: HutEdgesManifest = await (await fetch(`${baseUrl}/hut-edge-payload.json`)).json()
   const buffer = await (await fetch(`${baseUrl}/hut-edge-payload.bin`)).arrayBuffer()
-  const c = readColumns(buffer, manifest)
+  const c = readColumns(buffer, manifest as unknown as Parameters<typeof readColumns>[1])
 
-  const records = new Array(manifest.rows)
+  const records = new Array<HutEdgeRecord>(manifest.rows)
   for (let i = 0; i < manifest.rows; i++) {
     records[i] = {
       fromIndex: c.from_id[i], toIndex: c.to_id[i], variant: c.variant[i],
