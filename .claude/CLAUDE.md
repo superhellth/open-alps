@@ -54,14 +54,37 @@ endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
 
 ## Hut-to-hut routing graph
 
-Offline trail-graph precompute pipeline under `pipeline/` (code) writing into `data/` (gitignored
+Offline trail-graph precompute pipeline under `pipeline/` (code, orchestrated as a
+[doit](https://pydoit.org) task DAG via `pipeline/dodo.py`) writing into `data/` (gitignored
 raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, `hut-edges.pmtiles`,
-`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) are hand-copied into
-`huts/public/data/` and rendered by `GraphPage.jsx`/`App.jsx` above — see `pipeline/CLAUDE.md` for
-details.
+`hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `stations.geojson`,
+`parking.geojson`, `unsnapped_huts.json`, `approaches.bin`, `approaches.json`,
+`hut-edge-payload.bin`, `hut-edge-payload.json`) are copied into `huts/public/data/` by the
+pipeline's own `copy_public_data` task. The first group (`huts.geojson`, `trails.pmtiles`,
+`hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) is rendered by
+`GraphPage.jsx`/`App.jsx` above today; `start-edges.pmtiles`/`start-edge-stats.json`,
+`unsnapped_huts.json`, `approaches.*` and `hut-edge-payload.*` are the tour-suggestion backend's
+static outputs — built and shipped, but not yet fetched by any client code (the client-side tour
+search that would consume them is out of scope for this pipeline work, see "Deferred" in
+`docs/superpowers/plans/2026-08-22-tour-suggestion-backend.md`). The hut-edge payload contract
+(columns, dtypes, what's deliberately not shipped) is documented in
+`docs/tour-suggestion-payload.md` — see `pipeline/CLAUDE.md` for pipeline details.
 
-**Never run any `pipeline/` step (individually or via `run_all.py`, with or without `--only`)
-without first asking the user and getting explicit confirmation.** Steps 06 and 08 are hardcoded
-in `run_all.py` to always run, not freshness-checked, and step 06 alone has measured at ~4 hours
-(see `data/timings.jsonl`) — an unfiltered run can silently kick off a multi-hour job. This applies
-even to steps that look cheap or read-only.
+**Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
+first asking the user and getting explicit confirmation.** `build_base_graph` alone has measured at
+~4 hours (see `data/timings.jsonl`) and is a normal dependency of the default `doit` run — a
+freshness check can still decide it's stale and silently kick off a multi-hour job. This applies
+even to tasks that look cheap or read-only. (`build_profiles` is hardcoded to always run when
+selected, but is genuinely cheap — seconds, and never reopens the DEM.)
+
+## No git worktrees, no subagent-driven development
+
+**Never create or remove a git worktree in this repo, for any reason.** `git worktree remove`
+deletes the entire worktree directory from disk, including gitignored content — it destroyed
+`data/`'s multi-hour pipeline outputs (raw OSM extracts, DEM, base graph) because `DATA_DIR`
+resolves relative to each worktree's own path, so nothing was shared with the main checkout.
+Work directly on branches in the main checkout instead.
+
+**Never use `superpowers:subagent-driven-development` or any other approach that spins up
+worktrees/subagents to execute plan tasks in this repo, even if a skill recommends it.** Execute
+plan tasks directly, in-session, on the current checkout.

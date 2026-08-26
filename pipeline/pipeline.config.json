@@ -8,19 +8,23 @@
   "graph": {
     "maxEdgeKm": 30,
     "maxSnapM": 100,
-    "roadPenaltyFactor": 1.3,
-    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"]
+    "maxSnapAscentM": 25,
+    "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
+    "tileSizeKm": 60,
+    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
+    "variants": ["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]
   },
   "dem": {
-    "source": "copernicus-glo-30",
-    "provider": "composite",
     "providerConfig": {
       "regions": [
         {
+          "provider": "copernicus-glo-30",
+          "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 }
+        },
+        {
           "provider": "bavaria-dgm5",
           "bbox": { "minLng": 8.9, "maxLng": 13.9, "minLat": 47.2, "maxLat": 50.6 },
-          "bboxFromHuts": true,
-          "bufferKm": 1.5
+          "bboxFromHuts": true
         },
         {
           "provider": "at-bev-dgm",
@@ -29,9 +33,10 @@
         }
       ]
     },
-    "eleNoiseThresholdM": 4,
+    "smoothingKernelM": 30,
     "profilePoints": 30
   },
+  "approach": { "k": 3 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
   "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "hoverSimplifyToleranceDeg": 0.0003 }
 }

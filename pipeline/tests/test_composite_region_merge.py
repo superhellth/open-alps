@@ -2,11 +2,15 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import pytest
 
-import dem_providers  # noqa: E402
-from dem_providers import composite  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
+
+import downloads.dem_providers as dem_providers  # noqa: E402
+from downloads.dem_providers import composite  # noqa: E402
 from lib import pipeline as pipeline_lib  # noqa: E402
+from lib.pipeline import HUB_RANGE_SAFETY_MARGIN  # noqa: E402
 
 
 def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path, monkeypatch):
@@ -26,7 +30,7 @@ def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path,
         ]
     }
 
-    manifest = composite.fetch_regions(provider_config, tmp_path)
+    manifest = composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
 
     assert sum(1 for c in calls if c[0] == "fetch") == 2
     assert len(manifest) == 2
@@ -45,6 +49,10 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
 
     monkeypatch.setattr(dem_providers, "get_provider", lambda name: fake_provider)
     monkeypatch.setattr(pipeline_lib, "normalize_colorinterp", lambda p: p)
+    monkeypatch.setattr(
+        pipeline_lib, "materialize_geotiff",
+        lambda vrt_path, out_path: calls.append(("materialize_geotiff", vrt_path, out_path)) or out_path
+    )
 
     merge_calls = []
     monkeypatch.setattr(
@@ -72,5 +80,53 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
 
     assert result == out_vrt
     assert sum(1 for c in calls if c[0] == "to_4326_vrt") == 2
-    assert len(merge_calls) == 1  # final gdalbuildvrt over the two regional VRTs
-    assert merge_calls[0][0] == "gdalbuildvrt"
+    assert sum(1 for c in calls if c[0] == "materialize_geotiff") == 2  # one per region, parallel
+    assert len(merge_calls) == 1  # final gdalbuildvrt over the two materialized region GeoTIFFs
+
+
+def test_fetch_regions_computes_bufferkm_from_max_edge_km_for_bboxfromhuts_region(
+    tmp_path, monkeypatch
+):
+    calls = []
+    fake_provider = MagicMock()
+    fake_provider.fetch.side_effect = lambda cfg, raw_dir: calls.append(cfg) or [
+        raw_dir / "tile.tif"
+    ]
+    monkeypatch.setattr(composite, "get_provider", lambda name: fake_provider)
+    monkeypatch.setattr(composite, "_points_for_region", lambda bbox: [[11.0, 47.0]])
+
+    provider_config = {
+        "regions": [
+            {"provider": "bavaria-dgm5",
+             "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1},
+             "bboxFromHuts": True},
+        ]
+    }
+
+    composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
+
+    assert calls[0]["bufferKm"] == pytest.approx(30.0 * HUB_RANGE_SAFETY_MARGIN)
+
+
+def test_fetch_regions_preserves_region_order_for_gdalbuildvrt_priority(tmp_path, monkeypatch):
+    calls = []
+    fake_provider = MagicMock()
+    fake_provider.fetch.side_effect = lambda cfg, raw_dir: calls.append(cfg["provider"]) or [
+        raw_dir / "tile.tif"
+    ]
+    monkeypatch.setattr(composite, "get_provider", lambda name: fake_provider)
+    monkeypatch.setattr(composite, "_points_for_region", lambda bbox: [[11.0, 47.0]])
+
+    provider_config = {
+        "regions": [
+            {"provider": "copernicus-glo-30", "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}},
+            {"provider": "bavaria-dgm5",
+             "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}, "bboxFromHuts": True},
+            {"provider": "at-bev-dgm", "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}},
+        ]
+    }
+
+    manifest = composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
+
+    assert [m["provider"] for m in manifest] == ["copernicus-glo-30", "bavaria-dgm5", "at-bev-dgm"]
+    assert calls == ["copernicus-glo-30", "bavaria-dgm5", "at-bev-dgm"]

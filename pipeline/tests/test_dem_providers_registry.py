@@ -2,8 +2,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from dem_providers import get_provider, PROVIDER_NAMES  # noqa: E402
+from downloads.dem_providers import get_provider, PROVIDER_NAMES  # noqa: E402
 
 
 def test_registry_lists_copernicus_by_default():
