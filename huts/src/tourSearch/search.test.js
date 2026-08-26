@@ -76,3 +76,38 @@ describe('searchChains (transit)', () => {
     expect(durations).toEqual([...durations].sort((a, b) => a - b))
   })
 })
+
+describe('searchChains (car)', () => {
+  it('only finishes a chain whose exit start point matches the entry start point', () => {
+    const { chains } = searchChains(
+      { mode: 'car', legCountMin: 2, legCountMax: 4, ...generousConstraints },
+      graphData,
+    )
+    // graphData's only exit from hut 2 is start_id 200, but the only approach is start_id 100 ->
+    // no car chain can close, regardless of leg budget.
+    expect(chains).toEqual([])
+  })
+
+  it('finds a closing loop when an exit back to the entry start point exists', () => {
+    const loopGraphData = {
+      ...graphData,
+      approaches: {
+        ...graphData.approaches,
+        reverseIndex: {
+          hut_to_starts: {
+            2: [{ hut_id: 2, start_id: 100, source_type: 2, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100 }],
+          },
+          start_to_huts: {},
+        },
+      },
+    }
+    const { chains } = searchChains(
+      { mode: 'car', legCountMin: 2, legCountMax: 4, ...generousConstraints },
+      loopGraphData,
+    )
+    const full = chains.find((c) => c.huts.length === 3)
+    expect(full).toBeDefined()
+    expect(full.startId).toBe(100)
+    expect(full.exitStartId).toBe(100)
+  })
+})
