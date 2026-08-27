@@ -4,8 +4,8 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import TourSearchPage from './TourSearchPage.js'
-import * as tourSearchIndex from './tourSearch/index.js'
-import type { GraphData, SearchResult } from './tourSearch/types.js'
+import * as tourSearchIndex from '../tourSearch/index.js'
+import type { GraphData, SearchResult } from '../tourSearch/types.js'
 
 const graphDataFixture: GraphData = {
   hutEdges: { hutIds: ['HutA'], variantNames: { 0: 'FAST_ANY' }, records: [] },

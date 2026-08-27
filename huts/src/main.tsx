@@ -4,9 +4,8 @@ import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import './index.css'
 import theme from './theme.js'
-import App from './App.js'
 import GraphPage from './GraphPage.js'
-import TourSearchPage from './TourSearchPage.js'
+import TourSearchPage from './tourSearchPage/TourSearchPage.js'
 
 function subscribeHash(callback: () => void) {
   window.addEventListener('hashchange', callback)
@@ -16,8 +15,7 @@ function subscribeHash(callback: () => void) {
 function Router() {
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
   if (hash === '#graph') return <GraphPage />
-  if (hash === '#tours') return <TourSearchPage />
-  return <App />
+  return <TourSearchPage />
 }
 
 const rootElement = document.getElementById('root')
