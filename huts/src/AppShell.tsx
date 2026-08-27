@@ -2,9 +2,8 @@ import type { ReactNode } from 'react'
 import { AppBar, Box, Tab, Tabs, Toolbar, Typography } from '@mui/material'
 
 const TABS = [
-  { hash: '', label: 'Karte' },
+  { hash: '', label: 'Tourensuche' },
   { hash: '#graph', label: 'Trail-Graph' },
-  { hash: '#tours', label: 'Tourensuche' },
 ] as const
 
 interface AppShellProps {
