@@ -21,7 +21,7 @@ function LegCountSlider({
         Etappen: {draft[0]}–{draft[1]}
       </Typography>
       <Typography variant="caption" color="text.secondary">
-        {draft[1]} Etappen = {draft[1] - 1} Hütten = {draft[1] - 1} Übernachtungen
+        {draft[1]} Etappen = {draft[1] - 1} Übernachtungen
       </Typography>
       <Slider
         value={draft}
