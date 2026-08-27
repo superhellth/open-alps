@@ -11,7 +11,10 @@ app fetches public third-party APIs directly from the browser.
 `caa.alpenverein.at.har` (29 MB) is the source network capture the endpoints were derived from.
 It is reference material, not build input.
 
-No test setup exists yet.
+`huts/` has a vitest test suite (`npm test`, `npm run typecheck`, `npm run lint` from `huts/`) —
+engine tests run under the default `node` environment, UI tests opt into `jsdom` per-file via a
+`// @vitest-environment jsdom` docblock (see `huts/src/TourSearchPage.test.tsx`). No CI pipeline
+runs these automatically yet.
 
 ## Data sources
 
@@ -76,6 +79,19 @@ first asking the user and getting explicit confirmation.** `build_base_graph` al
 freshness check can still decide it's stale and silently kick off a multi-hour job. This applies
 even to tasks that look cheap or read-only. (`build_profiles` is hardcoded to always run when
 selected, but is genuinely cheap — seconds, and never reopens the DEM.)
+
+## Fix problems at their root layer
+
+**The frontend must not paper over backend/data problems, and the pipeline must not paper over
+frontend problems.** If a defect's root cause is in `pipeline/` or the emitted data contract (bad,
+missing or unusable data — e.g. stations that aren't actually served, huts that failed to snap,
+wrong durations), the fix belongs in `pipeline/`, not in a client-side filter or workaround in
+`huts/`. Likewise, presentation/interaction problems are fixed in `huts/`, never by reshaping
+pipeline output to suit one UI.
+
+When reviewing or planning, classify each issue by its root layer first, and route it there — a
+scope boundary ("that's not this spec") is a reason to file it against the right layer, not a
+reason to fix it in the wrong one.
 
 ## No git worktrees, no subagent-driven development
 

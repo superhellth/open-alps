@@ -1,0 +1,271 @@
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography,
+} from '@mui/material'
+import type { SelectChangeEvent } from '@mui/material'
+import { loadTourSearchData, findTours } from '../tourSearch/index.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
+import type { GraphData, SearchResult, TourMode } from '../tourSearch/types.js'
+import AppShell from '../AppShell.js'
+import type { StartPoint } from './types.js'
+import { DEFAULT_FORM, OVERLAP_THRESHOLD_BY_VARIETY, buildQuery, type FormState } from './formState.js'
+import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, type SortKey } from './helpers.js'
+import LegCountSlider from './LegCountSlider.js'
+import LegTimeSlider from './LegTimeSlider.js'
+import ResultsMap from './ResultsMap.js'
+import TourList from './TourList.js'
+
+const HUTS_URL = '/data/huts.geojson'
+const PARKING_URL = '/data/parking.geojson'
+const STATIONS_URL = '/data/stations.geojson'
+
+function TourSearchPage() {
+  const [graphData, setGraphData] = useState<GraphData | null>(null)
+  const [hutNameById, setHutNameById] = useState<Map<number, string>>(new Map())
+  const [hutCoordsById, setHutCoordsById] = useState<Map<number, { lat: number; lng: number }>>(new Map())
+  const [startById, setStartById] = useState<Map<number, StartPoint>>(new Map())
+  const [error, setError] = useState<string | null>(null)
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
+  const [result, setResult] = useState<SearchResult | null>(null)
+  const [searching, setSearching] = useState(false)
+  const [sortKey, setSortKey] = useState<SortKey>('duration')
+  const [page, setPage] = useState(1)
+  const [expandedChain, setExpandedChain] = useState<number | null>(null)
+
+  useEffect(() => {
+    Promise.all([
+      loadTourSearchData(),
+      fetch(HUTS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
+      fetch(PARKING_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
+      fetch(STATIONS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
+    ])
+      .then(([tourSearchData, hutsFc, parkingFc, stationsFc]) => {
+        setGraphData(tourSearchData)
+        setHutNameById(
+          new Map(
+            hutsFc.features.map((f) => [
+              (f.properties as { id: number }).id,
+              (f.properties as { name: string }).name,
+            ]),
+          ),
+        )
+        setHutCoordsById(
+          new Map(
+            hutsFc.features.map((f) => {
+              const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+              return [(f.properties as { id: number }).id, { lat, lng }]
+            }),
+          ),
+        )
+
+        const starts = new Map<number, StartPoint>()
+        for (const f of stationsFc.features) {
+          const id = idFromOsmFeatureId(f.id as string | number)
+          const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+          if (id != null) {
+            starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_STATION, lat, lng })
+          }
+        }
+        for (const f of parkingFc.features) {
+          const id = idFromOsmFeatureId(f.id as string | number)
+          const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+          if (id != null) {
+            starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_PARKING, lat, lng })
+          }
+        }
+        setStartById(starts)
+      })
+      .catch((e: Error) => setError(e.message))
+  }, [])
+
+  const startLabel = useMemo(
+    () => (startId: number) => {
+      const start = startById.get(startId)
+      if (!start) return `Startpunkt ${startId}`
+      const kind = SOURCE_TYPE_LABEL[start.sourceType] ?? 'Startpunkt'
+      if (!start.name) return kind
+      return start.sourceType === SOURCE_TYPE_STATION ? start.name : `${start.name} (${kind})`
+    },
+    [startById],
+  )
+
+  const displayedChains = useMemo(() => {
+    if (!result) return []
+    const chains = [...result.chains]
+    chains.sort(SORT_COMPARATORS[sortKey])
+    return chains
+  }, [result, sortKey])
+
+  const pageCount = Math.max(1, Math.ceil(displayedChains.length / PAGE_SIZE))
+  const pageChains = useMemo(
+    () => displayedChains.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [displayedChains, page],
+  )
+
+  const selectedChain = expandedChain !== null ? (displayedChains[expandedChain] ?? null) : null
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!graphData) return
+    setSearching(true)
+    setResult(null)
+    setExpandedChain(null)
+    // Defer the heavy synchronous findTours call a tick so React can paint the spinner first
+    // (spec D: no Web Worker in this spec's scope).
+    setTimeout(() => {
+      const query = buildQuery(form)
+      const overlapThreshold = OVERLAP_THRESHOLD_BY_VARIETY[form.overlapVariety]
+      setResult(findTours(query, graphData, { overlapThreshold }))
+      setPage(1)
+      setSearching(false)
+    }, 0)
+  }
+
+  function handleReset() {
+    setForm(DEFAULT_FORM)
+    setResult(null)
+    setExpandedChain(null)
+  }
+
+  return (
+    <AppShell
+      title="Tourensuche"
+      status={error ? `Fehler: ${error}` : graphData ? 'Daten geladen' : 'Lade Daten…'}
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <Box
+          component="form"
+          onSubmit={handleSubmit}
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start', p: 2, borderBottom: '1px solid #e0e0e0' }}
+        >
+          <Box sx={{ width: 220 }}>
+            <Typography variant="subtitle2">Modus</Typography>
+            <Select
+              fullWidth
+              size="small"
+              value={form.mode}
+              onChange={(e: SelectChangeEvent) => setForm((f) => ({ ...f, mode: e.target.value as TourMode }))}
+            >
+              <MenuItem value="car">Auto (Rundtour zum Ausgangspunkt)</MenuItem>
+              <MenuItem value="transit">ÖPNV (offene Strecke)</MenuItem>
+            </Select>
+          </Box>
+
+          <Box sx={{ width: 220 }}>
+            <LegCountSlider
+              value={form.legCountRange}
+              onCommit={(legCountRange) => setForm((f) => ({ ...f, legCountRange }))}
+            />
+          </Box>
+
+          <Box sx={{ width: 220 }}>
+            <LegTimeSlider
+              value={form.legTimeRange}
+              onCommit={(legTimeRange) => setForm((f) => ({ ...f, legTimeRange }))}
+            />
+          </Box>
+
+          <Box sx={{ width: 240 }}>
+            <Typography variant="subtitle2">Schwierigkeit</Typography>
+            <Select
+              fullWidth
+              size="small"
+              value={form.sacCeiling}
+              onChange={(e: SelectChangeEvent<number | 'any'>) =>
+                setForm((f) => ({ ...f, sacCeiling: e.target.value === 'any' ? 'any' : Number(e.target.value) }))
+              }
+              sx={{ mb: 1 }}
+            >
+              <MenuItem value={1}>T1 Wandern</MenuItem>
+              <MenuItem value={2}>T2 Bergwandern</MenuItem>
+              <MenuItem value={3}>T3 anspruchsvolles Bergwandern</MenuItem>
+              <MenuItem value="any">beliebig</MenuItem>
+            </Select>
+            <FormControlLabel
+              control={<Checkbox checked={form.allowUngraded} onChange={(e) => setForm((f) => ({ ...f, allowUngraded: e.target.checked }))} />}
+              label="auch ungeratete Wege erlauben"
+            />
+            <FormControlLabel
+              sx={{ display: 'block' }}
+              control={<Checkbox checked={form.allowViaFerrata} onChange={(e) => setForm((f) => ({ ...f, allowViaFerrata: e.target.checked }))} />}
+              label="Klettersteige erlauben"
+            />
+          </Box>
+
+          <Box sx={{ width: 280 }}>
+            <Accordion disableGutters elevation={0} sx={{ border: '1px solid #e0e0e0', '&:before': { display: 'none' } }}>
+              <AccordionSummary sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 1 } }}>
+                <Typography variant="subtitle2">Erweiterte Optionen</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Anstiegslimit pro Etappe (m, leer = unbegrenzt)"
+                  slotProps={{ htmlInput: { min: 0 } }}
+                  value={form.legAscentCapM}
+                  onChange={(e) => setForm((f) => ({ ...f, legAscentCapM: e.target.value }))}
+                />
+
+                <TextField
+                  size="small"
+                  type="number"
+                  label="Maximalhöhe (m, leer = unbegrenzt)"
+                  value={form.maxEleM}
+                  onChange={(e) => setForm((f) => ({ ...f, maxEleM: e.target.value }))}
+                />
+
+                <Box>
+                  <Typography variant="subtitle2">Variantenvielfalt</Typography>
+                  <Select
+                    fullWidth
+                    size="small"
+                    value={form.overlapVariety}
+                    onChange={(e: SelectChangeEvent) => setForm((f) => ({ ...f, overlapVariety: e.target.value as FormState['overlapVariety'] }))}
+                  >
+                    <MenuItem value="wenig">wenig (ähnliche Touren zusammenfassen)</MenuItem>
+                    <MenuItem value="mittel">mittel</MenuItem>
+                    <MenuItem value="viel">viel (auch ähnliche Touren zeigen)</MenuItem>
+                  </Select>
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+          </Box>
+
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 'auto' }}>
+            <Button type="submit" variant="contained" disabled={!graphData || searching} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
+              Touren suchen
+            </Button>
+            <Button type="button" variant="outlined" onClick={handleReset}>
+              Zurücksetzen
+            </Button>
+          </Box>
+        </Box>
+
+        <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
+          {result && (
+            <TourList
+              result={result}
+              displayedChains={displayedChains}
+              pageChains={pageChains}
+              page={page}
+              pageCount={pageCount}
+              setPage={setPage}
+              sortKey={sortKey}
+              setSortKey={setSortKey}
+              hutNameById={hutNameById}
+              startLabel={startLabel}
+              expandedChain={expandedChain}
+              setExpandedChain={setExpandedChain}
+            />
+          )}
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <ResultsMap selectedChain={selectedChain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />
+          </Box>
+        </Box>
+      </Box>
+    </AppShell>
+  )
+}
+
+export default TourSearchPage

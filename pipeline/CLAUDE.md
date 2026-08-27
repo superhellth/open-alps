@@ -19,7 +19,7 @@ hut bbox, trail tag filter, max-edge-km / max-snap-m, DEM provider) lives in
 `pipeline/pipeline.config.json` — and `pipeline/dodo.py` runs the whole thing as a
 [doit](https://pydoit.org) task DAG (one task per script, wired by `file_dep`/`targets` rather than
 a numbered run order), idempotently (`doit` skips a task whose targets are already up to date;
-`doit <task>` reruns just that task and any stale deps), inside the `alpen-osm` conda env (see
+`doit <task>` reruns just that task and any stale deps), inside the `alpen-osm` pixi env (see
 `pipeline/README.md` "Setup"). The last task, `copy_public_data`, copies every output into
 `huts/public/data/` — no separate hand-copy step.
 
