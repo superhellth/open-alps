@@ -124,24 +124,32 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 Every script reads this file (via `pipeline/lib/pipeline.py`'s `load_config()`) instead of
 hardcoding these values — change the config, not the scripts.
 
-## Setup: the `alpen-osm` conda env
+## Setup: the `alpen-osm` pixi env
 
 The pipeline needs a real `osmium-tool` binary (`tags-filter`/`merge`/`fileinfo`) plus a handful
 of Python packages with native extensions (`pyosmium`, `scipy`, `numpy`, `python-igraph`). None of
-that is on PyPI in CLI form, so it's a conda-forge env, not `pip`/`uv`. `psutil` is in the
-list too: `lib/memtrace.py` imports it at module level and `build_base_graph.py` imports
-memtrace, so an env without it fails the phase at import time, not at first use.
+that is on PyPI in CLI form, so it's a conda-forge env, managed here via
+[pixi](https://pixi.sh) rather than `pip`/`uv`. `pixi.toml` (this directory) is the tracked
+manifest — its dependency list plus `pixi.lock` (also tracked) is the whole env spec, so
+`pixi install` reproduces exactly the same env everyone else has, not just "python=3.11 and
+whatever conda-forge resolves today." `psutil` is in the list too: `lib/memtrace.py` imports it
+at module level and `build_base_graph.py` imports memtrace, so an env without it fails the phase
+at import time, not at first use.
 
 ```bash
-conda create -n alpen-osm -c conda-forge \
-  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson psutil shapely
-conda activate alpen-osm
-osmium --version   # sanity check: should print "osmium version ..."
-pip install pmtiles doit   # pmtiles + doit aren't on conda-forge
+curl -fsSL https://pixi.sh/install.sh | sh   # one-time, installs the pixi CLI itself
+cd pipeline
+pixi install                                  # reads pixi.toml/pixi.lock, builds the env
+pixi run osmium --version   # sanity check: should print "osmium version ..."
 ```
 
-`tippecanoe` (needed by `build_trail_tiles.py`/`build_edge_tiles.py`) has no Windows build on
-conda-forge — only linux-64/osx-64. On Windows, set up a one-time WSL micromamba env instead:
+`pixi run <cmd>` runs `<cmd>` inside the env without a separate activate step (`pixi shell` drops
+you into an activated shell instead, if you'd rather not prefix every command). `tippecanoe`
+(needed by `build_trail_tiles.py`/`build_edge_tiles.py`) is in `pixi.toml`'s dependency list too —
+it has conda-forge builds for linux-64/osx-64/osx-arm64 (this project's `pixi.toml` only declares
+those platforms), so on Linux, macOS, or WSL it's just another package in the same env, no extra
+step. It has **no Windows conda-forge build**, so native Windows (not WSL) isn't a supported pixi
+platform here — set up a one-time WSL micromamba env just for `tippecanoe` instead:
 
 ```bash
 # inside WSL
@@ -152,7 +160,8 @@ mkdir -p mm && tar -xjf micromamba.tar.bz2 -C mm
 
 `build_trail_tiles.py` detects Windows and falls back to invoking `tippecanoe` through WSL
 automatically (`lib.pipeline.run_tippecanoe()`) — see `phases/postprocessing/README.md` for how.
-On Linux/macOS, just `conda install -c conda-forge tippecanoe` into `alpen-osm` and skip this.
+If you're already working from inside WSL (as this setup is), ignore the Windows path entirely —
+`pixi install` above covers `tippecanoe` too.
 
 ## Reproducing from scratch
 
@@ -160,13 +169,14 @@ The pipeline is orchestrated by [doit](https://pydoit.org) — `pipeline/dodo.py
 per script, wired by `file_dep`/`targets` (doit derives run order and staleness from that graph).
 
 ```bash
-conda activate alpen-osm
-doit                                    # run everything that's stale, in dependency order
-doit build_base_graph build_hub_edges   # run just these tasks (+ stale deps)
-doit build_base_graph --tile-size-km 60 # override a task's own param
-doit list                               # see every task + up-to-date status
-doit info <task>                        # see why a task would (not) run
+pixi run doit                                    # run everything that's stale, in dependency order
+pixi run doit build_base_graph build_hub_edges   # run just these tasks (+ stale deps)
+pixi run doit build_base_graph --tile-size-km 60 # override a task's own param
+pixi run doit list                               # see every task + up-to-date status
+pixi run doit info <task>                        # see why a task would (not) run
 ```
+
+(Or `pixi shell` once, then drop the `pixi run` prefix for the rest of the session.)
 
 `doit` skips any task whose `targets` already exist and whose own tracked params (each task's
 `TaskOptionsChanged()` check, `dodo.py`) haven't changed since its last successful run — not a
