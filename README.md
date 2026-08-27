@@ -41,35 +41,41 @@ pipeline to get back to the same place, modulo upstream sources changing over ti
 
 **One-time environment setup** — the pipeline needs `osmium-tool` + a few natively-compiled
 Python packages that aren't reliably available via plain `pip`, so it uses a dedicated
-conda-forge env, `alpen-osm`, created with `micromamba` (fast standalone solver — this machine's
-plain `conda create -c conda-forge` hangs solving the spec):
+conda-forge env, `alpen-osm`, managed via [pixi](https://pixi.sh): `pipeline/pixi.toml` +
+`pipeline/pixi.lock` are the tracked env manifest, so `pixi install` reproduces the exact same env
+for everyone, no imperative setup commands to copy-paste. On Linux, macOS, or WSL:
 
 ```bash
-curl -sSL -o micromamba.tar.bz2 "https://micro.mamba.pm/api/micromamba/win-64/latest"
-mkdir mm && tar -xjf micromamba.tar.bz2 -C mm
-mm/Library/bin/micromamba.exe create -y -r "$CONDA_ROOT" -n alpen-osm -c conda-forge \
-  python=3.11 osmium-tool pyosmium scipy numpy python-igraph gdal rasterio orjson
-
-conda activate alpen-osm
-pip install pmtiles doit
+curl -fsSL https://pixi.sh/install.sh | sh   # one-time, installs the pixi CLI itself
+cd pipeline
+pixi install                                  # reads pixi.toml/pixi.lock, builds the env
+pixi run osmium --version   # sanity check: should print "osmium version ..."
 ```
 
-(`$CONDA_ROOT` is wherever your miniconda/anaconda lives — `conda info` reports it as "base
-environment".) `tippecanoe` (needed for vector-tile builds) has no Windows conda-forge build —
-see `pipeline/README.md`'s "Displaying the raw OSM trails" section for the one-time WSL
-workaround. Full setup rationale: `pipeline/README.md` → "Setup".
+`pixi run <cmd>` runs `<cmd>` inside the env (or `pixi shell` once to activate it for the rest of
+the session). `tippecanoe` (needed for vector-tile builds) is in `pixi.toml` too and has
+conda-forge builds for linux-64/osx-64/osx-arm64, so it's just another package in the same env on
+those platforms — no extra step.
+
+**Native Windows** (not WSL) isn't a supported `pixi` platform here, since `tippecanoe` has no
+Windows conda-forge build — it needs a one-time WSL micromamba env just for `tippecanoe`
+(`build_trail_tiles.py` detects Windows and shells out to it automatically via
+`lib.pipeline.run_tippecanoe()`) — full commands in `pipeline/README.md` → "Setup". If you're
+reading this from inside WSL already, ignore the Windows path entirely and use the instructions
+above directly.
+
+Full setup rationale: `pipeline/README.md` → "Setup".
 
 **Running it** — the pipeline is a [doit](https://pydoit.org) task graph
 (`pipeline/dodo.py`), one task per processing step, wired together by real file
 dependencies/outputs so `doit` only reruns what's actually stale:
 
 ```bash
-conda activate alpen-osm
 cd pipeline
-doit list                # see every task + up-to-date status, without running anything
-doit info <task>          # see *why* a task would (not) run
-doit                       # run the full DAG, idempotently
-doit <task> [<task> ...]  # run just one/some tasks (+ their stale deps)
+pixi run doit list                # see every task + up-to-date status, without running anything
+pixi run doit info <task>          # see *why* a task would (not) run
+pixi run doit                       # run the full DAG, idempotently
+pixi run doit <task> [<task> ...]  # run just one/some tasks (+ their stale deps)
 ```
 
 **Read `pipeline/README.md` before running anything** — it documents every task, every

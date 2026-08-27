@@ -1,0 +1,28 @@
+[workspace]
+name = "alpen-osm"
+version = "0.1.0"
+description = "Offline hut-to-hut trail graph pipeline (OSM + DEM -> routing graph)"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[dependencies]
+python = "3.11.*"
+osmium-tool = "*"
+pyosmium = "*"
+scipy = "*"
+numpy = "*"
+python-igraph = "*"
+gdal = "*"
+rasterio = "*"
+orjson = "*"
+psutil = "*"
+shapely = "*"
+tippecanoe = "*"
+pip = "*"
+
+[pypi-dependencies]
+pmtiles = "*"
+doit = "*"
+
+[tasks]
+doit = "doit"
