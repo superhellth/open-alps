@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Alert, Box, Slider, Typography } from '@mui/material'
-import { LEG_COUNT_SLOW_WARNING_THRESHOLD } from './helpers.js'
+import { Box, Slider, Typography } from '@mui/material'
 
 // Owns its own drag-in-progress value so the Slider's continuous onChange events (fired on every
 // pointer move) only re-render this small subtree, not the whole page's form + result panes —
 // the parent form state is only touched once, via onChangeCommitted, on release.
-function LegCountSlider({
+function LegTimeSlider({
   value, onCommit,
 }: {
   value: [number, number]
@@ -13,33 +12,24 @@ function LegCountSlider({
 }) {
   const [draft, setDraft] = useState(value)
   useEffect(() => setDraft(value), [value])
-  const tooHigh = draft[1] > LEG_COUNT_SLOW_WARNING_THRESHOLD
 
   return (
     <Box>
       <Typography variant="subtitle2">
-        Etappen: {draft[0]}–{draft[1]}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        {draft[1]} Etappen = {draft[1] - 1} Übernachtungen
+        Gehzeit pro Etappe: {draft[0]}–{draft[1]}h
       </Typography>
       <Slider
         value={draft}
         onChange={(_e, v) => setDraft(v as [number, number])}
         onChangeCommitted={(_e, v) => onCommit(v as [number, number])}
-        min={1}
-        max={14}
-        step={1}
+        min={0}
+        max={12}
+        step={0.5}
         marks
         valueLabelDisplay="auto"
       />
-      {tooHigh && (
-        <Alert severity="warning" sx={{ mt: 1 }}>
-          Hohe Etappenzahl kann die Suche spürbar verlangsamen.
-        </Alert>
-      )}
     </Box>
   )
 }
 
-export default LegCountSlider
+export default LegTimeSlider

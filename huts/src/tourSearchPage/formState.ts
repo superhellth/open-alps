@@ -14,11 +14,11 @@ export interface FormState {
 }
 
 export const DEFAULT_FORM: FormState = {
-  mode: 'car',
+  mode: 'transit',
   legCountRange: [2, 4],
   sacCeiling: 3,
   allowUngraded: true,
-  legTimeRange: [0, 8],
+  legTimeRange: [4, 8],
   legAscentCapM: '',
   maxEleM: '',
   allowViaFerrata: true,

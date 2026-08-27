@@ -58,16 +58,6 @@ export function legWaypointLabels(
   return labels
 }
 
-export function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
-  const R = 6371
-  const dLat = ((b.lat - a.lat) * Math.PI) / 180
-  const dLng = ((b.lng - a.lng) * Math.PI) / 180
-  const sinLat = Math.sin(dLat / 2)
-  const sinLng = Math.sin(dLng / 2)
-  const h = sinLat * sinLat + Math.cos((a.lat * Math.PI) / 180) * Math.cos((b.lat * Math.PI) / 180) * sinLng * sinLng
-  return 2 * R * Math.asin(Math.sqrt(h))
-}
-
 // legCountMax above this is flagged as potentially slow in the UI (spec D2: "guard the
 // expensive end of the range" - no Worker, no cancel, so an unexpected blowup freezes the tab).
 export const LEG_COUNT_SLOW_WARNING_THRESHOLD = 8
