@@ -235,7 +235,7 @@ def task_fetch_huts():
             {"name": "bbox_json", "long": "bbox-json", "type": str,
              "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
         ],
-        "targets": [rel(OSM_DIR / "huts.geojson")],
+        "targets": [rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "partner_betriebe.geojson")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -287,7 +287,7 @@ def task_filter_start_points():
         ],
         "file_dep": [
             rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "stations.geojson"),
-            rel(OSM_DIR / "parking.geojson"),
+            rel(OSM_DIR / "parking.geojson"), rel(OSM_DIR / "partner_betriebe.geojson"),
         ],
         "targets": [rel(OSM_DIR / "start_points.npy"), rel(OSM_DIR / "start_points_id_table.json")],
         "uptodate": [TaskOptionsChanged()],

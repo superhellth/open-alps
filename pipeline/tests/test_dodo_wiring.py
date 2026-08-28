@@ -134,3 +134,13 @@ def test_edge_tile_tasks_track_zoom_and_hover_tolerance():
     trail_param_names = {p["name"] for p in trail_task["params"]}
     assert {"min_zoom", "max_zoom"} <= trail_param_names
     assert trail_task["uptodate"]
+
+
+def test_fetch_huts_targets_include_partner_betriebe():
+    targets = dodo.task_fetch_huts()["targets"]
+    assert any(t.endswith("partner_betriebe.geojson") for t in targets)
+
+
+def test_filter_start_points_depends_on_partner_betriebe():
+    deps = dodo.task_filter_start_points()["file_dep"]
+    assert any(d.endswith("partner_betriebe.geojson") for d in deps)
