@@ -107,8 +107,11 @@ def build_dem_vrt(manifest: list[dict], dem_dir: Path) -> Path:
     region_vrts = []
     for entry in manifest:
         provider = get_provider(entry["provider"])
-        tile_paths = [Path(p) for p in entry["tile_paths"]]
-        region_vrt = Path(entry["region_vrt"])
+        # entry's paths are stored relative to dem_dir (see composite.py's fetch_regions()) -
+        # resolve against the dem_dir this call was actually given, not whatever machine/OS wrote
+        # the manifest.
+        tile_paths = [dem_dir / p for p in entry["tile_paths"]]
+        region_vrt = dem_dir / entry["region_vrt"]
         provider.to_4326_vrt(tile_paths, region_vrt)
         region_vrts.append(normalize_colorinterp(region_vrt))
 

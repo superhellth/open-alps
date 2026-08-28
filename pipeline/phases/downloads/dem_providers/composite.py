@@ -60,10 +60,14 @@ def fetch_regions(provider_config: dict, dem_dir: Path, max_edge_km: float) -> l
 
         print(f"composite region {i}: {region_config['provider']} ...")
         tile_paths = provider.fetch(region_config, raw_dir)
+        # Relative to dem_dir, not absolute: an absolute path baked in here goes stale the moment
+        # the pipeline runs on a different machine/OS (e.g. a native-Windows -> WSL migration -
+        # see pipeline/lib/pipeline.py's DATA_DIR docstring for the same class of problem in
+        # doit's own path keys). build_dem_vrt() resolves these back against its own dem_dir.
         manifest.append({
             "provider": region_config["provider"],
-            "raw_dir": str(raw_dir),
-            "region_vrt": str(region_vrt),
-            "tile_paths": [str(p) for p in tile_paths],
+            "raw_dir": str(raw_dir.relative_to(dem_dir)),
+            "region_vrt": str(region_vrt.relative_to(dem_dir)),
+            "tile_paths": [str(p.relative_to(dem_dir)) for p in tile_paths],
         })
     return manifest

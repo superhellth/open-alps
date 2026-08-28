@@ -36,7 +36,11 @@ def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path,
     assert len(manifest) == 2
     assert manifest[0]["provider"] == "at-bev-dgm"
     assert manifest[1]["provider"] == "bavaria-dgm5"
-    assert manifest[0]["tile_paths"] == [str(tmp_path / "raw" / "region_0_at-bev-dgm" / "tile.tif")]
+    # Relative to dem_dir (tmp_path here), not absolute - so the manifest stays valid across
+    # machines/OSes (e.g. a Windows -> WSL migration), see pipeline/lib/dem.py's build_dem_vrt().
+    assert manifest[0]["raw_dir"] == "raw/region_0_at-bev-dgm"
+    assert manifest[0]["region_vrt"] == "region_0_at-bev-dgm.vrt"
+    assert manifest[0]["tile_paths"] == ["raw/region_0_at-bev-dgm/tile.tif"]
 
 
 def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
@@ -60,18 +64,20 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
         lambda args, **kwargs: merge_calls.append(args)
     )
 
+    # Paths are relative to dem_dir (as composite.fetch_regions() now writes them) - build_dem_vrt
+    # must resolve them back against the dem_dir it's called with, not trust them as absolute.
     manifest = [
         {
             "provider": "at-bev-dgm",
-            "raw_dir": str(tmp_path / "raw" / "region_0_at-bev-dgm"),
-            "region_vrt": str(tmp_path / "region_0_at-bev-dgm.vrt"),
-            "tile_paths": [str(tmp_path / "raw" / "region_0_at-bev-dgm" / "tile.tif")],
+            "raw_dir": "raw/region_0_at-bev-dgm",
+            "region_vrt": "region_0_at-bev-dgm.vrt",
+            "tile_paths": ["raw/region_0_at-bev-dgm/tile.tif"],
         },
         {
             "provider": "bavaria-dgm5",
-            "raw_dir": str(tmp_path / "raw" / "region_1_bavaria-dgm5"),
-            "region_vrt": str(tmp_path / "region_1_bavaria-dgm5.vrt"),
-            "tile_paths": [str(tmp_path / "raw" / "region_1_bavaria-dgm5" / "tile.tif")],
+            "raw_dir": "raw/region_1_bavaria-dgm5",
+            "region_vrt": "region_1_bavaria-dgm5.vrt",
+            "tile_paths": ["raw/region_1_bavaria-dgm5/tile.tif"],
         },
     ]
 
@@ -82,6 +88,11 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
     assert sum(1 for c in calls if c[0] == "to_4326_vrt") == 2
     assert sum(1 for c in calls if c[0] == "materialize_geotiff") == 2  # one per region, parallel
     assert len(merge_calls) == 1  # final gdalbuildvrt over the two materialized region GeoTIFFs
+    # to_4326_vrt/materialize_geotiff must see real absolute paths under tmp_path, not the
+    # relative strings stored in the manifest.
+    for _, paths, out in (c for c in calls if c[0] == "to_4326_vrt"):
+        assert all(p.is_absolute() and tmp_path in p.parents for p in paths)
+        assert out.is_absolute() and out.parent == tmp_path
 
 
 def test_fetch_regions_computes_bufferkm_from_max_edge_km_for_bboxfromhuts_region(
