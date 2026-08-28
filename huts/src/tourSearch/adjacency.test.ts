@@ -6,8 +6,8 @@ const hutEdgesData: HutEdgesData = {
   hutIds: ['A', 'B', 'C'],
   variantNames: { 0: 'FAST_ANY', 1: 'FAST_T2' },
   records: [
-    { fromIndex: 0, toIndex: 1, variant: 0, distanceM: 5000, ascentM: 400, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0 },
-    { fromIndex: 0, toIndex: 2, variant: 1, distanceM: 6000, ascentM: 500, descentM: 300, maxEleM: 2100, sacRank: 2, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0 },
+    { fromIndex: 0, toIndex: 1, variant: 0, distanceM: 5000, ascentM: 400, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: 0 },
+    { fromIndex: 0, toIndex: 2, variant: 1, distanceM: 6000, ascentM: 500, descentM: 300, maxEleM: 2100, sacRank: 2, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: 1 },
   ],
 }
 
