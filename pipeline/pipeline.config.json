@@ -38,5 +38,5 @@
   },
   "approach": { "k": 3 },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
-  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "hoverSimplifyToleranceDeg": 0.0003 }
+  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 }
 }
