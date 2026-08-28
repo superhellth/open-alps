@@ -78,6 +78,11 @@ def test_record_dtype_carries_the_scalar_filter_columns():
         assert field in binfmt.RECORD_DTYPE.names, field
 
 
+def test_type_partner_is_distinct_from_existing_hub_types():
+    assert binfmt.TYPE_PARTNER == 3
+    assert binfmt.TYPE_PARTNER not in (binfmt.TYPE_HUT, binfmt.TYPE_STATION, binfmt.TYPE_PARKING)
+
+
 def test_record_dtype_has_no_stored_duration():
     # spec D3: reported duration is direction-dependent. A stored scalar guarantees something
     # reads it for a leg walked backwards and is wrong by the full ascent/descent rate gap.
