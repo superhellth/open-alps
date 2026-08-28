@@ -132,6 +132,7 @@ export interface ReverseIndexEntry {
   distance_m: number
   ascent_m: number
   descent_m: number
+  edge_id: number
 }
 
 export interface HutEdgesData {

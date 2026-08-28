@@ -20,6 +20,7 @@ export function getExitLegs(hutIndex: number, variant: number, approachesData: A
         hutIndex,
         startId: r.start_id,
         sourceType: r.source_type,
+        edgeId: r.edge_id,
         accessUnknown: false,
         distanceM: r.distance_m,
         ascentM: r.ascent_m,
