@@ -16,17 +16,18 @@ export function reverseHutLeg(record: HutEdgeRecord): HutLeg {
     toIndex: record.fromIndex,
     ascentM: record.descentM,
     descentM: record.ascentM,
+    reversed: true,
   })
 }
 
 export function forwardHutLeg(record: HutEdgeRecord): HutLeg {
-  return withDuration(record)
+  return withDuration({ ...record, reversed: false })
 }
 
 export function reverseStartLeg(record: ApproachRecord): StartLeg {
-  return withDuration({ ...record, ascentM: record.descentM, descentM: record.ascentM })
+  return withDuration({ ...record, ascentM: record.descentM, descentM: record.ascentM, reversed: true })
 }
 
 export function forwardStartLeg(record: ApproachRecord): StartLeg {
-  return withDuration(record)
+  return withDuration({ ...record, reversed: false })
 }
