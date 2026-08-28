@@ -28,6 +28,7 @@ export interface HutEdgeRecord {
   ungradedM: number
   inferredM: number
   snapM: number
+  edgeId: number
 }
 
 /** Fields legFilters.legPasses needs, present on every leg shape (hut-hut, approach, exit). */
