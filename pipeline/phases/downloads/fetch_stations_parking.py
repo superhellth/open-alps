@@ -24,6 +24,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
+
+SCRIPT_NAME = "fetch_stations_parking.py"
 
 config = load_config()
 
@@ -41,7 +44,7 @@ LAYERS = [
 ]
 
 
-def export_layer(layer: dict) -> None:
+def export_layer(layer: dict, timer: StepTimer) -> None:
     out_path = OSM_DIR / f"{layer['name']}.geojson"
     features = []
 
@@ -49,21 +52,23 @@ def export_layer(layer: dict) -> None:
         src = OSM_DIR / "raw" / f"{region['name']}-latest.osm.pbf"
         filtered = OSM_DIR / f"{region['name']}-{layer['name']}.osm.pbf"
         print(f"filtering {src} -> {filtered}")
-        subprocess.run(
-            ["osmium", "tags-filter", str(src), layer["tag_filter"],
-             "-o", str(filtered), "--overwrite"],
-            check=True,
-        )
+        with timer.step(f"{layer['name']}_tag_filter"):
+            subprocess.run(
+                ["osmium", "tags-filter", str(src), layer["tag_filter"],
+                 "-o", str(filtered), "--overwrite"],
+                check=True,
+            )
 
-        result = subprocess.run(
-            # --add-unique-id=type_id: osmium export emits no id at all by default. With this
-            # flag it lands on each Feature's top-level "id" (e.g. "n8091317", type prefix +
-            # numeric id) - not inside "properties" - which filter_start_points.py's osm_id
-            # depends on to identify every station/parking point.
-            ["osmium", "export", str(filtered), "-f", "geojson",
-             "--geometry-types", "point", "--add-unique-id=type_id"],
-            check=True, capture_output=True, text=True, encoding="utf-8",
-        )
+        with timer.step(f"{layer['name']}_export"):
+            result = subprocess.run(
+                # --add-unique-id=type_id: osmium export emits no id at all by default. With this
+                # flag it lands on each Feature's top-level "id" (e.g. "n8091317", type prefix +
+                # numeric id) - not inside "properties" - which filter_start_points.py's osm_id
+                # depends on to identify every station/parking point.
+                ["osmium", "export", str(filtered), "-f", "geojson",
+                 "--geometry-types", "point", "--add-unique-id=type_id"],
+                check=True, capture_output=True, text=True, encoding="utf-8",
+            )
         fc = json.loads(result.stdout)
         for feat in fc["features"]:
             raw_props = feat["properties"]
@@ -77,5 +82,9 @@ def export_layer(layer: dict) -> None:
     print(f"written {out_path}")
 
 
-for layer in LAYERS:
-    export_layer(layer)
+timer = StepTimer()
+with phase(SCRIPT_NAME, "fetch_stations_parking") as meta:
+    for layer in LAYERS:
+        export_layer(layer, timer)
+    meta.update(timer.as_meta())
+print(f"step totals: {timer.summary()}", flush=True)

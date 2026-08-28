@@ -14,6 +14,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "fetch_huts.py"
 
 bbox = load_config()["bbox"]
 out_path = OSM_DIR / "huts.geojson"
@@ -25,8 +28,9 @@ url = (
     "&resultRecordCount=8000&f=json"
 )
 
-with urllib.request.urlopen(url) as res:
-    data = json.load(res)
+with phase(SCRIPT_NAME, "fetch_huts"):
+    with urllib.request.urlopen(url) as res:
+        data = json.load(res)
 
 features = [
     f
