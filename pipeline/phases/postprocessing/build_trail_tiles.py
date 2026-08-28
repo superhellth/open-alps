@@ -17,9 +17,8 @@ Pipeline:
        of the pipeline that's pure single-threaded Python rather than a C/C++ tool, so it's the
        actual bottleneck; osmium export and tippecanoe are both already multi-core-capable C++
        (tippecanoe parallelizes its own tiling internally, no flag needed).
-    3. `tippecanoe` builds zoomed vector tiles from the filtered file into an mbtiles archive.
-    4. `pmtiles.convert.mbtiles_to_pmtiles` (the PyPI `pmtiles` package's Python API - it has no
-       CLI, despite the package name) repackages the mbtiles into one .pmtiles file.
+    3. `lib.tippecanoe.build_pmtiles()` tiles the filtered file into an mbtiles archive, repacks
+       it into a single .pmtiles file, and deletes both intermediates.
 
 Requires, on PATH/importable inside the alpen-osm env:
     - osmium-tool (already a pipeline dependency, see filter_trails.py)
@@ -43,84 +42,82 @@ import sys
 from pathlib import Path
 
 import orjson
-from pmtiles.convert import mbtiles_to_pmtiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config, run_tippecanoe  # noqa: E402
+from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.tippecanoe import build_pmtiles  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_trail_tiles.py"
 
-config = load_config()
-tiles_config = config.get("trailTiles", {})
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
-parser.add_argument("--out", default=str(OSM_DIR / "trails.pmtiles"))
-parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
-parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
-args = parser.parse_args()
+def filter_trail_feature(feat: dict) -> dict:
+    """Strips a GeoJSON feature's properties down to just `highway` - the one tag the frontend
+    styles by - in place, returning it for chaining. Every other OSM tag is dead weight in the
+    tiles."""
+    props = feat.get("properties") or {}
+    feat["properties"] = {"highway": props.get("highway")}
+    return feat
 
-trails_pbf = Path(args.trails)
-filtered = OSM_DIR / "trails.geojsons"  # tippecanoe recognizes this extension as a JSON sequence
-mbtiles = OSM_DIR / "trails.mbtiles"
-out_path = Path(args.out)
 
-# Splits the three costs: the osmium export + per-feature tag rewrite (ours, Python), tippecanoe
-# (external), and the pmtiles conversion. Without the split a slower run is unattributable.
-timer = StepTimer()
-n_features = 0
-
-print(f"streaming {trails_pbf} -> filtering -> {filtered} ...", flush=True)
-# osmium export's stdout is piped straight into the filter loop below - no intermediate
-# trails.geojsonseq on disk, since nothing else needs the full-tag version. Streams line-by-line
-# throughout, so this never holds the full multi-million-way export in memory.
-export = subprocess.Popen(
-    [
-        "osmium", "export", str(trails_pbf),
-        "--geometry-types=linestring",
-        "-f", "geojsonseq",
-        "-o", "-",
-    ],
-    stdout=subprocess.PIPE,
-)
-with timer.step("osmium_export_filter"), open(filtered, "wb") as dst:
-    for line in export.stdout:
-        line = line.strip(b"\x1e\n")  # RFC 8142 record separator osmium emits per line
-        if not line:
-            continue
-        feat = orjson.loads(line)
-        props = feat.get("properties") or {}
-        feat["properties"] = {"highway": props.get("highway")}
-        dst.write(orjson.dumps(feat))
-        dst.write(b"\n")
-        n_features += 1
-    returncode = export.wait()
-    if returncode != 0:
-        raise subprocess.CalledProcessError(returncode, export.args)
-
-print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...", flush=True)
-with timer.step("tippecanoe"):
-    run_tippecanoe(
+def export_and_filter(trails_pbf: Path, out_path: Path, timer: StepTimer) -> int:
+    """Streams trails_pbf through `osmium export` (piped straight in, never written to disk
+    itself, since nothing else needs the full-tag version) and writes each filtered feature as
+    one line of GeoJSON-seq to out_path. Returns the feature count."""
+    export = subprocess.Popen(
         [
-            "-o", str(mbtiles),
-            "-l", "trails",
-            "-Z", str(args.min_zoom),
-            "-z", str(args.max_zoom),
-            "--drop-densest-as-needed",
-            "--force",
-            str(filtered),
-        ]
+            "osmium", "export", str(trails_pbf),
+            "--geometry-types=linestring",
+            "-f", "geojsonseq",
+            "-o", "-",
+        ],
+        stdout=subprocess.PIPE,
     )
+    n_features = 0
+    with timer.step("osmium_export_filter"), open(out_path, "wb") as dst:
+        for line in export.stdout:
+            line = line.strip(b"\x1e\n")  # RFC 8142 record separator osmium emits per line
+            if not line:
+                continue
+            feat = filter_trail_feature(orjson.loads(line))
+            dst.write(orjson.dumps(feat))
+            dst.write(b"\n")
+            n_features += 1
+        returncode = export.wait()
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, export.args)
+    return n_features
 
-print(f"converting {mbtiles} -> {out_path} ...", flush=True)
-with timer.step("mbtiles_to_pmtiles"):
-    mbtiles_to_pmtiles(str(mbtiles), str(out_path), args.max_zoom)
 
-filtered.unlink(missing_ok=True)
-mbtiles.unlink(missing_ok=True)
-with phase(SCRIPT_NAME, "build_trail_tiles", n_features=n_features,
-           min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
-    pass
-print(f"step totals: {timer.summary()}", flush=True)
-print(f"written {out_path}")
+if __name__ == "__main__":
+    config = load_config()
+    tiles_config = config.get("trailTiles", {})
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
+    parser.add_argument("--out", default=str(OSM_DIR / "trails.pmtiles"))
+    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
+    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
+    args = parser.parse_args()
+
+    trails_pbf = Path(args.trails)
+    filtered = OSM_DIR / "trails.geojsons"  # tippecanoe recognizes this extension as a JSON sequence
+    mbtiles = OSM_DIR / "trails.mbtiles"
+    out_path = Path(args.out)
+
+    # Splits the three costs: the osmium export + per-feature tag rewrite (ours, Python), tippecanoe
+    # (external), and the pmtiles conversion. Without the split a slower run is unattributable.
+    timer = StepTimer()
+
+    print(f"streaming {trails_pbf} -> filtering -> {filtered} ...", flush=True)
+    n_features = export_and_filter(trails_pbf, filtered, timer)
+
+    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
+          f"-> {out_path} ...", flush=True)
+    build_pmtiles(timer, filtered, mbtiles, out_path, "trails", args.min_zoom, args.max_zoom)
+
+    with phase(SCRIPT_NAME, "build_trail_tiles", n_features=n_features,
+               min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
+        pass
+    print(f"step totals: {timer.summary()}", flush=True)
+    print(f"written {out_path}")

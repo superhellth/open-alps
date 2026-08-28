@@ -16,8 +16,9 @@ one place it exists, per analysis/README.md's rule for a classifier proposal wit
 counterpart yet.
 
 Calls the real production functions: lib.subgraph.gather_padded_subgraph,
-graph_building.build_hub_edges.snap_hub_to_subgraph / _build_igraph_with_snaps / _path_for,
-lib.variants.edge_mask, lib.speed.edge_time_s / din_duration_h. Never reimplements routing itself.
+graph_building.build_hub_edges.snap_hub_to_subgraph, lib.cell_igraph.build_igraph_with_snaps /
+path_for, lib.variants.edge_mask, lib.speed.edge_time_s / din_duration_h. Never reimplements
+routing itself.
 
 Requires data/osm/base_graph/ WITH add_base_elevation.py already run (time_s/ascent_m/descent_m/
 node_ele.npy/interior_ele.npy populated - a probe run before that measures a graph that no longer
@@ -42,12 +43,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt, speed, variants  # noqa: E402
+from lib.cell_igraph import build_igraph_with_snaps, path_for  # noqa: E402
 from lib.grid import Grid  # noqa: E402
-from lib.pipeline import DATA_DIR, OSM_DIR, hut_points, load_config  # noqa: E402
+from lib.geo import hut_points  # noqa: E402
+from lib.pipeline import DATA_DIR, OSM_DIR, load_config  # noqa: E402
 from lib.subgraph import gather_padded_subgraph  # noqa: E402
-from graph_building.build_hub_edges import (  # noqa: E402
-    _build_igraph_with_snaps, _path_for, snap_hub_to_subgraph,
-)
+from graph_building.build_hub_edges import snap_hub_to_subgraph  # noqa: E402
 
 OUT_PATH = DATA_DIR / "analysis" / "routing_probe.json"
 
@@ -90,7 +91,7 @@ def _road_avoid_weights(graph) -> list:
 
 def _row_graph(full_graph, row: int):
     """Derives a row-filtered graph from full_graph (built once per pair with edge_mask=None) via
-    igraph's own subgraph_edges, instead of re-running _build_igraph_with_snaps's Python-level
+    igraph's own subgraph_edges, instead of re-running build_igraph_with_snaps's Python-level
     edge construction per row - that construction (per-edge interior-point gathers over a mmap
     array) is the expensive part per docs/superpowers/specs's build-cost analysis, and paying it
     three times per pair instead of once was what made a 3-pair smoke test miss a 120s budget.
@@ -117,7 +118,7 @@ def _column_weights(graph, column: str) -> list:
 
 
 def _measure_path(graph, vertex_coords, src_v, tgt_v, weights):
-    """Like build_hub_edges._path_for, but routes on an arbitrary weight list instead of the
+    """Like lib.cell_igraph.path_for, but routes on an arbitrary weight list instead of the
     graph's own "weight" attribute (which is always time_s), so the probe can try SHORT/
     ROAD_AVOID columns without mutating production state. Returns None when no path exists."""
     if src_v == tgt_v:
@@ -333,9 +334,9 @@ def run_probe(n_pairs: int, seed: int, direction_sample: int) -> dict:
             duration_pairs.append((routed_h, din_h))
 
         if len(direction_spread) < direction_sample and fast_any is not None:
-            reverse = _path_for(full_graph, vertex_coords, hub_vertex[tgt_key], hub_vertex[src_key])
+            reverse = path_for(full_graph, vertex_coords, hub_vertex[tgt_key], hub_vertex[src_key])
             rev_coords, rev_distance = reverse[0], reverse[1]
-            # fast_any["coords"] and reverse's trail_coords are both _path_for-style traces (start
+            # fast_any["coords"] and reverse's trail_coords are both path_for-style traces (start
             # and end AT the snap vertex, no separate hub-coordinate prepend) - directly comparable
             # once reversed, no trimming needed.
             fwd_coords_rev = list(reversed(fast_any["coords"]))
@@ -343,9 +344,9 @@ def run_probe(n_pairs: int, seed: int, direction_sample: int) -> dict:
             cost_ratio = (rev_distance / fast_any["distance_m"]) if fast_any["distance_m"] > 0 else 1.0
             direction_spread.append((same, cost_ratio))
 
-    # Grouped by the SOURCE hub's cell: gather_padded_subgraph + _build_igraph_with_snaps are the
+    # Grouped by the SOURCE hub's cell: gather_padded_subgraph + build_igraph_with_snaps are the
     # genuinely expensive per-cell steps (spec's own cost analysis - a 60km padded cell holds
-    # ~670k edges, and _build_igraph_with_snaps's per-edge Python interior-point gather dominates,
+    # ~670k edges, and build_igraph_with_snaps's per-edge Python interior-point gather dominates,
     # same as production build_hub_edges.py's "build_igraph" StepTimer step). Production pays that
     # cost once per cell and answers every pair sharing it; paying it once per SAMPLED PAIR instead
     # (46 cells but up to 200 pairs) is what made an early smoke test take ~15s/pair. Snapping only
@@ -370,7 +371,7 @@ def run_probe(n_pairs: int, seed: int, direction_sample: int) -> dict:
             if snap is not None:
                 snaps[("hut", hub["id"])] = snap
 
-        full_graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, snaps)
+        full_graph, hub_vertex, vertex_coords = build_igraph_with_snaps(subgraph, snaps)
         row_graphs = {binfmt.VARIANT_FAST_ANY: (full_graph, hub_vertex, vertex_coords)}
         for row in (binfmt.VARIANT_FAST_T2, binfmt.VARIANT_FAST_T3):
             row_graphs[row] = (_row_graph(full_graph, row), hub_vertex, vertex_coords)

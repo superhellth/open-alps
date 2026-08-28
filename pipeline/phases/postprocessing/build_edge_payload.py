@@ -26,7 +26,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, hut_points  # noqa: E402
+from lib.geo import hut_points  # noqa: E402
+from lib.pipeline import OSM_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 # (column name, packed dtype) - hut ids narrow i8 -> u2 (huts.geojson is well under 65536 huts);
@@ -41,19 +42,15 @@ COLUMNS = [
 
 
 def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
-    payload = bytearray()
-    column_manifest = {}
-    for name, dtype in COLUMNS:
-        col = np.asarray(records[name], dtype=dtype)
-        column_manifest[name] = {"dtype": dtype, "offset": len(payload)}
-        payload.extend(col.tobytes())
+    columns = {name: (dtype, records[name]) for name, dtype in COLUMNS}
+    payload, column_manifest = binfmt.pack_columns(columns)
     manifest = {
         "rows": len(records),
         "columns": column_manifest,
         "variants": binfmt.VARIANT_NAMES,
         "hut_ids": hut_ids,
     }
-    return bytes(payload), manifest
+    return payload, manifest
 
 
 if __name__ == "__main__":

@@ -18,11 +18,11 @@ from pathlib import Path
 
 import numpy as np
 import orjson
-from pmtiles.convert import mbtiles_to_pmtiles
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import load_config, run_tippecanoe  # noqa: E402
+from lib.pipeline import load_config  # noqa: E402
+from lib.tippecanoe import build_pmtiles  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_edge_tiles.py"
@@ -174,20 +174,10 @@ if __name__ == "__main__":
             f.write(orjson.dumps({"point_counts": point_counts}))
 
     mbtiles = edges_dir / "tiling_input.mbtiles"
-    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...", flush=True)
-    with timer.step("tippecanoe"):
-        run_tippecanoe([
-            "-o", str(mbtiles), "-l", args.layer_name,
-            "-Z", str(args.min_zoom), "-z", str(args.max_zoom),
-            "--drop-densest-as-needed", "--force", str(tiling_input),
-        ])
-
-    print(f"converting {mbtiles} -> {args.out_tiles} ...", flush=True)
-    with timer.step("mbtiles_to_pmtiles"):
-        mbtiles_to_pmtiles(str(mbtiles), args.out_tiles, args.max_zoom)
-
-    tiling_input.unlink(missing_ok=True)
-    mbtiles.unlink(missing_ok=True)
+    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
+          f"-> {args.out_tiles} ...", flush=True)
+    build_pmtiles(timer, tiling_input, mbtiles, args.out_tiles, args.layer_name,
+                  args.min_zoom, args.max_zoom)
     # Nothing left to time - phase() here exists only to land the split in timings.jsonl next to
     # every other phase, keyed by layer so hut_edges and start_edges stay distinguishable.
     with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name, n_edges=len(records),

@@ -1,9 +1,13 @@
 # phases/graph_building/ — OSM ways → hut-to-hut trail edges
 
 The expensive phase (`build_base_graph` alone measured ~4.1h for AT+Bayern —
-`data/timings.jsonl`). Split into two scripts so that the costly, hub-independent part is computed
-and persisted once, and only the cheap, hub-dependent part reruns when the hub set or edge
-hyperparameters change.
+`data/timings.jsonl`). Split into four scripts so each hyperparameter only forces a rerun of the
+work that actually depends on it: `build_base_graph.py` (hub-agnostic, depends only on the OSM
+extract), `snap_hubs.py` (depends only on `--max-snap-m`/`--max-snap-ascent-m`),
+`gather_route_subgraphs.py` (depends only on `--max-edge-km`), and `build_hub_edges.py` (the actual
+per-variant routing, depends on both `--max-edge-km` and `graph.variants` — see
+`docs/superpowers/plans/2026-08-23-split-build-hub-edges.md` for why the last three were split out
+of what was originally one `build_hub_edges.py`).
 
 Replaces an earlier buffer-clip + OSMnx/NetworkX approach — rejected because the bottleneck was
 never input size but per-node/edge Python object overhead (dict-of-dicts + shapely geometry per
@@ -70,54 +74,97 @@ memory-mappable via `np.load(..., mmap_mode="r")`):
   forget`. **Not** force-rerun (unlike the deleted V1 `add_elevation.py`) — freshness-checked
   normally given its ~4.1h cost.
 
+## Shared hub-loading + per-cell-pool infra
+
+`snap_hubs.py`, `gather_route_subgraphs.py` and `build_hub_edges.py` each need the same combined
+hub set (huts + stations/parking/partner access points) loaded and cell-bucketed against the base
+graph's `Grid`, and each runs its own cell-by-cell loop that must print
+`pipeline/CLAUDE.md`'s progress-logging convention. Rather than each script hand-rolling both:
+
+- **`lib/hubs.py`** — `load_all_hubs(osm_dir)` joins `huts.geojson` + `start_points.npy` into one
+  flat `[{id, type, lon, lat, name}, ...]` list (`type` is `binfmt.TYPE_*`); `bucket_by_cell(hubs,
+  grid)` buckets it into `{cell_id: [hub, ...]}`. One place to extend when a new hub type joins
+  `TYPE_HUT`/`TYPE_STATION`/`TYPE_PARKING`/`TYPE_PARTNER`.
+- **`lib/progress.py`** — `run_pool(tasks, worker_fn, workers)` wraps the
+  `ProcessPoolExecutor`/`as_completed` submit loop `snap_hubs.py` and `build_hub_edges.py` both
+  need (guarded behind `if __name__ == "__main__":` in each — required on Windows, where the
+  `spawn` start method re-imports the worker module in each child); `gather_route_subgraphs.py`
+  runs single-process and doesn't need it. `ProgressTracker` tracks completed/total/elapsed and
+  formats the `"elapsed Xm, ~Ym remaining"` suffix every per-cell progress line ends with.
+
+## `snap_hubs.py` — snap every hub onto the base graph, once
+
+Params: `--max-snap-m` (default `config.graph.maxSnapM`), `--max-snap-ascent-m`
+(`maxSnapAscentM`), `--workers`.
+
+Snaps every hub (independent of `--max-edge-km` and `graph.variants` — a hub's snap point is a
+fact about its own location, not about any routing constraint) onto the persisted base graph and
+persists the result to `hub_snaps.npy`/`hub_snap_interior.npy` (`lib/hub_snap.py`'s
+`PersistedSnap`, keyed by globally-stable node/edge ids) for `build_hub_edges.py` to reuse. One
+worker process per grid cell; each worker gathers a small `lib/subgraph.py` region (buffered off
+`--max-snap-m`, not `--max-edge-km` — a few hundred metres, not tens of km) and calls
+`lib/hub_snap.py`'s `snap_hub_to_subgraph()` per hub: an existing graph node within `--max-snap-m`
+always wins; otherwise the nearest mid-chain point on a chain edge's interior polyline is found
+(`lib/edge_split.py`'s `nearest_point_on_polyline()`) and the edge is split there
+(`split_edge_at_point()`). A hub with no node within `--max-snap-m`, or whose vertical offset
+exceeds `--max-snap-ascent-m`, is rejected — recorded in `unsnapped_huts.json`, never
+force-matched. Writes `hub_snaps.npy`, `hub_snap_interior.npy`, `unsnapped_huts.json`.
+
+## `gather_route_subgraphs.py` — cache each hub cell's routing region
+
+Params: `--max-edge-km` (default `config.graph.maxEdgeKm`).
+
+For every hub-bearing cell, gathers and persists the `--max-edge-km`-padded `LocalSubgraph`
+(`lib/subgraph.py`'s `gather_padded_subgraph()` — a cell-union-then-edge-incidence-closure mmap
+slice of the base graph) that `build_hub_edges.py`'s routing pass needs, under
+`data/osm/route_subgraphs/cell_<id>/`. Depends only on `--max-edge-km` and the base graph — not on
+`graph.variants` — so retuning the variant grid alone leaves this cache untouched. Single-process,
+sequential over cells (the expensive part is the mmap slice + array copy per cell, not something
+that benefits from cross-cell parallelism the way per-hub snapping/routing do).
+
 ## `build_hub_edges.py` — per-hub shortest paths, tiled + multiprocess
 
-Params: `--max-edge-km` (default `config.graph.maxEdgeKm`), `--max-snap-m` (`maxSnapM`),
-`--workers` (default `os.cpu_count()`).
+Params: `--max-edge-km` (default `config.graph.maxEdgeKm`), `--workers` (default
+`os.cpu_count()`).
 
-**Setup**: loads `base_graph/manifest.json` and reconstructs its `Grid` (deterministic — `cell_id`
-is fully determined by `(bbox, tile_size_km)`, so no lookup table is needed to re-derive it),
-loads `huts.geojson` + `start_points.npy` (the combined hub set: huts + filtered
-stations/parking), and assigns each hub to a grid cell by coordinate.
+Reloads `snap_hubs.py`'s persisted snaps and `gather_route_subgraphs.py`'s cached per-cell
+subgraphs instead of recomputing either — this script's own cost is now just the routing pass,
+the one stage that genuinely scales with the variant grid. One worker process per grid cell; each
+worker (`_run_cell`) reloads its cached subgraph, looks up its hubs' precomputed snaps
+(`lib/hub_snap.py`'s `reconstruct_local_snaps()`), and calls `compute_hub_edges_for_cell()`:
 
-**Parallelism**: one worker process per grid cell, via `ProcessPoolExecutor` (guarded behind
-`if __name__ == "__main__":` — required on Windows, where the `spawn` start method re-imports the
-worker module in each child). Each worker, independently:
-
-1. **Gathers a padded region** — `lib/subgraph.py`'s `gather_padded_subgraph()`: a
-   cell-union-then-edge-incidence-closure mmap slice of the base graph, buffered by
-   `--max-edge-km` so a hub near a cell boundary still sees every trail edge within range, without
-   loading cells the worker doesn't need.
-2. **Snaps** each relevant hub in its region onto the subgraph (`snap_hub_to_subgraph()`) — the
-   cell's own core hubs plus the *huts* in its padded region; non-core stations/parking are
-   skipped, since huts are the only routing targets (see step 3). An existing
-   graph node within `--max-snap-m` always wins; otherwise the nearest mid-chain point on a chain
-   edge's interior polyline is found (`lib/edge_split.py`'s `nearest_point_on_polyline()`) and the
-   edge is split there (`split_edge_at_point()`), inserting a virtual vertex. A hub with no node
-   within `--max-snap-m` is skipped entirely — not force-matched to a distant trail.
-3. **Routes each enabled variant row** (`pipeline.config.json`'s `graph.variants`, `lib/variants.py`
+1. **Routes each enabled variant row** (`pipeline.config.json`'s `graph.variants`, `lib/variants.py`
    — currently `FAST_ANY`, `FAST_T2`, `FAST_T3`, `FAST_T3_UNGRADED`) separately over the same
    snapped hubs: `lib/variants.py`'s `edge_mask()` turns the row's constraint (max `sac_rank`,
    whether ungraded terrain is admitted) into a boolean mask over the region's edges, and
-   `_build_igraph_with_snaps()` builds one `igraph.Graph` per row from only the unmasked edges
-   (base nodes + virtual snap vertices). For each core hub: computes real-distance shortest-path
-   *distances* (`weights="dist"`, on that row's masked graph) to every *hut* in range and discards
-   any pair over `--max-edge-km` (mirrors an "all-pairs cutoff" pass), then for surviving pairs
-   fetches the *time*-shortest path (`weights="weight"` == `time_s`, spec A3 — never the
-   road-penalized distance the pre-V2 pipeline used) and walks its edge list to build full path
-   geometry, summing real `dist`/`road_m` and tracking max `sac_rank` and any `via_ferrata`
-   crossing along the path. The routed path's own `distance_m` is re-checked against
-   `--max-edge-km` after the fact (spec C8): the cutoff above ran on the *unconstrained* shortest
-   distance, which the time-shortest path can exceed. A row with no legal path for a pair emits
-   nothing for it — never a silent fallback to a laxer row.
+   `lib/cell_igraph.py`'s `build_igraph_from_base()` builds one `igraph.Graph` per row from only
+   the unmasked edges (base nodes + virtual snap vertices) — the variant-independent
+   column/interior/max_ele_m work is built once per cell by `build_base_igraph_arrays()` and
+   reused across every row. `lib/cell_igraph.py` holds this igraph-building/path-walking engine
+   (also used directly by `analysis/routing_probe.py`) as reusable, subgraph+snaps-only plumbing
+   with no dependency on this script's own routing loop or output packing — see its module
+   docstring. For each core hub: computes real-distance shortest-path *distances* (`weights="dist"`,
+   on that row's masked graph) to every *hut* in range and discards any pair over `--max-edge-km` (mirrors an
+   "all-pairs cutoff" pass), then for surviving pairs fetches the *time*-shortest path
+   (`weights="weight"` == `time_s`, spec A3 — never the road-penalized distance the pre-V2
+   pipeline used) and walks its edge list to build full path geometry, summing real `dist`/`road_m`
+   and tracking max `sac_rank` and any `via_ferrata` crossing along the path. The routed path's own
+   `distance_m` is re-checked against `--max-edge-km` after the fact (spec C8): the cutoff above
+   ran on the *unconstrained* shortest distance, which the time-shortest path can exceed. A row
+   with no legal path for a pair emits nothing for it — never a silent fallback to a laxer row.
    Only huts are ever routed *to*: the two shipped edge sets are hut-hut and access-point-to-hut,
    so a station↔parking pair is work nothing consumes, and a hut→access-point pair would just
    duplicate the access→hut record the access point's own cell already emits.
-4. **`merge_and_dedup()`** combines every worker's records: undirected hut↔hut pairs are
+2. **`merge_and_dedup()`** combines every worker's records: undirected hut↔hut pairs are
    deduplicated on `(variant, type, id)` (not id alone — hut/station/parking id spaces can
    collide, and two variant rows for the same pair are two distinct records, not duplicates),
    while directional access→hut records are kept as-is (a station/parking point is always stored
    as the origin, never merged symmetrically with a hut).
+
+`compute_hub_edges_for_cell()` always takes an already-computed `snaps` dict (from
+`reconstruct_local_snaps()` in production); `snap_hubs_for_cell()` is a standalone self-snapping
+convenience for callers without that cache (tests, `analysis/` scripts) — production never calls
+it, since a hub only ever needs to snap once, pipeline-wide, in `snap_hubs.py`.
 
 **Output** (`lib/binfmt.py`'s `RECORD_DTYPE`/`COORD_DTYPE`). `distance_m`/`road_m`/`ascent_m`/
 `descent_m`/`max_ele_m`/`ungraded_m`/`inferred_m`/`sac_rank`/`via_ferrata` are all accumulated
@@ -160,14 +207,20 @@ the parent merges them all into the phase meta (`<step>_s`, `<step>_calls`) and 
 `step totals` line, with the same split per cell in the progress line. Summed across workers, so
 the columns exceed wall clock — read the ratios.
 
-- **doit wiring**: `task_dep=[compute_edge_profiles]` (edges.npy's `time_s`/`ascent_m`/`descent_m`
-  are rewritten in place by that task but aren't one of its declared targets, so `node_ele.npy`'s
-  file-hash freshness alone doesn't guarantee ordering — see `task_build_hub_edges`'s comment in
-  `dodo.py`), `file_dep=[base_graph/manifest.json, base_graph/node_ele.npy, huts.geojson,
-  start_points.npy, dem.tif]` (the DEM is a real new dependency here: hub elevation is sampled
-  directly from it, spec E3), `targets=[hut_edges/records.npy, start_edges/records.npy,
-  unsnapped_huts.json]`. `uptodate` uses `TaskOptionsChanged()` over the task's own params
-  (`--max-edge-km`/`--max-snap-m`/`--max-snap-ascent-m` plus two tracking-only params with no CLI
-  flag: `variants_json`, so a `config.graph.variants` grid edit is seen even though the script
-  reads it straight from config, and `schema_version`, `binfmt.SCHEMA_VERSION` again), so any of
-  those changes trigger a rerun automatically.
+- **doit wiring** (`dag/graph_building.py`, split three ways so retuning one knob doesn't force the
+  other two to rerun — see each task's own comment there): `task_snap_hubs` depends only on
+  `--max-snap-m`/`--max-snap-ascent-m` (`file_dep=[base_graph/manifest.json,
+  base_graph/node_ele.npy, huts.geojson, start_points.npy, dem.tif]`,
+  `targets=[hub_snaps.npy, hub_snap_interior.npy, unsnapped_huts.json]`); `task_gather_route_subgraphs`
+  depends only on `--max-edge-km` (same `file_dep` minus `dem.tif`,
+  `targets=[route_subgraphs/manifest.json]`); `task_build_hub_edges` depends on both
+  (`task_dep=[snap_hubs, gather_route_subgraphs]`, `file_dep=[base_graph/manifest.json,
+  huts.geojson, start_points.npy, hub_snaps.npy, hub_snap_interior.npy,
+  route_subgraphs/manifest.json]`, `targets=[hut_edges/records.npy, start_edges/records.npy]`) plus
+  a tracking-only `variants_json` param (`config.graph.variants`, read straight from config so a
+  grid edit wouldn't otherwise be seen as a param change). All three depend on `compute_edge_profiles`
+  as a `task_dep` (edges.npy's `time_s`/`ascent_m`/`descent_m` are rewritten in place by that task
+  but aren't one of its declared targets, so `node_ele.npy`'s file-hash freshness alone wouldn't
+  guarantee ordering) and carry the tracking-only `schema_version` param
+  (`binfmt.SCHEMA_VERSION`). `uptodate` uses `TaskOptionsChanged()` over each task's own params, so
+  a flag retune reruns just the task(s) that actually depend on it, without `doit forget`.

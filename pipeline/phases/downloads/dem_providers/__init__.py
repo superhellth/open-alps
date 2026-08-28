@@ -1,5 +1,11 @@
 """Registry mapping a provider name (dem.providerConfig.regions[].provider) to its provider
-module. See base.py for what every provider module must implement."""
+module. See base.py for what every provider module must implement.
+
+composite.py is deliberately NOT registered here: it doesn't implement the fetch()/to_4326_vrt()
+DemProvider contract (it has a differently-shaped fetch_regions()), and no config or code ever
+looks it up by name - fetch_dem.py imports fetch_regions directly. Registering it under a
+"composite" key would let get_provider("composite") return something that breaks as soon as a
+caller treats it as a real DemProvider."""
 
 from . import at_bev, bavaria_dgm, copernicus
 
@@ -19,12 +25,3 @@ def get_provider(name: str):
         raise KeyError(
             f"unknown DEM provider {name!r} - valid providers: {PROVIDER_NAMES}"
         ) from None
-
-
-# Imported after get_provider() is defined, not alongside the other providers above: composite.py
-# does `from . import get_provider` at module scope, which would be a circular import if composite
-# were imported while this package's own __init__ was still assembling get_provider.
-from . import composite  # noqa: E402
-
-_REGISTRY["composite"] = composite
-PROVIDER_NAMES = list(_REGISTRY)

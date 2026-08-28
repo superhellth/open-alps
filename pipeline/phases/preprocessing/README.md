@@ -23,13 +23,16 @@ hiking-ways network, and a bounded set of station/parking "hub" candidates.
   `graph_building/build_base_graph.py` streams.
 - **doit wiring**: `file_dep=[<region>-trails.osm.pbf, ...]`, `targets=[trails.osm.pbf]`.
 
-## `verify_trails.py` — gate, always reruns (`uptodate: [False]`)
+## `verify_trails.py` — gate
 
 - Checks `trails.osm.pbf` exists and is non-empty; exits nonzero otherwise, failing the doit run
   before anything downstream starts on a bad/missing input.
 - Runs `osmium fileinfo -e trails.osm.pbf` to print bbox/node/way/relation counts for a quick
   sanity read.
-- No target of its own — it's a gate, not a cacheable build step, hence the forced rerun.
+- Targets `verify_trails.stamp`, so an unchanged `trails.osm.pbf` (content hash) skips the rescan
+  instead of forcing a rerun on every `doit` invocation — the check result isn't itself cacheable,
+  but "did the input change" is, via the normal `file_dep` hash.
+- **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[verify_trails.stamp]`.
 
 ## `filter_start_points.py`
 
