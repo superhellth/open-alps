@@ -52,7 +52,7 @@ _DROP_BARRIER = {"gate", "lift_gate"}
 
 def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
     by_hut = defaultdict(list)
-    for r in records:
+    for edge_id, r in enumerate(records):
         if int(r["variant"]) != binfmt.VARIANT_FAST_ANY:
             continue
         type_name = _SOURCE_TYPE_NAME.get(int(r["from_type"]))
@@ -74,6 +74,7 @@ def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
             "hut_id": int(r["to_id"]),
             "start_id": start_id,
             "source_type": int(r["from_type"]),
+            "edge_id": edge_id,
             "access": access,
             "access_unknown": access is None,
             "distance_m": float(r["distance_m"]),
@@ -110,7 +111,7 @@ def build_tables(records: np.ndarray, id_table: dict, k: int) -> tuple:
 
     hut_to_starts = defaultdict(list)
     start_to_huts = defaultdict(list)
-    for r in records:
+    for edge_id, r in enumerate(records):
         type_name = _SOURCE_TYPE_NAME.get(int(r["from_type"]))
         if type_name is None:
             continue
@@ -120,6 +121,7 @@ def build_tables(records: np.ndarray, id_table: dict, k: int) -> tuple:
         hut_id = int(r["to_id"])
         row = {
             "hut_id": hut_id, "start_id": start_id, "source_type": int(r["from_type"]),
+            "edge_id": edge_id,
             "variant": int(r["variant"]), "distance_m": float(r["distance_m"]),
             "ascent_m": float(r["ascent_m"]), "descent_m": float(r["descent_m"]),
         }
@@ -155,6 +157,7 @@ if __name__ == "__main__":
             "hut_id": ("u2", np.array([r["hut_id"] for r in approaches], dtype="u2")),
             "start_id": ("u8", np.array([r["start_id"] for r in approaches], dtype="u8")),
             "source_type": ("u1", np.array([r["source_type"] for r in approaches], dtype="u1")),
+            "edge_id": ("u4", np.array([r["edge_id"] for r in approaches], dtype="u4")),
             "access_unknown": (
                 "u1", np.array([r["access_unknown"] for r in approaches], dtype="u1")
             ),
