@@ -87,6 +87,8 @@ export interface LegSummary {
   ascentM: number
   descentM: number
   distanceM: number
+  edgeId: number
+  reversed: boolean
 }
 
 export interface TourResult {

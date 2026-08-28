@@ -42,8 +42,8 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
     legs: LegSummary[]
     visitedKey: bigint
   }
-  function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number }): LegSummary {
-    return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM }
+  function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number; edgeId: number; reversed: boolean }): LegSummary {
+    return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM, edgeId: leg.edgeId, reversed: leg.reversed }
   }
 
   function insertDominant(bucket: Map<string, State>, key: string, state: State) {
