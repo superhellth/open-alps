@@ -20,6 +20,7 @@ export async function loadApproachesData(baseUrl = '/data'): Promise<ApproachesD
       accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
       ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       access: manifest.access_values ? manifest.access_values[i] : null,
+      edgeId: c.edge_id[i],
     }
   }
   return { records, reverseIndex: manifest.reverse_index }
