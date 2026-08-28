@@ -140,8 +140,11 @@ PUBLIC_FILES = [
     "huts.geojson",
     "hut-edges.pmtiles",
     "hut-edge-stats.json",
+    "hut-edge-geometry.bin",
+    "hut-edge-geometry.json",
     "start-edges.pmtiles",
-    "start-edge-stats.json",
+    "start-edge-geometry.bin",
+    "start-edge-geometry.json",
     "trails.pmtiles",
     "stations.geojson",
     "parking.geojson",
@@ -606,8 +609,8 @@ def _hut_edge_tiles_params():
     return [
         {"name": "min_zoom", "long": "min-zoom", "type": int, "default": tiles_cfg.get("minZoom", 6)},
         {"name": "max_zoom", "long": "max-zoom", "type": int, "default": tiles_cfg.get("maxZoom", 14)},
-        {"name": "hover_simplify_tolerance_deg", "long": "hover-simplify-tolerance-deg",
-         "type": float, "default": tiles_cfg.get("hoverSimplifyToleranceDeg", 0.0003)},
+        {"name": "simplify_tolerance_deg", "long": "simplify-tolerance-deg",
+         "type": float, "default": tiles_cfg.get("simplifyToleranceDeg", 0.0003)},
     ]
 
 
@@ -621,9 +624,11 @@ def task_build_hut_edge_tiles():
                 "--layer-name hut_edges",
                 f"--out-tiles {OSM_DIR / 'hut-edges.pmtiles'}",
                 f"--out-stats {OSM_DIR / 'hut-edge-stats.json'}",
+                f"--out-geometry-bin {OSM_DIR / 'hut-edge-geometry.bin'}",
+                f"--out-geometry-json {OSM_DIR / 'hut-edge-geometry.json'}",
                 "--min-zoom %(min_zoom)s",
                 "--max-zoom %(max_zoom)s",
-                "--hover-simplify-tolerance-deg %(hover_simplify_tolerance_deg)s",
+                "--simplify-tolerance-deg %(simplify_tolerance_deg)s",
             )
         ],
         "params": _hut_edge_tiles_params(),
@@ -633,7 +638,10 @@ def task_build_hut_edge_tiles():
         # wouldn't guarantee this task runs after it.
         "task_dep": ["build_profiles"],
         "file_dep": [rel(OSM_DIR / "hut_edges" / "records.npy")],
-        "targets": [rel(OSM_DIR / "hut-edges.pmtiles"), rel(OSM_DIR / "hut-edge-stats.json")],
+        "targets": [
+            rel(OSM_DIR / "hut-edges.pmtiles"), rel(OSM_DIR / "hut-edge-stats.json"),
+            rel(OSM_DIR / "hut-edge-geometry.bin"), rel(OSM_DIR / "hut-edge-geometry.json"),
+        ],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -648,15 +656,20 @@ def task_build_start_edge_tiles():
                 "--layer-name start_edges",
                 f"--out-tiles {OSM_DIR / 'start-edges.pmtiles'}",
                 f"--out-stats {OSM_DIR / 'start-edge-stats.json'}",
+                f"--out-geometry-bin {OSM_DIR / 'start-edge-geometry.bin'}",
+                f"--out-geometry-json {OSM_DIR / 'start-edge-geometry.json'}",
                 "--min-zoom %(min_zoom)s",
                 "--max-zoom %(max_zoom)s",
-                "--hover-simplify-tolerance-deg %(hover_simplify_tolerance_deg)s",
+                "--simplify-tolerance-deg %(simplify_tolerance_deg)s",
             )
         ],
         "params": _hut_edge_tiles_params(),
         "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
         "file_dep": [rel(OSM_DIR / "start_edges" / "records.npy")],
-        "targets": [rel(OSM_DIR / "start-edges.pmtiles"), rel(OSM_DIR / "start-edge-stats.json")],
+        "targets": [
+            rel(OSM_DIR / "start-edges.pmtiles"), rel(OSM_DIR / "start-edge-stats.json"),
+            rel(OSM_DIR / "start-edge-geometry.bin"), rel(OSM_DIR / "start-edge-geometry.json"),
+        ],
         "uptodate": [TaskOptionsChanged()],
     }
 
