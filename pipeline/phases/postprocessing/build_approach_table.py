@@ -42,7 +42,10 @@ from lib.timing import phase  # noqa: E402
 
 config = load_config()
 
-_SOURCE_TYPE_NAME = {binfmt.TYPE_PARKING: "parking", binfmt.TYPE_STATION: "station"}
+_SOURCE_TYPE_NAME = {
+    binfmt.TYPE_PARKING: "parking", binfmt.TYPE_STATION: "station",
+    binfmt.TYPE_PARTNER: "partner_betrieb",
+}
 _DROP_ACCESS = {"private", "no"}
 _DROP_BARRIER = {"gate", "lift_gate"}
 

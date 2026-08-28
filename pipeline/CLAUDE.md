@@ -96,6 +96,20 @@ stop being a split. Every long script now ends with a `step totals: ...` line:
 | `elevation/compute_edge_profiles.py` | `compute_edge_profiles` | `load_arrays`, `smooth`, `ascent_descent`, `write` |
 | `postprocessing/build_edge_tiles.py` | `build_edge_tiles` | `load_arrays`, `write_tiling_input`, `build_stats`, `write_stats`, `tippecanoe`, `mbtiles_to_pmtiles` |
 | `postprocessing/build_trail_tiles.py` | `build_trail_tiles` | `osmium_export_filter`, `tippecanoe`, `mbtiles_to_pmtiles` |
+| `downloads/download_extracts.py` | `download_extracts` | `download` (per region) |
+| `preprocessing/filter_trails.py` | `filter_trails` | `tag_filter`, `clip` (per region) |
+| `downloads/fetch_stations_parking.py` | `fetch_stations_parking` | `<layer>_tag_filter`, `<layer>_export` (per layer x region) |
+
+Every other DAG task (`preprocessing/merge_trails.py`, `preprocessing/verify_trails.py`,
+`downloads/fetch_huts.py`, `preprocessing/compute_hub_range.py`,
+`preprocessing/filter_start_points.py`, `downloads/fetch_dem.py`,
+`elevation/build_profiles.py`, `postprocessing/build_approach_table.py`,
+`postprocessing/build_edge_payload.py`, and `copy_public_data`'s inline action in `dodo.py`) now
+records a plain `phase(...)` per run too (no StepTimer split - either genuinely one unit of work,
+or not yet worth breaking down further) - so every task in the DAG has at least whole-task timing
+in `data/timings.jsonl`, even the ones not listed in this table.
+`elevation/build_dem_vrt.py` already did this before this pass, with two separate phase records
+(`materialize_regions`, `materialize_geotiff`) rather than one.
 
 The pre-existing `stream_osm` / `contract_structural` / `read_dem_window` /
 `per_edge_ascent_profile` `phase()` records are deliberately kept alongside the StepTimer steps

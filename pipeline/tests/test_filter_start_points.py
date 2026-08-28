@@ -62,6 +62,47 @@ def test_load_layer_reads_top_level_feature_id(tmp_path):
     assert points[0]["lon"] == 16.31 and points[0]["lat"] == 48.21
 
 
+def test_load_layer_reads_id_from_properties_for_non_osm_sources(tmp_path):
+    # partner_betriebe.geojson (fetch_huts.py, Task 2) is not OSM data - id is a plain int
+    # already sitting in properties["id"] (the ArcGIS layer's OBJECTID), not a "n12345"-shaped
+    # top-level Feature id the way stations/parking (osmium export) have.
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature",
+             "geometry": {"type": "Point", "coordinates": [11.5, 47.3]},
+             "properties": {"id": 502, "name": "Gasthof Alpenrose"}},
+        ],
+    }
+    path = tmp_path / "partner_betriebe.geojson"
+    path.write_text(json.dumps(fc), encoding="utf-8")
+
+    points = _load_layer(path, "partner_betrieb", id_from_properties=True)
+
+    assert len(points) == 1
+    assert points[0]["osm_id"] == 502
+    assert points[0]["type"] == "partner_betrieb"
+    assert points[0]["lon"] == 11.5 and points[0]["lat"] == 47.3
+
+
+def test_default_id_from_properties_is_false_existing_osm_behavior_unchanged(tmp_path):
+    # regression: Task 3 must not change the default path used by stations.geojson/parking.geojson
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "id": "n8091317",
+             "geometry": {"type": "Point", "coordinates": [16.31, 48.21]},
+             "properties": {"name": "Wien Ottakring"}},
+        ],
+    }
+    path = tmp_path / "stations.geojson"
+    path.write_text(json.dumps(fc), encoding="utf-8")
+
+    points = _load_layer(path, "station")
+
+    assert points[0]["osm_id"] == 8091317
+
+
 def test_start_points_retain_access_tags():
     table = build_id_table([
         {"type": "parking", "id": 1, "lon": 11.0, "lat": 47.0,
