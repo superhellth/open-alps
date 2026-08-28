@@ -150,7 +150,11 @@ Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start_ed
 because a client needs both a small per-hut table and a way to answer "does this loop close":
 
 **Approach table** (`approaches.bin`, columns per `approaches.json`'s `columns` manifest):
-`hut_id` (u2), `start_id` (u8 — raw OSM node id, exceeds u4 range), `source_type` (u1, `binfmt.TYPE_PARKING`/`TYPE_STATION`),
+`hut_id` (u2), `start_id` (u8 — a raw OSM node id for `TYPE_PARKING`/`TYPE_STATION` rows, or the
+Alpenverein ArcGIS layer's `OBJECTID` for `TYPE_PARTNER` rows — same field, two different id
+spaces depending on `source_type`, exceeds u4 range either way), `source_type` (u1,
+`binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER` — the last added
+`docs/superpowers/specs/2026-08-28-hut-classification-design.md`),
 `access_unknown` (u1, boolean), `distance_m`/`ascent_m`/`descent_m` (f4). The k best approaches per
 hut (k = `config.approach.k`, default 3), where "best" is **time-ranked** (DIN duration, §2), not
 distance-ranked, and restricted-access candidates (`access`/`motor_vehicle ∈ {private, no}`, gated
@@ -196,5 +200,9 @@ silent gap in coverage.
 
 ## 8. Hut metadata
 
-Already shipped as `huts.geojson` (unchanged by this backend) — this payload's `hut_ids` /
-`from_id`/`to_id` indices join back onto it by array position, not by any new id scheme.
+Already shipped as `huts.geojson` — this payload's `hut_ids` / `from_id`/`to_id` indices join back
+onto it by array position, not by any new id scheme. `huts.geojson` itself gained `hutType`
+(`"av"`/`"sonstige"`), `serviced` (bool), and `elevation` properties on 2026-08-28
+(`docs/superpowers/specs/2026-08-28-hut-classification-design.md`) — a separate, unrelated change
+from this backend, noted here only because a client reading this payload will likely also read
+those fields off the huts it joins onto.

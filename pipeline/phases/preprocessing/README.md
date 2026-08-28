@@ -52,7 +52,10 @@ Reduces station/parking candidates to the ones that can possibly matter, using a
   actually bounds hub count before `build_hub_edges.py`'s per-hub shortest-path search runs.
 - **Output**:
   - `data/osm/start_points.npy` — structured array `(lon: f8, lat: f8, osm_id: i8, type: u1)`,
-    `type` is `binfmt.TYPE_STATION` (1) / `binfmt.TYPE_PARKING` (2).
+    `type` is `binfmt.TYPE_STATION` (1) / `binfmt.TYPE_PARKING` (2) / `binfmt.TYPE_PARTNER` (3,
+    Bergsteigerdörfer partner businesses from `partner_betriebe.geojson` — `docs/superpowers/specs/
+    2026-08-28-hut-classification-design.md`). For `TYPE_PARTNER`, `osm_id` holds the ArcGIS
+    layer's `OBJECTID`, not a real OSM id.
   - `data/osm/start_points_id_table.json` — `{"station:<osm_id>": <osm_id>, "parking:<osm_id>":
     <osm_id>}`, kept for symmetry/debuggability; downstream code addresses points by the
     `(osm_id, type)` pair directly rather than through this table.
