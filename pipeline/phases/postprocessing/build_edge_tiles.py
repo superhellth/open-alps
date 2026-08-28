@@ -62,7 +62,7 @@ def rdp_keep_indices(coords: np.ndarray, epsilon: float) -> np.ndarray:
 
 
 def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray, id_table: dict,
-                 hover_tolerance_deg: float) -> list:
+                 simplify_tolerance_deg: float) -> tuple:
     inverse_id_table = {}
     for k, v in id_table.items():
         if ":" in k:
@@ -80,11 +80,16 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
 
     lons, lats = geometry["lon"], geometry["lat"]
     stats = []
+    point_counts = []
+    all_points = []
     for edge_id in range(len(records)):
         r = records[edge_id]
         g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
         coords = np.column_stack([lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]])
-        keep = rdp_keep_indices(coords, hover_tolerance_deg)
+        keep = rdp_keep_indices(coords, simplify_tolerance_deg)
+        simplified = coords[keep]
+        point_counts.append(len(simplified))
+        all_points.append(simplified)
 
         p_off, p_count = int(r["profile_offset"]), int(r["profile_count"])
         profile = profiles[p_off:p_off + p_count].tolist() if p_count else []
@@ -100,9 +105,11 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
             "elevation_profile": profile,
             "sac_scale": int(r["sac_rank"]) if r["sac_rank"] >= 0 else None,
             "via_ferrata": bool(r["via_ferrata"]),
-            "positions": coords[keep].tolist(),
         })
-    return stats
+    geometry_points = (
+        np.concatenate(all_points, axis=0).astype("f4") if all_points else np.zeros((0, 2), dtype="f4")
+    )
+    return stats, point_counts, geometry_points
 
 
 if __name__ == "__main__":
@@ -115,10 +122,12 @@ if __name__ == "__main__":
     parser.add_argument("--layer-name", required=True)
     parser.add_argument("--out-tiles", required=True)
     parser.add_argument("--out-stats", required=True)
+    parser.add_argument("--out-geometry-bin", required=True)
+    parser.add_argument("--out-geometry-json", required=True)
     parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
     parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
-    parser.add_argument("--hover-simplify-tolerance-deg", type=float,
-                         default=tiles_config.get("hoverSimplifyToleranceDeg", 0.0001))
+    parser.add_argument("--simplify-tolerance-deg", type=float,
+                         default=tiles_config.get("simplifyToleranceDeg", 0.0003))
     args = parser.parse_args()
 
     edges_dir = Path(args.edges_dir)
@@ -151,11 +160,18 @@ if __name__ == "__main__":
             tf.write(b"\n")
 
     with timer.step("build_stats"):
-        stats = build_stats(records, geometry, profiles, id_table,
-                            args.hover_simplify_tolerance_deg)
+        stats, point_counts, geometry_points = build_stats(
+            records, geometry, profiles, id_table, args.simplify_tolerance_deg
+        )
     print(f"writing {args.out_stats} ...", flush=True)
     with timer.step("write_stats"), open(args.out_stats, "wb") as f:
         f.write(orjson.dumps(stats))
+
+    print(f"writing {args.out_geometry_bin} and {args.out_geometry_json} ...", flush=True)
+    with timer.step("write_geometry"):
+        Path(args.out_geometry_bin).write_bytes(geometry_points.tobytes())
+        with open(args.out_geometry_json, "wb") as f:
+            f.write(orjson.dumps({"point_counts": point_counts}))
 
     mbtiles = edges_dir / "tiling_input.mbtiles"
     print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} ...", flush=True)
@@ -178,4 +194,4 @@ if __name__ == "__main__":
                min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
         pass
     print(f"step totals: {timer.summary()}", flush=True)
-    print(f"written {args.out_tiles} and {args.out_stats}")
+    print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin} and {args.out_geometry_json}")
