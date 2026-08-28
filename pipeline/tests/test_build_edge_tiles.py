@@ -39,3 +39,9 @@ def test_build_stats_resolves_ids_via_id_table():
     assert stats[0]["to_hut_id"] == "hut-xyz"
     assert stats[0]["ascent_m"] == 50.0
     assert stats[0]["elevation_profile"] == [1000.0, 1010.0, 1005.0]
+
+
+def test_type_prefix_includes_partner_betrieb():
+    from postprocessing.build_edge_tiles import TYPE_PREFIX
+
+    assert TYPE_PREFIX[binfmt.TYPE_PARTNER] == "partner_betrieb"

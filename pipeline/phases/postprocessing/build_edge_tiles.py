@@ -27,7 +27,10 @@ from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_edge_tiles.py"
 
-TYPE_PREFIX = {binfmt.TYPE_HUT: "hut", binfmt.TYPE_STATION: "station", binfmt.TYPE_PARKING: "parking"}
+TYPE_PREFIX = {
+    binfmt.TYPE_HUT: "hut", binfmt.TYPE_STATION: "station", binfmt.TYPE_PARKING: "parking",
+    binfmt.TYPE_PARTNER: "partner_betrieb",
+}
 
 
 def rdp_keep_indices(coords: np.ndarray, epsilon: float) -> np.ndarray:

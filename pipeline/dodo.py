@@ -16,11 +16,20 @@ A task always reruns if any file in its file_dep changed (content hash, not mtim
 by default) or if the specific pipeline.config.json values it reads changed - each task pulls
 those into "params" (CLI flags defaulted from CONFIG) and tracks them with TaskOptionsChanged,
 never depends on the whole config file's bytes, so an edit to an unrelated key doesn't invalidate
-every task downstream of it (unlike run_all.py's old global config-mtime check). verify_trails has
-no target (it's a gate, not a cacheable output) and declares `uptodate: [False]` to force a rerun
-every time it's selected.
-build_profiles does too - it never reads the DEM (spec B4) and is usually run precisely to retune
---profile-points, so a fresh run is always cheap (seconds). build_base_graph/build_hub_edges/
+every task downstream of it (unlike run_all.py's old global config-mtime check). verify_trails
+used to declare `uptodate: [False]` to force a rerun every time it's selected, reasoning that a
+gate has no cacheable output - true of the check result, but not of "did trails.osm.pbf change",
+which file_dep already tracks. It now targets a verify_trails.stamp (same pattern as
+compute_edge_profiles' edge_profiles.stamp below) so an unchanged trails.osm.pbf skips the
+osmium re-scan.
+build_profiles used to force-rerun on the same "gate has no cacheable output" reasoning, but it doesn't
+apply here either: it writes profile_offset/profile_count into hut_edges/records.npy and
+start_edges/records.npy in place, which are also its own file_dep (build_hub_edges owns those files as
+targets, so build_profiles can't - see task_build_profiles's comment). A standalone doit experiment
+confirmed doit hashes file_dep *after* a successful run, so a task that mutates its own file_dep in
+place still caches correctly - it isn't perpetually "stale" from its own last write. build_profiles now
+uses TaskOptionsChanged() like every other params task, so a --profile-points retune (spec B4: must not
+force a re-route or a DEM read) still reruns it, but an unchanged run is skipped. build_base_graph/build_hub_edges/
 sample_base_elevation/compute_edge_profiles are NOT force-rerun despite compute_edge_profiles
 looking similarly cheap-to-retune - their predecessor build_hut_graph.py was measured at ~4.1
 hours (data/timings.jsonl, 2026-08-15), and sample_base_elevation genuinely reads the whole DEM
@@ -34,12 +43,14 @@ run_all.py - `doit <task>` / bare `doit` are pipeline-step invocations.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
 
 
 class TaskOptionsChanged:
@@ -106,6 +117,25 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG = load_config()
 REGION_NAMES = [r["name"] for r in CONFIG["regions"]]
 
+
+def rel(path) -> str:
+    """file_dep/targets entries below use this instead of a bare str(path): doit's dependency DB
+    keys each file's tracked hash by the literal string given here, resolved against doit's own
+    cwd (SCRIPT_DIR - pipeline/, where dodo.py lives; both pixi.toml's [tasks] and the README's
+    manual conda flow always run doit from there). OSM_DIR/DEM_DIR/PUBLIC_DATA_DIR (lib/pipeline.py)
+    are absolute, .resolve()d paths - deliberately, so a worktree's data/ symlink and the main
+    checkout's real data/ dir produce identical strings on the SAME machine/OS. But an absolute
+    path is still different text on native Windows (C:\\Users\\...) vs WSL (/home/...) for the
+    exact same file, so switching between them makes every file_dep look "moved" and forces a full
+    rebuild (seen switching this pipeline from native-Windows conda to WSL/pixi - see git history
+    around the pixi migration). A path relative to SCRIPT_DIR, normalized to forward slashes, is
+    identical text regardless of OS or which machine last ran doit - only the *content* of
+    pipeline.config.json/scripts should invalidate a task, not which OS wrote the cache.
+    Actions (subprocess/script CLI args) are untouched by this - they still use OSM_DIR/DEM_DIR
+    absolute paths directly, since those are just runtime arguments to a fresh process each run,
+    not something doit hashes and compares across runs."""
+    return os.path.relpath(Path(path).resolve(), SCRIPT_DIR).replace(os.sep, "/")
+
 PUBLIC_FILES = [
     "huts.geojson",
     "hut-edges.pmtiles",
@@ -141,7 +171,7 @@ def task_download_extracts():
             {"name": "regions_json", "long": "regions-json", "type": str,
              "default": json.dumps(CONFIG["regions"], sort_keys=True)},
         ],
-        "targets": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
+        "targets": [rel(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -160,9 +190,9 @@ def task_filter_trails():
         ],
         # hub_range.json (compute_hub_range.py, task 05a below) needs huts.geojson first, so this
         # early-numbered task now depends on a later-numbered one - see 05a's comment.
-        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
-        + [str(OSM_DIR / "hub_range.geojson")],
-        "targets": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
+        "file_dep": [rel(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES]
+        + [rel(OSM_DIR / "hub_range.geojson")],
+        "targets": [rel(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -172,18 +202,23 @@ def task_filter_trails():
 def task_merge_trails():
     return {
         "actions": [py("phases/preprocessing/merge_trails.py")],
-        "file_dep": [str(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
-        "targets": [str(OSM_DIR / "trails.osm.pbf")],
+        "file_dep": [rel(OSM_DIR / f"{n}-trails.osm.pbf") for n in REGION_NAMES],
+        "targets": [rel(OSM_DIR / "trails.osm.pbf")],
     }
 
 
-# ---- 04: verify (gate, no target - always runs when selected) -------------
+# ---- 04: verify (gate) ------------------------------------------------------
+# Targets verify_trails.stamp so this is freshness-checked like any other task - trails.osm.pbf
+# unchanged (content hash) means the file already passed osmium fileinfo -e last time, so
+# re-scanning it buys nothing. Used to force-rerun via uptodate:[False] on the reasoning that a
+# gate has no cacheable output; that's true of the *check result* but not of "did the input
+# change", which file_dep already tracks regardless of targets.
 
 def task_verify_trails():
     return {
         "actions": [py("phases/preprocessing/verify_trails.py")],
-        "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
-        "uptodate": [False],
+        "file_dep": [rel(OSM_DIR / "trails.osm.pbf")],
+        "targets": [rel(OSM_DIR / "verify_trails.stamp")],
     }
 
 
@@ -200,7 +235,7 @@ def task_fetch_huts():
             {"name": "bbox_json", "long": "bbox-json", "type": str,
              "default": json.dumps(CONFIG["bbox"], sort_keys=True)},
         ],
-        "targets": [str(OSM_DIR / "huts.geojson")],
+        "targets": [rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "partner_betriebe.geojson")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -221,8 +256,8 @@ def task_compute_hub_range():
             {"name": "max_edge_km", "long": "max-edge-km", "type": float,
              "default": CONFIG["graph"]["maxEdgeKm"]},
         ],
-        "file_dep": [str(OSM_DIR / "huts.geojson")],
-        "targets": [str(OSM_DIR / "hub_range.geojson")],
+        "file_dep": [rel(OSM_DIR / "huts.geojson")],
+        "targets": [rel(OSM_DIR / "hub_range.geojson")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -232,8 +267,8 @@ def task_compute_hub_range():
 def task_fetch_stations_parking():
     return {
         "actions": [py("phases/downloads/fetch_stations_parking.py")],
-        "file_dep": [str(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
-        "targets": [str(OSM_DIR / "stations.geojson"), str(OSM_DIR / "parking.geojson")],
+        "file_dep": [rel(OSM_DIR / "raw" / f"{n}-latest.osm.pbf") for n in REGION_NAMES],
+        "targets": [rel(OSM_DIR / "stations.geojson"), rel(OSM_DIR / "parking.geojson")],
     }
 
 
@@ -251,10 +286,10 @@ def task_filter_start_points():
              "default": CONFIG["graph"]["maxEdgeKm"]},
         ],
         "file_dep": [
-            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "stations.geojson"),
-            str(OSM_DIR / "parking.geojson"),
+            rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "stations.geojson"),
+            rel(OSM_DIR / "parking.geojson"), rel(OSM_DIR / "partner_betriebe.geojson"),
         ],
-        "targets": [str(OSM_DIR / "start_points.npy"), str(OSM_DIR / "start_points_id_table.json")],
+        "targets": [rel(OSM_DIR / "start_points.npy"), rel(OSM_DIR / "start_points_id_table.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -288,8 +323,8 @@ def task_build_base_graph():
             {"name": "schema_version", "long": "schema-version", "type": int,
              "default": binfmt.SCHEMA_VERSION},
         ],
-        "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
-        "targets": [str(OSM_DIR / "base_graph" / "manifest.json")],
+        "file_dep": [rel(OSM_DIR / "trails.osm.pbf")],
+        "targets": [rel(OSM_DIR / "base_graph" / "manifest.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -321,15 +356,15 @@ def task_snap_hubs():
         # sharing one target) - node_ele.npy is the completion signal instead.
         "task_dep": ["compute_edge_profiles"],
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
-            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
+            rel(OSM_DIR / "base_graph" / "manifest.json"), rel(OSM_DIR / "base_graph" / "node_ele.npy"),
+            rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "start_points.npy"),
             # spec E3: hub elevation is sampled directly from the DEM (same raster as
             # node_ele.npy/interior_ele.npy).
-            str(DEM_DIR / "dem.tif"),
+            rel(DEM_DIR / "dem.tif"),
         ],
         "targets": [
-            str(OSM_DIR / "hub_snaps.npy"), str(OSM_DIR / "hub_snap_interior.npy"),
-            str(OSM_DIR / "unsnapped_huts.json"),
+            rel(OSM_DIR / "hub_snaps.npy"), rel(OSM_DIR / "hub_snap_interior.npy"),
+            rel(OSM_DIR / "unsnapped_huts.json"),
         ],
         "uptodate": [TaskOptionsChanged()],
     }
@@ -357,10 +392,10 @@ def task_gather_route_subgraphs():
         ],
         "task_dep": ["compute_edge_profiles"],  # same in-place-edit reasoning as task_snap_hubs
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "manifest.json"), str(OSM_DIR / "base_graph" / "node_ele.npy"),
-            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
+            rel(OSM_DIR / "base_graph" / "manifest.json"), rel(OSM_DIR / "base_graph" / "node_ele.npy"),
+            rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "start_points.npy"),
         ],
-        "targets": [str(OSM_DIR / "route_subgraphs" / "manifest.json")],
+        "targets": [rel(OSM_DIR / "route_subgraphs" / "manifest.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -387,13 +422,13 @@ def task_build_hub_edges():
         ],
         "task_dep": ["snap_hubs", "gather_route_subgraphs"],
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "manifest.json"),
-            str(OSM_DIR / "huts.geojson"), str(OSM_DIR / "start_points.npy"),
-            str(OSM_DIR / "hub_snaps.npy"), str(OSM_DIR / "hub_snap_interior.npy"),
-            str(OSM_DIR / "route_subgraphs" / "manifest.json"),
+            rel(OSM_DIR / "base_graph" / "manifest.json"),
+            rel(OSM_DIR / "huts.geojson"), rel(OSM_DIR / "start_points.npy"),
+            rel(OSM_DIR / "hub_snaps.npy"), rel(OSM_DIR / "hub_snap_interior.npy"),
+            rel(OSM_DIR / "route_subgraphs" / "manifest.json"),
         ],
         "targets": [
-            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+            rel(OSM_DIR / "hut_edges" / "records.npy"), rel(OSM_DIR / "start_edges" / "records.npy"),
         ],
         "uptodate": [TaskOptionsChanged()],
     }
@@ -422,7 +457,7 @@ def task_fetch_dem():
             {"name": "max_edge_km", "long": "max-edge-km", "type": float,
              "default": CONFIG["graph"]["maxEdgeKm"]},
         ],
-        "targets": [str(DEM_DIR / "fetch_manifest.json")],
+        "targets": [rel(DEM_DIR / "fetch_manifest.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -430,8 +465,8 @@ def task_fetch_dem():
 def task_build_dem_vrt():
     return {
         "actions": [py("phases/elevation/build_dem_vrt.py")],
-        "file_dep": [str(DEM_DIR / "fetch_manifest.json")],
-        "targets": [str(DEM_DIR / "dem.vrt"), str(DEM_DIR / "dem.tif")],
+        "file_dep": [rel(DEM_DIR / "fetch_manifest.json")],
+        "targets": [rel(DEM_DIR / "dem.vrt"), rel(DEM_DIR / "dem.tif")],
     }
 
 
@@ -450,9 +485,9 @@ def task_sample_base_elevation():
         ],
         # spec B5: the elevation pass genuinely needs the DEM, so declare it - the previous
         # numbering-convention ordering let a stale dem.tif through silently.
-        "file_dep": [str(OSM_DIR / "base_graph" / "manifest.json"), str(DEM_DIR / "dem.tif")],
+        "file_dep": [rel(OSM_DIR / "base_graph" / "manifest.json"), rel(DEM_DIR / "dem.tif")],
         "targets": [
-            str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
+            rel(OSM_DIR / "base_graph" / "node_ele.npy"), rel(OSM_DIR / "base_graph" / "interior_ele.npy"),
         ],
     }
 
@@ -480,20 +515,32 @@ def task_compute_edge_profiles():
         ],
         "task_dep": ["sample_base_elevation"],
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "node_ele.npy"), str(OSM_DIR / "base_graph" / "interior_ele.npy"),
+            rel(OSM_DIR / "base_graph" / "node_ele.npy"), rel(OSM_DIR / "base_graph" / "interior_ele.npy"),
         ],
         # edges.npy is rewritten in place but can't be this task's target - build_base_graph
         # already owns it as a target, and doit forbids two tasks sharing one target (same
         # reason build_hub_edges below signals off node_ele.npy instead of edges.npy). This
         # stamp file is the completion signal instead.
-        "targets": [str(OSM_DIR / "base_graph" / "edge_profiles.stamp")],
+        "targets": [rel(OSM_DIR / "base_graph" / "edge_profiles.stamp")],
         "uptodate": [TaskOptionsChanged()],
     }
 
 
 # ---- 09b: display-only elevation profiles (never reads the DEM) -----------
-# Always reruns when selected - genuinely cheap (seconds), and usually run precisely to retune
-# --profile-points (spec B4: that retune must not force a re-route or a DEM read).
+# Meant to be cheap, and usually run precisely to retune --profile-points (spec B4: that retune
+# must not force a re-route or a DEM read). It genuinely was seconds until start_edges grew to
+# ~235k records / ~200M geometry points (2026-08-27), at which point build_profiles.py's
+# _fill_unmatched - a point-at-a-time Python loop - dominated with 800+s of the ~830s run
+# (data/timings.jsonl). Fixed by vectorizing _fill_unmatched; if this task gets slow again, check
+# timings.jsonl's hut_edges_s/start_edges_s split before assuming it's still cheap.
+#
+# Used to declare uptodate: [False] to force a rerun on every `doit` invocation, reasoning that a
+# task depending on (file_dep) a file it also mutates in place - hut_edges/records.npy and
+# start_edges/records.npy, where it fills profile_offset/profile_count, while build_hub_edges owns
+# them as targets - would otherwise look permanently stale from its own last write. A standalone
+# doit experiment (dodo.py history/PR description) showed that's wrong: doit hashes file_dep
+# *after* a successful run, so it correctly detects "unchanged since I last touched it" and skips.
+# Now uses TaskOptionsChanged() like every other params task instead.
 
 def task_build_profiles():
     return {
@@ -507,8 +554,8 @@ def task_build_profiles():
         ],
         "task_dep": ["build_hub_edges"],  # same file, not just same mtime - see docstring above
         "file_dep": [
-            str(OSM_DIR / "base_graph" / "interior_ele.npy"),
-            str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "start_edges" / "records.npy"),
+            rel(OSM_DIR / "base_graph" / "interior_ele.npy"),
+            rel(OSM_DIR / "hut_edges" / "records.npy"), rel(OSM_DIR / "start_edges" / "records.npy"),
         ],
         # records.npy is rewritten in place (profile_offset/profile_count filled) but NOT listed
         # as a target here: build_hub_edges already owns it as a target, and doit forbids two
@@ -516,9 +563,9 @@ def task_build_profiles():
         # Downstream tasks that need to wait for the in-place rewrite (the tile builders) declare
         # an explicit task_dep on build_profiles instead of relying on a shared target/file_dep link.
         "targets": [
-            str(OSM_DIR / "hut_edges" / "profiles.npy"), str(OSM_DIR / "start_edges" / "profiles.npy"),
+            rel(OSM_DIR / "hut_edges" / "profiles.npy"), rel(OSM_DIR / "start_edges" / "profiles.npy"),
         ],
-        "uptodate": [False],
+        "uptodate": [TaskOptionsChanged()],
     }
 
 
@@ -542,8 +589,8 @@ def task_build_trail_tiles():
             {"name": "max_zoom", "long": "max-zoom", "type": int,
              "default": tiles_cfg.get("maxZoom", 14)},
         ],
-        "file_dep": [str(OSM_DIR / "trails.osm.pbf")],
-        "targets": [str(OSM_DIR / "trails.pmtiles")],
+        "file_dep": [rel(OSM_DIR / "trails.osm.pbf")],
+        "targets": [rel(OSM_DIR / "trails.pmtiles")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -585,8 +632,8 @@ def task_build_hut_edge_tiles():
         # targets (see task_build_profiles's comment), so doit's file-hash freshness check alone
         # wouldn't guarantee this task runs after it.
         "task_dep": ["build_profiles"],
-        "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy")],
-        "targets": [str(OSM_DIR / "hut-edges.pmtiles"), str(OSM_DIR / "hut-edge-stats.json")],
+        "file_dep": [rel(OSM_DIR / "hut_edges" / "records.npy")],
+        "targets": [rel(OSM_DIR / "hut-edges.pmtiles"), rel(OSM_DIR / "hut-edge-stats.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -608,8 +655,8 @@ def task_build_start_edge_tiles():
         ],
         "params": _hut_edge_tiles_params(),
         "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
-        "file_dep": [str(OSM_DIR / "start_edges" / "records.npy")],
-        "targets": [str(OSM_DIR / "start-edges.pmtiles"), str(OSM_DIR / "start-edge-stats.json")],
+        "file_dep": [rel(OSM_DIR / "start_edges" / "records.npy")],
+        "targets": [rel(OSM_DIR / "start-edges.pmtiles"), rel(OSM_DIR / "start-edge-stats.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -636,10 +683,10 @@ def task_build_approach_table():
             {"name": "k", "long": "k", "type": int, "default": CONFIG["approach"]["k"]},
         ],
         "file_dep": [
-            str(OSM_DIR / "start_edges" / "records.npy"),
-            str(OSM_DIR / "start_points_id_table.json"),
+            rel(OSM_DIR / "start_edges" / "records.npy"),
+            rel(OSM_DIR / "start_points_id_table.json"),
         ],
-        "targets": [str(OSM_DIR / "approaches.bin"), str(OSM_DIR / "approaches.json")],
+        "targets": [rel(OSM_DIR / "approaches.bin"), rel(OSM_DIR / "approaches.json")],
         "uptodate": [TaskOptionsChanged()],
     }
 
@@ -658,8 +705,8 @@ def task_build_edge_payload():
             )
         ],
         "task_dep": ["build_profiles"],  # see task_build_hut_edge_tiles's comment
-        "file_dep": [str(OSM_DIR / "hut_edges" / "records.npy"), str(OSM_DIR / "huts.geojson")],
-        "targets": [str(OSM_DIR / "hut-edge-payload.bin"), str(OSM_DIR / "hut-edge-payload.json")],
+        "file_dep": [rel(OSM_DIR / "hut_edges" / "records.npy"), rel(OSM_DIR / "huts.geojson")],
+        "targets": [rel(OSM_DIR / "hut-edge-payload.bin"), rel(OSM_DIR / "hut-edge-payload.json")],
     }
 
 
@@ -669,20 +716,21 @@ def task_copy_public_data():
     def copy_all():
         import shutil
 
-        PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        for name in PUBLIC_FILES:
-            src = OSM_DIR / name
-            if not src.exists():
-                print(f"  skip {name} (not built yet)")
-                continue
-            shutil.copy2(src, PUBLIC_DATA_DIR / name)
-            print(f"  {src} -> {PUBLIC_DATA_DIR / name}")
+        with phase("dodo.py", "copy_public_data"):
+            PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            for name in PUBLIC_FILES:
+                src = OSM_DIR / name
+                if not src.exists():
+                    print(f"  skip {name} (not built yet)")
+                    continue
+                shutil.copy2(src, PUBLIC_DATA_DIR / name)
+                print(f"  {src} -> {PUBLIC_DATA_DIR / name}")
 
-    deps = [str(OSM_DIR / name) for name in PUBLIC_FILES if (OSM_DIR / name).exists()] or [
-        str(OSM_DIR / name) for name in PUBLIC_FILES
+    deps = [rel(OSM_DIR / name) for name in PUBLIC_FILES if (OSM_DIR / name).exists()] or [
+        rel(OSM_DIR / name) for name in PUBLIC_FILES
     ]
     return {
         "actions": [copy_all],
         "file_dep": deps,
-        "targets": [str(PUBLIC_DATA_DIR / name) for name in PUBLIC_FILES],
+        "targets": [rel(PUBLIC_DATA_DIR / name) for name in PUBLIC_FILES],
     }

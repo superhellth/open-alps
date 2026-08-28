@@ -145,7 +145,10 @@ point's absolute elevation, not a delta, so a col strictly inside one contracted
 `RECORD_DTYPE = (from_id i8, to_id i8, from_type u1, to_type u1, variant u1, distance_m f4,
 road_m f4, ascent_m f4, descent_m f4, max_ele_m f4, ungraded_m f4, inferred_m f4, snap_m f4,
 sac_rank i1, via_ferrata bool, geom_offset i8, geom_count i4, profile_offset i8, profile_count
-i4)` — `from_type`/`to_type` are `binfmt.TYPE_HUT` (0) / `TYPE_STATION` (1) / `TYPE_PARKING` (2);
+i4)` — `from_type`/`to_type` are `binfmt.TYPE_HUT` (0) / `TYPE_STATION` (1) / `TYPE_PARKING` (2) /
+`TYPE_PARTNER` (3, added `docs/superpowers/specs/2026-08-28-hut-classification-design.md` —
+Bergsteigerdörfer partner businesses, routed one-directionally to huts exactly like
+stations/parking, never hut↔hut);
 `variant` is one of `binfmt.VARIANT_*` (`lib/variants.py`'s `VARIANTS` dict has the per-row
 definitions). `geom_offset`/`geom_count` slice into the sibling `geometry.npy` (`COORD_DTYPE`), a
 flat polyline vertex pool exactly like `base_graph/interior.npy`.

@@ -52,16 +52,27 @@ The site's actual call adds `f=pbf&cacheHint=true&maxRecordCountFactor=4&resultO
 | --- | --- | --- |
 | `OBJECTID` | oid | |
 | `id` | string | GUID-ish hut id used in URL params (`cabinIds`) |
-| `verein_nr` | int | club number — **this is the OHRS `tenantCode`** (8 = ÖAV, 5 = DAV) |
+| `verein_nr` | int | club number — **this is the OHRS `tenantCode`** (8 = ÖAV, 5 = DAV, 3 = Alpenverein Südtirol). Fetched by `fetch_huts.py` and drives its classification alongside `kategorie_nr` — see `docs/superpowers/specs/2026-08-28-hut-classification-design.md` for the full `verein_nr`/`kategorie_nr` → `hutType` table. |
 | `verein_name` | string | |
 | `nr` | int | |
 | `name` | string | hut name |
-| `kategorie_nr` / `kategorie` | int / string | |
-| `meereshoehe` | int | elevation, m |
+| `kategorie_nr` / `kategorie` | int / string | `kategorie_nr` is fetched by `fetch_huts.py` and drives its hut/Selbstversorger/Partnerbetrieb classification (`docs/superpowers/specs/2026-08-28-hut-classification-design.md`); `kategorie` (the string label) is not fetched. |
+| `meereshoehe` | int | elevation, m. Fetched by `fetch_huts.py` since 2026-08-28 and shipped as `huts.geojson`'s `elevation` property; `0` means missing (not sea level) — a handful of records have no value entered. |
 | `bild` | string | image reference |
 | `email`, `homepage`, `telefon` | string | |
 | `ohrs_hut_id` | string | join key to OHRS; **null for direct-booking-only huts** |
 | `huettenwirt_name` | string | |
+
+### Hut classification
+
+`fetch_huts.py` fetches `kategorie_nr`/`verein_nr` (alongside `id`/`name`/`meereshoehe`) and
+classifies every record using logic recovered from the AV's own ArcGIS layer renderer (an Arcade
+`valueExpression`, decoded from a HAR capture of the raw map view — see
+`docs/superpowers/specs/2026-08-28-hut-classification-design.md` for the full recovery and the
+investigation numbers behind it). Records classified `"partner"` (Bergsteigerdörfer partner
+businesses, private lodging — not Alpine Club huts) are written to `partner_betriebe.geojson`
+instead of `huts.geojson`, and routed through the pipeline as an access-point hub type
+(`binfmt.TYPE_PARTNER`) alongside stations/parking, not as a hut.
 
 Related layer referenced by the app (tours, not used by this project):
 `.../AVT_CAA_TOUR_View_L/FeatureServer/0` — fields `GlobalID`, `Huettenliste` (comma-separated hut
