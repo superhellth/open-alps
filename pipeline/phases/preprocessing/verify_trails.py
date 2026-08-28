@@ -3,6 +3,11 @@
 Sanity-check a .osm.pbf file: bbox, node/way/relation counts. Exits nonzero if the file is
 missing or empty, so run_all.py can gate on it automatically.
 Usage: python pipeline/phases/preprocessing/verify_trails.py [filename]   (default: trails.osm.pbf)
+
+Writes a verify_trails.stamp next to the checked file on success, so dodo.py's task_verify_trails
+can use it as a normal file_dep-hash-tracked target instead of forcing a rerun on every `doit`
+invocation - osmium fileinfo -e re-scans the whole merged trails.osm.pbf, which isn't free on a
+multi-region file, and re-verifying an unchanged file buys nothing.
 """
 
 import subprocess
@@ -20,3 +25,4 @@ if not path.exists() or path.stat().st_size == 0:
     sys.exit(1)
 
 subprocess.run(["osmium", "fileinfo", "-e", str(path)], check=True)
+(OSM_DIR / "verify_trails.stamp").write_text(f"verified {filename}\n", encoding="utf-8")
