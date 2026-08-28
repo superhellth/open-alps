@@ -41,20 +41,30 @@ def filter_to_hut_range(start_points: list, hut_coords: np.ndarray, max_edge_km:
     return kept
 
 
-def _load_layer(path: Path, point_type: str) -> list:
+def _load_layer(path: Path, point_type: str, id_from_properties: bool = False) -> list:
+    """id_from_properties=False (default - stations/parking, fetch_stations_parking.py's osmium
+    export --add-unique-id=type_id): the id is on the Feature itself, OSM-export shaped
+    ("n8091317" - type-prefix char + numeric id), not inside "properties" - properties only ever
+    holds the tag fields KEEP_FIELDS lets through.
+
+    id_from_properties=True (partner_betriebe.geojson, from fetch_huts.py/the Alpenverein ArcGIS
+    layer - not OSM data at all): the id is a plain int already sitting in properties["id"] (the
+    ArcGIS layer's OBJECTID, see fetch_huts.py's split_features), no prefix character to strip."""
     with open(path, encoding="utf-8") as f:
         fc = json.load(f)
     points = []
     for feat in fc["features"]:
-        # fetch_stations_parking.py's osmium export --add-unique-id=type_id puts the id on the
-        # Feature itself (e.g. "n8091317" - type prefix + numeric OSM id), not inside
-        # "properties" - properties only ever holds the tag fields KEEP_FIELDS lets through.
-        raw_id = feat.get("id")
-        if raw_id is None:
+        if id_from_properties:
+            raw_id = feat.get("properties", {}).get("id")
+            osm_id = None if raw_id is None else int(raw_id)
+        else:
+            raw_id = feat.get("id")
+            osm_id = None if raw_id is None else int(raw_id[1:])
+        if osm_id is None:
             continue
         lon, lat = feat["geometry"]["coordinates"]
         points.append({
-            "lon": lon, "lat": lat, "osm_id": int(raw_id[1:]), "type": point_type,
+            "lon": lon, "lat": lat, "osm_id": osm_id, "type": point_type,
             "properties": feat.get("properties", {}),
         })
     return points
@@ -85,6 +95,8 @@ if __name__ == "__main__":
         all_points = (
             _load_layer(OSM_DIR / "stations.geojson", "station")
             + _load_layer(OSM_DIR / "parking.geojson", "parking")
+            + _load_layer(OSM_DIR / "partner_betriebe.geojson", "partner_betrieb",
+                          id_from_properties=True)
         )
         print(f"start-point candidates: {len(all_points)}")
 
@@ -94,7 +106,10 @@ if __name__ == "__main__":
         arr = np.zeros(len(kept), dtype=[
             ("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1"),
         ])
-        type_code = {"station": binfmt.TYPE_STATION, "parking": binfmt.TYPE_PARKING}
+        type_code = {
+            "station": binfmt.TYPE_STATION, "parking": binfmt.TYPE_PARKING,
+            "partner_betrieb": binfmt.TYPE_PARTNER,
+        }
         for i, p in enumerate(kept):
             arr[i] = (p["lon"], p["lat"], p["osm_id"], type_code[p["type"]])
 
