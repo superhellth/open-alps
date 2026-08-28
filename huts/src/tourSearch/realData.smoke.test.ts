@@ -37,6 +37,9 @@ function loadApproachesFromDisk(): ApproachesData {
       accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
       ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       access: manifest.access_values ? manifest.access_values[i] : null,
+      // approaches.bin predating this plan's Task 2 has no edge_id column - guard until
+      // huts/public/data/ is rebuilt by a (separately gated) doit run.
+      edgeId: c.edge_id ? c.edge_id[i] : -1,
     }
   }
   return { records, reverseIndex: manifest.reverse_index }

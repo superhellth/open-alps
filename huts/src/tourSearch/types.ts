@@ -12,6 +12,7 @@ export interface ApproachRecord {
   ascentM: number
   descentM: number
   access: string | null
+  edgeId: number
 }
 
 export interface HutEdgeRecord {
