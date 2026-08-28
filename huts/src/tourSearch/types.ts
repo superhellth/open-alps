@@ -53,6 +53,8 @@ export interface HutLeg extends LegBase {
   ungradedM: number
   inferredM: number
   snapM: number
+  edgeId: number
+  reversed: boolean
 }
 
 export interface StartLeg extends LegBase {
@@ -61,6 +63,8 @@ export interface StartLeg extends LegBase {
   hutIndex?: number
   accessUnknown?: boolean
   access?: string | null
+  edgeId: number
+  reversed: boolean
 }
 
 export type Leg = HutLeg | StartLeg
