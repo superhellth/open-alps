@@ -49,6 +49,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import DATA_DIR, DEM_DIR, OSM_DIR, PUBLIC_DATA_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
 
 
 class TaskOptionsChanged:
@@ -695,14 +696,15 @@ def task_copy_public_data():
     def copy_all():
         import shutil
 
-        PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
-        for name in PUBLIC_FILES:
-            src = OSM_DIR / name
-            if not src.exists():
-                print(f"  skip {name} (not built yet)")
-                continue
-            shutil.copy2(src, PUBLIC_DATA_DIR / name)
-            print(f"  {src} -> {PUBLIC_DATA_DIR / name}")
+        with phase("dodo.py", "copy_public_data"):
+            PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
+            for name in PUBLIC_FILES:
+                src = OSM_DIR / name
+                if not src.exists():
+                    print(f"  skip {name} (not built yet)")
+                    continue
+                shutil.copy2(src, PUBLIC_DATA_DIR / name)
+                print(f"  {src} -> {PUBLIC_DATA_DIR / name}")
 
     deps = [str(OSM_DIR / name) for name in PUBLIC_FILES if (OSM_DIR / name).exists()] or [
         str(OSM_DIR / name) for name in PUBLIC_FILES

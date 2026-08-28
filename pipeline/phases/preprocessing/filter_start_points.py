@@ -21,6 +21,9 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.pipeline import OSM_DIR, hut_points, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "filter_start_points.py"
 
 config = load_config()
 
@@ -77,25 +80,26 @@ if __name__ == "__main__":
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
     args = parser.parse_args()
 
-    hut_coords = np.array(hut_points(OSM_DIR / "huts.geojson"))
-    all_points = (
-        _load_layer(OSM_DIR / "stations.geojson", "station")
-        + _load_layer(OSM_DIR / "parking.geojson", "parking")
-    )
-    print(f"start-point candidates: {len(all_points)}")
+    with phase(SCRIPT_NAME, "filter_start_points"):
+        hut_coords = np.array(hut_points(OSM_DIR / "huts.geojson"))
+        all_points = (
+            _load_layer(OSM_DIR / "stations.geojson", "station")
+            + _load_layer(OSM_DIR / "parking.geojson", "parking")
+        )
+        print(f"start-point candidates: {len(all_points)}")
 
-    kept = filter_to_hut_range(all_points, hut_coords, args.max_edge_km)
-    print(f"kept within maxEdgeKm of a hut: {len(kept)}")
+        kept = filter_to_hut_range(all_points, hut_coords, args.max_edge_km)
+        print(f"kept within maxEdgeKm of a hut: {len(kept)}")
 
-    arr = np.zeros(len(kept), dtype=[
-        ("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1"),
-    ])
-    type_code = {"station": binfmt.TYPE_STATION, "parking": binfmt.TYPE_PARKING}
-    for i, p in enumerate(kept):
-        arr[i] = (p["lon"], p["lat"], p["osm_id"], type_code[p["type"]])
+        arr = np.zeros(len(kept), dtype=[
+            ("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1"),
+        ])
+        type_code = {"station": binfmt.TYPE_STATION, "parking": binfmt.TYPE_PARKING}
+        for i, p in enumerate(kept):
+            arr[i] = (p["lon"], p["lat"], p["osm_id"], type_code[p["type"]])
 
-    binfmt.save_array(OSM_DIR / "start_points.npy", arr)
-    id_table = build_id_table(kept)
-    with open(OSM_DIR / "start_points_id_table.json", "w", encoding="utf-8") as f:
-        json.dump(id_table, f)
+        binfmt.save_array(OSM_DIR / "start_points.npy", arr)
+        id_table = build_id_table(kept)
+        with open(OSM_DIR / "start_points_id_table.json", "w", encoding="utf-8") as f:
+            json.dump(id_table, f)
     print(f"written {OSM_DIR / 'start_points.npy'}")
