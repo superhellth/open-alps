@@ -127,7 +127,7 @@ def test_edge_tile_tasks_track_zoom_and_hover_tolerance():
     for task_fn in (dodo.task_build_hut_edge_tiles, dodo.task_build_start_edge_tiles):
         task = task_fn()
         param_names = {p["name"] for p in task["params"]}
-        assert {"min_zoom", "max_zoom", "hover_simplify_tolerance_deg"} <= param_names
+        assert {"min_zoom", "max_zoom", "simplify_tolerance_deg"} <= param_names
         assert task["uptodate"]
 
     trail_task = dodo.task_build_trail_tiles()
