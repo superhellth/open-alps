@@ -264,7 +264,7 @@ def to_4326_vrt(tile_paths: list[Path], out_vrt_path: Path) -> Path:
     # mosaic does the same reprojection work in 2 process spawns total instead of tens of
     # thousands. Since output here is -of VRT (a lazy warped VRT, not materialized pixels), the
     # actual resampling doesn't run at this call - it's deferred to whenever something reads real
-    # pixels through it (materialize_geotiff() in lib/pipeline.py). -wo NUM_THREADS=ALL_CPUS is a
+    # pixels through it (materialize_geotiff() in lib/dem.py). -wo NUM_THREADS=ALL_CPUS is a
     # warp option, though, and GDAL persists warp options into the output VRT's XML - so it's not
     # wasted, it configures that later, deferred read to multithread the real resampling when it
     # finally happens (-multi, by contrast, only affects immediate chunked I/O at call time, which

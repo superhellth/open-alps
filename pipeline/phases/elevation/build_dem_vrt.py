@@ -2,7 +2,7 @@
 """
 Reprojects/merges the DEM tiles data/dem/fetch_manifest.json (fetch_dem.py's output) points at
 into data/dem/dem.vrt, then materializes that into data/dem/dem.tif for add_elevation.py to
-sample - see pipeline/lib/pipeline.py's build_dem_vrt()/materialize_geotiff() docstrings for what
+sample - see pipeline/lib/dem.py's build_dem_vrt()/materialize_geotiff() docstrings for what
 each step does. Split out from fetch_dem.py so retuning a provider's to_4326_vrt() (e.g.
 bavaria_dgm.py's -srcnodata fix) or the materialize step is a rerun of this script alone - no
 network access, no re-running Bavaria's coverage-grid WMS tile-existence check, nothing but local
@@ -17,7 +17,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from lib.pipeline import DEM_DIR, build_dem_vrt, materialize_geotiff  # noqa: E402
+from lib.dem import build_dem_vrt, materialize_geotiff  # noqa: E402
+from lib.pipeline import DEM_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "build_dem_vrt.py"

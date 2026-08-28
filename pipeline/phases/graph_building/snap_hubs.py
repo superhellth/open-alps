@@ -22,11 +22,9 @@ Usage: python pipeline/phases/graph_building/snap_hubs.py [--max-snap-m 100] [--
 """
 
 import argparse
-import json
 import os
 import sys
 import time
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -34,7 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib import hub_snap  # noqa: E402
 from lib.grid import Grid  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, hut_points, load_config  # noqa: E402
+from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
+from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.progress import ProgressTracker, run_pool  # noqa: E402
 from lib.subgraph import gather_padded_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
@@ -99,26 +99,7 @@ if __name__ == "__main__":
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    hut_coords = hut_points(OSM_DIR / "huts.geojson")
-    hut_coords_by_id = {i: tuple(c) for i, c in enumerate(hut_coords)}
-    with open(OSM_DIR / "huts.geojson", encoding="utf-8") as f:
-        hut_names_by_id = {
-            i: feat["properties"].get("name", "")
-            for i, feat in enumerate(json.load(f)["features"])
-        }
-    start_points = binfmt.load_array(OSM_DIR / "start_points.npy", mmap=False)
-    start_by_id = {}
-    for p in start_points:
-        start_by_id.setdefault(int(p["type"]), {})[int(p["osm_id"])] = (float(p["lon"]), float(p["lat"]))
-
-    all_hub_coords_by_type = {binfmt.TYPE_HUT: hut_coords_by_id, **start_by_id}
-
-    all_hubs_flat = [
-        {"id": hid, "type": htype, "lon": lon, "lat": lat,
-         "name": hut_names_by_id.get(hid, "") if htype == binfmt.TYPE_HUT else ""}
-        for htype, coords_by_id in all_hub_coords_by_type.items()
-        for hid, (lon, lat) in coords_by_id.items()
-    ]
+    all_hubs_flat = load_all_hubs(OSM_DIR)
 
     dem_path = Path(args.dem)
     if dem_path.exists():
@@ -128,10 +109,7 @@ if __name__ == "__main__":
         print(f"WARNING: {dem_path} not found - snap gaps priced without a vertical component",
               flush=True)
 
-    hubs_by_cell = {}
-    for hub in all_hubs_flat:
-        cid = grid.cell_id_for_point(hub["lon"], hub["lat"])
-        hubs_by_cell.setdefault(cid, []).append(hub)
+    hubs_by_cell = bucket_by_cell(all_hubs_flat, grid)
 
     buffer_km = _buffer_km_for(args.max_snap_m)
     tasks = [
@@ -147,31 +125,24 @@ if __name__ == "__main__":
 
     all_persisted = {}
     all_rejections = []
-    completed = 0
-    t_start = time.time()
+    tracker = ProgressTracker(total)
     run_timer = StepTimer()
     with phase(SCRIPT_NAME, "hub_snap", n_cells=total, n_huts=n_huts,
                n_access_points=len(all_hubs_flat) - n_huts,
                workers=args.workers or os.cpu_count(), max_snap_m=args.max_snap_m,
                max_snap_ascent_m=args.max_snap_ascent_m, buffer_km=buffer_km) as meta:
-        with ProcessPoolExecutor(max_workers=args.workers) as pool:
-            futures = [pool.submit(_run_cell, t) for t in tasks]
-            for fut in as_completed(futures):
-                result = fut.result()
-                all_persisted.update(result["persisted"])
-                all_rejections.extend(result["rejections"])
-                run_timer.merge(result["timer"])
-                completed += 1
-                overall_elapsed = time.time() - t_start
-                avg_s = overall_elapsed / completed
-                remaining_s = avg_s * (total - completed)
-                print(
-                    f"[{completed}/{total}] cell {result['cell_id']}: {result['elapsed_s']:.1f}s "
-                    f"({result['n_hubs']} hubs, {result['n_nodes']:,} nodes, "
-                    f"{result['n_edges']:,} edges) -> {len(result['persisted'])} snapped "
-                    f"| elapsed {overall_elapsed/60:.1f}m, ~{remaining_s/60:.1f}m remaining",
-                    flush=True,
-                )
+        for result in run_pool(tasks, _run_cell, workers=args.workers):
+            all_persisted.update(result["persisted"])
+            all_rejections.extend(result["rejections"])
+            run_timer.merge(result["timer"])
+            eta = tracker.eta_suffix()
+            print(
+                f"[{tracker.completed}/{total}] cell {result['cell_id']}: "
+                f"{result['elapsed_s']:.1f}s ({result['n_hubs']} hubs, {result['n_nodes']:,} "
+                f"nodes, {result['n_edges']:,} edges) -> {len(result['persisted'])} snapped "
+                f"| {eta}",
+                flush=True,
+            )
         meta.update(run_timer.as_meta())
 
     print(f"step totals (summed over workers): {run_timer.summary()}", flush=True)

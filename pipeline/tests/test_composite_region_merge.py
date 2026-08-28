@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 import downloads.dem_providers as dem_providers  # noqa: E402
 from downloads.dem_providers import composite  # noqa: E402
-from lib import pipeline as pipeline_lib  # noqa: E402
-from lib.pipeline import HUB_RANGE_SAFETY_MARGIN  # noqa: E402
+from lib import dem as dem_lib  # noqa: E402
+from lib.geo import HUB_RANGE_SAFETY_MARGIN  # noqa: E402
 
 
 def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path, monkeypatch):
@@ -48,15 +48,15 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
     ) or out
 
     monkeypatch.setattr(dem_providers, "get_provider", lambda name: fake_provider)
-    monkeypatch.setattr(pipeline_lib, "normalize_colorinterp", lambda p: p)
+    monkeypatch.setattr(dem_lib, "normalize_colorinterp", lambda p: p)
     monkeypatch.setattr(
-        pipeline_lib, "materialize_geotiff",
+        dem_lib, "materialize_geotiff",
         lambda vrt_path, out_path: calls.append(("materialize_geotiff", vrt_path, out_path)) or out_path
     )
 
     merge_calls = []
     monkeypatch.setattr(
-        pipeline_lib.subprocess, "run",
+        dem_lib.subprocess, "run",
         lambda args, **kwargs: merge_calls.append(args)
     )
 
@@ -76,7 +76,7 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
     ]
 
     out_vrt = tmp_path / "dem.vrt"
-    result = pipeline_lib.build_dem_vrt(manifest, tmp_path)
+    result = dem_lib.build_dem_vrt(manifest, tmp_path)
 
     assert result == out_vrt
     assert sum(1 for c in calls if c[0] == "to_4326_vrt") == 2

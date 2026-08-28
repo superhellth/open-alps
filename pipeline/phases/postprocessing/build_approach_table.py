@@ -165,11 +165,7 @@ if __name__ == "__main__":
             "ascent_m": ("f4", np.array([r["ascent_m"] for r in approaches], dtype="f4")),
             "descent_m": ("f4", np.array([r["descent_m"] for r in approaches], dtype="f4")),
         }
-        payload = bytearray()
-        column_manifest = {}
-        for name, (dtype, col) in columns.items():
-            column_manifest[name] = {"dtype": dtype, "offset": len(payload)}
-            payload.extend(col.tobytes())
+        payload, column_manifest = binfmt.pack_columns(columns)
         Path(args.out_bin).parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_bin, "wb") as f:
             f.write(payload)
