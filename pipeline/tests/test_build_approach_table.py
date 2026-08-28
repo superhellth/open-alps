@@ -24,6 +24,14 @@ def _records(rows):
     return np.array(rows, dtype=binfmt.RECORD_DTYPE)
 
 
+def test_partner_betrieb_source_type_is_not_dropped():
+    records = _records([_record(1, binfmt.TYPE_PARTNER, 7, 1000.0, 50.0, 20.0)])
+
+    rows = select_approaches(records, id_table={"partner_betrieb": {"1": {"access": None}}}, k=3)
+
+    assert any(r["start_id"] == 1 for r in rows)
+
+
 def test_restricted_access_start_points_are_dropped():
     records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
     rows = select_approaches(records, id_table={"parking": {"1": {"access": "private"}}}, k=3)
