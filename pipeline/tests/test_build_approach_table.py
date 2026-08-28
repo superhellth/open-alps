@@ -65,6 +65,35 @@ def test_k_best_never_fills_every_slot_from_one_source_type():
     assert binfmt.TYPE_PARKING in types and binfmt.TYPE_STATION in types
 
 
+def test_edge_id_is_the_true_start_edges_row_index():
+    records = _records([
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0),    # row 0
+        _record(2, binfmt.TYPE_PARKING, 7, 1100.0, 60.0, 25.0),    # row 1
+        _record(10, binfmt.TYPE_STATION, 7, 5000.0, 200.0, 100.0),  # row 2
+    ])
+    rows = select_approaches(records, id_table={}, k=3)
+    by_start_id = {r["start_id"]: r["edge_id"] for r in rows}
+    assert by_start_id[1] == 0
+    assert by_start_id[2] == 1
+    assert by_start_id[10] == 2
+
+
+def test_edge_id_round_trips_through_build_tables():
+    records = _records([
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0),    # row 0
+        _record(10, binfmt.TYPE_STATION, 7, 5000.0, 200.0, 100.0),  # row 1
+    ])
+    approaches, index = build_tables(records, id_table={}, k=3)
+    approach_edge_id = {r["start_id"]: r["edge_id"] for r in approaches}
+    assert approach_edge_id[1] == 0
+    assert approach_edge_id[10] == 1
+    for start_id, expected_edge_id in approach_edge_id.items():
+        for row in index["start_to_huts"][start_id]:
+            assert row["edge_id"] == expected_edge_id
+        matching = [row for row in index["hut_to_starts"][7] if row["start_id"] == start_id]
+        assert matching and all(row["edge_id"] == expected_edge_id for row in matching)
+
+
 def test_no_approach_time_cap_is_applied():
     # spec E1: maxApproachTime is deleted. An approach is a full leg, bounded by the same
     # pipeline range cap as any hut-hut edge and filtered client-side by the same maxLegTime.
