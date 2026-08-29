@@ -37,8 +37,10 @@ the download server."""
 
 import math
 import os
+import socket
 import subprocess
 import threading
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -52,6 +54,9 @@ from rasterio.warp import transform_bounds, transform
 
 TILE_URL_TEMPLATE = "https://download1.bayernwolke.de/a/dgm/dgm5xyz/{tile_id}.zip"
 DEFAULT_WORKERS = 16
+TILE_DOWNLOAD_TIMEOUT_S = 30  # fail fast instead of hanging on the OS's ~110s connect timeout
+TILE_DOWNLOAD_RETRIES = 4
+TILE_DOWNLOAD_RETRY_BACKOFF_S = 5
 
 GRID_WMS_URL = "https://geoservices.bayern.de/od/wms/grid/v1/opendatagrid"
 GRID_LAYER = "dgm5xyz"
@@ -199,12 +204,19 @@ def _download_tile(tile_id: str, raw_dir: Path) -> Path | None:
             return grids[0]
 
     if not zip_path.exists():
-        try:
-            urllib.request.urlretrieve(tile_url(tile_id), zip_path)
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
+        for attempt in range(TILE_DOWNLOAD_RETRIES):
+            try:
+                urllib.request.urlretrieve(tile_url(tile_id), zip_path)
+                break
+            except urllib.error.HTTPError as e:
+                if e.code == 404:
+                    return None
+                raise
+            except (urllib.error.URLError, TimeoutError, ConnectionError):
+                zip_path.unlink(missing_ok=True)
+                if attempt == TILE_DOWNLOAD_RETRIES - 1:
+                    raise
+                time.sleep(TILE_DOWNLOAD_RETRY_BACKOFF_S * (attempt + 1))
 
     with zipfile.ZipFile(zip_path) as zf:
         zf.extractall(extract_dir)
@@ -215,6 +227,7 @@ def _download_tile(tile_id: str, raw_dir: Path) -> Path | None:
 
 def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
     raw_dir.mkdir(parents=True, exist_ok=True)
+    socket.setdefaulttimeout(TILE_DOWNLOAD_TIMEOUT_S)
 
     points = provider_config.get("points")
     if points:

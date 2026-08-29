@@ -14,6 +14,9 @@ import os
 import sys
 from pathlib import Path
 
+from doit.cmd_base import Globals
+from doit.reporter import ConsoleReporter
+
 from lib.pipeline import SCRIPTS_DIR
 
 SCRIPT_DIR = SCRIPTS_DIR  # pipeline/, where dodo.py lives - see rel()'s docstring
@@ -80,6 +83,26 @@ class TaskOptionsChanged:
     def __call__(self, task, values):
         task.init_options()
         return values.get("_task_options") == json.dumps(task.options, sort_keys=True)
+
+
+class FlushingReporter(ConsoleReporter):
+    """Flush the dep-db to disk after every task, not just once at the end of the whole run.
+
+    doit's runner only calls dep_manager.close() (-> one dump() of every task's saved digest)
+    in a try/finally around the *entire* task_dispatcher loop (doit/runner.py Runner.finish()) -
+    a clean failure or Ctrl-C still hits that finally, but a harder kill (OOM - this pipeline
+    materializes multi-GB GeoTIFFs, terminal closed, SIGKILL) skips it, silently losing every
+    already-completed task's state from that run, not just the one that was interrupted. That's
+    what made fetch_dem/build_dem_vrt look like they never ran even right after they did.
+
+    Requires DOIT_CONFIG["backend"] = "json": JsonDB.dump() just reopens/rewrites the whole file
+    each call, safe to call repeatedly. DbmDB/SqliteDB both permanently close their handle/
+    connection on the first dump() (doit/dependency.py), so a second call would raise."""
+
+    def add_success(self, task):
+        super().add_success(task)
+        if Globals.dep_manager is not None:
+            Globals.dep_manager.backend.dump()
 
 
 def cli_param(name, long, type_, default):
