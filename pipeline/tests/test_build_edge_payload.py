@@ -17,6 +17,7 @@ def _record(from_id, to_id, variant, distance_m=1000.0, ascent_m=50.0, descent_m
         from_id, to_id, binfmt.TYPE_HUT, binfmt.TYPE_HUT, variant,
         distance_m, road_m, ascent_m, descent_m, max_ele_m, ungraded_m, inferred_m, snap_m,
         sac_rank, via_ferrata, 0, 2, 0, 3,
+        0, 0, (-1,) * 8, 0, (-1,) * 8, 0,
     )
 
 

@@ -34,6 +34,18 @@ RECORD_DTYPE = np.dtype([
     ("sac_rank", "i1"), ("via_ferrata", "bool"),
     ("geom_offset", "i8"), ("geom_count", "i4"),
     ("profile_offset", "i8"), ("profile_count", "i4"),
+    # Trail-segment identity for the "avoid overlapping tracks" check (docs/superpowers/specs/
+    # 2026-08-29-avoid-overlapping-tracks-design.md). edge_id_offset/count index a per-record
+    # ascending-sorted slice of hut_edges/edge_ids.npy (the FULL base-edge-id set, for the
+    # non-adjacent-leg overlap check). prefix_ids/suffix_ids are the first/last K_TRAVERSAL ids in
+    # TRAVERSAL order (prefix: outward from from_id: suffix: outward from to_id, i.e. the last-K
+    # run reversed) - needed because the shared-hub exemption (spec §4) has to walk inward from a
+    # specific endpoint, which the sorted set can't do. -1-padded past *_count when a record has
+    # fewer than K_TRAVERSAL base edges. Only ever populated for hut_edges records - start_edges
+    # keeps these zeroed (spec §1: gated on a parameter, hut-edges-only).
+    ("edge_id_offset", "i8"), ("edge_id_count", "i4"),
+    ("prefix_ids", "i4", (8,)), ("prefix_count", "u1"),
+    ("suffix_ids", "i4", (8,)), ("suffix_count", "u1"),
 ])
 PROFILE_DTYPE = np.dtype("f4")
 
@@ -87,11 +99,11 @@ VARIANT_NAMES = {
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
 
-# Bump on any EDGE_DTYPE/RECORD_DTYPE change. Tracked as a dodo.py task param (see
-# task_build_base_graph/task_build_hub_edges) purely so TaskOptionsChanged sees a code-only dtype
-# change and forces a rebuild - there is no CLI flag for it, the same "tracking-only param" pattern
-# already used for regions_json/bbox_json.
-SCHEMA_VERSION = 2
+# Split into three independent tracking params (one per dtype each cares about) so bumping one
+# doesn't force-rerun tasks that don't touch that dtype - see pipeline/dag/graph_building.py.
+EDGE_SCHEMA_VERSION = 2
+SNAP_SCHEMA_VERSION = 2
+RECORD_SCHEMA_VERSION = 3  # bumped: RECORD_DTYPE gained edge_id_offset/count + prefix/suffix ids
 
 
 def save_array(path: Path, array: np.ndarray) -> None:
