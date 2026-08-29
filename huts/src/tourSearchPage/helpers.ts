@@ -1,4 +1,4 @@
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { SearchResult, TourResult } from '../tourSearch/types.js'
 
 export const PAGE_SIZE = 25
@@ -6,6 +6,7 @@ export const PAGE_SIZE = 25
 export const SOURCE_TYPE_LABEL: Record<number, string> = {
   [SOURCE_TYPE_STATION]: 'Bahnhof',
   [SOURCE_TYPE_PARKING]: 'Parkplatz',
+  [SOURCE_TYPE_PARTNER]: 'Partnerbetrieb',
 }
 
 export type SortKey = 'duration' | 'ascent' | 'distance' | 'legCount'
@@ -33,6 +34,7 @@ const KILL_COUNTER_GUIDANCE: Record<string, (n: number) => string> = {
   maxEleM: (n) => `${n} Etappen lagen über der Maximalhöhe — Maximalhöhe erhöhen`,
   viaFerrata: (n) => `${n} Etappen enthielten Klettersteige — "Klettersteige erlauben" aktivieren`,
   revisit: () => '', // internal search bookkeeping, not user-actionable
+  hutFiltered: (n) => `${n} mögliche Etappenziele wurden durch den Hüttenfilter ausgeschlossen — Hüttenarten wieder aktivieren`,
 }
 
 export function killCounterGuidance(killCounters: SearchResult['killCounters']): string[] {
@@ -61,6 +63,12 @@ export function legWaypointLabels(
 // legCountMax above this is flagged as potentially slow in the UI (spec D2: "guard the
 // expensive end of the range" - no Worker, no cancel, so an unexpected blowup freezes the tab).
 export const LEG_COUNT_SLOW_WARNING_THRESHOLD = 8
+
+// Shown instead of the generic empty-results message when mode === 'village': only 56 of 110
+// Partnerbetriebe are connected to the trail network, so zero results there far more often
+// reflects sparse coverage than an over-tight filter.
+export const VILLAGE_EMPTY_STATE_HINT =
+  'Nur wenige Bergsteigerdörfer/Partnerbetriebe sind an das Wegenetz angebunden — probiere einen anderen Modus, falls hier keine Touren erscheinen.'
 
 // OSM feature ids in parking.geojson/stations.geojson are prefixed ("n123") - approaches.startId
 // is the bare numeric OSM node id, so this strips the prefix to join the two.
