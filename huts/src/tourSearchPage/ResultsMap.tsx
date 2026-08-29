@@ -4,7 +4,9 @@ import { MapContainer, TileLayer, CircleMarker, Tooltip, Polyline, useMap } from
 import 'leaflet/dist/leaflet.css'
 import { loadLegGeometry, type GeometryLayer } from '../tourSearch/loadLegGeometry.js'
 import type { TourResult } from '../tourSearch/types.js'
+import { SOURCE_TYPE_PARTNER } from '../tourSearch/types.js'
 import type { StartPoint } from './types.js'
+import { OPERATOR_COLOR, OPERATOR_LABEL, PARTNER_COLOR, PARTNER_LABEL, hutClassLabel, type HutClass } from '../hutClass.js'
 
 const TILE_LAYER = (
   <TileLayer
@@ -116,12 +118,14 @@ function chainSegments(
 // - so the map is never replaced by the list. A single MapContainer stays mounted across
 // selection changes so the current pan/zoom survives deselecting a tour.
 const ResultsMap = memo(function ResultsMap({
-  selectedChain, hutNameById, hutCoordsById, startById,
+  selectedChain, hutNameById, hutCoordsById, startById, hutClassByIndex, excludedHutIndices,
 }: {
   selectedChain: TourResult | null
   hutNameById: Map<number, string>
   hutCoordsById: Map<number, { lat: number; lng: number }>
   startById: Map<number, StartPoint>
+  hutClassByIndex: Map<number, HutClass>
+  excludedHutIndices: Set<number>
 }) {
   const positions = useMemo(
     () => (selectedChain ? chainPositions(selectedChain, hutCoordsById, startById) : []),
@@ -138,18 +142,44 @@ const ResultsMap = memo(function ResultsMap({
         {TILE_LAYER}
         <RecenterOnSelect selectedChain={selectedChain} hutCoordsById={hutCoordsById} startById={startById} />
         {!showChain &&
-          [...hutCoordsById.entries()].map(([id, { lat, lng }]) => (
-            <CircleMarker
-              key={id}
-              center={[lat, lng]}
-              radius={4}
-              pathOptions={{ color: '#1b5e20', fillColor: '#43a047', fillOpacity: 0.9, weight: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -6]}>
-                {hutNameById.get(id) ?? id}
-              </Tooltip>
-            </CircleMarker>
-          ))}
+          [...hutCoordsById.entries()].map(([id, { lat, lng }]) => {
+            const cls = hutClassByIndex.get(id)
+            const excluded = excludedHutIndices.has(id)
+            const color = cls ? OPERATOR_COLOR[cls.operator] : '#1b5e20'
+            return (
+              <CircleMarker
+                key={id}
+                center={[lat, lng]}
+                radius={4}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: excluded ? 0.25 : cls?.serviced === false ? 0.15 : 0.9,
+                  weight: excluded ? 1 : cls?.serviced === false ? 2 : 1,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {hutNameById.get(id) ?? id}
+                  {cls ? ` — ${hutClassLabel(cls)}` : ''}
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
+        {!showChain &&
+          [...startById.entries()]
+            .filter(([, s]) => s.sourceType === SOURCE_TYPE_PARTNER)
+            .map(([id, s]) => (
+              <CircleMarker
+                key={`partner-${id}`}
+                center={[s.lat, s.lng]}
+                radius={5}
+                pathOptions={{ color: PARTNER_COLOR, fillColor: PARTNER_COLOR, fillOpacity: 0.9, weight: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {s.name ?? PARTNER_LABEL} ({PARTNER_LABEL})
+                </Tooltip>
+              </CircleMarker>
+            ))}
         {showChain && (
           <>
             {segments.map((seg, i) => (
@@ -163,17 +193,40 @@ const ResultsMap = memo(function ResultsMap({
                 }
               />
             ))}
-            {positions.map((pos, i) => (
-              <CircleMarker
-                key={i}
-                center={pos}
-                radius={i === 0 || i === positions.length - 1 ? 6 : 5}
-                pathOptions={{ color: '#1b5e20', fillColor: '#43a047', fillOpacity: 1 }}
-              />
-            ))}
+            {positions.map((pos, i) => {
+              const isEndpoint = i === 0 || i === positions.length - 1
+              const hutIndex = !isEndpoint ? selectedChain!.huts[i - 1] : null
+              const cls = hutIndex != null ? hutClassByIndex.get(hutIndex) : undefined
+              const color = cls ? OPERATOR_COLOR[cls.operator] : '#1b5e20'
+              return (
+                <CircleMarker
+                  key={i}
+                  center={pos}
+                  radius={isEndpoint ? 6 : 5}
+                  pathOptions={{ color, fillColor: color, fillOpacity: 1 }}
+                />
+              )
+            })}
           </>
         )}
       </MapContainer>
+      <Box
+        sx={{
+          position: 'absolute', top: 8, right: 8, zIndex: 1000, bgcolor: 'background.paper',
+          p: 1, borderRadius: 1, fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: 0.5,
+        }}
+      >
+        {(Object.keys(OPERATOR_LABEL) as (keyof typeof OPERATOR_LABEL)[]).map((op) => (
+          <Box key={op} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: OPERATOR_COLOR[op] }} />
+            {OPERATOR_LABEL[op]}
+          </Box>
+        ))}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: PARTNER_COLOR }} />
+          {PARTNER_LABEL}
+        </Box>
+      </Box>
       {showChain && anyFallback && (
         <Typography
           variant="caption"

@@ -6,6 +6,7 @@ import ResultsMap from './ResultsMap.js'
 import * as loadLegGeometryModule from '../tourSearch/loadLegGeometry.js'
 import type { TourResult } from '../tourSearch/types.js'
 import type { StartPoint } from './types.js'
+import type { HutClass } from '../hutClass.js'
 
 // vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
 // afterEach(cleanup) never registers - without this, each test's render() stacks onto the
@@ -53,7 +54,7 @@ describe('ResultsMap real geometry integration', () => {
       .mockImplementationOnce(() => d0.promise)
       .mockImplementationOnce(() => d1.promise)
 
-    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />)
+    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
 
     expect(screen.getByText(CAPTION)).toBeInTheDocument()
     expect(spy).toHaveBeenNthCalledWith(1, 'start_edges', 5, false)
@@ -69,7 +70,7 @@ describe('ResultsMap real geometry integration', () => {
   it('a leg whose fetch rejects keeps its straight-line fallback instead of crashing', async () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockRejectedValue(new Error('range not supported'))
 
-    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />)
+    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
 
     await waitFor(() => expect(screen.getByText(CAPTION)).toBeInTheDocument())
   })
@@ -78,7 +79,7 @@ describe('ResultsMap real geometry integration', () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockReturnValue(new Promise(() => {}))
 
     const { container } = render(
-      <ResultsMap selectedChain={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />,
+      <ResultsMap selectedChain={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
     )
 
     expect(screen.queryByText(CAPTION)).not.toBeInTheDocument()
@@ -86,5 +87,22 @@ describe('ResultsMap real geometry integration', () => {
     // queryable at rest - the hut circle marker itself is the observable proxy for "the full hut
     // list is shown" instead.
     expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(1)
+  })
+})
+
+describe('ResultsMap hut-class styling', () => {
+  it('colours the overview markers by operator and dims huts excluded by the active filter', () => {
+    const hutClassByIndex = new Map<number, HutClass>([[0, { operator: 'av', serviced: true }]])
+    const { container } = render(
+      <ResultsMap
+        selectedChain={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById}
+        startById={startById} hutClassByIndex={hutClassByIndex}
+        excludedHutIndices={new Set([0])}
+      />,
+    )
+    const marker = container.querySelector('path.leaflet-interactive')
+    expect(marker).not.toBeNull()
+    // Dimmed excluded huts render with reduced fill-opacity rather than being removed.
+    expect(marker?.getAttribute('fill-opacity')).not.toBe('0.9')
   })
 })

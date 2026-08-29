@@ -128,6 +128,20 @@ function TourSearchPage() {
     return chains
   }, [result, sortKey])
 
+  const hutClassByIndex = useMemo(
+    () => new Map(hutsByIndex.map((c, i) => [i, c]).filter((entry): entry is [number, HutClass] => entry[1] != null)),
+    [hutsByIndex],
+  )
+  const excludedHutIndices = useMemo(() => {
+    const allowed = graphData ? buildQuery(form, hutsByIndex).allowedHutIndices : undefined
+    if (!allowed) return new Set<number>()
+    const excluded = new Set<number>()
+    hutClassByIndex.forEach((_c, i) => {
+      if (!allowed.has(i)) excluded.add(i)
+    })
+    return excluded
+  }, [form, hutsByIndex, hutClassByIndex, graphData])
+
   const pageCount = Math.max(1, Math.ceil(displayedChains.length / PAGE_SIZE))
   const pageChains = useMemo(
     () => displayedChains.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -326,13 +340,22 @@ function TourSearchPage() {
               sortKey={sortKey}
               setSortKey={setSortKey}
               hutNameById={hutNameById}
+              hutClassByIndex={hutClassByIndex}
               startLabel={startLabel}
               expandedChain={expandedChain}
               setExpandedChain={setExpandedChain}
+              mode={form.mode}
             />
           )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <ResultsMap selectedChain={selectedChain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />
+            <ResultsMap
+              selectedChain={selectedChain}
+              hutNameById={hutNameById}
+              hutCoordsById={hutCoordsById}
+              startById={startById}
+              hutClassByIndex={hutClassByIndex}
+              excludedHutIndices={excludedHutIndices}
+            />
           </Box>
         </Box>
       </Box>
