@@ -1,3 +1,4 @@
+import json
 import sys
 from pathlib import Path
 
@@ -155,3 +156,169 @@ def test_build_tour_record_shape_matches_write_edge_records_expectations():
     assert record["geometry"][0] == (10.0, 47.0)
     assert record["geometry"][-1] == (10.01, 47.0)
     assert record["base_edge_ids"] == [7]
+
+
+from lib.hub_snap import pack_hub_snaps, to_persisted  # noqa: E402
+from lib.hub_snap import SnapResult  # noqa: E402
+
+
+def _write_synthetic_base_graph(tmp_path, grid):
+    """A single straight 4-node, 3-edge chain (~1km per edge) - LQR/WelserHöhenweg-shaped (single
+    part, no unsnapped huts, spec Testing section) rather than Chiemgautour's 45-fragment geometry,
+    which belongs in the §2.7 spike, not a golden test."""
+    coords = [(0.0, 0.0), (0.009, 0.0), (0.018, 0.0), (0.027, 0.0)]  # ~1km apart at the equator
+    nodes = np.zeros(4, dtype=binfmt.NODE_DTYPE)
+    cell_ids = [grid.cell_id_for_point(*c) for c in coords]
+    for i, (c, cid) in enumerate(zip(coords, cell_ids)):
+        nodes[i] = (c[0], c[1], cid)
+    _, cell_index = binfmt.build_csr_index(
+        np.array(cell_ids, dtype=np.int32), n_groups=len(grid.all_cell_ids())
+    )
+    edges = np.zeros(3, dtype=binfmt.EDGE_DTYPE)
+    for i in range(3):
+        edges[i] = (i, i + 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 20.0, 5.0, -1, False, True, 0, 0, i)
+    doubled_nodes = np.concatenate([edges["u"], edges["v"]])
+    doubled_edge_ids = np.concatenate([edges["edge_id"], edges["edge_id"]])
+    order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=4)
+    node_edge_ids = doubled_edge_ids[order]
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    node_ele = np.array([1000.0, 1020.0, 1040.0, 1060.0], dtype=np.float32)
+
+    base_graph_dir = tmp_path / "base_graph"
+    binfmt.save_array(base_graph_dir / "nodes.npy", nodes)
+    binfmt.save_array(base_graph_dir / "cell_index.npy", cell_index)
+    binfmt.save_array(base_graph_dir / "node_edge_index.npy", node_edge_index)
+    binfmt.save_array(base_graph_dir / "node_edge_ids.npy", node_edge_ids)
+    binfmt.save_array(base_graph_dir / "edges.npy", edges)
+    binfmt.save_array(base_graph_dir / "interior.npy", interior)
+    binfmt.save_array(base_graph_dir / "node_ele.npy", node_ele)
+    binfmt.save_array(base_graph_dir / "interior_ele.npy", np.zeros(0, dtype=np.float32))
+    binfmt.save_manifest(
+        base_graph_dir / "manifest.json", {"bbox": BBOX, "tile_size_km": grid.tile_size_km},
+    )
+    return base_graph_dir, coords
+
+
+def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypatch):
+    grid = Grid(BBOX, tile_size_km=60.0)
+    base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
+
+    # 4 huts sitting exactly on the 4 graph nodes (LQR-shaped: single part, no unsnapped huts).
+    hut_coords = node_coords
+    huts_geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"id": f"{{GUID-{i}}}"},
+             "geometry": {"type": "Point", "coordinates": list(c)}}
+            for i, c in enumerate(hut_coords)
+        ],
+    }
+    (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
+
+    persisted_snaps = {}
+    for i, node_idx in enumerate((0, 1, 2, 3)):
+        result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
+        from lib.subgraph import LocalSubgraph
+
+        stand_in_subgraph = LocalSubgraph(
+            global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
+            local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
+            interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+            local_node_ele=np.zeros(0, dtype=np.float32), interior_ele=np.zeros(0, dtype=np.float32),
+        )
+        persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
+    pack_hub_snaps(persisted_snaps, tmp_path)
+
+    tours = [{
+        "tourId": 0, "globalId": "{TOUR-LQR}", "name": "LQR-shaped test tour",
+        "shortCode": "LQRTEST", "isLoop": False, "homepage": None,
+        "hutIndices": [0, 1, 2, 3],
+    }]
+    (tmp_path / "tours.json").write_text(json.dumps(tours), encoding="utf-8")
+    traces = [{"tourId": 0, "paths": [[list(c) for c in node_coords]]}]  # single part
+    (tmp_path / "tour_traces.json").write_text(json.dumps(traces), encoding="utf-8")
+
+    import graph_building.match_tour_edges as mte
+
+    monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
+    monkeypatch.setattr(
+        mte, "load_config",
+        lambda: {"tourMatch": {"fragmentBreakM": 150.0, "corridorBufferM": 150.0,
+                                "maxHutTraceM": 250.0, "lengthDivergenceRatio": 2.0}},
+    )
+    mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
+
+    records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
+    tour_meta = binfmt.load_array(tmp_path / "tour_edges" / "tour_meta.npy", mmap=False)
+    gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
+
+    assert len(records) == 3  # 3 legs, no gaps
+    assert gaps == []
+    assert list(tour_meta["leg_index"]) == [0, 1, 2]
+    assert all(r == binfmt.VARIANT_OFFICIAL for r in records["variant"])
+    # touches both huts' own coordinates at the geometry endpoints
+    assert (records["geom_offset"] >= 0).all()
+    total_distance = records["distance_m"].sum()
+    assert 2900.0 < total_distance < 3100.0  # ~3 x 1000m, order-of-magnitude sane
+
+
+def test_rundtour_closing_leg_is_matched(tmp_path, monkeypatch):
+    # A 4-hut Rundtour on the same synthetic straight chain: the closing leg's corridor bbox (huts
+    # 3 and 0, the chain's own endpoints) spans the WHOLE chain, and the base graph is undirected,
+    # so the router legitimately finds a path back through nodes 2 and 1 (distance ~3000m, not
+    # gapped) - this fixture can't exercise a "closing leg has no real geometry" gap (that needs a
+    # true loop shape, out of scope for this synthetic straight-chain fixture); what it does prove
+    # is that isLoop=True actually appends the N-th leg and it gets matched like any other leg.
+    grid = Grid(BBOX, tile_size_km=60.0)
+    base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
+    huts_geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"id": f"{{GUID-{i}}}"},
+             "geometry": {"type": "Point", "coordinates": list(c)}}
+            for i, c in enumerate(node_coords)
+        ],
+    }
+    (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
+
+    persisted_snaps = {}
+    from lib.subgraph import LocalSubgraph
+    stand_in_subgraph = LocalSubgraph(
+        global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
+        local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE), interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(0, dtype=np.float32), interior_ele=np.zeros(0, dtype=np.float32),
+    )
+    for i, node_idx in enumerate((0, 1, 2, 3)):
+        result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
+        persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
+    pack_hub_snaps(persisted_snaps, tmp_path)
+
+    tours = [{
+        "tourId": 0, "globalId": "{TOUR-LOOP}", "name": "Loop test tour", "shortCode": "LOOPTEST",
+        "isLoop": True, "homepage": None, "hutIndices": [0, 1, 2, 3],
+    }]
+    (tmp_path / "tours.json").write_text(json.dumps(tours), encoding="utf-8")
+    traces = [{"tourId": 0, "paths": [[list(c) for c in node_coords]]}]
+    (tmp_path / "tour_traces.json").write_text(json.dumps(traces), encoding="utf-8")
+
+    import graph_building.match_tour_edges as mte
+    monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
+    monkeypatch.setattr(
+        mte, "load_config",
+        lambda: {"tourMatch": {"fragmentBreakM": 150.0, "corridorBufferM": 150.0,
+                                "maxHutTraceM": 250.0, "lengthDivergenceRatio": 2.0}},
+    )
+    mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
+
+    records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
+    tour_meta = binfmt.load_array(tmp_path / "tour_edges" / "tour_meta.npy", mmap=False)
+    gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
+
+    # 4 legs total (loop yields N legs, not N-1), and all 4 are matched - the closing leg (index 3,
+    # hut 3 -> hut 0) routes back through nodes 2 and 1 since the base graph is undirected and its
+    # own corridor bbox spans the whole chain.
+    assert len(records) == 4
+    assert gaps == []
+    assert list(tour_meta["leg_index"]) == [0, 1, 2, 3]
+    closing_leg = records[tour_meta["leg_index"] == 3][0]
+    assert 2900.0 < closing_leg["distance_m"] < 3100.0
