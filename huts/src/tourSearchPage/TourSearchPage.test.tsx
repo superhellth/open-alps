@@ -1,11 +1,19 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import TourSearchPage from './TourSearchPage.js'
 import * as tourSearchIndex from '../tourSearch/index.js'
 import type { GraphData, SearchResult } from '../tourSearch/types.js'
+
+// vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
+// afterEach(cleanup) never registers - without this, each test's render() stacks onto the
+// previous test's un-unmounted DOM.
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 const graphDataFixture: GraphData = {
   hutEdges: { hutIds: ['HutA'], variantNames: { 0: 'FAST_ANY' }, records: [] },
@@ -66,5 +74,52 @@ describe('TourSearchPage', () => {
 
     await userEvent.click(screen.getByText(/Parkplatz Test/))
     await waitFor(() => expect(screen.getByText('Schematische Verbindung, nicht der reale Wegverlauf.')).toBeInTheDocument())
+  })
+
+  it('resolves hut name/coordinates when huts.geojson uses GUID ids and TourResult.huts holds indices', async () => {
+    vi.spyOn(tourSearchIndex, 'loadTourSearchData').mockResolvedValue({
+      hutEdges: { hutIds: ['{GUID-A}'], variantNames: { 0: 'FAST_ANY' }, records: [] },
+      approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+    })
+    vi.spyOn(tourSearchIndex, 'findTours').mockReturnValue({
+      chains: [{
+        huts: [0], startId: 100, exitStartId: 100,
+        totalDurationH: 5, totalAscentM: 500, totalDescentM: 500, totalDistanceM: 8000,
+        legs: [
+          { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000, edgeId: 0, reversed: false },
+          { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000, edgeId: 1, reversed: true },
+        ],
+      }],
+      killCounters: { maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0 },
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('huts.geojson')) {
+          return fetchJsonMock({
+            type: 'FeatureCollection',
+            features: [{ properties: { id: '{GUID-A}', name: 'Guid Hut', hutType: 'av', serviced: true }, geometry: { type: 'Point', coordinates: [11.0, 47.0] } }],
+          })
+        }
+        if (url.includes('parking.geojson')) {
+          return fetchJsonMock({
+            type: 'FeatureCollection',
+            features: [{ id: 'n100', properties: { name: 'Parkplatz Test' }, geometry: { type: 'Point', coordinates: [11.1, 47.1] } }],
+          })
+        }
+        if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Touren suchen' }))
+    await waitFor(() => expect(screen.getByText(/1 Tour gefunden/)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText(/Parkplatz Test/))
+    // Before the fix, hutNameById.get(0) misses (map is keyed by GUID) and the raw index "0"
+    // renders instead of "Guid Hut".
+    await waitFor(() => expect(screen.getAllByText(/Guid Hut/).length).toBeGreaterThan(0))
   })
 })

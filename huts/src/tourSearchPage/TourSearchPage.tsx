@@ -41,20 +41,28 @@ function TourSearchPage() {
     ])
       .then(([tourSearchData, hutsFc, parkingFc, stationsFc]) => {
         setGraphData(tourSearchData)
+
+        const hutFeatureByGuid = new Map(
+          hutsFc.features.map((f) => [(f.properties as { id: string }).id, f]),
+        )
+        const hutsByIndex = tourSearchData.hutEdges.hutIds.map((guid) => hutFeatureByGuid.get(guid) ?? null)
+
         setHutNameById(
           new Map(
-            hutsFc.features.map((f) => [
-              (f.properties as { id: number }).id,
-              (f.properties as { name: string }).name,
-            ]),
+            hutsByIndex
+              .map((f, i) => (f ? ([i, (f.properties as { name: string }).name] as const) : null))
+              .filter((entry): entry is readonly [number, string] => entry != null),
           ),
         )
         setHutCoordsById(
           new Map(
-            hutsFc.features.map((f) => {
-              const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
-              return [(f.properties as { id: number }).id, { lat, lng }]
-            }),
+            hutsByIndex
+              .map((f, i) => {
+                if (!f) return null
+                const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+                return [i, { lat, lng }] as const
+              })
+              .filter((entry): entry is readonly [number, { lat: number; lng: number }] => entry != null),
           ),
         )
 
