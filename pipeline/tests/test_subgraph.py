@@ -142,3 +142,31 @@ def test_save_and_load_local_subgraph_round_trips():
 def _tmp_path_fixture():
     import tempfile
     return Path(tempfile.mkdtemp())
+
+
+from lib.subgraph import gather_subgraph_for_bounds  # noqa: E402
+
+
+def test_gather_subgraph_for_bounds_excludes_far_away_nodes(tmp_path):
+    fine_grid = Grid(BBOX, tile_size_km=20.0)
+    base_graph_dir = _write_fixture_base_graph(tmp_path, fine_grid)
+    # Tight bbox around only node 1's cell (0.95, 0.05) - node 0 gets pulled in by the one-hop
+    # edge closure (edge 0-1), but node 2 at (0.05, 0.95) sits in a cell this bbox doesn't
+    # overlap AND isn't the far endpoint of any edge incident to node 1, so it must stay excluded.
+    # (A bbox that also overlaps node 0's cell would pull node 2 in too, via edge 0-2 - that's
+    # the one-hop closure working as designed, not a bounds-filtering bug.)
+    bounds = {"minLng": 0.9, "maxLng": 1.0, "minLat": 0.0, "maxLat": 0.1}
+    subgraph = gather_subgraph_for_bounds(base_graph_dir, fine_grid, bounds)
+    assert len(subgraph.local_nodes) == 2
+
+
+def test_gather_subgraph_for_bounds_equals_padded_gather_on_same_effective_bounds(tmp_path):
+    fine_grid = Grid(BBOX, tile_size_km=20.0)
+    base_graph_dir = _write_fixture_base_graph(tmp_path, fine_grid)
+    padded = fine_grid.padded_bounds(cell_id=fine_grid.cell_id_for_point(0.05, 0.05), buffer_km=5.0)
+    direct = gather_subgraph_for_bounds(base_graph_dir, fine_grid, padded)
+    via_wrapper = gather_padded_subgraph(
+        base_graph_dir, fine_grid, fine_grid.cell_id_for_point(0.05, 0.05), buffer_km=5.0
+    )
+    assert list(direct.global_node_ids) == list(via_wrapper.global_node_ids)
+    assert len(direct.local_edges) == len(via_wrapper.local_edges)
