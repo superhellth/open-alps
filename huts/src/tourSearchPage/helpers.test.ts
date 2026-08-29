@@ -11,7 +11,7 @@ describe('SOURCE_TYPE_LABEL', () => {
 describe('killCounterGuidance hutFiltered', () => {
   it('explains that the hut filter excluded stage destinations, with a count', () => {
     const msgs = killCounterGuidance({
-      maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0, hutFiltered: 7,
+      maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0, hutFiltered: 7, trackOverlap: 0,
     })
     expect(msgs.some((m) => m.includes('7') && m.includes('Hüttenfilter'))).toBe(true)
   })

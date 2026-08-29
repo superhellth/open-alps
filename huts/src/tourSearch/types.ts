@@ -127,6 +127,7 @@ export interface KillCounters {
   viaFerrata: number
   revisit: number
   hutFiltered: number
+  trackOverlap: number
 }
 
 export interface ReverseIndexEntry {
