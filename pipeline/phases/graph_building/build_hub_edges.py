@@ -238,6 +238,7 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                     "sac_rank": int(path.sac_rank),
                     "via_ferrata": bool(path.via_ferrata),
                     "geometry": geometry,
+                    "base_edge_ids": path.base_edge_ids,
                 })
     return records
 
@@ -258,7 +259,11 @@ def merge_and_dedup(shard_records: list) -> list:
     return merged
 
 
-def _write_edge_output(records: list, out_dir: Path) -> None:
+K_TRAVERSAL = 8  # spec §4: ~1km at 132m mean base-edge length; revisit once real overlap-length
+                 # distribution is visible from the first real build.
+
+
+def _write_edge_output(records: list, out_dir: Path, write_edge_ids: bool = False) -> None:
     """Packs merge_and_dedup's dict records into binfmt.RECORD_DTYPE + a flat geometry.npy
     (binfmt.COORD_DTYPE), mirroring how build_base_graph.py packs contracted-edge interior
     polylines: one growing geometry array, each record's geom_offset/geom_count pointing into
@@ -270,10 +275,19 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
     instead of the geometry file growing linearly in variant count for zero new information.
     No collision re-check against the stored run: blake2b-128 over the run counts this pipeline
     will ever see has a collision probability far below floating-point noise in the coordinates
-    themselves - deliberate, not an oversight."""
+    themselves - deliberate, not an oversight.
+
+    write_edge_ids: True for hut_edges only (spec §1 of the overlapping-tracks design gates this
+    on a parameter - start_edges' geometry sidecar alone is 147MB and approaches are out of scope).
+    When True, also writes out_dir/edge_ids.npy: each record's FULL base-edge-id set, deduped and
+    sorted ascending, concatenated across records in record order - RECORD_DTYPE's
+    edge_id_offset/edge_id_count slice into it. prefix_ids/suffix_ids are small enough to live
+    directly on RECORD_DTYPE (fixed-width K_TRAVERSAL, -1-padded)."""
     records_arr = np.zeros(len(records), dtype=binfmt.RECORD_DTYPE)
     flat_geometry = []
+    flat_edge_ids = []
     cursor = 0
+    edge_id_cursor = 0
     seen_geoms = {}   # blake2b of the packed coordinate run -> geom_offset
     for i, r in enumerate(records):
         geom = r["geometry"]
@@ -286,11 +300,31 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
             seen_geoms[key] = offset
             flat_geometry.extend(geom)
             cursor += len(geom)
+
+        if write_edge_ids:
+            traversal_ids = r["base_edge_ids"]
+            sorted_ids = sorted(set(traversal_ids))
+            edge_id_offset = edge_id_cursor
+            edge_id_count = len(sorted_ids)
+            flat_edge_ids.extend(sorted_ids)
+            edge_id_cursor += edge_id_count
+            prefix = traversal_ids[:K_TRAVERSAL]
+            suffix = list(reversed(traversal_ids[-K_TRAVERSAL:])) if traversal_ids else []
+            prefix_count = len(prefix)
+            suffix_count = len(suffix)
+            prefix_ids = tuple(prefix + [-1] * (K_TRAVERSAL - prefix_count))
+            suffix_ids = tuple(suffix + [-1] * (K_TRAVERSAL - suffix_count))
+        else:
+            edge_id_offset, edge_id_count = 0, 0
+            prefix_ids = suffix_ids = (-1,) * K_TRAVERSAL
+            prefix_count = suffix_count = 0
+
         records_arr[i] = (
             r["from_id"], r["to_id"], r["from_type"], r["to_type"], r["variant"],
             r["distance_m"], r["road_m"], r["ascent_m"], r["descent_m"], r["max_ele_m"],
             r["ungraded_m"], r["inferred_m"], r["snap_m"], r["sac_rank"],
             r["via_ferrata"], offset, len(geom), 0, 0,
+            edge_id_offset, edge_id_count, prefix_ids, prefix_count, suffix_ids, suffix_count,
         )
 
     geometry_arr = np.zeros(len(flat_geometry), dtype=binfmt.COORD_DTYPE)
@@ -300,6 +334,8 @@ def _write_edge_output(records: list, out_dir: Path) -> None:
 
     binfmt.save_array(out_dir / "records.npy", records_arr)
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
+    if write_edge_ids:
+        binfmt.save_array(out_dir / "edge_ids.npy", np.array(flat_edge_ids, dtype="i4"))
 
 
 def _cell_workload_score(route_subgraphs_dir: Path, cell_id: int, n_hubs: int) -> int:
@@ -453,6 +489,6 @@ if __name__ == "__main__":
               f"access {access_counts_by_variant.get(variant.code, 0)}")
 
     out_dir = Path(args.out_dir)
-    _write_edge_output(hut_records, out_dir / "hut_edges")
-    _write_edge_output(access_records, out_dir / "start_edges")
+    _write_edge_output(hut_records, out_dir / "hut_edges", write_edge_ids=True)
+    _write_edge_output(access_records, out_dir / "start_edges", write_edge_ids=False)
     print(f"written {out_dir / 'hut_edges'} and {out_dir / 'start_edges'}")
