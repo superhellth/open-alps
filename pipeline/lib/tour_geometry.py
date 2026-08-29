@@ -82,3 +82,25 @@ def orient_chain(chain: list, hut_coords_in_order: list, is_loop: bool) -> list:
 
     reversed_chain = list(reversed(chain))
     return chain if violations(chain) <= violations(reversed_chain) else reversed_chain
+
+
+def assign_hut_position(chain: list, hut_coord: tuple, max_hut_trace_m: float):
+    """Nearest chain point to a hut's own coordinate, as a (chain_index, dist_m) pair - or None
+    when even the nearest point exceeds max_hut_trace_m (spec §0.3: "huts sit right on the trail"
+    is false, e.g. KHW's Zollnersee-Hütte at 9,178m; this is the hut_far_from_trace gap case,
+    spec §2.5)."""
+    idx = _nearest_chain_index(chain, hut_coord)
+    dist_m = _haversine_m(*chain[idx], *hut_coord)
+    if dist_m > max_hut_trace_m:
+        return None
+    return idx, dist_m
+
+
+def leg_chain_slice(chain: list, pos_a: int, pos_b: int) -> list:
+    """Sub-chain between two chain-position indices, order-agnostic. Handles the Rundtour closing
+    leg's wraparound (pos_a > pos_b, e.g. last hut's position > first hut's position on an oriented
+    loop chain) by concatenating the tail and the head instead of returning an empty/reversed
+    slice."""
+    if pos_a <= pos_b:
+        return chain[pos_a:pos_b + 1]
+    return chain[pos_a:] + chain[:pos_b + 1]

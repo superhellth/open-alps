@@ -82,3 +82,35 @@ def test_loop_chain_reverses_when_huts_visit_backward():
 def test_empty_hut_list_returns_chain_unchanged():
     chain = [(10.0, 47.0), (10.01, 47.0)]
     assert orient_chain(chain, [], is_loop=False) == chain
+
+
+from lib.tour_geometry import assign_hut_position, leg_chain_slice  # noqa: E402
+
+
+def test_assign_hut_position_finds_nearest_index():
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0)]
+    result = assign_hut_position(chain, (10.0095, 47.0), max_hut_trace_m=250.0)
+    assert result is not None
+    idx, dist_m = result
+    assert idx == 1
+    assert dist_m < 250.0
+
+
+def test_assign_hut_position_rejects_beyond_threshold():
+    # KHW-style gap (spec §0.3): a hut far from every chain point (~9km scale reproduced small
+    # here) must come back None, not the nearest-anyway index.
+    chain = [(10.0, 47.0), (10.01, 47.0)]
+    result = assign_hut_position(chain, (11.0, 48.0), max_hut_trace_m=250.0)
+    assert result is None
+
+
+def test_leg_chain_slice_normal_leg():
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0), (10.03, 47.0)]
+    assert leg_chain_slice(chain, 1, 3) == chain[1:4]
+
+
+def test_leg_chain_slice_wraps_for_rundtour_closing_leg():
+    # Closing leg: last hut sits at position 3, first hut at position 0 - the slice must wrap
+    # rather than come back empty or run backward through the whole tour.
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0), (10.03, 47.0)]
+    assert leg_chain_slice(chain, 3, 0) == [chain[3], chain[0]]
