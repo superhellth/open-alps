@@ -64,3 +64,50 @@ def test_write_edge_output_skips_edge_ids_when_not_requested(tmp_path):
     records = binfmt.load_array(out_dir / "records.npy", mmap=False)
     assert records["edge_id_count"][0] == 0
     assert records["prefix_count"][0] == 0
+
+
+from dataclasses import dataclass
+
+from lib.edge_output import fold_endpoint_snaps  # noqa: E402
+
+
+@dataclass
+class _FakeSnap:
+    gap_m: float
+    gap_dz_m: float
+
+
+@dataclass
+class _FakePath:
+    ascent_m: float
+    descent_m: float
+
+
+def test_fold_endpoint_snaps_sums_the_horizontal_gap():
+    path = _FakePath(ascent_m=100.0, descent_m=50.0)
+    src = _FakeSnap(gap_m=10.0, gap_dz_m=0.0)
+    tgt = _FakeSnap(gap_m=5.0, gap_dz_m=0.0)
+    snap_m, ascent_m, descent_m = fold_endpoint_snaps(path, src, tgt)
+    assert snap_m == 15.0
+    assert ascent_m == 100.0
+    assert descent_m == 50.0
+
+
+def test_fold_endpoint_snaps_prices_departure_climb_as_ascent():
+    # src below its snap point (gap_dz_m < 0): climbing UP to the trail is ascent.
+    path = _FakePath(ascent_m=0.0, descent_m=0.0)
+    src = _FakeSnap(gap_m=10.0, gap_dz_m=-20.0)
+    tgt = _FakeSnap(gap_m=0.0, gap_dz_m=0.0)
+    _, ascent_m, descent_m = fold_endpoint_snaps(path, src, tgt)
+    assert ascent_m == 20.0
+    assert descent_m == 0.0
+
+
+def test_fold_endpoint_snaps_prices_arrival_climb_as_ascent():
+    # tgt above its snap point (gap_dz_m > 0): climbing UP off the trail to the hut is ascent.
+    path = _FakePath(ascent_m=0.0, descent_m=0.0)
+    src = _FakeSnap(gap_m=0.0, gap_dz_m=0.0)
+    tgt = _FakeSnap(gap_m=10.0, gap_dz_m=30.0)
+    _, ascent_m, descent_m = fold_endpoint_snaps(path, src, tgt)
+    assert ascent_m == 30.0
+    assert descent_m == 0.0
