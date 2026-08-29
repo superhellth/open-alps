@@ -48,3 +48,37 @@ def test_single_point_fragments_are_dropped():
     degenerate = [(11.0, 48.0)]
     chains = reassemble_fragments([a, degenerate], break_threshold_m=150.0)
     assert chains == [a]
+
+
+from lib.tour_geometry import orient_chain  # noqa: E402
+
+
+def test_open_chain_already_forward_is_unchanged():
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0)]
+    huts = [(10.0, 47.0), (10.02, 47.0)]  # first hut near chain start
+    assert orient_chain(chain, huts, is_loop=False) == chain
+
+
+def test_open_chain_backward_gets_reversed():
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0)]
+    huts = [(10.02, 47.0), (10.0, 47.0)]  # first hut near chain END
+    assert orient_chain(chain, huts, is_loop=False) == list(reversed(chain))
+
+
+def test_loop_chain_picks_direction_matching_hut_order():
+    # A 4-point loop; huts visit it in FORWARD point order (0, 1, 2, 3) - orienting forward should
+    # win over reversed, which would visit them 3, 2, 1, 0 (all "violations").
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0), (10.03, 47.0)]
+    huts = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0), (10.03, 47.0)]
+    assert orient_chain(chain, huts, is_loop=True) == chain
+
+
+def test_loop_chain_reverses_when_huts_visit_backward():
+    chain = [(10.0, 47.0), (10.01, 47.0), (10.02, 47.0), (10.03, 47.0)]
+    huts = [(10.03, 47.0), (10.02, 47.0), (10.01, 47.0), (10.0, 47.0)]
+    assert orient_chain(chain, huts, is_loop=True) == list(reversed(chain))
+
+
+def test_empty_hut_list_returns_chain_unchanged():
+    chain = [(10.0, 47.0), (10.01, 47.0)]
+    assert orient_chain(chain, [], is_loop=False) == chain
