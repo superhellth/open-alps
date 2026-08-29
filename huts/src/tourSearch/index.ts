@@ -12,13 +12,9 @@ export async function loadTourSearchData(baseUrl = '/data'): Promise<GraphData> 
   return { hutEdges, approaches }
 }
 
-export function findTours(
-  query: Query,
-  graphData: GraphData,
-  { overlapThreshold = 0.5 }: { overlapThreshold?: number } = {},
-): SearchResult {
+export function findTours(query: Query, graphData: GraphData): SearchResult {
   const { chains, killCounters } = searchChains(query, graphData)
   const deduped = dedupeReversePairs(chains)
-  const diverse = suppressSimilar(deduped, overlapThreshold)
+  const diverse = suppressSimilar(deduped)
   return { chains: diverse, killCounters }
 }
