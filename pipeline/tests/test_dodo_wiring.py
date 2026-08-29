@@ -200,3 +200,24 @@ def test_fetch_tours_targets_all_three_outputs():
 def test_fetch_tours_tracks_bbox():
     param_names = {p["name"] for p in dodo.task_fetch_tours().get("params", [])}
     assert "bbox_json" in param_names
+
+
+def test_match_tour_edges_depends_on_profiles_and_snaps_not_edges_npy():
+    task = dodo.task_match_tour_edges()
+    assert "compute_edge_profiles" in task["task_dep"]
+    assert "snap_hubs" in task["task_dep"]
+    assert not any(d.endswith("edges.npy") for d in task["file_dep"])
+
+
+def test_match_tour_edges_targets_tour_edges_directory():
+    targets = dodo.task_match_tour_edges()["targets"]
+    assert any(t.endswith("tour_edges/records.npy") for t in targets)
+    assert any(t.endswith("tour_edges/tour_meta.npy") for t in targets)
+    assert any(t.endswith("tour-match-gaps.json") for t in targets)
+
+
+def test_match_tour_edges_does_not_track_record_schema_version():
+    # spec §2.6: this task doesn't own RECORD_DTYPE, so it must never move record_schema_version
+    # and never force a build_hub_edges rerun.
+    param_names = {p["name"] for p in dodo.task_match_tour_edges().get("params", [])}
+    assert "record_schema_version" not in param_names
