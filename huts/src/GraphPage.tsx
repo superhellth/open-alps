@@ -11,6 +11,8 @@ const EDGE_STATS_URL = '/data/hut-edge-stats.json'
 const HUTS_URL = '/data/huts.geojson'
 const TRAILS_PMTILES_URL = '/data/trails.pmtiles'
 const HUT_EDGES_PMTILES_URL = '/data/hut-edges.pmtiles'
+const EDGE_GEOMETRY_MANIFEST_URL = '/data/hut-edge-geometry.json'
+const EDGE_GEOMETRY_BIN_URL = '/data/hut-edge-geometry.bin'
 
 // How close the cursor has to be to a trail polyline to count as "hovering" it, in screen
 // pixels - constant across zoom levels since it's a hit-test tolerance, not a map distance.
@@ -53,7 +55,31 @@ interface EdgeStatsEntry {
   elevation_profile: number[] | null
   sac_scale: string | null
   via_ferrata: boolean
-  positions: [number, number][]
+}
+
+interface EdgeGeometryManifest {
+  point_counts: number[]
+}
+
+/** Decodes hut-edge-geometry.bin's flat f4 [lon, lat] point stream (edge_id order, no framing)
+ *  into one Leaflet-ready [lat, lng][] per edge, using point_counts as a prefix-sum offset table.
+ *  Fetched whole rather than range-fetched (unlike ResultsMap's per-leg lookups) because
+ *  HoverInspector below needs every edge's geometry at once. */
+function decodeEdgeGeometry(manifest: EdgeGeometryManifest, buffer: ArrayBuffer): L.LatLngExpression[][] {
+  const floats = new Float32Array(buffer)
+  const perEdge: L.LatLngExpression[][] = new Array(manifest.point_counts.length)
+  let pointOffset = 0
+  for (let i = 0; i < manifest.point_counts.length; i++) {
+    const count = manifest.point_counts[i]
+    const positions: L.LatLngExpression[] = new Array(count)
+    for (let p = 0; p < count; p++) {
+      const base = (pointOffset + p) * 2
+      positions[p] = [floats[base + 1], floats[base]]
+    }
+    perEdge[i] = positions
+    pointOffset += count
+  }
+  return perEdge
 }
 
 function distToSegmentPx(p: L.Point, a: L.Point, b: L.Point): number {
@@ -261,15 +287,17 @@ function GraphPage() {
   useEffect(() => {
     Promise.all([
       fetch(EDGE_STATS_URL).then((r) => r.json()) as Promise<EdgeStatsEntry[]>,
+      fetch(EDGE_GEOMETRY_MANIFEST_URL).then((r) => r.json()) as Promise<EdgeGeometryManifest>,
+      fetch(EDGE_GEOMETRY_BIN_URL).then((r) => r.arrayBuffer()),
       fetch(HUTS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
     ])
-      .then(([edgeStats, hutsFc]) => {
+      .then(([edgeStats, geometryManifest, geometryBuffer, hutsFc]) => {
+        // Geometry and stats are built from the same records.npy pass, in the same edge_id
+        // order (build_edge_tiles.py's build_stats loop) - zip by index, no id lookup needed.
+        const perEdgePositions = decodeEdgeGeometry(geometryManifest, geometryBuffer)
         setEdges(
-          edgeStats.map((s) => {
-            // positions here are the RDP-simplified hover-hit-test copy (see
-            // data/scripts/11-build-hut-edge-tiles.py), not the full-resolution trail geometry -
-            // the visible line comes from HutEdgeTilesLayer's PMTiles layer instead.
-            const positions: L.LatLngExpression[] = s.positions.map(([lng, lat]) => [lat, lng])
+          edgeStats.map((s, i) => {
+            const positions = perEdgePositions[i]
             return {
               fromId: s.from_hut_id,
               toId: s.to_hut_id,

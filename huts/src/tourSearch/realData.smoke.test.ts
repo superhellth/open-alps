@@ -20,6 +20,7 @@ function loadHutEdgesFromDisk(): HutEdgesData {
       distanceM: c.distance_m[i], ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       maxEleM: c.max_ele_m[i], sacRank: c.sac_rank[i], viaFerrata: c.via_ferrata[i] === 1,
       roadM: c.road_m[i], ungradedM: c.ungraded_m[i], inferredM: c.inferred_m[i], snapM: c.snap_m[i],
+      edgeId: i,
     }
   }
   return { hutIds: manifest.hut_ids, variantNames: manifest.variants, records }
@@ -36,6 +37,9 @@ function loadApproachesFromDisk(): ApproachesData {
       accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
       ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       access: manifest.access_values ? manifest.access_values[i] : null,
+      // approaches.bin predating this plan's Task 2 has no edge_id column - guard until
+      // huts/public/data/ is rebuilt by a (separately gated) doit run.
+      edgeId: c.edge_id ? c.edge_id[i] : -1,
     }
   }
   return { records, reverseIndex: manifest.reverse_index }

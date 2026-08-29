@@ -165,8 +165,10 @@ If you're already working from inside WSL (as this setup is), ignore the Windows
 
 ## Reproducing from scratch
 
-The pipeline is orchestrated by [doit](https://pydoit.org) — `pipeline/dodo.py` declares one task
-per script, wired by `file_dep`/`targets` (doit derives run order and staleness from that graph).
+The pipeline is orchestrated by [doit](https://pydoit.org) — one task per script, wired by
+`file_dep`/`targets` (doit derives run order and staleness from that graph). Task wiring lives in
+`pipeline/dag/` (one module per `phases/` subdirectory); `pipeline/dodo.py` just assembles them
+plus the pipeline-wide `copy_public_data` finalize step.
 
 ```bash
 pixi run doit                                    # run everything that's stale, in dependency order
@@ -179,7 +181,7 @@ pixi run doit info <task>                        # see why a task would (not) ru
 (Or `pixi shell` once, then drop the `pixi run` prefix for the rest of the session.)
 
 `doit` skips any task whose `targets` already exist and whose own tracked params (each task's
-`TaskOptionsChanged()` check, `dodo.py`) haven't changed since its last successful run — not a
+`TaskOptionsChanged()` check, `lib/doit_support.py`) haven't changed since its last successful run — not a
 whole-config-file hash, so an edit to an unrelated `pipeline.config.json` key doesn't invalidate
 every task downstream of it. `build_profiles` always reruns when selected (cheap, seconds — never
 reopens the DEM, usually run to retune `--profile-points`). `build_base_graph`/`build_hub_edges`

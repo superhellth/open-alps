@@ -52,13 +52,18 @@ app-facing assets instead of shipping the raw binary arrays directly.
   geometry used only for hover hit-testing, kept separate from the full-resolution tile geometry.
 - **`build_stats()`** — writes one JSON array indexed by `edge_id`, holding everything
   non-geometric the app's hover UI needs: `from_hut_id, to_hut_id, distance_m, road_m, ascent_m,
-  descent_m, elevation_profile, sac_scale, via_ferrata`, plus the RDP-simplified `positions`
-  (`[lng, lat]` pairs). This exists because PMTiles has no feature-level query API — a rendered
-  tile can be drawn, but there's no "give me properties for edge N" lookup, so the app needs this
-  separate flat JSON copy for hover. `from_hut_id`/`to_hut_id` are resolved from the numeric
-  `(type, id)` pair stored in `records.npy` back to their original string/OSM id via
-  `start_points_id_table.json` (huts pass through as-is — `huts.geojson` never needed a separate
-  id table since hut ids are already strings).
+  descent_m, elevation_profile, sac_scale, via_ferrata`. This exists because PMTiles has no
+  feature-level query API — a rendered tile can be drawn, but there's no "give me properties for
+  edge N" lookup, so the app needs this separate flat JSON copy for hover. `from_hut_id`/
+  `to_hut_id` are resolved from the numeric `(type, id)` pair stored in `records.npy` back to
+  their original string/OSM id via `start_points_id_table.json` (huts pass through as-is —
+  `huts.geojson` never needed a separate id table since hut ids are already strings). The
+  RDP-simplified hover geometry itself is written separately (below), not inlined into this JSON.
+- **`*-edge-geometry.bin`/`*-edge-geometry.json`** — the RDP-simplified `positions` per edge,
+  split out of `build_stats()`'s output into their own byte-packed sidecar: a flat `f4` `[lng,
+  lat]` array (`.bin`) plus a `point_counts` array (`.json`) giving each edge's slice length in
+  order, since a plain JSON array of coordinate pairs per edge would repeat the same nesting
+  overhead `hut-edge-stats.json` was designed to avoid.
 - **`*-edges.pmtiles`** — full-resolution edge geometry, `{edge_id}`-only properties, built via the
   same tippecanoe → pmtiles-convert pipeline as `build_trail_tiles.py` above (`-l hut_edges`/`-l
   start_edges`, same `min-zoom`/`max-zoom`/`--drop-densest-as-needed`).

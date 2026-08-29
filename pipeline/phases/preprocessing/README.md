@@ -23,13 +23,16 @@ hiking-ways network, and a bounded set of station/parking "hub" candidates.
   `graph_building/build_base_graph.py` streams.
 - **doit wiring**: `file_dep=[<region>-trails.osm.pbf, ...]`, `targets=[trails.osm.pbf]`.
 
-## `verify_trails.py` — gate, always reruns (`uptodate: [False]`)
+## `verify_trails.py` — gate
 
 - Checks `trails.osm.pbf` exists and is non-empty; exits nonzero otherwise, failing the doit run
   before anything downstream starts on a bad/missing input.
 - Runs `osmium fileinfo -e trails.osm.pbf` to print bbox/node/way/relation counts for a quick
   sanity read.
-- No target of its own — it's a gate, not a cacheable build step, hence the forced rerun.
+- Targets `verify_trails.stamp`, so an unchanged `trails.osm.pbf` (content hash) skips the rescan
+  instead of forcing a rerun on every `doit` invocation — the check result isn't itself cacheable,
+  but "did the input change" is, via the normal `file_dep` hash.
+- **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[verify_trails.stamp]`.
 
 ## `filter_start_points.py`
 
@@ -52,7 +55,10 @@ Reduces station/parking candidates to the ones that can possibly matter, using a
   actually bounds hub count before `build_hub_edges.py`'s per-hub shortest-path search runs.
 - **Output**:
   - `data/osm/start_points.npy` — structured array `(lon: f8, lat: f8, osm_id: i8, type: u1)`,
-    `type` is `binfmt.TYPE_STATION` (1) / `binfmt.TYPE_PARKING` (2).
+    `type` is `binfmt.TYPE_STATION` (1) / `binfmt.TYPE_PARKING` (2) / `binfmt.TYPE_PARTNER` (3,
+    Bergsteigerdörfer partner businesses from `partner_betriebe.geojson` — `docs/superpowers/specs/
+    2026-08-28-hut-classification-design.md`). For `TYPE_PARTNER`, `osm_id` holds the ArcGIS
+    layer's `OBJECTID`, not a real OSM id.
   - `data/osm/start_points_id_table.json` — `{"station:<osm_id>": <osm_id>, "parking:<osm_id>":
     <osm_id>}`, kept for symmetry/debuggability; downstream code addresses points by the
     `(osm_id, type)` pair directly rather than through this table.

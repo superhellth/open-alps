@@ -9,7 +9,7 @@ import type { GraphData, LegSummary, Query, TourResult } from './types.js'
 
 // A tiny 3-hut chain: start1 -> A -> B -> C -> start2, all within budget, all FAST_ANY.
 function edge(fromIndex: number, toIndex: number, distanceM: number) {
-  return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0 }
+  return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
 }
 
 // This fixture's approach/exit are station-type (SOURCE_TYPE_STATION = 1), matching the
@@ -23,11 +23,11 @@ const graphData: GraphData = {
   },
   approaches: {
     records: [
-      { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null },
+      { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
     ],
     reverseIndex: {
       hut_to_starts: {
-        2: [{ hut_id: 2, start_id: 200, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100 }],
+        2: [{ hut_id: 2, start_id: 200, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 9001 }],
       },
       start_to_huts: {},
     },
@@ -104,7 +104,7 @@ describe('searchChains (car)', () => {
         records: [{ ...graphData.approaches.records[0], sourceType: 2 }],
         reverseIndex: {
           hut_to_starts: {
-            2: [{ hut_id: 2, start_id: 100, source_type: 2, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100 }],
+            2: [{ hut_id: 2, start_id: 100, source_type: 2, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 8002 }],
           },
           start_to_huts: {},
         },
@@ -156,6 +156,7 @@ describe('mode-gated source types (Section A fixes)', () => {
     expect(full?.exitStartId).toBe(200)
     // legs = [start->A, A->B, B->C, C->exit] = 4 entries for a 3-hut chain.
     expect(full?.legs).toHaveLength(4)
+    expect(full?.legs[0]).toMatchObject({ edgeId: 9000, reversed: false })
     const summedDuration = full!.legs.reduce((sum, l) => sum + l.durationH, 0)
     expect(summedDuration).toBeCloseTo(full!.totalDurationH, 6)
   })
@@ -167,7 +168,7 @@ describe('mode-gated source types (Section A fixes)', () => {
         ...graphData.approaches,
         reverseIndex: {
           hut_to_starts: {
-            2: [{ hut_id: 2, start_id: 100, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100 }],
+            2: [{ hut_id: 2, start_id: 100, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 8001 }],
           },
           start_to_huts: {},
         },
@@ -203,8 +204,8 @@ function bruteForceSearchChains(query: Query, graphData: GraphData) {
   const nightsMax = legCountMax - 1
 
   interface State { path: number[]; startId: number; totalDurationH: number; totalAscentM: number; totalDescentM: number; totalDistanceM: number; legs: LegSummary[] }
-  function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number }): LegSummary {
-    return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM }
+  function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number; edgeId: number; reversed: boolean }): LegSummary {
+    return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM, edgeId: leg.edgeId, reversed: leg.reversed }
   }
   let layer = new Map<number, State[]>()
   for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
@@ -271,7 +272,7 @@ describe('dominance pruning (Section B) is exact', () => {
   // Diamond graph: A(seed)->B, A->C, B->C, B->D, C->D, all variant 0. A->B->C->D and A->C->B->D
   // both visit {A,B,C,D} and finish at D - exactly the case dominance pruning collapses.
   function edge(fromIndex: number, toIndex: number, distanceM: number) {
-    return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 100, descentM: 100, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0 }
+    return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 100, descentM: 100, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
   }
   const diamondGraph: GraphData = {
     hutEdges: {
@@ -280,10 +281,10 @@ describe('dominance pruning (Section B) is exact', () => {
       records: [edge(0, 1, 3000), edge(0, 2, 4000), edge(1, 2, 2000), edge(1, 3, 3500), edge(2, 3, 3000)],
     },
     approaches: {
-      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null }],
+      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null, edgeId: 8000 }],
       reverseIndex: {
         hut_to_starts: {
-          3: [{ hut_id: 3, start_id: 200, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 1000, ascent_m: 20, descent_m: 50 }],
+          3: [{ hut_id: 3, start_id: 200, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 1000, ascent_m: 20, descent_m: 50, edge_id: 8001 }],
         },
         start_to_huts: {},
       },

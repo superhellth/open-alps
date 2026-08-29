@@ -20,6 +20,7 @@ export async function loadHutEdgesData(baseUrl = '/data'): Promise<HutEdgesData>
       distanceM: c.distance_m[i], ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       maxEleM: c.max_ele_m[i], sacRank: c.sac_rank[i], viaFerrata: c.via_ferrata[i] === 1,
       roadM: c.road_m[i], ungradedM: c.ungraded_m[i], inferredM: c.inferred_m[i], snapM: c.snap_m[i],
+      edgeId: i,
     }
   }
   return { hutIds: manifest.hut_ids, variantNames: manifest.variants, records }

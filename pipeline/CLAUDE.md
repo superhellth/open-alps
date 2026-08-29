@@ -23,6 +23,29 @@ a numbered run order), idempotently (`doit` skips a task whose targets are alrea
 `pipeline/README.md` "Setup"). The last task, `copy_public_data`, copies every output into
 `huts/public/data/` — no separate hand-copy step.
 
+`dodo.py` itself only assembles the DAG (`DOIT_CONFIG`, `copy_public_data`) — the `task_*`
+functions live in `pipeline/dag/`, one module per `phases/` subdirectory (`dag/downloads.py`,
+`dag/preprocessing.py`, `dag/graph_building.py`, `dag/elevation.py`, `dag/postprocessing.py`), so a
+task's wiring sits next to the phase it wires, and no single file grows to hold the whole DAG.
+`lib/doit_support.py` holds the plumbing every `task_*` function needs: `pipeline_task()` builds
+the action command line + `file_dep`/`targets` (via `rel()`) + `params`/`uptodate` in one call
+instead of each task hand-rolling them; `cli_param()` is a param that's both a real `--flag` on the
+action line and part of the tracked cache key, `tracking_param()` is one that's tracked but has no
+corresponding flag (the script reads that config value directly); `TaskOptionsChanged` is the
+`uptodate` check both rely on — see its docstring for the two doit bugs it works around, which is
+why it exists as real code instead of `doit`'s built-in `config_changed`.
+
+### Keep task-wiring rationale short-lived
+
+A `dag/*.py` comment should state *why the wiring is what it is now* (e.g. "not force-rerun: ~4h
+rebuild", "split from X because Y only needs Z") in one or two lines — not the history of what used
+to be wrong and how it got fixed. `dodo.py` grew past 700 lines mostly from that narrative form
+repeated per task; it's real information, but it belongs in the commit that made the change (or
+`pipeline/README.md`/a linked spec under `docs/superpowers/`) so it can be found by `git blame`
+without inflating the file everyone reads to understand the DAG. When editing a task's wiring,
+prefer trimming an existing comment down to its current rationale over appending another paragraph
+explaining what changed and why the old approach was wrong.
+
 `pipeline/analysis/` holds standalone, read-only analysis/benchmark scripts (e.g. `snap_stats.py`)
 that are **not** part of the `dodo.py` task DAG and never modify `phases/` scripts — they import and
 call the real phase functions directly (e.g. `build_hub_edges.py`'s `snap_hub_to_subgraph()`) against
@@ -96,6 +119,20 @@ stop being a split. Every long script now ends with a `step totals: ...` line:
 | `elevation/compute_edge_profiles.py` | `compute_edge_profiles` | `load_arrays`, `smooth`, `ascent_descent`, `write` |
 | `postprocessing/build_edge_tiles.py` | `build_edge_tiles` | `load_arrays`, `write_tiling_input`, `build_stats`, `write_stats`, `tippecanoe`, `mbtiles_to_pmtiles` |
 | `postprocessing/build_trail_tiles.py` | `build_trail_tiles` | `osmium_export_filter`, `tippecanoe`, `mbtiles_to_pmtiles` |
+| `downloads/download_extracts.py` | `download_extracts` | `download` (per region) |
+| `preprocessing/filter_trails.py` | `filter_trails` | `tag_filter`, `clip` (per region) |
+| `downloads/fetch_stations_parking.py` | `fetch_stations_parking` | `<layer>_tag_filter`, `<layer>_export` (per layer x region) |
+
+Every other DAG task (`preprocessing/merge_trails.py`, `preprocessing/verify_trails.py`,
+`downloads/fetch_huts.py`, `preprocessing/compute_hub_range.py`,
+`preprocessing/filter_start_points.py`, `downloads/fetch_dem.py`,
+`elevation/build_profiles.py`, `postprocessing/build_approach_table.py`,
+`postprocessing/build_edge_payload.py`, and `copy_public_data`'s inline action in `dodo.py`) now
+records a plain `phase(...)` per run too (no StepTimer split - either genuinely one unit of work,
+or not yet worth breaking down further) - so every task in the DAG has at least whole-task timing
+in `data/timings.jsonl`, even the ones not listed in this table.
+`elevation/build_dem_vrt.py` already did this before this pass, with two separate phase records
+(`materialize_regions`, `materialize_geotiff`) rather than one.
 
 The pre-existing `stream_osm` / `contract_structural` / `read_dem_window` /
 `per_edge_ascent_profile` `phase()` records are deliberately kept alongside the StepTimer steps

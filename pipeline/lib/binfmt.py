@@ -62,6 +62,13 @@ HUB_SNAP_DTYPE = np.dtype([
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
+# Bergsteigerdörfer partner businesses / ÖAV Vertragshaus (docs/superpowers/specs/
+# 2026-08-28-hut-classification-design.md) - private guesthouses/pensions, not Alpine Club huts.
+# Routed one-directionally to huts exactly like TYPE_STATION/TYPE_PARKING (fetch_huts.py splits
+# them out of huts.geojson into partner_betriebe.geojson; filter_start_points.py loads that file
+# as a third access-point layer). start_points.npy's "osm_id" field holds the ArcGIS layer's
+# OBJECTID for this type, not a real OSM id - see filter_start_points.py's _load_arcgis_layer docstring.
+TYPE_PARTNER = 3
 
 # Variant grid rows (spec C2/C3). Phase 1 builds the "fastest" objective column only; a ROAD_*
 # column appends here if the post-rebuild road-share measurement justifies it.
@@ -153,3 +160,19 @@ def build_csr_index(group_ids: np.ndarray, n_groups: int) -> tuple[np.ndarray, n
     index["start_offset"] = offsets[:-1]
     index["count"] = counts
     return order, index
+
+
+def pack_columns(columns: dict) -> tuple[bytes, dict]:
+    """Packs named columns (in insertion order) into one flat buffer, per-column rather than
+    interleaved (so a downstream gzip sees each column's own byte pattern uninterrupted), plus a
+    manifest recording each column's dtype and byte offset for unpacking. `columns` maps name ->
+    (dtype_str, array). Shared by build_approach_table.py and build_edge_payload.py, which both
+    ship a small columnar binary this way - kept here rather than duplicated so an offset bug only
+    has one place to hide."""
+    payload = bytearray()
+    column_manifest = {}
+    for name, (dtype, array) in columns.items():
+        col = np.asarray(array, dtype=dtype)
+        column_manifest[name] = {"dtype": dtype, "offset": len(payload)}
+        payload.extend(col.tobytes())
+    return bytes(payload), column_manifest
