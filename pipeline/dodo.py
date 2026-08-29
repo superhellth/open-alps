@@ -48,19 +48,30 @@ from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,
     task_verify_trails,
 )
-from lib.doit_support import rel  # noqa: E402
+from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 DOIT_CONFIG = {
     # keeps doit's runtime state out of the tracked half of pipeline/, alongside every other
     # generated/gitignored pipeline artifact (see root CLAUDE.md's data/ vs pipeline/ split)
-    "dep_file": str(DATA_DIR / ".doit.db"),
+    # .doit.json.db, not the old .doit.db: that file is in dbm format, which the json backend
+    # below can't read (doit errors "seems to use an old format"). Starting a fresh cache file is
+    # harmless here - see DOIT_CONFIG["backend"]'s comment; none of .doit.db's entries reliably
+    # matched the current post-refactor task shapes anyway (fetch_dem/build_dem_vrt had none at
+    # all - the mid-run-kill bug this same commit fixes).
+    "dep_file": str(DATA_DIR / ".doit.json.db"),
     # 2 = stream both stdout and stderr from the task's action, live. doit's default (1) captures
     # stdout and only replays it if the task fails, which hides the per-unit progress lines this
     # pipeline is required to print (see CLAUDE.md "Progress logging") and makes a multi-hour task
     # look hung. A single task can still opt out with "verbosity" in its own task dict.
     "verbosity": 2,
+    # json (not the dbm default) + FlushingReporter: persist each task's success to disk as it
+    # happens instead of only once at the end of the whole run - see FlushingReporter's docstring
+    # (lib/doit_support.py) for why a mid-run kill was silently discarding already-completed
+    # tasks' state, forcing e.g. fetch_dem to rerun even right after it finished.
+    "backend": "json",
+    "reporter": FlushingReporter,
     "default_tasks": [
         "download_extracts", "fetch_huts", "compute_hub_range", "filter_trails",
         "merge_trails", "verify_trails",
