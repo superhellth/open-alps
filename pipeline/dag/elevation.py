@@ -68,14 +68,19 @@ def task_build_profiles():
         "phases/elevation/build_profiles.py",
         params=[cli_param("profile_points", "profile-points", int,
                           CONFIG["dem"].get("profilePoints", 30))],
-        task_dep=["build_hub_edges"],  # same file it mutates in place, not just same mtime
+        task_dep=["build_hub_edges", "match_tour_edges"],  # same files they mutate in place
         file_dep=[
             OSM_DIR / "base_graph" / "interior_ele.npy",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy",
+            OSM_DIR / "tour_edges" / "records.npy",
         ],
         # records.npy is rewritten in place (profile_offset/profile_count filled) but not listed as
-        # a target - build_hub_edges already owns it. profiles.npy is the only file this task alone
-        # produces; downstream tile builders declare an explicit task_dep on this task rather than
-        # relying on a shared target/file_dep link to wait for the in-place rewrite.
-        targets=[OSM_DIR / "hut_edges" / "profiles.npy", OSM_DIR / "start_edges" / "profiles.npy"],
+        # a target - build_hub_edges/match_tour_edges already own it. profiles.npy is the only
+        # file this task alone produces; downstream tile builders declare an explicit task_dep on
+        # this task rather than relying on a shared target/file_dep link to wait for the in-place
+        # rewrite.
+        targets=[
+            OSM_DIR / "hut_edges" / "profiles.npy", OSM_DIR / "start_edges" / "profiles.npy",
+            OSM_DIR / "tour_edges" / "profiles.npy",
+        ],
     )

@@ -221,3 +221,10 @@ def test_match_tour_edges_does_not_track_record_schema_version():
     # and never force a build_hub_edges rerun.
     param_names = {p["name"] for p in dodo.task_match_tour_edges().get("params", [])}
     assert "record_schema_version" not in param_names
+
+
+def test_build_profiles_depends_on_match_tour_edges_and_tour_edges_records():
+    task = dodo.task_build_profiles()
+    assert any(d.endswith("tour_edges/records.npy") for d in task["file_dep"])
+    assert any(t.endswith("tour_edges/profiles.npy") for t in task["targets"])
+    assert "match_tour_edges" in task["task_dep"]
