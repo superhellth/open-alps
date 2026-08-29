@@ -158,6 +158,21 @@ def test_edge_tile_tasks_track_zoom_and_hover_tolerance():
     assert trail_task["uptodate"]
 
 
+def test_build_edge_ids_task_depends_on_hut_edges_records_and_ids():
+    task = dodo.task_build_edge_ids()
+    file_deps = set(task["file_dep"])
+    assert any("hut_edges/records.npy" in p for p in file_deps)
+    assert any("hut_edges/edge_ids.npy" in p for p in file_deps)
+    targets = set(task["targets"])
+    assert any(p.endswith("hut-edge-ids.bin") for p in targets)
+    assert any(p.endswith("hut-edge-ids.json") for p in targets)
+
+
+def test_public_files_includes_hut_edge_ids():
+    assert "hut-edge-ids.bin" in dodo.PUBLIC_FILES
+    assert "hut-edge-ids.json" in dodo.PUBLIC_FILES
+
+
 def test_fetch_huts_targets_include_partner_betriebe():
     targets = dodo.task_fetch_huts()["targets"]
     assert any(t.endswith("partner_betriebe.geojson") for t in targets)
