@@ -31,7 +31,7 @@ const searchResultFixture: SearchResult = {
       ],
     },
   ],
-  killCounters: { maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0 },
+  killCounters: { maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0, hutFiltered: 0 },
 }
 
 function fetchJsonMock(body: unknown) {
@@ -90,7 +90,7 @@ describe('TourSearchPage', () => {
           { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000, edgeId: 1, reversed: true },
         ],
       }],
-      killCounters: { maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0 },
+      killCounters: { maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0, hutFiltered: 0 },
     })
     vi.stubGlobal(
       'fetch',

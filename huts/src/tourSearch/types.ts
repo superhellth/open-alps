@@ -1,7 +1,8 @@
 export const SOURCE_TYPE_STATION = 1
 export const SOURCE_TYPE_PARKING = 2
+export const SOURCE_TYPE_PARTNER = 3
 
-export type SourceType = typeof SOURCE_TYPE_STATION | typeof SOURCE_TYPE_PARKING
+export type SourceType = typeof SOURCE_TYPE_STATION | typeof SOURCE_TYPE_PARKING | typeof SOURCE_TYPE_PARTNER
 
 export interface ApproachRecord {
   hutIndex: number
@@ -102,7 +103,7 @@ export interface TourResult {
   legs: LegSummary[]
 }
 
-export type TourMode = 'car' | 'transit'
+export type TourMode = 'car' | 'transit' | 'village'
 
 export interface Query {
   mode: TourMode
@@ -115,6 +116,7 @@ export interface Query {
   legAscentCapM?: number
   maxEleM?: number | null
   allowViaFerrata?: boolean
+  allowedHutIndices?: Set<number>
 }
 
 export interface KillCounters {
@@ -124,6 +126,7 @@ export interface KillCounters {
   maxEleM: number
   viaFerrata: number
   revisit: number
+  hutFiltered: number
 }
 
 export interface ReverseIndexEntry {

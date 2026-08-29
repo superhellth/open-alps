@@ -8,12 +8,13 @@ import { resolveVariant } from './resolveVariant.js'
 import { buildAdjacency } from './adjacency.js'
 import { getApproachLegs, getExitLegs } from './approaches.js'
 import { legPasses, createKillCounters } from './legFilters.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from './types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from './types.js'
 import type { GraphData, LegSummary, Query, SearchResult, SourceType, TourResult } from './types.js'
 
 function requiredSourceType(mode: Query['mode']): SourceType | null {
   if (mode === 'transit') return SOURCE_TYPE_STATION
   if (mode === 'car') return SOURCE_TYPE_PARKING
+  if (mode === 'village') return SOURCE_TYPE_PARTNER
   return null
 }
 
@@ -21,6 +22,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   const {
     mode, legCountMin, legCountMax, sacCeiling, allowUngraded = false,
     maxLegTimeH, minLegTimeH = 0, legAscentCapM = Infinity, maxEleM = null, allowViaFerrata = true,
+    allowedHutIndices,
   } = query
   const constraints = { maxLegTimeH, minLegTimeH, legAscentCapM, maxEleM, allowViaFerrata }
   const killCounters = createKillCounters()
@@ -57,6 +59,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   // getExitLegs/adjacency.get(h) are still looked up once per hut, not once per state.
   let layer = new Map<number, Map<string, State>>()
   for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
+    if (allowedHutIndices && !allowedHutIndices.has(h)) { killCounters.hutFiltered++; continue }
     for (const approachLeg of getApproachLegs(h, graphData.approaches)) {
       if (gateSourceType != null && approachLeg.sourceType !== gateSourceType) continue
       if (!legPasses(approachLeg, constraints, killCounters)) continue
@@ -104,6 +107,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
       for (const s of states.values()) {
         for (const leg of legs) {
           const h2 = leg.toIndex
+          if (allowedHutIndices && !allowedHutIndices.has(h2)) { killCounters.hutFiltered++; continue }
           if (s.path.includes(h2)) { killCounters.revisit++; continue }
           if (!legPasses(leg, constraints, killCounters)) continue
           const nextVisitedKey = s.visitedKey | (1n << BigInt(h2))

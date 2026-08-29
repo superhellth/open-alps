@@ -298,3 +298,77 @@ describe('dominance pruning (Section B) is exact', () => {
     expect(normalizeForComparison(pruned.chains)).toEqual(normalizeForComparison(unpruned.chains))
   })
 })
+
+describe('searchChains hut filtering', () => {
+  it('excludes a hut from every position in a chain, including mid-route, when its index is not allowed', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, allowedHutIndices: new Set([0, 2]) },
+      graphData,
+    )
+    for (const chain of chains) {
+      expect(chain.huts).not.toContain(1)
+    }
+  })
+
+  it('increments hutFiltered when the allow-set prunes a hut', () => {
+    const { killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, allowedHutIndices: new Set([0, 2]) },
+      graphData,
+    )
+    expect(killCounters.hutFiltered).toBeGreaterThan(0)
+  })
+
+  it('an undefined allowedHutIndices allows every hut, unchanged from before this feature', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it('every returned chain has at least one hut night (huts.length >= 1), including at legCountMin = 1', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 1, legCountMax: 4, ...generousConstraints },
+      graphData,
+    )
+    for (const chain of chains) {
+      expect(chain.huts.length).toBeGreaterThanOrEqual(1)
+    }
+  })
+})
+
+describe('searchChains village mode', () => {
+  const villageGraphData: GraphData = {
+    ...graphData,
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 300, sourceType: 3, accessUnknown: false, distanceM: 1500, ascentM: 80, descentM: 40, access: null, edgeId: 9100 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          2: [{ hut_id: 2, start_id: 400, source_type: 3, variant: 0, distance_m: 1500, ascent_m: 40, descent_m: 80, edge_id: 9101 }],
+        },
+        start_to_huts: {},
+      },
+    },
+  }
+
+  it('gates approach/exit legs to SOURCE_TYPE_PARTNER, like transit gates to stations', () => {
+    const { chains } = searchChains(
+      { mode: 'village', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      villageGraphData,
+    )
+    const full = chains.find((c) => c.huts.length === 3)
+    expect(full).toBeDefined()
+    expect(full!.startId).toBe(300)
+    expect(full!.exitStartId).toBe(400)
+  })
+
+  it('behaves like transit (open point-to-point), not like car (no same-start round-trip check)', () => {
+    const { chains } = searchChains(
+      { mode: 'village', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      villageGraphData,
+    )
+    expect(chains.some((c) => c.startId !== c.exitStartId)).toBe(true)
+  })
+})
