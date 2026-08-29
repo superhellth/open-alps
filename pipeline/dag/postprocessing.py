@@ -109,3 +109,17 @@ def task_build_edge_payload():
         file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "huts.geojson"],
         targets=[OSM_DIR / "hut-edge-payload.bin", OSM_DIR / "hut-edge-payload.json"],
     )
+
+
+def task_build_edge_ids():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_ids.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'hut_edges'}",
+            f"--out-bin {OSM_DIR / 'hut-edge-ids.bin'}",
+            f"--out-manifest {OSM_DIR / 'hut-edge-ids.json'}",
+        ],
+        task_dep=["build_hub_edges"],
+        file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "hut_edges" / "edge_ids.npy"],
+        targets=[OSM_DIR / "hut-edge-ids.bin", OSM_DIR / "hut-edge-ids.json"],
+    )
