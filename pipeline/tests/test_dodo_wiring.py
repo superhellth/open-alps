@@ -246,3 +246,30 @@ def test_build_tour_edge_payload_passes_tour_meta_flag():
     assert any("--tour-meta" in a and "tour_meta.npy" in a for a in task["actions"])
     assert any(t.endswith("tour-edge-payload.bin") for t in task["targets"])
     assert "build_profiles" in task["task_dep"]
+
+
+def test_public_files_includes_every_tour_output():
+    for name in [
+        "tours.json", "tour-edges.pmtiles", "tour-edge-stats.json",
+        "tour-edge-geometry.bin", "tour-edge-geometry.json",
+        "tour-edge-payload.bin", "tour-edge-payload.json",
+        "tour-fetch-gaps.json", "tour-match-gaps.json",
+    ]:
+        assert name in dodo.PUBLIC_FILES, name
+
+
+def test_public_files_does_not_include_internal_tour_traces():
+    # tour_traces.json is the ~3.5MB raw fragment file (spec §1) - internal only, never shipped.
+    assert "tour_traces.json" not in dodo.PUBLIC_FILES
+
+
+def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
+    ordered = dodo.DOIT_CONFIG["default_tasks"]
+    for name in ["fetch_tours", "match_tour_edges", "build_tour_edge_tiles", "build_tour_edge_payload"]:
+        assert name in ordered, name
+    assert ordered.index("fetch_tours") < ordered.index("match_tour_edges")
+    assert ordered.index("snap_hubs") < ordered.index("match_tour_edges")
+    assert ordered.index("compute_edge_profiles") < ordered.index("match_tour_edges")
+    assert ordered.index("match_tour_edges") < ordered.index("build_profiles")
+    assert ordered.index("build_profiles") < ordered.index("build_tour_edge_tiles")
+    assert ordered.index("build_profiles") < ordered.index("build_tour_edge_payload")

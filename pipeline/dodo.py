@@ -76,14 +76,16 @@ DOIT_CONFIG = {
     "backend": "json",
     "reporter": FlushingReporter,
     "default_tasks": [
-        "download_extracts", "fetch_huts", "compute_hub_range", "filter_trails",
+        "download_extracts", "fetch_huts", "fetch_tours", "compute_hub_range", "filter_trails",
         "merge_trails", "verify_trails",
         "fetch_stations_parking", "filter_start_points",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
+        "match_tour_edges",
         "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
-        "build_approach_table", "build_edge_payload", "build_edge_ids",
+        "build_tour_edge_tiles",
+        "build_approach_table", "build_edge_payload", "build_edge_ids", "build_tour_edge_payload",
         "copy_public_data",
     ],
 }
@@ -108,6 +110,15 @@ PUBLIC_FILES = [
     "hut-edge-ids.bin",
     "hut-edge-ids.json",
     "partner_betriebe.geojson",
+    "tours.json",
+    "tour-edges.pmtiles",
+    "tour-edge-stats.json",
+    "tour-edge-geometry.bin",
+    "tour-edge-geometry.json",
+    "tour-edge-payload.bin",
+    "tour-edge-payload.json",
+    "tour-fetch-gaps.json",
+    "tour-match-gaps.json",
 ]
 
 
