@@ -136,6 +136,25 @@ def task_build_edge_payload():
     )
 
 
+def task_build_tour_edge_payload():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_payload.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'tour_edges'}",
+            f"--huts {OSM_DIR / 'huts.geojson'}",
+            f"--tour-meta {OSM_DIR / 'tour_edges' / 'tour_meta.npy'}",
+            f"--out-bin {OSM_DIR / 'tour-edge-payload.bin'}",
+            f"--out-manifest {OSM_DIR / 'tour-edge-payload.json'}",
+        ],
+        task_dep=["build_profiles"],
+        file_dep=[
+            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
+            OSM_DIR / "huts.geojson",
+        ],
+        targets=[OSM_DIR / "tour-edge-payload.bin", OSM_DIR / "tour-edge-payload.json"],
+    )
+
+
 def task_build_edge_ids():
     return pipeline_task(
         "phases/postprocessing/build_edge_ids.py",
