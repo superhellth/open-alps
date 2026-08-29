@@ -39,7 +39,8 @@ from dag.elevation import (  # noqa: E402,F401
     task_build_dem_vrt, task_build_profiles, task_compute_edge_profiles, task_sample_base_elevation,
 )
 from dag.graph_building import (  # noqa: E402,F401
-    task_build_base_graph, task_build_hub_edges, task_gather_route_subgraphs, task_snap_hubs,
+    task_build_base_graph, task_build_hub_edges, task_gather_route_subgraphs,
+    task_match_tour_edges, task_snap_hubs,
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
