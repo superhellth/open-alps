@@ -37,6 +37,12 @@
     "profilePoints": 30
   },
   "approach": { "k": 3 },
+  "tourMatch": {
+    "fragmentBreakM": 150.0,
+    "corridorBufferM": 150.0,
+    "maxHutTraceM": 250.0,
+    "lengthDivergenceRatio": 2.0
+  },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
   "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 }
 }
