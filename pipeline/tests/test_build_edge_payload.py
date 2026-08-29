@@ -61,3 +61,29 @@ def test_no_duration_column_is_shipped():
 def test_geometry_offsets_are_not_in_the_payload():
     _, manifest = pack_edges(RECORDS, HUT_IDS)
     assert "geom_offset" not in manifest["columns"]
+
+
+def test_pack_edges_without_tour_meta_is_unchanged():
+    payload, manifest = pack_edges(RECORDS, HUT_IDS)
+    assert "tour_id" not in manifest["columns"]
+    assert "leg_index" not in manifest["columns"]
+
+
+def test_pack_edges_with_tour_meta_adds_two_columns():
+    tour_meta = np.array([(0, 0), (0, 1), (1, 0)], dtype=binfmt.TOUR_META_DTYPE)
+    payload, manifest = pack_edges(RECORDS, HUT_IDS, tour_meta=tour_meta)
+    assert "tour_id" in manifest["columns"]
+    assert "leg_index" in manifest["columns"]
+    tour_id_col = np.frombuffer(
+        payload, dtype=manifest["columns"]["tour_id"]["dtype"], count=manifest["rows"],
+        offset=manifest["columns"]["tour_id"]["offset"],
+    )
+    assert tour_id_col.tolist() == [0, 0, 1]
+
+
+def test_manifest_always_gains_the_official_variant_key():
+    # spec §2.6: the manifest gains a VARIANT_OFFICIAL key from binfmt.VARIANT_NAMES regardless of
+    # whether tour_meta is present - hut_edges/start_edges payloads are unaffected in their .bin,
+    # but the shared variants dict is the same for every payload.
+    _, manifest = pack_edges(RECORDS, HUT_IDS)
+    assert "OFFICIAL" in manifest["variants"].values()

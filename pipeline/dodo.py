@@ -44,8 +44,8 @@ from dag.graph_building import (  # noqa: E402,F401
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
-    task_build_hut_edge_tiles, task_build_start_edge_tiles, task_build_tour_edge_tiles,
-    task_build_trail_tiles,
+    task_build_hut_edge_tiles, task_build_start_edge_tiles, task_build_tour_edge_payload,
+    task_build_tour_edge_tiles, task_build_trail_tiles,
 )
 from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,

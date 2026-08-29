@@ -239,3 +239,10 @@ def test_build_tour_edge_tiles_mirrors_hut_edge_tiles_wiring():
     assert any("--layer-name tour_edges" in a for a in task["actions"])
     # --id-table is required=True even though tour records are hut-only (spec §3)
     assert any("start_points_id_table.json" in a for a in task["actions"])
+
+
+def test_build_tour_edge_payload_passes_tour_meta_flag():
+    task = dodo.task_build_tour_edge_payload()
+    assert any("--tour-meta" in a and "tour_meta.npy" in a for a in task["actions"])
+    assert any(t.endswith("tour-edge-payload.bin") for t in task["targets"])
+    assert "build_profiles" in task["task_dep"]
