@@ -4,11 +4,13 @@ import {
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import { loadTourSearchData, findTours } from '../tourSearch/index.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { GraphData, SearchResult, TourMode } from '../tourSearch/types.js'
 import AppShell from '../AppShell.js'
 import type { StartPoint } from './types.js'
-import { DEFAULT_FORM, OVERLAP_THRESHOLD_BY_VARIETY, buildQuery, type FormState } from './formState.js'
+import type { HutClass, HutOperator } from '../hutClass.js'
+import { OPERATOR_LABEL } from '../hutClass.js'
+import { DEFAULT_FORM, OVERLAP_THRESHOLD_BY_VARIETY, buildQuery, isFilterSelectionValid, type FormState } from './formState.js'
 import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, type SortKey } from './helpers.js'
 import LegCountSlider from './LegCountSlider.js'
 import LegTimeSlider from './LegTimeSlider.js'
@@ -18,12 +20,14 @@ import TourList from './TourList.js'
 const HUTS_URL = '/data/huts.geojson'
 const PARKING_URL = '/data/parking.geojson'
 const STATIONS_URL = '/data/stations.geojson'
+const PARTNER_URL = '/data/partner_betriebe.geojson'
 
 function TourSearchPage() {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [hutNameById, setHutNameById] = useState<Map<number, string>>(new Map())
   const [hutCoordsById, setHutCoordsById] = useState<Map<number, { lat: number; lng: number }>>(new Map())
   const [startById, setStartById] = useState<Map<number, StartPoint>>(new Map())
+  const [hutsByIndex, setHutsByIndex] = useState<(HutClass | null)[]>([])
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [result, setResult] = useState<SearchResult | null>(null)
@@ -38,25 +42,28 @@ function TourSearchPage() {
       fetch(HUTS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
       fetch(PARKING_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
       fetch(STATIONS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
+      fetch(PARTNER_URL)
+        .then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
+        .catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection),
     ])
-      .then(([tourSearchData, hutsFc, parkingFc, stationsFc]) => {
+      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc]) => {
         setGraphData(tourSearchData)
 
         const hutFeatureByGuid = new Map(
           hutsFc.features.map((f) => [(f.properties as { id: string }).id, f]),
         )
-        const hutsByIndex = tourSearchData.hutEdges.hutIds.map((guid) => hutFeatureByGuid.get(guid) ?? null)
+        const hutsByIdx = tourSearchData.hutEdges.hutIds.map((guid) => hutFeatureByGuid.get(guid) ?? null)
 
         setHutNameById(
           new Map(
-            hutsByIndex
+            hutsByIdx
               .map((f, i) => (f ? ([i, (f.properties as { name: string }).name] as const) : null))
               .filter((entry): entry is readonly [number, string] => entry != null),
           ),
         )
         setHutCoordsById(
           new Map(
-            hutsByIndex
+            hutsByIdx
               .map((f, i) => {
                 if (!f) return null
                 const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
@@ -64,6 +71,14 @@ function TourSearchPage() {
               })
               .filter((entry): entry is readonly [number, { lat: number; lng: number }] => entry != null),
           ),
+        )
+        setHutsByIndex(
+          hutsByIdx.map((f) => {
+            if (!f) return null
+            const props = f.properties as { hutType?: string; serviced?: boolean }
+            if (props.hutType !== 'av' && props.hutType !== 'sonstige') return null
+            return { operator: props.hutType, serviced: props.serviced ?? true }
+          }),
         )
 
         const starts = new Map<number, StartPoint>()
@@ -79,6 +94,15 @@ function TourSearchPage() {
           const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
           if (id != null) {
             starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_PARKING, lat, lng })
+          }
+        }
+        // Partner points carry no top-level f.id (ArcGIS OBJECTID lives in properties.id) - do NOT
+        // use idFromOsmFeatureId here, it would reduce Number("") to 0 and collapse every point.
+        for (const f of partnerFc.features) {
+          const id = (f.properties as { id?: number })?.id
+          const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+          if (id != null) {
+            starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_PARTNER, lat, lng })
           }
         }
         setStartById(starts)
@@ -121,7 +145,7 @@ function TourSearchPage() {
     // Defer the heavy synchronous findTours call a tick so React can paint the spinner first
     // (spec D: no Web Worker in this spec's scope).
     setTimeout(() => {
-      const query = buildQuery(form)
+      const query = buildQuery(form, hutsByIndex)
       const overlapThreshold = OVERLAP_THRESHOLD_BY_VARIETY[form.overlapVariety]
       setResult(findTours(query, graphData, { overlapThreshold }))
       setPage(1)
@@ -156,6 +180,7 @@ function TourSearchPage() {
             >
               <MenuItem value="car">Auto (Rundtour zum Ausgangspunkt)</MenuItem>
               <MenuItem value="transit">ÖPNV (offene Strecke)</MenuItem>
+              <MenuItem value="village">Start im Bergsteigerdorf (offene Strecke)</MenuItem>
             </Select>
           </Box>
 
@@ -200,6 +225,45 @@ function TourSearchPage() {
             />
           </Box>
 
+          <Box sx={{ width: 260 }}>
+            <Typography variant="subtitle2">Hüttenarten</Typography>
+            {(Object.keys(OPERATOR_LABEL) as HutOperator[]).map((op) => (
+              <FormControlLabel
+                key={op}
+                sx={{ display: 'block' }}
+                control={
+                  <Checkbox
+                    checked={form.allowedOperators.has(op)}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const next = new Set(f.allowedOperators)
+                        if (e.target.checked) next.add(op)
+                        else next.delete(op)
+                        return { ...f, allowedOperators: next }
+                      })
+                    }
+                  />
+                }
+                label={OPERATOR_LABEL[op]}
+              />
+            ))}
+            <FormControlLabel
+              sx={{ display: 'block' }}
+              control={<Checkbox checked={form.allowServiced} onChange={(e) => setForm((f) => ({ ...f, allowServiced: e.target.checked }))} />}
+              label="Bewirtschaftete Hütten"
+            />
+            <FormControlLabel
+              sx={{ display: 'block' }}
+              control={<Checkbox checked={form.allowSelfService} onChange={(e) => setForm((f) => ({ ...f, allowSelfService: e.target.checked }))} />}
+              label="Selbstversorgerhütten (unbewirtschaftet, ggf. Schlüssel nötig)"
+            />
+            {!isFilterSelectionValid(form) && (
+              <Typography variant="caption" color="error">
+                Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.
+              </Typography>
+            )}
+          </Box>
+
           <Box sx={{ width: 280 }}>
             <Accordion disableGutters elevation={0} sx={{ border: '1px solid #e0e0e0', '&:before': { display: 'none' } }}>
               <AccordionSummary sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 1 } }}>
@@ -241,7 +305,7 @@ function TourSearchPage() {
           </Box>
 
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 'auto' }}>
-            <Button type="submit" variant="contained" disabled={!graphData || searching} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
+            <Button type="submit" variant="contained" disabled={!graphData || searching || !isFilterSelectionValid(form)} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
               Touren suchen
             </Button>
             <Button type="button" variant="outlined" onClick={handleReset}>
