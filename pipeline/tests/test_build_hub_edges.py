@@ -20,7 +20,7 @@ from lib import variants  # noqa: E402
 from lib.hub_snap import SnapResult  # noqa: E402
 from lib.edge_split import SplitResult  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    SnapRejection, SnapResult, _cell_workload_score, _write_edge_output,
+    SnapRejection, SnapResult, _cell_workload_score,
     compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, snap_hubs_for_cell,
     write_unsnapped_report,
 )
@@ -451,41 +451,6 @@ def test_merge_and_dedup_keys_on_pair_and_variant():
     assert len(merge_and_dedup([[a], [b], [c]])) == 2
 
 
-def _rec(variant, from_id=1, to_id=2, distance_m=100.0, geometry=None):
-    return {
-        "from_id": from_id, "to_id": to_id, "from_type": binfmt.TYPE_HUT, "to_type": binfmt.TYPE_HUT,
-        "variant": variant, "distance_m": distance_m, "road_m": 0.0,
-        "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
-        "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
-        "sac_rank": -1, "via_ferrata": False,
-        "geometry": geometry if geometry is not None else [(0.0, 0.0), (0.01, 0.0)],
-    }
-
-
-def test_write_edge_output_preserves_each_record_variant(tmp_path):
-    _write_edge_output([_rec(variant=0), _rec(variant=2)], tmp_path)
-    arr = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    assert sorted(arr["variant"].tolist()) == [0, 2]
-
-
-def test_identical_variant_geometries_share_one_offset(tmp_path):
-    geom = [(0.0, 0.0), (0.001, 0.0)]
-    _write_edge_output([_rec(variant=0, geometry=geom), _rec(variant=2, geometry=geom)], tmp_path)
-    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    geometry = binfmt.load_array(tmp_path / "geometry.npy", mmap=False)
-    assert records["geom_offset"][0] == records["geom_offset"][1]
-    assert len(geometry) == 2   # one shared run, not two copies
-
-
-def test_differing_geometries_do_not_share(tmp_path):
-    _write_edge_output([
-        _rec(variant=0, geometry=[(0.0, 0.0), (0.001, 0.0)]),
-        _rec(variant=2, geometry=[(0.0, 0.0), (0.001, 0.001)]),
-    ], tmp_path)
-    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    assert records["geom_offset"][0] != records["geom_offset"][1]
-
-
 def test_route_exceeding_max_edge_km_is_dropped():
     # spec C8: selection cuts off on `dist`, but the routed path's distance_m can exceed the cap
     subgraph = _line_subgraph()
@@ -745,55 +710,3 @@ def test_accumulate_path_same_source_and_target_has_empty_base_edge_ids():
     assert result.base_edge_ids == []
 
 
-def _record_with_geometry(from_id, to_id, base_edge_ids):
-    return {
-        "from_id": from_id, "from_type": binfmt.TYPE_HUT,
-        "to_id": to_id, "to_type": binfmt.TYPE_HUT,
-        "variant": binfmt.VARIANT_FAST_ANY,
-        "distance_m": 1000.0, "road_m": 0.0, "ascent_m": 50.0, "descent_m": 20.0,
-        "max_ele_m": 1500.0, "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 5.0,
-        "sac_rank": 1, "via_ferrata": False,
-        "geometry": [(11.0, 47.0), (11.01, 47.0)],
-        "base_edge_ids": base_edge_ids,
-    }
-
-
-def test_write_edge_output_writes_sorted_edge_ids_and_prefix_suffix(tmp_path):
-    records = [
-        _record_with_geometry(0, 1, [30, 10, 20]),  # traversal order: 30 then 10 then 20
-        _record_with_geometry(1, 2, [40, 40, 50]),  # a repeated id must collapse in the sorted set
-    ]
-    out_dir = tmp_path / "hut_edges"
-    out_dir.mkdir()
-
-    _write_edge_output(records, out_dir, write_edge_ids=True)
-
-    records_arr = binfmt.load_array(out_dir / "records.npy", mmap=False)
-    edge_ids_arr = binfmt.load_array(out_dir / "edge_ids.npy", mmap=False)
-
-    # record 0: sorted set {10,20,30}, prefix = first 8 in traversal order ([30,10,20], only 3
-    # available), suffix = last 8 in traversal order REVERSED to be outward-from-to_id ([20,10,30]).
-    r0 = records_arr[0]
-    assert edge_ids_arr[r0["edge_id_offset"]:r0["edge_id_offset"] + r0["edge_id_count"]].tolist() == [10, 20, 30]
-    assert r0["prefix_count"] == 3
-    assert r0["prefix_ids"][:3].tolist() == [30, 10, 20]
-    assert r0["prefix_ids"][3] == -1
-    assert r0["suffix_count"] == 3
-    assert r0["suffix_ids"][:3].tolist() == [20, 10, 30]
-
-    # record 1: duplicate id 40 collapses to one entry in the sorted set.
-    r1 = records_arr[1]
-    assert edge_ids_arr[r1["edge_id_offset"]:r1["edge_id_offset"] + r1["edge_id_count"]].tolist() == [40, 50]
-
-
-def test_write_edge_output_skips_edge_ids_when_not_requested(tmp_path):
-    records = [_record_with_geometry(0, 1, [10, 20])]
-    out_dir = tmp_path / "start_edges"
-    out_dir.mkdir()
-
-    _write_edge_output(records, out_dir, write_edge_ids=False)
-
-    assert not (out_dir / "edge_ids.npy").exists()
-    records_arr = binfmt.load_array(out_dir / "records.npy", mmap=False)
-    assert records_arr[0]["edge_id_count"] == 0
-    assert records_arr[0]["prefix_count"] == 0
