@@ -49,6 +49,12 @@ class BaseIgraphArrays:
     # its terrain from for i >= n_orig - a variant's edge_mask() only covers the n_orig original
     # edges, so a synthetic edge has no mask entry of its own.
     edge_source: list
+    # base_edge_ids[i] is the disambiguated global base-graph edge id for igraph edge i - see
+    # this module's build_base_igraph_arrays for the split-half disambiguation (spec §1 of
+    # docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md): edge_id*3 for an
+    # original edge, edge_id*3+1/+2 for the u-side/v-side half of a hub-split edge, so the two
+    # halves of one split edge never collide.
+    base_edge_ids: list
 
 
 def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIgraphArrays:
@@ -95,6 +101,8 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
 
     n_orig = len(subgraph.local_edges)
     edge_source = list(range(n_orig))
+    edge_ids_col = subgraph.local_edges["edge_id"]
+    base_edge_ids = [int(edge_ids_col[i]) * 3 for i in range(n_orig)]
 
     hub_vertex = {}
     next_vertex = n_base
@@ -128,6 +136,7 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
         interiors.append(list(split.interior_to_u))
         max_ele_ms.append(base_max_ele)
         edge_source.append(ei)
+        base_edge_ids.append(int(edge_ids_col[ei]) * 3 + 1)
         edges_uv.append((vid, v))
         dists.append(split.dist_to_v)
         times.append(split.dist_to_v)
@@ -142,6 +151,7 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
         interiors.append(list(split.interior_to_v))
         max_ele_ms.append(base_max_ele)
         edge_source.append(ei)
+        base_edge_ids.append(int(edge_ids_col[ei]) * 3 + 2)
         hub_vertex[hub_key] = vid
 
     return BaseIgraphArrays(
@@ -150,7 +160,7 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
         descent_ms=descent_ms, sac_ranks=sac_ranks, via_ferratas=via_ferratas,
         constrained_oks=constrained_oks, interiors=interiors, max_ele_ms=max_ele_ms,
         vertex_coords=vertex_coords, hub_vertex=hub_vertex, edges_to_remove=edges_to_remove,
-        edge_source=edge_source,
+        edge_source=edge_source, base_edge_ids=base_edge_ids,
     )
 
 
@@ -183,6 +193,7 @@ def build_igraph_from_base(base: BaseIgraphArrays, edge_mask: np.ndarray = None)
         "descent_m": _filter(base.descent_ms), "max_ele_m": _filter(base.max_ele_ms),
         "sac_rank": _filter(base.sac_ranks), "via_ferrata": _filter(base.via_ferratas),
         "constrained_ok": _filter(base.constrained_oks), "interior": _filter(base.interiors),
+        "base_edge_id": _filter(base.base_edge_ids),
     }, directed=False)
     return graph, base.hub_vertex, base.vertex_coords
 
@@ -209,7 +220,7 @@ def build_igraph_with_snaps(subgraph: LocalSubgraph, hub_snaps: dict, edge_mask:
 PathResult = namedtuple(
     "PathResult",
     "coords distance_m road_m ungraded_m inferred_m ascent_m descent_m max_ele_m sac_rank "
-    "via_ferrata",
+    "via_ferrata base_edge_ids",
 )
 
 
@@ -228,7 +239,7 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     descent reported for the forward direction would silently become the reported ascent for the
     reverse one."""
     if src_v == tgt_v:
-        return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False)
+        return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False, [])
     trail_coords = []
     distance_m = 0.0
     road_m = 0.0
@@ -239,6 +250,7 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     max_ele_m = float("-inf")
     max_sac_rank = -1
     has_via_ferrata = False
+    base_edge_ids = []
     cur = src_v
     for eid in epath:
         e = graph.es[eid]
@@ -259,11 +271,14 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
             max_sac_rank = e["sac_rank"]
         if e["via_ferrata"]:
             has_via_ferrata = True
+        # base_edge_id is direction-independent (it identifies physical ground, not a signed
+        # delta), so unlike ascent_m/descent_m it needs no forward swap.
+        base_edge_ids.append(e["base_edge_id"])
         cur = nxt
     trail_coords.append(vertex_coords[cur])
     return PathResult(
         trail_coords, distance_m, road_m, ungraded_m, inferred_m, ascent_m, descent_m,
-        max_ele_m, max_sac_rank, has_via_ferrata,
+        max_ele_m, max_sac_rank, has_via_ferrata, base_edge_ids,
     )
 
 
