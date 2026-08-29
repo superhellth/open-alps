@@ -228,3 +228,14 @@ def test_build_profiles_depends_on_match_tour_edges_and_tour_edges_records():
     assert any(d.endswith("tour_edges/records.npy") for d in task["file_dep"])
     assert any(t.endswith("tour_edges/profiles.npy") for t in task["targets"])
     assert "match_tour_edges" in task["task_dep"]
+
+
+def test_build_tour_edge_tiles_mirrors_hut_edge_tiles_wiring():
+    task = dodo.task_build_tour_edge_tiles()
+    assert "build_profiles" in task["task_dep"]
+    assert any(d.endswith("tour_edges/records.npy") for d in task["file_dep"])
+    assert any(t.endswith("tour-edges.pmtiles") for t in task["targets"])
+    assert any(t.endswith("tour-edge-geometry.bin") for t in task["targets"])
+    assert any("--layer-name tour_edges" in a for a in task["actions"])
+    # --id-table is required=True even though tour records are hut-only (spec §3)
+    assert any("start_points_id_table.json" in a for a in task["actions"])

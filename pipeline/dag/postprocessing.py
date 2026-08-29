@@ -81,6 +81,31 @@ def task_build_start_edge_tiles():
     )
 
 
+def task_build_tour_edge_tiles():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_tiles.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'tour_edges'}",
+            # --id-table is required=True on build_edge_tiles.py even though tour records are
+            # hut-only (spec §3) - the same id table hut/start edges already resolve display ids
+            # from.
+            f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
+            "--layer-name tour_edges",
+            f"--out-tiles {OSM_DIR / 'tour-edges.pmtiles'}",
+            f"--out-stats {OSM_DIR / 'tour-edge-stats.json'}",
+            f"--out-geometry-bin {OSM_DIR / 'tour-edge-geometry.bin'}",
+            f"--out-geometry-json {OSM_DIR / 'tour-edge-geometry.json'}",
+        ],
+        params=_hut_edge_tiles_params(),
+        task_dep=["build_profiles"],  # same in-place-rewrite reasoning as the other two edge-tile tasks
+        file_dep=[OSM_DIR / "tour_edges" / "records.npy"],
+        targets=[
+            OSM_DIR / "tour-edges.pmtiles", OSM_DIR / "tour-edge-stats.json",
+            OSM_DIR / "tour-edge-geometry.bin", OSM_DIR / "tour-edge-geometry.json",
+        ],
+    )
+
+
 def task_build_approach_table():
     return pipeline_task(
         "phases/postprocessing/build_approach_table.py",
