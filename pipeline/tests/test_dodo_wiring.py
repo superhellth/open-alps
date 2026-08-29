@@ -181,3 +181,22 @@ def test_fetch_huts_targets_include_partner_betriebe():
 def test_filter_start_points_depends_on_partner_betriebe():
     deps = dodo.task_filter_start_points()["file_dep"]
     assert any(d.endswith("partner_betriebe.geojson") for d in deps)
+
+
+def test_fetch_tours_depends_on_huts_geojson_not_just_network():
+    # Resolving Huettenliste GUIDs to positional indices means a huts refetch that reorders or
+    # re-filters huts silently invalidates every hutIndices entry - file_dep must NOT be [].
+    deps = dodo.task_fetch_tours()["file_dep"]
+    assert any(d.endswith("huts.geojson") for d in deps)
+
+
+def test_fetch_tours_targets_all_three_outputs():
+    targets = dodo.task_fetch_tours()["targets"]
+    assert any(t.endswith("tours.json") for t in targets)
+    assert any(t.endswith("tour_traces.json") for t in targets)
+    assert any(t.endswith("tour-fetch-gaps.json") for t in targets)
+
+
+def test_fetch_tours_tracks_bbox():
+    param_names = {p["name"] for p in dodo.task_fetch_tours().get("params", [])}
+    assert "bbox_json" in param_names

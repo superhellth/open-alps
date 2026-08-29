@@ -32,6 +32,23 @@ def task_fetch_huts():
     )
 
 
+def task_fetch_tours():
+    return pipeline_task(
+        "phases/downloads/fetch_tours.py",
+        # fetch_tours.py resolves Huettenliste GUIDs against huts.geojson's own feature-array
+        # position - unlike fetch_huts.py's plain network fetch, a huts refetch that reorders or
+        # re-filters huts silently invalidates every hutIndices entry, so this must be a real
+        # file_dep, not just a tracked param.
+        tracking_params=[
+            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
+        ],
+        file_dep=[OSM_DIR / "huts.geojson"],
+        targets=[
+            OSM_DIR / "tours.json", OSM_DIR / "tour_traces.json", OSM_DIR / "tour-fetch-gaps.json",
+        ],
+    )
+
+
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",
