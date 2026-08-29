@@ -56,6 +56,9 @@ beforeEach(() => {
       if (url.includes('stations.geojson')) {
         return fetchJsonMock({ type: 'FeatureCollection', features: [] })
       }
+      if (url.includes('partner_betriebe.geojson')) {
+        return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+      }
       throw new Error(`unexpected fetch ${url}`)
     }),
   )
@@ -108,6 +111,7 @@ describe('TourSearchPage', () => {
           })
         }
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('partner_betriebe.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
@@ -121,5 +125,40 @@ describe('TourSearchPage', () => {
     // Before the fix, hutNameById.get(0) misses (map is keyed by GUID) and the raw index "0"
     // renders instead of "Guid Hut".
     await waitFor(() => expect(screen.getAllByText(/Guid Hut/).length).toBeGreaterThan(0))
+  })
+
+  it('fetches partner_betriebe.geojson and a 404 on it still leaves the page usable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('huts.geojson')) {
+          return fetchJsonMock({ type: 'FeatureCollection', features: [{ properties: { id: 0, name: 'HutA', hutType: 'av', serviced: true }, geometry: { type: 'Point', coordinates: [11.0, 47.0] } }] })
+        }
+        if (url.includes('parking.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('partner_betriebe.geojson')) return Promise.reject(new Error('404'))
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Touren suchen' })).toBeEnabled()
+  })
+
+  it('renders the Bergsteigerdorf mode option and the operator/servicing checkboxes', async () => {
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    await userEvent.click(screen.getAllByRole('combobox')[0])
+    expect(screen.getByText('Start im Bergsteigerdorf (offene Strecke)')).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByLabelText(/Selbstversorgerhütten/)).toBeInTheDocument()
+  })
+
+  it('disables submit and shows a hint when the filter selection is empty', async () => {
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    await userEvent.click(screen.getByLabelText('AV-Hütte'))
+    await userEvent.click(screen.getByLabelText('Sonstige Hütte'))
+    expect(screen.getByRole('button', { name: 'Touren suchen' })).toBeDisabled()
   })
 })
