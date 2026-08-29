@@ -12,10 +12,19 @@ function edge(fromIndex: number, toIndex: number, distanceM: number) {
   return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
 }
 
+function emptyHutEdgeIdsStub(): GraphData['hutEdgeIds'] {
+  return {
+    getSortedIds: () => new Int32Array(0),
+    getPrefixIds: () => new Int32Array(0),
+    getSuffixIds: () => new Int32Array(0),
+  }
+}
+
 // This fixture's approach/exit are station-type (SOURCE_TYPE_STATION = 1), matching the
 // "(transit)" describe block below; the "(car)" describe block overrides source types to
 // SOURCE_TYPE_PARKING (2) on its own graph copies where mode-gating requires it.
 const graphData: GraphData = {
+  hutEdgeIds: emptyHutEdgeIdsStub(),
   hutEdges: {
     hutIds: ['A', 'B', 'C'],
     variantNames: { 0: 'FAST_ANY' },
@@ -118,6 +127,65 @@ describe('searchChains (car)', () => {
     expect(full).toBeDefined()
     expect(full!.startId).toBe(100)
     expect(full!.exitStartId).toBe(100)
+  })
+})
+
+describe('searchChains (overlap avoidance)', () => {
+  const overlapEdge = (fromIndex: number, toIndex: number, edgeId: number) => ({
+    fromIndex, toIndex, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000,
+    sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId,
+  })
+
+  // Chain 0 -[e01]-> 1 -[e12]-> 2 -[e23]-> 3. e01 and e12 share base-edge id 100, but ONLY in the
+  // run leaving their common hut 1 - spec §4's exemption should keep a chain using just those two.
+  // e01 and e23 independently share id 200, with NO common hut between them - spec §4's hard rule
+  // should exclude any chain using both.
+  const SORTED: Record<number, number[]> = { 1: [100, 200], 2: [100, 300], 3: [200, 400] }
+  const PREFIX: Record<number, number[]> = { 1: [200], 2: [100], 3: [400] }  // near from_id
+  const SUFFIX: Record<number, number[]> = { 1: [100], 2: [300], 3: [200] }  // near to_id
+
+  const overlapGraphData: GraphData = {
+    hutEdges: {
+      hutIds: ['A', 'B', 'C', 'D'],
+      variantNames: { 0: 'FAST_ANY' },
+      records: [overlapEdge(0, 1, 1), overlapEdge(1, 2, 2), overlapEdge(2, 3, 3)],
+    },
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          2: [{ hut_id: 2, start_id: 300, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 9002 }],
+          3: [{ hut_id: 3, start_id: 200, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 9001 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED[edgeId] ?? []),
+      getPrefixIds: (edgeId) => Int32Array.from(PREFIX[edgeId] ?? []),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX[edgeId] ?? []),
+    },
+  }
+
+  it('excludes a chain whose non-adjacent legs share a base-edge id', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      overlapGraphData,
+    )
+    expect(chains.some((c) => c.huts.length === 4)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+
+  it('keeps a chain whose adjacent legs only share the run out of their common hut', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      overlapGraphData,
+    )
+    const kept = chains.find((c) => c.huts.length === 3 && c.exitStartId === 300)
+    expect(kept).toBeDefined()
+    expect(kept!.huts).toEqual([0, 1, 2])
   })
 })
 
@@ -275,6 +343,7 @@ describe('dominance pruning (Section B) is exact', () => {
     return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 100, descentM: 100, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
   }
   const diamondGraph: GraphData = {
+    hutEdgeIds: emptyHutEdgeIdsStub(),
     hutEdges: {
       hutIds: ['A', 'B', 'C', 'D'],
       variantNames: { 0: 'FAST_ANY' },
