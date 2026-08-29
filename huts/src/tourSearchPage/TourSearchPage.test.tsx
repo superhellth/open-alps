@@ -15,9 +15,16 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+const emptyHutEdgeIdsStub: GraphData['hutEdgeIds'] = {
+  getSortedIds: () => new Int32Array(0),
+  getPrefixIds: () => new Int32Array(0),
+  getSuffixIds: () => new Int32Array(0),
+}
+
 const graphDataFixture: GraphData = {
   hutEdges: { hutIds: ['HutA'], variantNames: { 0: 'FAST_ANY' }, records: [] },
   approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+  hutEdgeIds: emptyHutEdgeIdsStub,
 }
 
 const searchResultFixture: SearchResult = {
@@ -83,6 +90,7 @@ describe('TourSearchPage', () => {
     vi.spyOn(tourSearchIndex, 'loadTourSearchData').mockResolvedValue({
       hutEdges: { hutIds: ['{GUID-A}'], variantNames: { 0: 'FAST_ANY' }, records: [] },
       approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+      hutEdgeIds: emptyHutEdgeIdsStub,
     })
     vi.spyOn(tourSearchIndex, 'findTours').mockReturnValue({
       chains: [{
