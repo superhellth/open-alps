@@ -1,4 +1,5 @@
 import type { Query, TourMode } from '../tourSearch/types.js'
+import type { HutClass, HutOperator } from '../hutClass.js'
 import { toNumberOrDefault } from './helpers.js'
 
 export interface FormState {
@@ -11,6 +12,9 @@ export interface FormState {
   maxEleM: string
   allowViaFerrata: boolean
   overlapVariety: 'wenig' | 'mittel' | 'viel'
+  allowedOperators: Set<HutOperator>
+  allowServiced: boolean
+  allowSelfService: boolean
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -23,6 +27,9 @@ export const DEFAULT_FORM: FormState = {
   maxEleM: '',
   allowViaFerrata: true,
   overlapVariety: 'mittel',
+  allowedOperators: new Set(['av', 'sonstige']),
+  allowServiced: true,
+  allowSelfService: false,
 }
 
 export const OVERLAP_THRESHOLD_BY_VARIETY: Record<FormState['overlapVariety'], number> = {
@@ -31,7 +38,26 @@ export const OVERLAP_THRESHOLD_BY_VARIETY: Record<FormState['overlapVariety'], n
   viel: 0.8,
 }
 
-export function buildQuery(form: FormState): Query {
+function hutClassAllowed(c: HutClass, form: FormState): boolean {
+  if (!form.allowedOperators.has(c.operator)) return false
+  return c.serviced ? form.allowServiced : form.allowSelfService
+}
+
+function allowedHutIndices(form: FormState, hutsByIndex: (HutClass | null)[]): Set<number> {
+  const allowed = new Set<number>()
+  hutsByIndex.forEach((c, i) => {
+    if (c && hutClassAllowed(c, form)) allowed.add(i)
+  })
+  return allowed
+}
+
+export function isFilterSelectionValid(form: FormState): boolean {
+  if (form.allowedOperators.size === 0) return false
+  if (!form.allowServiced && !form.allowSelfService) return false
+  return true
+}
+
+export function buildQuery(form: FormState, hutsByIndex: (HutClass | null)[]): Query {
   return {
     mode: form.mode,
     legCountMin: form.legCountRange[0],
@@ -43,5 +69,6 @@ export function buildQuery(form: FormState): Query {
     legAscentCapM: toNumberOrDefault(form.legAscentCapM, Infinity),
     maxEleM: form.maxEleM === '' ? null : toNumberOrDefault(form.maxEleM, Infinity),
     allowViaFerrata: form.allowViaFerrata,
+    allowedHutIndices: allowedHutIndices(form, hutsByIndex),
   }
 }
