@@ -154,9 +154,16 @@ export interface ApproachesData {
   }
 }
 
+export interface HutEdgeIdsData {
+  getSortedIds(edgeId: number): Int32Array
+  getPrefixIds(edgeId: number): Int32Array
+  getSuffixIds(edgeId: number): Int32Array
+}
+
 export interface GraphData {
   hutEdges: HutEdgesData
   approaches: ApproachesData
+  hutEdgeIds: HutEdgeIdsData
 }
 
 export interface SearchResult {

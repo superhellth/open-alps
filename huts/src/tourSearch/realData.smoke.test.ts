@@ -49,7 +49,17 @@ describe('real shipped payload (huts/public/data)', () => {
   let graphData: GraphData
 
   beforeAll(() => {
-    graphData = { hutEdges: loadHutEdgesFromDisk(), approaches: loadApproachesFromDisk() }
+    // hutEdgeIds is a stub until Task 12 (docs/superpowers/plans/
+    // 2026-08-29-avoid-overlapping-tracks-plan.md) regenerates huts/public/data/hut-edge-ids.*
+    // via a confirmed pipeline run and wires a real loadHutEdgeIdsFromDisk() here.
+    graphData = {
+      hutEdges: loadHutEdgesFromDisk(), approaches: loadApproachesFromDisk(),
+      hutEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+    }
   })
 
   it('resolves every difficulty ceiling to a variant the payload actually has', () => {
