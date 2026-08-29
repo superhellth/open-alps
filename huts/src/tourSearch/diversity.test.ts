@@ -31,12 +31,12 @@ describe('dedupeReversePairs', () => {
 import { suppressSimilar } from './diversity.js'
 
 describe('suppressSimilar', () => {
-  it('drops a candidate that shares more than the threshold fraction of huts with an accepted chain', () => {
+  it('drops a candidate that shares more than the fixed threshold fraction of huts with an accepted chain', () => {
     const chains = [
       { huts: [0, 1, 2], startId: 100, totalDurationH: 5 },
       { huts: [0, 1, 3], startId: 200, totalDurationH: 6 }, // shares 2/3 huts with the first
     ]
-    const result = suppressSimilar(chains, 0.5)
+    const result = suppressSimilar(chains)
     expect(result).toHaveLength(1)
     expect(result[0].totalDurationH).toBe(5)
   })
@@ -46,7 +46,17 @@ describe('suppressSimilar', () => {
       { huts: [0, 1, 2], startId: 100, totalDurationH: 5 },
       { huts: [3, 4, 5], startId: 200, totalDurationH: 6 }, // disjoint
     ]
-    expect(suppressSimilar(chains, 0.5)).toHaveLength(2)
+    expect(suppressSimilar(chains)).toHaveLength(2)
+  })
+
+  it('drops a same-hut-set permutation reached from a different start point', () => {
+    // The case dedupeReversePairs deliberately does NOT collapse (different tours, same huts) —
+    // this step is what keeps only one of them, and is why the threshold survives as a constant.
+    const chains = [
+      { huts: [0, 1, 2], startId: 100, totalDurationH: 5 },
+      { huts: [0, 2, 1], startId: 200, totalDurationH: 6 },
+    ]
+    expect(suppressSimilar(chains)).toHaveLength(1)
   })
 
   it('drops a candidate sharing its start point with an accepted chain, even with low hut overlap', () => {
@@ -54,7 +64,7 @@ describe('suppressSimilar', () => {
       { huts: [0, 1, 2], startId: 100, totalDurationH: 5 },
       { huts: [3, 4, 5], startId: 100, totalDurationH: 6 }, // same trailhead
     ]
-    expect(suppressSimilar(chains, 0.5)).toHaveLength(1)
+    expect(suppressSimilar(chains)).toHaveLength(1)
   })
 
   it('processes candidates in the given (ranked) order, always keeping the first', () => {
@@ -63,7 +73,7 @@ describe('suppressSimilar', () => {
       { huts: [0], startId: 1, totalDurationH: 2 },
       { huts: [0], startId: 1, totalDurationH: 3 },
     ]
-    const result = suppressSimilar(chains, 0.5)
+    const result = suppressSimilar(chains)
     expect(result).toHaveLength(1)
     expect(result[0].totalDurationH).toBe(1)
   })

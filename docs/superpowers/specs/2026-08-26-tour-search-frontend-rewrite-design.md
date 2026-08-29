@@ -181,9 +181,16 @@ plain `List` of every chain is unusable at that scale.
   by a named region, using the start-point coordinates already loaded from
   `stations.geojson`/`parking.geojson`. Applied after `findTours`, so it cannot affect
   exhaustiveness or perf.
-- **Variety knob.** `findTours`' `overlapThreshold` (default `0.5`, `index.js`) is currently
+- **Variety knob.** ~~`findTours`' `overlapThreshold` (default `0.5`, `index.js`) is currently
   hardcoded at the call site. Surface it as a coarse UI control (e.g. "wenig/mittel/viel Varianz")
-  rather than a raw number.
+  rather than a raw number.~~ **Done, then reverted (2026-08-29).** The "Variantenvielfalt" control
+  shipped and was measured to be a no-op: on the shipped payload (2–4 legs, SAC 3, ungraded
+  allowed, 8 h legs) `wenig`/`mittel`/`viel` (0.3/0.5/0.8) returned identical chain counts — 188
+  transit, 384 car — because `suppressSimilar`'s start-point rule already caps output at one tour
+  per start point, and tours from *different* start points rarely share huts. The threshold itself
+  was kept (dropping it entirely lets ~16% more car chains through, all same-hut-set permutations),
+  but as a constant inside `diversity.ts`; `findTours`' options argument, `FormState.overlapVariety`
+  and the dropdown are removed.
 - **Per-leg breakdown per result.** Today only the totals are shown
   (`h`, ↑m, ↓m, km). A user cannot choose between multi-day tours without seeing that day 3 is 9 h
   and 1400 hm. Each result card expands to a per-leg list (from → to, duration, ascent, descent,

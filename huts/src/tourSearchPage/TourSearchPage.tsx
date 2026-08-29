@@ -10,7 +10,7 @@ import AppShell from '../AppShell.js'
 import type { StartPoint } from './types.js'
 import type { HutClass, HutOperator } from '../hutClass.js'
 import { OPERATOR_LABEL } from '../hutClass.js'
-import { DEFAULT_FORM, OVERLAP_THRESHOLD_BY_VARIETY, buildQuery, isFilterSelectionValid, type FormState } from './formState.js'
+import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, type FormState } from './formState.js'
 import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, type SortKey } from './helpers.js'
 import LegCountSlider from './LegCountSlider.js'
 import LegTimeSlider from './LegTimeSlider.js'
@@ -160,8 +160,7 @@ function TourSearchPage() {
     // (spec D: no Web Worker in this spec's scope).
     setTimeout(() => {
       const query = buildQuery(form, hutsByIndex)
-      const overlapThreshold = OVERLAP_THRESHOLD_BY_VARIETY[form.overlapVariety]
-      setResult(findTours(query, graphData, { overlapThreshold }))
+      setResult(findTours(query, graphData))
       setPage(1)
       setSearching(false)
     }, 0)
@@ -300,20 +299,6 @@ function TourSearchPage() {
                   value={form.maxEleM}
                   onChange={(e) => setForm((f) => ({ ...f, maxEleM: e.target.value }))}
                 />
-
-                <Box>
-                  <Typography variant="subtitle2">Variantenvielfalt</Typography>
-                  <Select
-                    fullWidth
-                    size="small"
-                    value={form.overlapVariety}
-                    onChange={(e: SelectChangeEvent) => setForm((f) => ({ ...f, overlapVariety: e.target.value as FormState['overlapVariety'] }))}
-                  >
-                    <MenuItem value="wenig">wenig (ähnliche Touren zusammenfassen)</MenuItem>
-                    <MenuItem value="mittel">mittel</MenuItem>
-                    <MenuItem value="viel">viel (auch ähnliche Touren zeigen)</MenuItem>
-                  </Select>
-                </Box>
               </AccordionDetails>
             </Accordion>
           </Box>

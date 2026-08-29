@@ -11,7 +11,6 @@ export interface FormState {
   legAscentCapM: string
   maxEleM: string
   allowViaFerrata: boolean
-  overlapVariety: 'wenig' | 'mittel' | 'viel'
   allowedOperators: Set<HutOperator>
   allowServiced: boolean
   allowSelfService: boolean
@@ -26,16 +25,9 @@ export const DEFAULT_FORM: FormState = {
   legAscentCapM: '',
   maxEleM: '',
   allowViaFerrata: true,
-  overlapVariety: 'mittel',
   allowedOperators: new Set(['av', 'sonstige']),
   allowServiced: true,
   allowSelfService: false,
-}
-
-export const OVERLAP_THRESHOLD_BY_VARIETY: Record<FormState['overlapVariety'], number> = {
-  wenig: 0.3,
-  mittel: 0.5,
-  viel: 0.8,
 }
 
 function hutClassAllowed(c: HutClass, form: FormState): boolean {
