@@ -17,6 +17,7 @@ def _record(from_id, from_type, to_id, distance_m, ascent_m, descent_m,
         from_id, to_id, from_type, binfmt.TYPE_HUT, variant,
         distance_m, 0.0, ascent_m, descent_m, 0.0, 0.0, 0.0, 0.0,
         -1, False, 0, 0, 0, 0,
+        0, 0, (-1,) * 8, 0, (-1,) * 8, 0,
     )
 
 

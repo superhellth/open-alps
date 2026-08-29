@@ -15,9 +15,13 @@ from lib.pipeline import DEM_DIR, OSM_DIR, load_config
 
 CONFIG = load_config()
 
-# tracking-only, no CLI flag: a code-only EDGE_DTYPE/RECORD_DTYPE change (no config edit at all)
-# must still force these tasks' multi-hour rebuilds - see binfmt.SCHEMA_VERSION's docstring.
-_SCHEMA_VERSION_PARAM = tracking_param("schema_version", int, binfmt.SCHEMA_VERSION)
+# Split so bumping RECORD_DTYPE (this change) doesn't force-rerun task_build_base_graph's ~4h
+# EDGE_DTYPE build - see root CLAUDE.md's warning on that task and lib/binfmt.py's dtype table.
+_EDGE_SCHEMA_VERSION_PARAM = tracking_param("edge_schema_version", int, binfmt.EDGE_SCHEMA_VERSION)
+_SNAP_SCHEMA_VERSION_PARAM = tracking_param("snap_schema_version", int, binfmt.SNAP_SCHEMA_VERSION)
+_RECORD_SCHEMA_VERSION_PARAM = tracking_param(
+    "record_schema_version", int, binfmt.RECORD_SCHEMA_VERSION
+)
 
 
 def task_build_base_graph():
@@ -32,7 +36,7 @@ def task_build_base_graph():
             tracking_param("road_highway_tags_json", str,
                             json.dumps(CONFIG["graph"]["roadHighwayTags"])),
             tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
-            _SCHEMA_VERSION_PARAM,
+            _EDGE_SCHEMA_VERSION_PARAM,
         ],
         file_dep=[OSM_DIR / "trails.osm.pbf"],
         targets=[OSM_DIR / "base_graph" / "manifest.json"],
@@ -50,7 +54,7 @@ def task_snap_hubs():
             cli_param("max_snap_ascent_m", "max-snap-ascent-m", float,
                       CONFIG["graph"]["maxSnapAscentM"]),
         ],
-        tracking_params=[_SCHEMA_VERSION_PARAM],
+        tracking_params=[_SNAP_SCHEMA_VERSION_PARAM],
         # compute_edge_profiles rewrites base_graph/edges.npy's time_s/ascent_m/descent_m in place
         # but doesn't declare it as a target (build_base_graph already owns it), so this needs the
         # explicit task_dep - node_ele.npy alone wouldn't prove that in-place rewrite happened.
@@ -76,7 +80,7 @@ def task_gather_route_subgraphs():
     return pipeline_task(
         "phases/graph_building/gather_route_subgraphs.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
-        tracking_params=[_SCHEMA_VERSION_PARAM],
+        tracking_params=[_EDGE_SCHEMA_VERSION_PARAM],
         task_dep=["compute_edge_profiles"],  # same in-place-edit reasoning as snap_hubs above
         file_dep=[
             OSM_DIR / "base_graph" / "manifest.json", OSM_DIR / "base_graph" / "node_ele.npy",
@@ -95,7 +99,7 @@ def task_build_hub_edges():
             # (variants_lib.enabled_variants) - without this, a variant-grid edit would report
             # "up to date" and silently skip the rebuild.
             tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
-            _SCHEMA_VERSION_PARAM,
+            _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,
         ],
         task_dep=["snap_hubs", "gather_route_subgraphs"],
         file_dep=[
