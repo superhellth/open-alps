@@ -13,6 +13,9 @@ caa.alpenverein.at.har
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+.pixi/
 
 # OS/editor
 .DS_Store
