@@ -55,14 +55,36 @@ def test_build_hub_edges_tracks_the_variant_grid():
     assert "variants_json" in param_names
 
 
-def test_build_base_graph_and_hub_edges_track_schema_version():
-    # binfmt.SCHEMA_VERSION exists so a code-only EDGE_DTYPE/RECORD_DTYPE change (no config edit
-    # at all) still changes the tracked digest and forces a rebuild instead of needing `doit
-    # forget` by hand.
-    for task_fn in (dodo.task_build_base_graph, dodo.task_build_hub_edges, dodo.task_snap_hubs,
-                     dodo.task_gather_route_subgraphs):
-        param_names = {p["name"] for p in task_fn()["params"]}
-        assert "schema_version" in param_names
+def test_build_base_graph_tracks_only_edge_schema_version():
+    # binfmt.EDGE_SCHEMA_VERSION exists so a code-only EDGE_DTYPE change (no config edit at all)
+    # still changes the tracked digest and forces a rebuild instead of needing `doit forget` by
+    # hand - but a RECORD_DTYPE-only change (this task never writes RECORD_DTYPE) must not
+    # force-rerun this ~4h task.
+    param_names = {p["name"] for p in dodo.task_build_base_graph()["params"]}
+    assert "edge_schema_version" in param_names
+    assert "snap_schema_version" not in param_names
+    assert "record_schema_version" not in param_names
+
+
+def test_build_hub_edges_tracks_all_three_schema_versions():
+    # reads EDGE_DTYPE + HUB_SNAP_DTYPE, writes RECORD_DTYPE - a code-only change to any of the
+    # three must force this task to rerun.
+    param_names = {p["name"] for p in dodo.task_build_hub_edges()["params"]}
+    assert {"edge_schema_version", "snap_schema_version", "record_schema_version"} <= param_names
+
+
+def test_snap_hubs_tracks_only_snap_schema_version():
+    param_names = {p["name"] for p in dodo.task_snap_hubs()["params"]}
+    assert "snap_schema_version" in param_names
+    assert "edge_schema_version" not in param_names
+    assert "record_schema_version" not in param_names
+
+
+def test_gather_route_subgraphs_tracks_only_edge_schema_version():
+    param_names = {p["name"] for p in dodo.task_gather_route_subgraphs()["params"]}
+    assert "edge_schema_version" in param_names
+    assert "snap_schema_version" not in param_names
+    assert "record_schema_version" not in param_names
 
 
 def test_snap_hubs_and_gather_route_subgraphs_sit_between_compute_edge_profiles_and_build_hub_edges():
