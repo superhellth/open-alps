@@ -102,6 +102,7 @@ PUBLIC_FILES = [
     "approaches.json",
     "hut-edge-payload.bin",
     "hut-edge-payload.json",
+    "partner_betriebe.geojson",
 ]
 
 
