@@ -56,3 +56,29 @@ def reassemble_fragments(fragments: list, break_threshold_m: float) -> list:
                 merged = True
         chains.append(chain)
     return chains
+
+
+def _nearest_chain_index(chain: list, point: tuple) -> int:
+    dists = [_haversine_m(*p, *point) for p in chain]
+    return dists.index(min(dists))
+
+
+def orient_chain(chain: list, hut_coords_in_order: list, is_loop: bool) -> list:
+    """Orients a reassembled chain (Task 3) so its point order matches the tour's own hut visit
+    order (spec §2.2 step 3). For an open chain, whichever end sits nearer the first hut becomes
+    index 0. For a Rundtour the chain closes on itself, so both directions are valid geometric
+    walks - the one that visits the hut list with fewer order violations (a later hut assigned to
+    an earlier chain position than the one before it) wins."""
+    if not hut_coords_in_order:
+        return chain
+    if not is_loop:
+        start_d = _haversine_m(*chain[0], *hut_coords_in_order[0])
+        end_d = _haversine_m(*chain[-1], *hut_coords_in_order[0])
+        return chain if start_d <= end_d else list(reversed(chain))
+
+    def violations(oriented_chain):
+        positions = [_nearest_chain_index(oriented_chain, h) for h in hut_coords_in_order]
+        return sum(1 for a, b in zip(positions, positions[1:]) if b < a)
+
+    reversed_chain = list(reversed(chain))
+    return chain if violations(chain) <= violations(reversed_chain) else reversed_chain
