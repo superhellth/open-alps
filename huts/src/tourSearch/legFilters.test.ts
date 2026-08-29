@@ -53,4 +53,8 @@ describe('legPasses', () => {
     const startLeg = { durationH: 3, ascentM: 400, descentM: 100, distanceM: 5000 } // approach/exit legs carry no maxEleM/viaFerrata
     expect(legPasses(startLeg, baseConstraints, counters)).toBe(true)
   })
+
+  it('createKillCounters starts trackOverlap at 0', () => {
+    expect(createKillCounters().trackOverlap).toBe(0)
+  })
 })
