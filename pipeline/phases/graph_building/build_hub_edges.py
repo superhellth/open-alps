@@ -35,7 +35,7 @@ from lib import variants as variants_lib  # noqa: E402
 from lib.cell_igraph import (  # noqa: E402
     accumulate_path, build_base_igraph_arrays, build_igraph_from_base,
 )
-from lib.edge_output import write_edge_records  # noqa: E402
+from lib.edge_output import fold_endpoint_snaps, write_edge_records  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
@@ -217,13 +217,7 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
                 # is priced in here - it was contributing zero distance/ascent/descent otherwise.
                 src_snap = snaps[src_key]
                 tgt_snap = snaps[(t["type"], t["id"])]
-                snap_m = src_snap.gap_m + tgt_snap.gap_m
-                # Departure (src): climbing from hub up to the trail (hub below its snap point,
-                # gap_dz_m < 0) is ascent; descending down to the trail (gap_dz_m > 0) is descent.
-                # Arrival (tgt): climbing from the trail up to the hub (gap_dz_m > 0) is ascent;
-                # descending down off the trail to the hub (gap_dz_m < 0) is descent.
-                ascent_m = path.ascent_m + max(0.0, -src_snap.gap_dz_m) + max(0.0, tgt_snap.gap_dz_m)
-                descent_m = path.descent_m + max(0.0, src_snap.gap_dz_m) + max(0.0, -tgt_snap.gap_dz_m)
+                snap_m, ascent_m, descent_m = fold_endpoint_snaps(path, src_snap, tgt_snap)
                 geometry = [(hub["lon"], hub["lat"]), *path.coords, (t["lon"], t["lat"])]
                 records.append({
                     "from_id": hub["id"], "from_type": hub["type"],

@@ -84,3 +84,23 @@ def write_edge_records(records: list, out_dir: Path, write_edge_ids: bool = Fals
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
     if write_edge_ids:
         binfmt.save_array(out_dir / "edge_ids.npy", np.array(flat_edge_ids, dtype="i4"))
+
+
+def fold_endpoint_snaps(path, src_snap, tgt_snap) -> tuple:
+    """Prices the hub-to-trail gap at both ends into distance/ascent/descent (spec E3 of
+    2026-08-19-pipeline-v2-design.md): a routed path only sums routed edges, so the snap gap
+    contributes zero to distance/ascent/descent unless folded in here. Shared by
+    build_hub_edges.py's compute_hub_edges_for_cell and match_tour_edges.py's per-leg accumulation
+    (spec 2026-08-29-official-tours-integration-design.md §2.6: "apply the SAME endpoint treatment
+    build_hub_edges.py applies").
+
+    Departure (src): climbing from the hub up to the trail (hub below its snap point, gap_dz_m < 0)
+    is ascent; descending down to the trail (gap_dz_m > 0) is descent. Arrival (tgt): climbing from
+    the trail up to the hub (gap_dz_m > 0) is ascent; descending down off the trail to the hub
+    (gap_dz_m < 0) is descent. Returns (snap_m, ascent_m, descent_m) - distance_m folding is the
+    caller's own `path.distance_m + snap_m`, since callers differ in whether distance_m already
+    includes other terms."""
+    snap_m = src_snap.gap_m + tgt_snap.gap_m
+    ascent_m = path.ascent_m + max(0.0, -src_snap.gap_dz_m) + max(0.0, tgt_snap.gap_dz_m)
+    descent_m = path.descent_m + max(0.0, src_snap.gap_dz_m) + max(0.0, -tgt_snap.gap_dz_m)
+    return snap_m, ascent_m, descent_m
