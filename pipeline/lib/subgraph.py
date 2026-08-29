@@ -35,7 +35,12 @@ class LocalSubgraph:
     interior_ele: np.ndarray
 
 
-def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: float) -> LocalSubgraph:
+def gather_subgraph_for_bounds(base_graph_dir: Path, grid, bounds: dict) -> LocalSubgraph:
+    """Gathers every base-graph node/edge whose cell overlaps `bounds`, plus the one-hop edge-
+    incidence closure (see module docstring) - the bbox-driven half of gather_padded_subgraph,
+    factored out so a caller with its own bbox (match_tour_edges.py's per-leg corridor, sized off
+    a chain slice rather than a grid cell) can reuse the exact same gather instead of re-deriving
+    it from a cell_id it doesn't have."""
     base_graph_dir = Path(base_graph_dir)
     nodes = binfmt.load_array(base_graph_dir / "nodes.npy")
     cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy")
@@ -50,8 +55,7 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
     interior_ele = (binfmt.load_array(interior_ele_path) if interior_ele_path.exists()
                      else np.zeros(len(interior), dtype=np.float32))
 
-    padded = grid.padded_bounds(cell_id, buffer_km)
-    overlapping_cells = grid.cell_ids_overlapping(padded)
+    overlapping_cells = grid.cell_ids_overlapping(bounds)
 
     if overlapping_cells:
         base_node_ids = np.unique(np.concatenate([
@@ -103,6 +107,10 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
         # same "stay a lazy view, indexed by the untouched global offsets" reasoning as interior.
         interior_ele=interior_ele,
     )
+
+
+def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: float) -> LocalSubgraph:
+    return gather_subgraph_for_bounds(base_graph_dir, grid, grid.padded_bounds(cell_id, buffer_km))
 
 
 def save_local_subgraph(subgraph: LocalSubgraph, cell_dir: Path) -> None:
