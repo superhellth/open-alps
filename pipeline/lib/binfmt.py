@@ -71,6 +71,11 @@ HUB_SNAP_DTYPE = np.dtype([
     ("gap_m", "f8"), ("gap_dz_m", "f8"),
 ])
 
+# tour_edges/tour_meta.npy - row-aligned 1:1 with tour_edges/records.npy (NOT folded into
+# RECORD_DTYPE itself, spec §2.6: avoids touching the shared dtype every other consumer depends
+# on). 25 tours x <=9 legs each fits u1 comfortably.
+TOUR_META_DTYPE = np.dtype([("tour_id", "u1"), ("leg_index", "u1")])
+
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
@@ -92,9 +97,13 @@ VARIANT_FAST_T3 = 2
 # huts losing their last T2/T3 connection under the strict ungraded_m==0 rule, both far over the
 # 5% threshold that would have kept the grid at three rows.
 VARIANT_FAST_T3_UNGRADED = 3
+# A tour leg is not a member of the graph.variants search grid (spec 2026-08-29-official-tours-
+# integration-design.md §5) - it is the ONE route the AV publishes, nothing to search among - so
+# it gets its own sentinel rather than reusing a FAST_* row.
+VARIANT_OFFICIAL = 4
 VARIANT_NAMES = {
     VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
-    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED",
+    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED", VARIANT_OFFICIAL: "OFFICIAL",
 }
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
