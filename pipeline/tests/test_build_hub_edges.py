@@ -17,6 +17,8 @@ from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
+from lib.hub_snap import SnapResult  # noqa: E402
+from lib.edge_split import SplitResult  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
     SnapRejection, SnapResult, _cell_workload_score, _write_edge_output,
     compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, snap_hubs_for_cell,
@@ -669,3 +671,75 @@ def test_cell_workload_score_is_zero_for_an_uncached_cell(tmp_path):
     # gather_route_subgraphs.py (build_hub_edges.py's task_dep), so this path shouldn't be hit in
     # practice, but a missing file must not crash the sort.
     assert _cell_workload_score(tmp_path, 999, n_hubs=3) == 0
+
+
+def _one_edge_subgraph_for_split():
+    """Two local nodes joined by one base edge (global edge_id=7), long enough to mid-chain-split."""
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes["lon"] = [11.0, 11.01]
+    nodes["lat"] = [47.0, 47.0]
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 700.0, 0.0, 0.0, 0.0, 700.0, 50.0, 20.0, 1, False, True, 0, 0, 7)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101]),
+        local_nodes=nodes,
+        local_edges=edges,
+        interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(2, dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+
+
+def test_synthetic_split_halves_get_distinct_base_edge_ids():
+    subgraph = _one_edge_subgraph_for_split()
+    split = SplitResult(
+        split_coord=(11.005, 47.0),
+        dist_to_u=350.0, dist_to_v=350.0,
+        road_m_to_u=0.0, road_m_to_v=0.0,
+        ungraded_m_to_u=0.0, ungraded_m_to_v=0.0,
+        inferred_m_to_u=0.0, inferred_m_to_v=0.0,
+        interior_to_u=[], interior_to_v=[],
+    )
+    hub_snaps = {("hut", 1): SnapResult(edge_local_index=0, split=split)}
+
+    base = build_base_igraph_arrays(subgraph, hub_snaps)
+
+    # index 0 = original edge (edge_id=7 -> 21), index 1 = the u-side synthetic half (-> 22),
+    # index 2 = the v-side synthetic half (-> 23). This is the false-overlap bug §1 guards against:
+    # a naive mapping would report the SAME id for both halves.
+    assert base.base_edge_ids == [21, 22, 23]
+    assert base.base_edge_ids[1] != base.base_edge_ids[2]
+
+    graph, hub_vertex, _ = build_igraph_from_base(base)
+    # original edge (index 0) was removed by the split; only the two synthetic halves survive.
+    assert graph.ecount() == 2
+    assert set(graph.es["base_edge_id"]) == {22, 23}
+
+
+def test_accumulate_path_reports_traversed_base_edge_ids_in_order():
+    subgraph = _one_edge_subgraph_for_split()
+    split = SplitResult(
+        split_coord=(11.005, 47.0),
+        dist_to_u=350.0, dist_to_v=350.0,
+        road_m_to_u=0.0, road_m_to_v=0.0,
+        ungraded_m_to_u=0.0, ungraded_m_to_v=0.0,
+        inferred_m_to_u=0.0, inferred_m_to_v=0.0,
+        interior_to_u=[], interior_to_v=[],
+    )
+    hub_snaps = {("hut", 1): SnapResult(edge_local_index=0, split=split)}
+    base = build_base_igraph_arrays(subgraph, hub_snaps)
+    graph, hub_vertex, vertex_coords = build_igraph_from_base(base)
+
+    result = path_for(graph, vertex_coords, 0, 1)
+
+    assert result.base_edge_ids == [22, 23]
+
+
+def test_accumulate_path_same_source_and_target_has_empty_base_edge_ids():
+    subgraph = _one_edge_subgraph_for_split()
+    base = build_base_igraph_arrays(subgraph, {})
+    graph, _, vertex_coords = build_igraph_from_base(base)
+
+    result = path_for(graph, vertex_coords, 0, 0)
+
+    assert result.base_edge_ids == []
