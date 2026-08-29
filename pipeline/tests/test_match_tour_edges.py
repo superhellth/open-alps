@@ -120,3 +120,38 @@ def test_match_leg_reports_length_divergent_when_routed_far_exceeds_trace():
     result = match_leg(subgraph, src_key, tgt_key, persisted, trace_length_m=100.0,
                         length_divergence_ratio=2.0)
     assert result["reason"] == "length_divergent"
+
+
+from lib.cell_igraph import PathResult  # noqa: E402
+from graph_building.match_tour_edges import build_tour_record  # noqa: E402
+
+
+def test_build_tour_record_shape_matches_write_edge_records_expectations():
+    path = PathResult(
+        coords=[(0.003, 0.0)], distance_m=900.0, road_m=0.0, ungraded_m=0.0, inferred_m=0.0,
+        ascent_m=30.0, descent_m=10.0, max_ele_m=1200.0, sac_rank=1, via_ferrata=False,
+        base_edge_ids=[7],
+    )
+    src_snap = _node_snap(100, gap_m=5.0, gap_dz_m=0.0)
+    tgt_snap = _node_snap(101, gap_m=3.0, gap_dz_m=0.0)
+    # match_leg returns SnapResult (post-reconstruct_local_snaps), not PersistedSnap - build a
+    # minimal stand-in with the same .gap_m/.gap_dz_m surface fold_endpoint_snaps reads.
+    from dataclasses import dataclass
+
+    @dataclass
+    class _Snap:
+        gap_m: float
+        gap_dz_m: float
+
+    record = build_tour_record(
+        from_hut=0, to_hut=1, from_coord=(10.0, 47.0), to_coord=(10.01, 47.0),
+        path=path, src_snap=_Snap(5.0, 0.0), tgt_snap=_Snap(3.0, 0.0),
+    )
+    assert record["from_id"] == 0 and record["to_id"] == 1
+    assert record["from_type"] == binfmt.TYPE_HUT and record["to_type"] == binfmt.TYPE_HUT
+    assert record["variant"] == binfmt.VARIANT_OFFICIAL
+    assert record["distance_m"] == 900.0 + 5.0 + 3.0
+    assert record["snap_m"] == 8.0
+    assert record["geometry"][0] == (10.0, 47.0)
+    assert record["geometry"][-1] == (10.01, 47.0)
+    assert record["base_edge_ids"] == [7]
