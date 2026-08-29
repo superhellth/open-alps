@@ -24,6 +24,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.timing import StepTimer, phase  # noqa: E402
+
+SCRIPT_NAME = "filter_trails.py"
 
 config = load_config()
 
@@ -33,22 +36,28 @@ args = parser.parse_args()
 
 hub_range_path = OSM_DIR / "hub_range.geojson"
 
-for region in config["regions"]:
-    name = region["name"]
-    src = OSM_DIR / "raw" / f"{name}-latest.osm.pbf"
-    tag_filtered = OSM_DIR / f"{name}-tag-filtered.osm.pbf"
-    dst = OSM_DIR / f"{name}-trails.osm.pbf"
+timer = StepTimer()
+with phase(SCRIPT_NAME, "filter_trails") as meta:
+    for region in config["regions"]:
+        name = region["name"]
+        src = OSM_DIR / "raw" / f"{name}-latest.osm.pbf"
+        tag_filtered = OSM_DIR / f"{name}-tag-filtered.osm.pbf"
+        dst = OSM_DIR / f"{name}-trails.osm.pbf"
 
-    print(f"tag-filtering {src} -> {tag_filtered}")
-    subprocess.run(
-        ["osmium", "tags-filter", str(src), args.tag_filter, "-o", str(tag_filtered), "--overwrite"],
-        check=True,
-    )
+        print(f"tag-filtering {src} -> {tag_filtered}")
+        with timer.step("tag_filter"):
+            subprocess.run(
+                ["osmium", "tags-filter", str(src), args.tag_filter, "-o", str(tag_filtered), "--overwrite"],
+                check=True,
+            )
 
-    print(f"clipping {tag_filtered} to hub range {hub_range_path} -> {dst}")
-    subprocess.run(
-        ["osmium", "extract", "--polygon", str(hub_range_path), str(tag_filtered),
-         "-o", str(dst), "--overwrite"],
-        check=True,
-    )
-    tag_filtered.unlink()
+        print(f"clipping {tag_filtered} to hub range {hub_range_path} -> {dst}")
+        with timer.step("clip"):
+            subprocess.run(
+                ["osmium", "extract", "--polygon", str(hub_range_path), str(tag_filtered),
+                 "-o", str(dst), "--overwrite"],
+                check=True,
+            )
+        tag_filtered.unlink()
+    meta.update(timer.as_meta())
+print(f"step totals: {timer.summary()}", flush=True)

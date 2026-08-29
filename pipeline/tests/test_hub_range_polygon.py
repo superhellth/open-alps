@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from shapely.geometry import MultiPolygon, Point, Polygon  # noqa: E402
 
-from lib.pipeline import circle_polygon, hub_range_polygon  # noqa: E402
+from lib.geo import circle_polygon, hub_range_polygon  # noqa: E402
 
 
 def _write_huts(tmp_path, coords):

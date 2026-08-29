@@ -6,7 +6,7 @@ no trail farther than maxEdgeKm beeline from every hut can ever appear on a vali
 hut-to-start edge (build_hub_edges.py's real-distance cutoff can only be >= beeline distance) -
 the same bound filter_start_points.py already applies to station/parking points.
 
-The radius includes HUB_RANGE_SAFETY_MARGIN (lib.pipeline) so this shape and bavaria-dgm5's
+The radius includes HUB_RANGE_SAFETY_MARGIN (lib.geo) so this shape and bavaria-dgm5's
 per-hut DEM tile buffer (dem_providers/composite.py) are guaranteed to agree - see
 docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md.
 
@@ -21,7 +21,11 @@ from pathlib import Path
 from shapely.geometry import mapping
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import HUB_RANGE_SAFETY_MARGIN, OSM_DIR, hub_range_polygon, load_config  # noqa: E402
+from lib.geo import HUB_RANGE_SAFETY_MARGIN, hub_range_polygon  # noqa: E402
+from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "compute_hub_range.py"
 
 config = load_config()
 
@@ -31,7 +35,8 @@ parser.add_argument("--osm-dir", type=Path, default=OSM_DIR)
 args = parser.parse_args()
 
 radius_km = args.max_edge_km * HUB_RANGE_SAFETY_MARGIN
-polygon = hub_range_polygon(args.osm_dir / "huts.geojson", radius_km)
+with phase(SCRIPT_NAME, "compute_hub_range"):
+    polygon = hub_range_polygon(args.osm_dir / "huts.geojson", radius_km)
 
 out_path = args.osm_dir / "hub_range.geojson"
 with open(out_path, "w", encoding="utf-8") as f:

@@ -18,8 +18,8 @@ const searchResultFixture: SearchResult = {
       huts: [0], startId: 100, exitStartId: 100,
       totalDurationH: 5, totalAscentM: 500, totalDescentM: 500, totalDistanceM: 8000,
       legs: [
-        { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000 },
-        { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000 },
+        { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000, edgeId: 0, reversed: false },
+        { durationH: 2.5, ascentM: 250, descentM: 250, distanceM: 4000, edgeId: 1, reversed: true },
       ],
     },
   ],

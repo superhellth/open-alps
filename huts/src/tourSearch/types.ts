@@ -12,6 +12,7 @@ export interface ApproachRecord {
   ascentM: number
   descentM: number
   access: string | null
+  edgeId: number
 }
 
 export interface HutEdgeRecord {
@@ -28,6 +29,7 @@ export interface HutEdgeRecord {
   ungradedM: number
   inferredM: number
   snapM: number
+  edgeId: number
 }
 
 /** Fields legFilters.legPasses needs, present on every leg shape (hut-hut, approach, exit). */
@@ -51,6 +53,8 @@ export interface HutLeg extends LegBase {
   ungradedM: number
   inferredM: number
   snapM: number
+  edgeId: number
+  reversed: boolean
 }
 
 export interface StartLeg extends LegBase {
@@ -59,6 +63,8 @@ export interface StartLeg extends LegBase {
   hutIndex?: number
   accessUnknown?: boolean
   access?: string | null
+  edgeId: number
+  reversed: boolean
 }
 
 export type Leg = HutLeg | StartLeg
@@ -81,6 +87,8 @@ export interface LegSummary {
   ascentM: number
   descentM: number
   distanceM: number
+  edgeId: number
+  reversed: boolean
 }
 
 export interface TourResult {
@@ -126,6 +134,7 @@ export interface ReverseIndexEntry {
   distance_m: number
   ascent_m: number
   descent_m: number
+  edge_id: number
 }
 
 export interface HutEdgesData {

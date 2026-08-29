@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from preprocessing.filter_start_points import (  # noqa: E402
-    _load_layer,
+    _load_arcgis_layer,
+    _load_osm_export_layer,
     build_id_table,
     filter_to_hut_range,
 )
@@ -54,7 +55,7 @@ def test_load_layer_reads_top_level_feature_id(tmp_path):
     path = tmp_path / "stations.geojson"
     path.write_text(json.dumps(fc), encoding="utf-8")
 
-    points = _load_layer(path, "station")
+    points = _load_osm_export_layer(path, "station")
 
     assert len(points) == 2
     assert points[0]["osm_id"] == 8091317
@@ -62,9 +63,32 @@ def test_load_layer_reads_top_level_feature_id(tmp_path):
     assert points[0]["lon"] == 16.31 and points[0]["lat"] == 48.21
 
 
+def test_load_arcgis_layer_reads_id_from_properties(tmp_path):
+    # partner_betriebe.geojson (fetch_huts.py, Task 2) is not OSM data - id is a plain int
+    # already sitting in properties["id"] (the ArcGIS layer's OBJECTID), not a "n12345"-shaped
+    # top-level Feature id the way stations/parking (osmium export) have.
+    fc = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature",
+             "geometry": {"type": "Point", "coordinates": [11.5, 47.3]},
+             "properties": {"id": 502, "name": "Gasthof Alpenrose"}},
+        ],
+    }
+    path = tmp_path / "partner_betriebe.geojson"
+    path.write_text(json.dumps(fc), encoding="utf-8")
+
+    points = _load_arcgis_layer(path, "partner_betrieb")
+
+    assert len(points) == 1
+    assert points[0]["osm_id"] == 502
+    assert points[0]["type"] == "partner_betrieb"
+    assert points[0]["lon"] == 11.5 and points[0]["lat"] == 47.3
+
+
 def test_start_points_retain_access_tags():
     table = build_id_table([
-        {"type": "parking", "id": 1, "lon": 11.0, "lat": 47.0,
+        {"type": "parking", "osm_id": 1, "lon": 11.0, "lat": 47.0,
          "properties": {"name": "P", "access": "private", "motor_vehicle": "no"}},
     ])
     assert table["parking"]["1"]["access"] == "private"
@@ -74,7 +98,7 @@ def test_start_points_retain_access_tags():
 def test_missing_access_becomes_none_not_absent():
     # spec E1: absent tag -> keep but mark access_unknown. Dropping the key makes "unknown"
     # and "open" indistinguishable downstream.
-    table = build_id_table([{"type": "parking", "id": 2, "lon": 11.0, "lat": 47.0,
+    table = build_id_table([{"type": "parking", "osm_id": 2, "lon": 11.0, "lat": 47.0,
                             "properties": {"name": "Q"}}])
     assert table["parking"]["2"]["access"] is None
 

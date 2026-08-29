@@ -13,8 +13,8 @@ describe('loadTourSearchData', () => {
       1,
     )
     const approachesFixture = packColumns(
-      { hut_id: 'u2', start_id: 'u8', source_type: 'u1', access_unknown: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4' },
-      { hut_id: [0], start_id: [1], source_type: [2], access_unknown: [0], distance_m: [500], ascent_m: [50], descent_m: [10] },
+      { hut_id: 'u2', start_id: 'u8', source_type: 'u1', edge_id: 'u4', access_unknown: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4' },
+      { hut_id: [0], start_id: [1], source_type: [2], edge_id: [0], access_unknown: [0], distance_m: [500], ascent_m: [50], descent_m: [10] },
       1,
     )
     const fetchMock = vi.fn()

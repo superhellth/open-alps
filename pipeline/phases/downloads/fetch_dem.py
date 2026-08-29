@@ -25,6 +25,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dem_providers.composite import fetch_regions  # noqa: E402
 from lib.pipeline import DEM_DIR, load_config  # noqa: E402
+from lib.timing import phase  # noqa: E402
+
+SCRIPT_NAME = "fetch_dem.py"
 
 config = load_config()
 
@@ -37,7 +40,9 @@ provider_config.setdefault("bbox", config["bbox"])
 
 DEM_DIR.mkdir(parents=True, exist_ok=True)
 
-manifest = fetch_regions(provider_config, DEM_DIR, max_edge_km=args.max_edge_km)
+with phase(SCRIPT_NAME, "fetch_dem") as meta:
+    manifest = fetch_regions(provider_config, DEM_DIR, max_edge_km=args.max_edge_km)
+    meta["n_regions"] = len(manifest)
 
 manifest_path = DEM_DIR / "fetch_manifest.json"
 with open(manifest_path, "w", encoding="utf-8") as f:

@@ -23,6 +23,7 @@ pip = "*"
 [pypi-dependencies]
 pmtiles = "*"
 doit = "*"
+pytest = "*"
 
 [tasks]
 doit = "doit"

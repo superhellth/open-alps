@@ -35,6 +35,7 @@ describe('loadHutEdgesData', () => {
     expect(data.records[0]).toMatchObject({
       fromIndex: 0, toIndex: 1, variant: 2, distanceM: 1200, ascentM: 300, descentM: 100,
       maxEleM: 2400, sacRank: 3, viaFerrata: true, roadM: 50, ungradedM: 0, inferredM: 200, snapM: 15,
+      edgeId: 0,
     })
   })
 })

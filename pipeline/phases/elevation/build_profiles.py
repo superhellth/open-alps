@@ -70,28 +70,32 @@ def lookup_elevations(lon, lat, lookup_keys, lookup_values):
     return out
 
 
+def _ffill(arr: np.ndarray) -> np.ndarray:
+    """Vectorized forward-fill: each NaN becomes the nearest preceding non-NaN value, or stays
+    NaN if none precedes it. `np.maximum.accumulate` over "index if valid else -1" gives, at
+    every position, the index of the most recent valid value seen so far."""
+    valid = ~np.isnan(arr)
+    idx = np.where(valid, np.arange(len(arr)), -1)
+    idx = np.maximum.accumulate(idx)
+    return np.where(idx >= 0, arr[np.clip(idx, 0, None)], np.nan)
+
+
 def _fill_unmatched(elevations: np.ndarray) -> np.ndarray:
     """Nearest-neighbour carry along the polyline for NaN (unmatched) points - forward-fill then
     backward-fill so both leading and trailing gaps (a record's own hub/access-point endpoints
-    are NEVER base-graph points) are covered."""
-    out = elevations.copy()
-    n = len(out)
-    if n == 0 or np.all(np.isnan(out)):
-        return np.nan_to_num(out)
-    last = None
-    for i in range(n):
-        if np.isnan(out[i]):
-            if last is not None:
-                out[i] = last
-        else:
-            last = out[i]
-    nxt = None
-    for i in range(n - 1, -1, -1):
-        if np.isnan(out[i]):
-            out[i] = nxt
-        else:
-            nxt = out[i]
-    return out
+    are NEVER base-graph points) are covered.
+
+    Vectorized (see _ffill) rather than a pair of pure-Python loops: at production scale
+    (start_edges, ~235k records / ~200M geometry points as of 2026-08-27) the old
+    point-at-a-time Python loops were the entire cost of build_profiles.py - 807s of its 827s
+    total (data/timings.jsonl), even though this task is meant to be a cheap, always-rerun
+    retune path for --profile-points (see this module's docstring and dodo.py's
+    task_build_profiles comment)."""
+    n = len(elevations)
+    if n == 0 or np.all(np.isnan(elevations)):
+        return np.nan_to_num(elevations)
+    fwd = _ffill(elevations)
+    return _ffill(fwd[::-1])[::-1]
 
 
 def _haversine_m_vec_pairs(lon1, lat1, lon2, lat2):

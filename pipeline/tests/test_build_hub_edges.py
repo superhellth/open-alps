@@ -9,14 +9,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
+from lib.cell_igraph import (  # noqa: E402
+    accumulate_path, build_base_igraph_arrays, build_igraph_from_base, build_igraph_with_snaps,
+    path_for,
+)
 from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    SnapRejection, SnapResult, _build_base_igraph_arrays, _build_igraph_from_base,
-    _build_igraph_with_snaps, _cell_workload_score, _path_for, _write_edge_output,
-    compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, write_unsnapped_report,
+    SnapRejection, SnapResult, _cell_workload_score, _write_edge_output,
+    compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, snap_hubs_for_cell,
+    write_unsnapped_report,
 )
 from graph_building.gather_route_subgraphs import cell_dir_for  # noqa: E402
 
@@ -219,8 +223,9 @@ def test_compute_hub_edges_for_cell_connects_two_huts_on_the_line():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
@@ -233,8 +238,9 @@ def test_compute_hub_edges_for_cell_returns_full_path_geometry():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
@@ -253,8 +259,9 @@ def test_record_distance_includes_both_snap_gaps():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
@@ -282,8 +289,9 @@ def test_snap_gap_climb_lands_in_ascent_not_only_distance():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004, "ele": 960.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003, "ele": 1000.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
@@ -318,8 +326,9 @@ def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
         {"id": 1, "type": binfmt.TYPE_STATION, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_PARKING, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert records == []
@@ -333,8 +342,9 @@ def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert len(records) == 1
@@ -365,14 +375,14 @@ def _two_edge_subgraph():
 
 def test_igraph_routes_on_time_not_distance():
     subgraph = _two_edge_subgraph()
-    graph, hub_vertex, coords = _build_igraph_with_snaps(subgraph, {})
+    graph, hub_vertex, coords = build_igraph_with_snaps(subgraph, {})
     assert graph.es["weight"] == graph.es["time_s"]
 
 
 def test_edge_mask_removes_edges_from_the_built_graph():
     subgraph = _two_edge_subgraph()
-    graph_all, _, _ = _build_igraph_with_snaps(subgraph, {}, edge_mask=None)
-    graph_filtered, _, _ = _build_igraph_with_snaps(
+    graph_all, _, _ = build_igraph_with_snaps(subgraph, {}, edge_mask=None)
+    graph_filtered, _, _ = build_igraph_with_snaps(
         subgraph, {}, edge_mask=np.array([True, False])
     )
     assert graph_filtered.ecount() < graph_all.ecount()
@@ -387,8 +397,9 @@ def test_compute_hub_edges_for_cell_fills_the_step_timer():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     timer = StepTimer()
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY, timer=timer,
     )
     assert set(timer.seconds) == {"snap", "build_igraph", "distances", "paths"}
@@ -422,8 +433,9 @@ def test_variant_rows_are_not_collapsed_into_one_record():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=[variants.VARIANTS[binfmt.VARIANT_FAST_ANY],
                   variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
     )
@@ -479,8 +491,9 @@ def test_route_exceeding_max_edge_km_is_dropped():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=0.5, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=0.5, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
     assert all(r["distance_m"] <= 500.0 for r in records)
@@ -507,8 +520,9 @@ def test_a_variant_with_no_obeying_path_emits_no_record():
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
     records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, all_hubs=core_hubs, max_edge_km=5.0, max_snap_m=50.0,
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=[variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
     )
     assert records == []
@@ -538,8 +552,8 @@ def _col_subgraph():
 
 def test_path_sums_ungraded_and_inferred_metres_like_road_m():
     subgraph = _col_subgraph()
-    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
-    result = _path_for(graph, vertex_coords, 0, 2)
+    graph, _, vertex_coords = build_igraph_with_snaps(subgraph, {})
+    result = path_for(graph, vertex_coords, 0, 2)
     assert result.ungraded_m == pytest.approx(100.0)
     assert result.inferred_m == pytest.approx(50.0)
 
@@ -548,16 +562,16 @@ def test_constrained_row_paths_have_zero_ungraded_metres():
     # the invariant the whole passability design rests on (spec C4/D1)
     subgraph = _line_subgraph_t2_graded()
     mask = variants.edge_mask(subgraph.local_edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
-    graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, {}, edge_mask=mask)
-    result = _path_for(graph, vertex_coords, 0, 1)
+    graph, hub_vertex, vertex_coords = build_igraph_with_snaps(subgraph, {}, edge_mask=mask)
+    result = path_for(graph, vertex_coords, 0, 1)
     assert result.ungraded_m == 0.0
 
 
 def test_max_ele_is_the_path_maximum_not_an_endpoint():
     # a path over a col must report the col, not the higher of the two huts
     subgraph = _col_subgraph()
-    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
-    result = _path_for(graph, vertex_coords, 0, 2)
+    graph, _, vertex_coords = build_igraph_with_snaps(subgraph, {})
+    result = path_for(graph, vertex_coords, 0, 2)
     ele_at_src, ele_at_tgt = 1000.0, 1200.0
     assert result.max_ele_m > max(ele_at_src, ele_at_tgt)
     assert result.max_ele_m == pytest.approx(1500.0)
@@ -565,23 +579,23 @@ def test_max_ele_is_the_path_maximum_not_an_endpoint():
 
 def test_ascent_and_descent_swap_on_reverse_traversal():
     subgraph = _col_subgraph()
-    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
-    fwd = _path_for(graph, vertex_coords, 0, 2)
-    rev = _path_for(graph, vertex_coords, 2, 0)
+    graph, _, vertex_coords = build_igraph_with_snaps(subgraph, {})
+    fwd = path_for(graph, vertex_coords, 0, 2)
+    rev = path_for(graph, vertex_coords, 2, 0)
     assert rev.ascent_m == pytest.approx(fwd.descent_m)
     assert rev.descent_m == pytest.approx(fwd.ascent_m)
 
 
 def test_base_igraph_arrays_reused_across_variants_matches_per_call_build():
-    # opt #1: _build_base_igraph_arrays is computed once per cell and reused across variants via
-    # _build_igraph_from_base - must produce the exact same graph as the old
-    # (single-call-per-variant) _build_igraph_with_snaps for each mask.
+    # opt #1: build_base_igraph_arrays is computed once per cell and reused across variants via
+    # build_igraph_from_base - must produce the exact same graph as the old
+    # (single-call-per-variant) build_igraph_with_snaps for each mask.
     subgraph = _line_subgraph_t2_graded()
-    base = _build_base_igraph_arrays(subgraph, {})
+    base = build_base_igraph_arrays(subgraph, {})
     mask = variants.edge_mask(subgraph.local_edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
 
-    reused_graph, reused_hub_vertex, reused_coords = _build_igraph_from_base(base, edge_mask=mask)
-    direct_graph, direct_hub_vertex, direct_coords = _build_igraph_with_snaps(
+    reused_graph, reused_hub_vertex, reused_coords = build_igraph_from_base(base, edge_mask=mask)
+    direct_graph, direct_hub_vertex, direct_coords = build_igraph_with_snaps(
         subgraph, {}, edge_mask=mask
     )
 
@@ -592,13 +606,13 @@ def test_base_igraph_arrays_reused_across_variants_matches_per_call_build():
 
 
 def test_base_igraph_arrays_reuse_keeps_variants_independent():
-    # a mask applied via one _build_igraph_from_base call must not leak into the next - each call
+    # a mask applied via one build_igraph_from_base call must not leak into the next - each call
     # must derive kept_mask fresh from base.edge_source, not mutate anything on `base`.
     subgraph = _two_edge_subgraph()
-    base = _build_base_igraph_arrays(subgraph, {})
-    all_kept, _, _ = _build_igraph_from_base(base, edge_mask=None)
-    one_dropped, _, _ = _build_igraph_from_base(base, edge_mask=np.array([True, False]))
-    all_kept_again, _, _ = _build_igraph_from_base(base, edge_mask=None)
+    base = build_base_igraph_arrays(subgraph, {})
+    all_kept, _, _ = build_igraph_from_base(base, edge_mask=None)
+    one_dropped, _, _ = build_igraph_from_base(base, edge_mask=np.array([True, False]))
+    all_kept_again, _, _ = build_igraph_from_base(base, edge_mask=None)
     assert one_dropped.ecount() < all_kept.ecount()
     assert all_kept_again.ecount() == all_kept.ecount()
 
@@ -606,14 +620,13 @@ def test_base_igraph_arrays_reuse_keeps_variants_independent():
 def test_batched_paths_match_per_target_path_for():
     # opt #2: compute_hub_edges_for_cell now fetches every in-cutoff target's path for a hub in
     # one get_shortest_paths call instead of one call per target - the per-pair result must be
-    # identical to the old one-call-per-target _path_for.
+    # identical to the old one-call-per-target path_for.
     subgraph = _col_subgraph()
-    graph, hub_vertex, vertex_coords = _build_igraph_with_snaps(subgraph, {})
-    individual = [_path_for(graph, vertex_coords, 0, tv) for tv in (1, 2)]
+    graph, hub_vertex, vertex_coords = build_igraph_with_snaps(subgraph, {})
+    individual = [path_for(graph, vertex_coords, 0, tv) for tv in (1, 2)]
     epaths = graph.get_shortest_paths(0, to=[1, 2], weights="weight", output="epath")
-    from graph_building.build_hub_edges import _accumulate_path
     batched = [
-        _accumulate_path(graph, vertex_coords, 0, tv, epath)
+        accumulate_path(graph, vertex_coords, 0, tv, epath)
         for tv, epath in zip([1, 2], epaths)
     ]
     assert individual == batched
@@ -624,9 +637,9 @@ def test_ascent_is_the_sum_the_router_used():
     # straight 0->1->2 line where every edge is traversed forward, so the sum of each edge's own
     # ascent_m attr (what the router's path actually walked) must equal the reported total.
     subgraph = _col_subgraph()
-    graph, _, vertex_coords = _build_igraph_with_snaps(subgraph, {})
+    graph, _, vertex_coords = build_igraph_with_snaps(subgraph, {})
     epath = graph.get_shortest_paths(0, to=2, weights="weight", output="epath")[0]
-    result = _path_for(graph, vertex_coords, 0, 2)
+    result = path_for(graph, vertex_coords, 0, 2)
     assert result.ascent_m == pytest.approx(sum(graph.es[e]["ascent_m"] for e in epath))
 
 
