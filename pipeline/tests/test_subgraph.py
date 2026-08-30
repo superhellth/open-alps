@@ -144,7 +144,32 @@ def _tmp_path_fixture():
     return Path(tempfile.mkdtemp())
 
 
-from lib.subgraph import gather_subgraph_for_bounds  # noqa: E402
+from lib.subgraph import clip_subgraph_to_bounds, gather_subgraph_for_bounds  # noqa: E402
+
+
+def test_clip_subgraph_to_bounds_narrows_within_a_single_cell(tmp_path):
+    # A coarse grid puts all 3 fixture nodes in ONE cell, mirroring production's 60km tiles vs. a
+    # tour leg's ~150m corridor buffer: gather_subgraph_for_bounds alone can't narrow further than
+    # the whole cell, so clip_subgraph_to_bounds is the only thing that actually constrains routing
+    # to the corridor.
+    coarse_grid = Grid(BBOX, tile_size_km=2000.0)
+    base_graph_dir = _write_fixture_base_graph(tmp_path, coarse_grid)
+    tight_bounds = {"minLng": 0.9, "maxLng": 1.0, "minLat": 0.0, "maxLat": 0.1}
+
+    whole_cell = gather_subgraph_for_bounds(base_graph_dir, coarse_grid, tight_bounds)
+    assert len(whole_cell.local_nodes) == 3  # unclipped: the whole (single) cell comes back
+
+    clipped = clip_subgraph_to_bounds(whole_cell, tight_bounds)
+    # node 1 (0.95, 0.05) is inside the box; node 0 (0.05, 0.05) is pulled in by the one-hop
+    # edge-incidence closure (edge 0-1); node 2 (0.05, 0.95) is outside the box and not the far
+    # endpoint of any edge incident to node 1, so it must be dropped.
+    assert set(clipped.global_node_ids.tolist()) == {0, 1}
+    assert len(clipped.local_edges) == 1
+    edge = clipped.local_edges[0]
+    assert {int(edge["u"]), int(edge["v"])} == {
+        int(np.searchsorted(clipped.global_node_ids, 0)),
+        int(np.searchsorted(clipped.global_node_ids, 1)),
+    }
 
 
 def test_gather_subgraph_for_bounds_excludes_far_away_nodes(tmp_path):

@@ -30,7 +30,7 @@ from lib.cell_igraph import (  # noqa: E402
 )
 from lib.edge_output import fold_endpoint_snaps  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT  # noqa: E402
-from lib.subgraph import gather_subgraph_for_bounds  # noqa: E402
+from lib.subgraph import clip_subgraph_to_bounds, gather_subgraph_for_bounds  # noqa: E402
 
 
 def build_tour_legs(tour: dict) -> list:
@@ -225,7 +225,9 @@ def main(argv=None):
                     _leg_segment_m(leg_points[i], leg_points[i + 1]) for i in range(len(leg_points) - 1)
                 )
                 bounds = corridor_bounds(leg_points or all_points, args.corridor_buffer_m, grid)
-                subgraph = gather_subgraph_for_bounds(base_graph_dir, grid, bounds)
+                subgraph = clip_subgraph_to_bounds(
+                    gather_subgraph_for_bounds(base_graph_dir, grid, bounds), bounds,
+                )
 
                 src_key, tgt_key = (binfmt.TYPE_HUT, from_hut), (binfmt.TYPE_HUT, to_hut)
                 result = match_leg(subgraph, src_key, tgt_key, persisted_snaps,
