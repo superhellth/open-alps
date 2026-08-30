@@ -33,7 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from dag.downloads import (  # noqa: E402,F401
     task_download_extracts, task_fetch_dem, task_fetch_huts, task_fetch_stations_parking,
-    task_fetch_tours,
+    task_fetch_tour_oa_geometry, task_fetch_tours,
 )
 from dag.elevation import (  # noqa: E402,F401
     task_build_dem_vrt, task_build_profiles, task_compute_edge_profiles, task_sample_base_elevation,
@@ -76,7 +76,8 @@ DOIT_CONFIG = {
     "backend": "json",
     "reporter": FlushingReporter,
     "default_tasks": [
-        "download_extracts", "fetch_huts", "fetch_tours", "compute_hub_range", "filter_trails",
+        "download_extracts", "fetch_huts", "fetch_tours", "fetch_tour_oa_geometry",
+        "compute_hub_range", "filter_trails",
         "merge_trails", "verify_trails",
         "fetch_stations_parking", "filter_start_points",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",

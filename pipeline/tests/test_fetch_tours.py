@@ -94,3 +94,25 @@ def test_is_loop_and_hut_indices_populated():
     tours, _, _ = build_tour_records(features, HUT_ID_TO_INDEX)
     assert tours[0]["isLoop"] is True
     assert tours[0]["hutIndices"] == [0, 1, 2]
+
+
+def _feature_with_homepage(guid_csv, homepage, short_code="X"):
+    return {"attributes": {"Kurzbezeichnung": short_code, "Bezeichnung": short_code,
+                            "GlobalID": "{G}", "Rundtour": False, "Homepage": homepage,
+                            "Huettenliste": guid_csv},
+            "geometry": {"paths": []}}
+
+
+def test_build_tour_records_resolves_oa_id_from_homepage():
+    tours, _, _ = build_tour_records(
+        [_feature_with_homepage("{GUID-A}", "https://www.alpenvereinaktiv.com/de/tour/thw/x/12345/")],
+        HUT_ID_TO_INDEX,
+    )
+    assert tours[0]["oaId"] == "12345"
+
+
+def test_build_tour_records_leaves_oa_id_none_without_a_match():
+    tours, _, _ = build_tour_records(
+        [_feature_with_homepage("{GUID-A}", "https://example.com/")], HUT_ID_TO_INDEX,
+    )
+    assert tours[0]["oaId"] is None

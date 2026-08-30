@@ -127,10 +127,10 @@ def task_match_tour_edges():
             cli_param("length_divergence_ratio", "length-divergence-ratio", float,
                       CONFIG["tourMatch"]["lengthDivergenceRatio"]),
         ],
-        task_dep=["compute_edge_profiles", "snap_hubs"],
+        task_dep=["compute_edge_profiles", "snap_hubs", "fetch_tour_oa_geometry"],
         file_dep=[
             OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
-            OSM_DIR / "tours.json", OSM_DIR / "tour_traces.json",
+            OSM_DIR / "tours.json", OSM_DIR / "tour_traces.json", OSM_DIR / "tour_oa_traces.json",
         ],
         targets=[
             OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",

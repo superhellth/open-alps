@@ -49,6 +49,18 @@ def task_fetch_tours():
     )
 
 
+def task_fetch_tour_oa_geometry():
+    # Downstream of fetch_tours.py's oaId resolution - task_dep (not just file_dep on tours.json)
+    # because a re-run with the SAME tours.json content but a code change to oa_ids_by_tour's
+    # regex should still refetch, and doit's file_dep freshness check alone wouldn't catch that.
+    return pipeline_task(
+        "phases/downloads/fetch_tour_oa_geometry.py",
+        task_dep=["fetch_tours"],
+        file_dep=[OSM_DIR / "tours.json"],
+        targets=[OSM_DIR / "tour_oa_traces.json"],
+    )
+
+
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",
