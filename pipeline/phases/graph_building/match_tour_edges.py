@@ -136,15 +136,24 @@ def build_tour_record(from_hut: int, to_hut: int, from_coord: tuple, to_coord: t
     }
 
 
-def _chain_for_tour(paths: list, break_threshold_m: float, hut_coords_in_order: list, is_loop: bool):
-    """Reassembles + orients a tour's fragments (spec §2.2). Returns (chains, oriented_primary) -
-    oriented_primary is the single reassembled+oriented chain when reassembly produced exactly
-    one, else None (callers fall back to a whole-tour bbox built from ALL chains' points, per
-    spec §2.3's mitigation note, and every leg whose two huts don't land in the SAME chain becomes
-    a chain_not_reassembled gap - spec §2.5)."""
+def _chain_for_tour(paths: list, break_threshold_m: float, hut_coords_in_order: list, is_loop: bool,
+                     oa_points: list | None = None):
+    """Reassembles + orients a tour's fragments (spec §2.2), falling back to Outdooractive's
+    already-ordered line (docs/superpowers/plans/2026-08-30-tour-reproducibility.md Task 3/4) when
+    the AV's own fragments don't reassemble into one chain - spec §2.7's spike showed this recovers
+    29 of 37 previously chain_not_reassembled legs across 9 tours, with a byte-identical control on
+    a tour where reassembly already worked. The AV's own geometry always wins when it's usable at
+    all: `oa_points` is only consulted when reassembly did NOT produce exactly one chain.
+
+    Returns (chains, oriented_primary) - `chains` is always the ArcGIS reassembly result (used by
+    main()'s whole-tour-bbox fallback regardless of which source oriented_primary came from);
+    oriented_primary is None only when BOTH sources fail, which is when callers gap the tour as
+    chain_not_reassembled (spec §2.5)."""
     chains = reassemble_fragments(paths, break_threshold_m)
     if len(chains) == 1:
         return chains, orient_chain(chains[0], hut_coords_in_order, is_loop)
+    if oa_points:
+        return chains, orient_chain(oa_points, hut_coords_in_order, is_loop)
     return chains, None
 
 
@@ -182,6 +191,11 @@ def main(argv=None):
         tours = json.load(fh)
     with open(OSM_DIR / "tour_traces.json", encoding="utf-8") as fh:
         traces_by_tour_id = {t["tourId"]: t["paths"] for t in json.load(fh)}
+    oa_traces_path = OSM_DIR / "tour_oa_traces.json"
+    oa_points_by_tour_id = {}
+    if oa_traces_path.exists():
+        with open(oa_traces_path, encoding="utf-8") as fh:
+            oa_points_by_tour_id = {t["tourId"]: t["points"] for t in json.load(fh) if t["points"]}
     with open(OSM_DIR / "huts.geojson", encoding="utf-8") as fh:
         hut_features = json.load(fh)["features"]
     hut_coords = [tuple(f["geometry"]["coordinates"]) for f in hut_features]
@@ -201,6 +215,7 @@ def main(argv=None):
             paths = traces_by_tour_id.get(tour["tourId"], [])
             chains, oriented = _chain_for_tour(
                 paths, args.fragment_break_m, hut_coords_in_order, tour["isLoop"],
+                oa_points=oa_points_by_tour_id.get(tour["tourId"]),
             )
             all_points = [p for chain in chains for p in chain]
 
