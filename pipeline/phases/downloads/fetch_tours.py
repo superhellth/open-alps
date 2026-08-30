@@ -19,10 +19,19 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from lib.oa_geometry import OA_URL_RE  # noqa: E402
 from lib.pipeline import OSM_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_tours.py"
+
+# Manual overrides for tours whose OA id was found via their own homepage's embedded widget
+# rather than a direct alpenvereinaktiv.com homepage link (Task 2 of
+# docs/superpowers/plans/2026-08-30-tour-reproducibility.md).
+HOMEPAGE_EMBED_OA_IDS = {
+    "KHW": "9027602",
+    "BHW": "21729786",
+}
 
 
 def parse_huettenliste(raw) -> list:
@@ -66,6 +75,8 @@ def build_tour_records(features: list, hut_id_to_index: dict) -> tuple:
         short_code = a.get("Kurzbezeichnung") or ""
         hut_indices = resolve_hut_indices(guids, hut_id_to_index, short_code, gaps)
         tour_id = len(tours)
+        oa_match = OA_URL_RE.search(a.get("Homepage") or "")
+        oa_id = oa_match.group(1) if oa_match else HOMEPAGE_EMBED_OA_IDS.get(short_code)
         tours.append({
             "tourId": tour_id,
             "globalId": a.get("GlobalID"),
@@ -73,6 +84,7 @@ def build_tour_records(features: list, hut_id_to_index: dict) -> tuple:
             "shortCode": a.get("Kurzbezeichnung"),
             "isLoop": bool(a.get("Rundtour")),
             "homepage": a.get("Homepage"),
+            "oaId": oa_id,
             "hutIndices": hut_indices,
         })
         traces.append({"tourId": tour_id, "paths": f.get("geometry", {}).get("paths", [])})
