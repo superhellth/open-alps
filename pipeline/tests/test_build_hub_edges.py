@@ -710,3 +710,32 @@ def test_accumulate_path_same_source_and_target_has_empty_base_edge_ids():
     assert result.base_edge_ids == []
 
 
+
+
+def _unelevated_line_subgraph():
+    # _line_subgraph with time_s left at binfmt.UNSET - exactly what build_base_graph.py writes
+    # before compute_edge_profiles.py fills it in.
+    subgraph = _line_subgraph()
+    subgraph.local_edges["time_s"] = binfmt.UNSET
+    return subgraph
+
+
+def test_build_base_igraph_arrays_rejects_unset_time_s():
+    # UNSET (-1.0) becomes the igraph "weight" attribute, and igraph answers negative weights by
+    # switching from Dijkstra to Bellman-Ford; on an undirected graph every negative edge is a
+    # negative cycle, which igraph only reports after re-queueing a vertex more than |V| times.
+    # On a real 117k-vertex cell that is hours of 100%-CPU spinning per call instead of an error,
+    # so the sentinel has to be caught here, before any of it is handed to igraph.
+    with pytest.raises(ValueError, match="time_s"):
+        build_base_igraph_arrays(_unelevated_line_subgraph(), {})
+
+
+def test_compute_hub_edges_for_cell_rejects_unset_time_s():
+    subgraph = _unelevated_line_subgraph()
+    hubs = [{"type": binfmt.TYPE_HUT, "id": 1, "lon": 0.0, "lat": 0.0, "name": "a"},
+            {"type": binfmt.TYPE_HUT, "id": 2, "lon": 0.009, "lat": 0.0, "name": "b"}]
+    snaps = snap_hubs_for_cell(_line_subgraph(), hubs, hubs, max_snap_m=50.0)
+
+    with pytest.raises(ValueError, match="time_s"):
+        compute_hub_edges_for_cell(subgraph, hubs, hubs, max_edge_km=30.0, snaps=snaps,
+                                   variants=FAST_ANY_ONLY)

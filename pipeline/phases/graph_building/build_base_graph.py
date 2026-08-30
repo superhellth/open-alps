@@ -208,6 +208,13 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
     out_dir = Path(out_dir)
     with timer.step("write_arrays"):
+        # edges_arr's time_s/ascent_m/descent_m are binfmt.UNSET above, so any edge_profiles.stamp
+        # from a previous base graph is about to become a lie - and that stamp is the only thing
+        # dodo's compute_edge_profiles keys "already done" off (dag/elevation.py's targets; it
+        # can't take edges.npy as a file_dep, since it rewrites that file in place). Dropped BEFORE
+        # edges.npy is written, so a crash mid-write still leaves the stamp gone rather than
+        # vouching for sentinel weights.
+        (out_dir / "edge_profiles.stamp").unlink(missing_ok=True)
         binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
         binfmt.save_array(out_dir / "cell_index.npy", cell_index)
         binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
