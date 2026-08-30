@@ -9,6 +9,7 @@ huts/public/data/
 
 # Reference network capture, not build input
 caa.alpenverein.at.har
+www.alpenvereinaktiv.com.har
 
 # Python
 __pycache__/
