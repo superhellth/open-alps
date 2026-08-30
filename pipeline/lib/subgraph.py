@@ -113,6 +113,47 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
     return gather_subgraph_for_bounds(base_graph_dir, grid, grid.padded_bounds(cell_id, buffer_km))
 
 
+def clip_subgraph_to_bounds(subgraph: LocalSubgraph, bounds: dict) -> LocalSubgraph:
+    """Narrows an already-gathered subgraph down to `bounds` at node/edge granularity, plus a
+    one-hop edge-incidence closure (same reasoning as gather_subgraph_for_bounds's cell-level
+    closure) so a path can still leave through an edge whose far endpoint sits just outside the
+    box. Needed because gather_subgraph_for_bounds only filters by whole grid cell - fine for
+    build_hub_edges.py (buffer_km == maxEdgeKm, so a padded cell IS the correct extent), but a
+    no-op for match_tour_edges.py's per-leg corridor (spec section 2.3): a tour leg's chain-slice
+    bbox plus a ~150m buffer is almost always far smaller than one 60km base-graph cell, so
+    without this step every leg of a tour routes over the SAME whole cell(s) regardless of the
+    corridor buffer, degenerating into the free shortest path section 2.3 exists to prevent."""
+    lon, lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+    in_bounds = ((lon >= bounds["minLng"]) & (lon <= bounds["maxLng"])
+                 & (lat >= bounds["minLat"]) & (lat <= bounds["maxLat"]))
+
+    if len(subgraph.local_edges):
+        edge_mask = in_bounds[subgraph.local_edges["u"]] | in_bounds[subgraph.local_edges["v"]]
+        kept_edges = subgraph.local_edges[edge_mask]
+    else:
+        kept_edges = subgraph.local_edges
+
+    core_ids = np.nonzero(in_bounds)[0]
+    if len(kept_edges):
+        keep_local_ids = np.unique(np.concatenate([core_ids, kept_edges["u"], kept_edges["v"]]))
+    else:
+        keep_local_ids = core_ids
+
+    local_edges = np.array(kept_edges, dtype=binfmt.EDGE_DTYPE)
+    if len(local_edges):
+        local_edges["u"] = np.searchsorted(keep_local_ids, local_edges["u"])
+        local_edges["v"] = np.searchsorted(keep_local_ids, local_edges["v"])
+
+    return LocalSubgraph(
+        global_node_ids=subgraph.global_node_ids[keep_local_ids],
+        local_nodes=subgraph.local_nodes[keep_local_ids],
+        local_edges=local_edges,
+        interior=subgraph.interior,
+        local_node_ele=subgraph.local_node_ele[keep_local_ids],
+        interior_ele=subgraph.interior_ele,
+    )
+
+
 def save_local_subgraph(subgraph: LocalSubgraph, cell_dir: Path) -> None:
     """Persists one gather_padded_subgraph() result so a later process can reload it without
     re-running the cell union / one-hop closure / array-copy work (gather_route_subgraphs.py's
