@@ -939,3 +939,55 @@ Gap reasons: `chain_not_reassembled` 45, `hut_unsnapped` 4, `hut_far_from_trace`
   map-matching still needs *a* trace to match against the graph. Their own follow-up is either a
   smarter homepage-embed search (Task 2's scan was HTML-regex only, no JS-rendered widget
   detection) or accepting they stay unmatched.
+
+## 2026-08-30 — Follow-up: direct alpenvereinaktiv.com/outdooractive.com search resolves 10 more ids
+
+After the above, searched alpenvereinaktiv.com directly by tour name (WebSearch, not the
+homepage-scan script) for the 10 remaining OA-id-less tours, and verified every candidate found by
+checking ALL of the tour's own `hutIndices` land within `maxHutTraceM` (250m) of the candidate's
+`oa_chain()` geometry via `assign_hut_position` - the same function `match_tour_edges.py` itself
+uses - rather than trusting a name match alone. This mattered: several rejected candidates looked
+right by name but weren't (see `HOMEPAGE_EMBED_OA_IDS`'s own comment in `fetch_tours.py` for the
+specifics - PHR's and SHR's and MontafonerHüttenrunde's first candidates each covered only 2-5 of
+the required huts).
+
+**10 more ids resolved and added to `HOMEPAGE_EMBED_OA_IDS`:** IHW, STHW, SHR, Karwendel Höhenweg,
+VT4T, KT01, TT4T, MontafonerHüttenrunde (8 verified cleanly on the first or second candidate) plus
+the 2 already-shipped KHW/BHW from the original homepage scan - **20 of 25 tours now have a
+verified `oaId`**, up from 12.
+
+Re-ran `doit fetch_tours fetch_tour_oa_geometry match_tour_edges` (again via `doit forget
+fetch_tours` first, same freshness-check gap as before). Result: **76 of 102 legs matched (75%)**,
+up from 47/102 (46%).
+
+Gap reasons: `chain_not_reassembled` 11, `hut_unsnapped` 6, `no_corridor_path` 4,
+`hut_far_from_trace` 3, `length_divergent` 1, `outside_extract` 1 (26 total).
+
+**Remaining unresolved-OA-id tours: 3, down from 10.**
+- **PHR** (Peter-Habeler-Runde) - the correct Outdooractive tour WAS found and identified
+  (`outdooractive.com/de/route/fernwanderweg/tux-finkenberg/peter-habeler-runde/7523011/`, correct
+  title/region), but its `geoJson` comes back `None` from the API - the raw content's
+  `meta.premium` is `{"name": "proplus", "userAccess": false}`, i.e. it's a paid Outdooractive
+  listing our API key doesn't have access to. Not a search problem, not fixable without a
+  commercial Outdooractive API relationship - out of scope for this plan.
+- **Achttälertour** - no homepage at all in `tours.json`, and no candidate found on
+  alpenvereinaktiv.com under that name. Genuinely no lead yet.
+- **MontafonerSilvrettarunde, Wiener Höhenweg** - still out of scope regardless (empty hut lists).
+
+**New observation: SHR gained a `length_divergent` gap it didn't have before.** The verified
+candidate (`17872005`, "SHR Hochalpin ... mit Ötz- und Inntalschlaufe", 4-9 day variant with
+optional side loops) matches all 6 huts positionally, but the *routed* leg distance for at least
+one leg apparently diverges from the *traced* distance by more than `lengthDivergenceRatio` (2.0)
+- plausibly because this specific OA variant's trace between two consecutive stage huts detours
+through the Ötztal/Inntal side loop rather than going directly, inflating `trace_length_m` for that
+leg. Not investigated further here (single occurrence, one tour) - worth a look if SHR's coverage
+matters more later, but doesn't change the overall decision below.
+
+**Decision: still ship, still no `leuvenmapmatching` follow-up needed.** The remaining 8 non-`
+chain_not_reassembled` gaps (`hut_unsnapped` 6, `no_corridor_path` 4, `hut_far_from_trace` 3,
+`length_divergent` 1, `outside_extract` 1 - note some legs carry more than one reason across gap
+records) are spread thin (1-3 per tour) across the 19 OA-sourced tours with any gap at all, not
+concentrated in a way that suggests a systemic corridor-routing limit. The 11 remaining
+`chain_not_reassembled` gaps belong entirely to PHR (6) and Achttälertour (5), both of which have
+no usable OA trace for the reasons above - exactly the same "no trace source at all" situation
+`leuvenmapmatching` can't help with either.
