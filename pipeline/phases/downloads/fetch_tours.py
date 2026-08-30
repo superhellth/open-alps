@@ -33,8 +33,9 @@ SCRIPT_NAME = "fetch_tours.py"
 # personal trip logs, alternate variants) for one real-world route, so name matching alone is not
 # enough; a rejected candidate (e.g. PHR's "Zillertaler Runde" and "Auf Spurensuche vom Zillertal
 # ins Wipptal" each only cover 2 of PHR's 6 huts, SHR's first candidate found was a shorter
-# variant missing one hut, and MontafonerHüttenrunde's only candidate found covers 5 of its 9
-# huts) is left unresolved rather than force-matched. PHR's own OA tour (outdooractive.com id
+# variant missing one hut, and MontafonerHüttenrunde's FIRST candidate found covered only 5 of
+# its 9 huts - a second, correct candidate was found afterwards) is left unresolved rather than
+# force-matched. PHR's own OA tour (outdooractive.com id
 # 7523011, cross-project but the SAME underlying content id resolves via project/alpenverein too)
 # was found and IS the right tour by name/region, but its geoJson comes back None because it's a
 # paid Outdooractive "proplus" listing (meta.premium.userAccess: False in the raw content) - not
@@ -49,6 +50,7 @@ HOMEPAGE_EMBED_OA_IDS = {
     "VT4T": "60696720",
     "KT01": "23684449",
     "TT4T": "17676990",
+    "MontafonerHüttenrunde": "12949948",
 }
 
 
