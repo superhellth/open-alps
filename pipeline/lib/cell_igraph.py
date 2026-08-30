@@ -57,11 +57,35 @@ class BaseIgraphArrays:
     base_edge_ids: list
 
 
+def _check_routable(subgraph: LocalSubgraph) -> None:
+    """time_s becomes the igraph "weight" attribute every routing caller shortest-paths on, so a
+    single UNSET (-1.0) edge left over from build_base_graph.py - i.e. compute_edge_profiles.py
+    never ran against THIS base graph - poisons the whole cell. igraph does not reject that: it
+    silently switches from Dijkstra to Bellman-Ford, and since every negative edge of an
+    undirected graph is a negative cycle, it only reports one after re-queueing a vertex more than
+    |V| times. On a real ~117k-vertex cell that is hours of 100%-CPU spinning per call with no
+    output rather than an error, which is exactly how it went unnoticed for a whole run - so catch
+    the sentinel here, at the one chokepoint every routing caller (build_hub_edges.py,
+    match_tour_edges.py, analysis/routing_probe.py) passes through."""
+    times = subgraph.local_edges["time_s"]
+    n_unset = int((times < 0).sum())
+    if n_unset:
+        raise ValueError(
+            f"{n_unset:,} of {len(times):,} edges have an UNSET/negative time_s - this subgraph "
+            "was built from a base graph whose compute_edge_profiles pass never ran. Rerun "
+            "`doit compute_edge_profiles`, then `doit gather_route_subgraphs` to rebuild the "
+            "per-cell caches under data/osm/route_subgraphs/."
+        )
+
+
 def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIgraphArrays:
     """The variant-independent half of building a routable igraph for this cell: base edge
     columns + every mid-chain snap's inserted vertex/synthetic-edge pair (topology only - hub
     locations and split geometry don't depend on a routing constraint, only which resulting edges
-    a given variant keeps does, see build_igraph_from_base)."""
+    a given variant keeps does, see build_igraph_from_base).
+
+    Raises ValueError if any edge still carries an UNSET (negative) time_s - see _check_routable."""
+    _check_routable(subgraph)
     n_base = len(subgraph.local_nodes)
     edges_uv = list(zip(subgraph.local_edges["u"].tolist(), subgraph.local_edges["v"].tolist()))
     dists = subgraph.local_edges["dist"].tolist()

@@ -273,3 +273,14 @@ def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
     assert ordered.index("match_tour_edges") < ordered.index("build_profiles")
     assert ordered.index("build_profiles") < ordered.index("build_tour_edge_tiles")
     assert ordered.index("build_profiles") < ordered.index("build_tour_edge_payload")
+
+
+def test_compute_edge_profiles_is_gated_only_by_the_stamp_build_base_graph_deletes():
+    # The stamp is the ONLY thing that can re-trigger this task after a base-graph rebuild:
+    # edges.npy (the file it rewrites in place) can't be a file_dep - the rewrite would make it
+    # dirty on every check and rerun forever - and its real file_deps (node_ele.npy /
+    # interior_ele.npy) survive a rebuild untouched. So build_base_graph.pack_and_write unlinks
+    # edge_profiles.stamp, and this task must keep it as a target for that to mean anything.
+    task = dodo.task_compute_edge_profiles()
+    assert any(str(t).endswith("edge_profiles.stamp") for t in task["targets"])
+    assert not any(str(d).endswith("edges.npy") for d in task["file_dep"])
