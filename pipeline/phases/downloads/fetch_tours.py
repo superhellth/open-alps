@@ -26,11 +26,19 @@ from lib.timing import phase  # noqa: E402
 SCRIPT_NAME = "fetch_tours.py"
 
 # Manual overrides for tours whose OA id was found via their own homepage's embedded widget
-# rather than a direct alpenvereinaktiv.com homepage link (Task 2 of
-# docs/superpowers/plans/2026-08-30-tour-reproducibility.md).
+# (Task 2 of docs/superpowers/plans/2026-08-30-tour-reproducibility.md) or via a direct search of
+# alpenvereinaktiv.com for a matching tour name, verified by checking every one of the tour's own
+# hutIndices lands within maxHutTraceM of the candidate's geometry (assign_hut_position) before
+# trusting it - alpenvereinaktiv.com often has several similarly-named entries (individual stages,
+# personal trip logs, alternate variants) for one real-world route, so name matching alone is not
+# enough; a rejected candidate (e.g. PHR's "Zillertaler Runde" and "Auf Spurensuche vom Zillertal
+# ins Wipptal" each only cover 2 of PHR's 6 huts) is left unresolved rather than force-matched.
 HOMEPAGE_EMBED_OA_IDS = {
     "KHW": "9027602",
     "BHW": "21729786",
+    "IHW": "7749907",
+    "STHW": "107992237",
+    "SHR": "17872005",
 }
 
 
