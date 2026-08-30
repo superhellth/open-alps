@@ -32,13 +32,15 @@ SCRIPT_NAME = "fetch_tours.py"
 # trusting it - alpenvereinaktiv.com often has several similarly-named entries (individual stages,
 # personal trip logs, alternate variants) for one real-world route, so name matching alone is not
 # enough; a rejected candidate (e.g. PHR's "Zillertaler Runde" and "Auf Spurensuche vom Zillertal
-# ins Wipptal" each only cover 2 of PHR's 6 huts) is left unresolved rather than force-matched.
+# ins Wipptal" each only cover 2 of PHR's 6 huts, and SHR's first candidate found was a shorter
+# variant missing one hut) is left unresolved rather than force-matched.
 HOMEPAGE_EMBED_OA_IDS = {
     "KHW": "9027602",
     "BHW": "21729786",
     "IHW": "7749907",
     "STHW": "107992237",
     "SHR": "17872005",
+    "Karwendel Höhenweg": "256769252",
 }
 
 
