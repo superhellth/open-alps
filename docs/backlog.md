@@ -53,10 +53,9 @@ Tour stages legitimately overnight at Berggasthöfe that are neither Alpine Club
 (`huts.geojson`) nor Bergsteigerdörfer partner businesses (`partner_betriebe.geojson`, only 110
 features nationwide).
 
-**Concrete case:** Kaisertour's leg 3→4 boundary is the **Weinbergerhaus (Berggasthof)** — named as
-such in the GPX's own `<trkpt><name>`. Nearest `huts.geojson` entry is Kaindlhütte at **2,101 m**;
-nearest partner business is 72 km away. So the stop exists, is a real overnight hut, and is in
-neither catalog.
+**Concrete case:** Kaisertour's leg 3→4 boundary is the **Weinbergerhaus**, a Berggasthof. Nearest
+`huts.geojson` entry is Kaindlhütte at **2,101 m**; nearest partner business is 72 km away. So the
+stop exists, is a real overnight hut, and is in neither catalog.
 
 This is a **data-coverage problem, not an algorithmic one** — the fix is to get such places into a
 hub layer, not to loosen snapping thresholds or invent per-tour endpoint types.

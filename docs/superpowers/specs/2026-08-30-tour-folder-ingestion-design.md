@@ -54,14 +54,8 @@ pipeline/tours/
 
 - Folder name is the tour's display name, verbatim (no slugification).
 - Each file is one leg's `<trk>/<trkseg>/<trkpt>` sequence, read as an ordered list of
-  `(lon, lat)`. `<ele>` is parsed but **not** shipped — elevation comes from the graph's own
-  profiles, like every other edge. `<wpt>` is ignored.
-- **`<trkpt>`'s optional `<name>` is retained** where present. OA exports name the significant
-  points along a track, and at leg boundaries that name is the stop's identity —
-  `<name>Weinbergerhaus (Berggasthof)</name>`, `Anton-Karg-Haus`, `Stripsenjochhaus`. Coverage is
-  uneven (unnamed points get a coordinate-string placeholder such as `"47.628591,12.242368"`, and
-  some legs carry no names at all), so this is **diagnostic only** — it never overrides a snap. It
-  is recorded in gap entries so an unsnapped endpoint says *what* it was, not just where.
+  `(lon, lat)`. `<ele>` and `<wpt>` are ignored — elevation comes from the graph's own profiles,
+  like every other edge.
 - **Leg order comes from the filename's integer value, sorted numerically** (`1, 2, ..., 10`, never
   lexicographically, never `readdir` order). A non-numeric stem is a hard error naming the file,
   not a silently skipped input.
@@ -151,42 +145,61 @@ consequences follow, both to be re-tuned with evidence once the phase runs on re
 Tour legs are ordinary `RECORD_DTYPE` rows written to `data/osm/tour_edges/` (`records.npy`,
 `geometry.npy`, `tour_meta.npy`), with `variant = VARIANT_OFFICIAL`. They pick up `time_s`,
 `ascent_m`/`descent_m`, `sac_rank`, `via_ferrata`, `ungraded_m` and elevation profiles from the
-same downstream phases as every other edge — no tour-specific handling anywhere.
+same downstream phases as every other edge — no tour-specific handling anywhere. Verified: nothing
+downstream filters on the `lib/variants.py` grid (only `build_hub_edges.py` and `cell_igraph.py`
+iterate it, and neither touches `tour_edges`), so `VARIANT_OFFICIAL` rows pass through
+`build_profiles.py` and `build_edge_payload.py` unchanged.
 
-`tour_meta.npy` (`tour_id`, `leg_index`, row-aligned 1:1 with `records.npy`) already carries leg
-identity, so **no per-leg record is stored anywhere else**. A tour is its ordered hub sequence; its
-legs are the consecutive pairs of that sequence.
+Geometry lives only in `tour_edges/geometry.npy`, exactly as for hut and start edges. **No per-leg
+geometry is stored anywhere else** — `tours.json` carries none.
 
-`data/osm/tours.json` accordingly shrinks to a small index, shipped to `huts/public/data/`:
+`data/osm/tours.json` is a small index, shipped to `huts/public/data/`. The example is Kaisertour's
+real expected output today (§8): only leg 1 routes.
 
 ```jsonc
 [
   {
     "tourId": 0,
     "name": "Kaisertour",
-    "hubs": [
-      {"type": "station", "id": 8091317},
-      {"type": "hut",     "id": 517},
-      {"type": "hut",     "id": 730}
+    "legs": [
+      {"legIndex": 0, "from": null,                      "to": {"type": "hut", "id": 517}},
+      {"legIndex": 1, "from": {"type": "hut", "id": 517}, "to": {"type": "hut", "id": 730}},
+      {"legIndex": 2, "from": {"type": "hut", "id": 730}, "to": null},
+      {"legIndex": 3, "from": null,                      "to": null}
     ]
   }
 ]
 ```
 
+**Why a leg list rather than a flat hub sequence.** Not every leg is routable — §5 drops a leg whose
+endpoint finds no hub — so a flat `hubs` array would either shorten the tour silently or need a hole
+it cannot express. `tour_meta.npy`'s `leg_index` is already absolute and already sparse (Kaisertour
+yields one record, `leg_index=1`), and `tours.json` mirrors it: **`legIndex` is the leg's position in
+the folder's numeric filename order, never a position in this array**, so it stays stable as hub
+coverage improves and previously-dropped legs start routing.
+
+`from`/`to` are `null` when that endpoint did not snap. Every leg the folder contains appears,
+routed or not, so "Kaisertour has 4 stages" survives even when one of them routes. Two non-`null`
+endpoints are necessary but **not** sufficient for a `tour_edges` row — §3's routing can still fail —
+so `tours.json` is an index of intent, never a promise that a matching record exists.
+
 `tourId` is assigned by iterating `pipeline/tours/` **sorted by folder name**, for stable diffs
-across runs (not mtime, not insertion order). It is the same `tour_id` `tour_meta.npy` carries.
+across runs (not mtime, not insertion order). It is the same `tour_id` `tour_meta.npy` carries, and
+is therefore capped at 255 by `TOUR_META_DTYPE`'s `u1` — ample now, worth revisiting only if the
+upload feature under "Non-goals" lands.
 
 ## 5. Gap handling
 
-Recorded in `data/osm/tour-load-gaps.json`, printed during the run (`pipeline/CLAUDE.md`'s
+Recorded in `data/osm/tour-match-gaps.json` — the existing name is kept, since the phase is
+still `match_tour_edges` — printed during the run (`pipeline/CLAUDE.md`'s
 progress-logging discipline). A gap drops **that leg**, not the tour — legs no longer depend on each
 other for reassembly or orientation, so every other leg still ships.
 
 | reason | when |
 |---|---|
-| `leg_endpoint_unsnapped` | no hub within `maxSnapM` of a leg endpoint. Detail: `{endpoint, nearestType, nearestId, nearestDistM, gpxName}` — `gpxName` is §1's `<trkpt>` name, so the entry says *Weinbergerhaus*, not just a coordinate. |
+| `leg_endpoint_unsnapped` | no hub within `maxSnapM` of a leg endpoint. Detail: `{endpoint, nearestType, nearestId, nearestDistM}` — the nearest candidate is reported even though it was rejected. |
 | `outside_extract` | corridor falls outside the OSM extract |
-| `hut_unsnapped` | an endpoint hub has no persisted graph snap |
+| `hub_unsnapped` | an endpoint hub has no persisted graph snap. Renamed from today's `hut_unsnapped`: §2 endpoints can be stations or parking, so the old name would misreport them. |
 | `no_corridor_path` | no path between the endpoints within the corridor |
 | `length_divergent` | routed length vs. trace length exceeds `lengthDivergenceRatio` |
 
@@ -211,7 +224,7 @@ def task_match_tour_edges():
                   OSM_DIR / "hub_snaps.npy", *tour_files],
         targets=[OSM_DIR / "tour_edges/records.npy", OSM_DIR / "tour_edges/geometry.npy",
                  OSM_DIR / "tour_edges/tour_meta.npy", OSM_DIR / "tours.json",
-                 OSM_DIR / "tour-load-gaps.json"],
+                 OSM_DIR / "tour-match-gaps.json"],
     )
 ```
 
@@ -221,8 +234,7 @@ never a cwd-relative `Path("pipeline/tours")`. `glob("*/*.gpx")`, not `rglob`, s
 
 `dodo.py` changes: drop `fetch_tours` and `fetch_tour_oa_geometry` from `default_tasks`; keep
 `match_tour_edges`, `build_tour_edge_tiles`, `build_tour_edge_payload`. Drop `tour-fetch-gaps.json`
-from `PUBLIC_FILES` and add `tour-load-gaps.json` alongside the existing `tour-match-gaps.json`
-entry, which it replaces.
+from `PUBLIC_FILES`; `tour-match-gaps.json` stays exactly as it is.
 
 ## 7. Deletions
 
@@ -233,7 +245,9 @@ entry, which it replaces.
   reassembly-only, and `assign_hut_position` is superseded — §2 needs "nearest *hub* to a given
   endpoint", which is the transpose of its "nearest *chain point* to a given hut" and must return
   the nearest candidate even when it exceeds the threshold (§5), which `assign_hut_position` cannot
-  (it returns `None`, discarding the distance).
+  (it returns `None`, discarding the distance). Its replacement belongs in **`lib/hubs.py`**, which
+  already loads and buckets the combined hub set — not in a new module, and not inside
+  `match_tour_edges.py`.
 - `match_tour_edges.py`'s `build_tour_legs`, `_chain_for_tour`, `_leg_segment_m` and its
   `tours.json`/`tour_traces.json`/OA-geometry loading
 - DAG tasks `task_fetch_tours`, `task_fetch_tour_oa_geometry` (`dag/downloads.py`)
@@ -251,24 +265,27 @@ column-folding, and the entire base graph / hub-edge / elevation pipeline. This 
 
 ## 8. Testing
 
-- **Parser:** fixture GPX → correct ordered `(lon, lat)` list; `<trkpt><name>` captured where
-  present; numeric filename sort (`1..10`, not lexicographic); non-`.gpx` ignored; non-numeric stem
-  raises naming the file.
+- **Parser:** fixture GPX → correct ordered `(lon, lat)` list; numeric filename sort (`1..10`, not
+  lexicographic); non-`.gpx` ignored; non-numeric stem raises naming the file.
 - **Endpoint snapping:** an endpoint within `maxSnapM` of a hut resolves to `("hut", index)`; one
   near a station resolves to `("station", osm_id)`; a hut is preferred over an equidistant access
   point; an endpoint beyond `maxSnapM` yields `leg_endpoint_unsnapped` **carrying the nearest
-  candidate's type, id, distance and `gpxName`**.
+  candidate's type, id and distance**.
 - **Routing:** existing `test_match_tour_edges.py` golden tests retained for the corridor/route/
   record core, re-driven from GPX fixtures instead of reassembled traces; `no_corridor_path` and
   `length_divergent` still covered.
 - **Wiring:** `test_dodo_wiring.py` updated — `match_tour_edges` targets `tour_edges/*` **and**
   `tours.json`; `fetch_tours`/`fetch_tour_oa_geometry` absent from `default_tasks`;
-  `tour-load-gaps.json` in `PUBLIC_FILES`.
+  `tour-fetch-gaps.json` absent from `PUBLIC_FILES`.
 - **Real-data smoke check:** run against `pipeline/tours/` (Kaisertour 4 legs, Welser Höhenweg 5).
-  Expected today, given the backlog's open coverage gaps: **Welser legs 2–5 and Kaisertour leg 2
-  route; Welser leg 1 and Kaisertour legs 1, 3, 4 report `leg_endpoint_unsnapped`** (5 of 9). That
-  is the baseline the access-node backlog item is measured against — not a passing bar. Subject to
-  `CLAUDE.md`'s "ask before running any pipeline task" rule.
+  Expected today, given the backlog's open coverage gaps — naming GPX **files**, so `2.gpx` is
+  `legIndex` 1: **`Welser/2–5.gpx` and `Kaisertour/2.gpx` route; `Welser/1.gpx` and
+  `Kaisertour/{1,3,4}.gpx` report `leg_endpoint_unsnapped`** (5 of 9). Measured against the exact
+  candidate set §2 specifies (`start_points.npy`, 15,720 rows): the one terminal endpoint that
+  resolves is `Welser/5.gpx`'s end at **42.3 m** from a `TYPE_STATION` point; the three that fail
+  are 2,165 m / 2,286 m / 3,836 m from any access point. That is the baseline the access-node
+  backlog item is measured against — not a passing bar. Subject to `CLAUDE.md`'s "ask before
+  running any pipeline task" rule.
 
 ## 9. Non-goals
 
