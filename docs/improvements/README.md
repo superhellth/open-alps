@@ -9,7 +9,7 @@ when done.
 
 | Plan | Title | Priority | Effort | Risk | Depends on | Status |
 |------|-------|----------|--------|------|------------|--------|
-| 005  | Add pytest pixi task + document it | P1 | S | LOW | — | TODO |
+| 005  | Add pytest pixi task + document it | P1 | S | LOW | — | DONE |
 | 008  | Argparse help text, stale doc pointer, README indexing | P3 | S | LOW | — | TODO |
 | 001  | Dedupe haversine formula into `lib/geo.py` | P1 | S | LOW | — | TODO |
 | 004  | Harden zip extraction against zip-slip | P2 | S | LOW | — | TODO |

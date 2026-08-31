@@ -27,3 +27,4 @@ pytest = "*"
 
 [tasks]
 doit = "doit"
+test = "pytest"

@@ -163,6 +163,16 @@ automatically (`lib.pipeline.run_tippecanoe()`) — see `phases/postprocessing/R
 If you're already working from inside WSL (as this setup is), ignore the Windows path entirely —
 `pixi install` above covers `tippecanoe` too.
 
+## Running tests
+
+```bash
+pixi run test          # equivalent to: pixi run pytest
+```
+
+Fast (a few seconds, no real `data/` outputs needed — every test uses small synthetic
+fixtures) and safe to run anytime; unlike the `doit` tasks above, no test touches `data/` or
+downloads anything.
+
 ## Reproducing from scratch
 
 The pipeline is orchestrated by [doit](https://pydoit.org) — one task per script, wired by
