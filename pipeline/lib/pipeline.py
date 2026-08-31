@@ -1,7 +1,9 @@
-"""Single config reader shared by every pipeline script, so pipeline.config.json is the
-one source of truth for hyperparameters (bbox, regions, tag filter, graph thresholds)."""
+"""Config reader plus small shared filesystem helpers used across pipeline scripts
+(pipeline.config.json is still the one source of truth for hyperparameters: bbox, regions, tag
+filter, graph thresholds)."""
 
 import json
+import zipfile
 from pathlib import Path
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent
@@ -27,3 +29,19 @@ PUBLIC_DATA_DIR = REPO_ROOT / "huts" / "public" / "data"
 def load_config():
     with open(CONFIG_PATH, encoding="utf-8") as f:
         return json.load(f)
+
+
+def safe_extractall(zf: "zipfile.ZipFile", extract_dir: Path) -> None:
+    """Extracts every member of zf into extract_dir, rejecting any member whose resolved path
+    would land outside extract_dir (zip-slip: a '../' path segment or an absolute path in a
+    malicious/corrupted archive). zipfile.ZipFile.extractall() does not do this itself on the
+    Python 3.11 this pipeline's pixi env pins (the filter= guard was added in 3.12) - matters for
+    archives fetched from third-party DEM providers."""
+    extract_dir = extract_dir.resolve()
+    for member in zf.infolist():
+        target = (extract_dir / member.filename).resolve()
+        if target != extract_dir and extract_dir not in target.parents:
+            raise ValueError(
+                f"refusing to extract {member.filename!r}: resolves outside {extract_dir}"
+            )
+    zf.extractall(extract_dir)
