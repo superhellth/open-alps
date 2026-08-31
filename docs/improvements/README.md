@@ -15,8 +15,8 @@ when done.
 | 004  | Harden zip extraction against zip-slip | P2 | S | LOW | — | DONE |
 | 006  | Fix isolated degree-2 cycles dropped by `contract_structural` | P2 | S/M | LOW | — | DONE |
 | 003  | Latitude-correct `nearest_point_on_polyline` | P2 | M | LOW-MED | — | DONE |
-| 007  | Test coverage for `doit_support.py` + preprocessing/download scripts | P2 | M | LOW | — | TODO |
-| 002  | Cache base-graph gather across tour legs in `match_tour_edges.py` | P2 | M | MED | — | TODO |
+| 007  | Test coverage for `doit_support.py` + preprocessing/download scripts | P2 | M | LOW | — | BLOCKED (steps 2-5: importing filter_trails.py/merge_trails.py/verify_trails.py/download_extracts.py to reach their target helper runs real unguarded module-level subprocess/network calls; step 1 (doit_support.py) landed) |
+| 002  | Cache base-graph gather across tour legs in `match_tour_edges.py` | P2 | M | MED | — | DONE |
 
 Suggested order above is by leverage (effort vs. risk vs. how quickly it unblocks confident
 follow-on work), not a hard dependency chain — none of these 8 plans technically blocks another.
