@@ -13,6 +13,12 @@ without always having to double-check bed availability on another website.
 
 ## Medium
 
+### [Corridor matching shortcuts summit-visiting legs](backlog/tour-corridor-matching-shortcuts-summits.md)
+
+Endpoint-only shortest-pathing inside the corridor bbox skips summit detours a leg's own GPX trace
+deliberately makes (Kaisertour leg 1: 0.63 length ratio, 1237 m max deviation). Candidate fix is
+HMM-style map matching against the trace's own points.
+
 ### Idea: Introduce a pipeline explanation/visualization
 
 Probably in form of a static web page, either as part of the existing frontend or a new one. May be combined with the data quality monitoring layer.
