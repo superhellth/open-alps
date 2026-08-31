@@ -133,6 +133,7 @@ def contract(*raw_args, progress_every: int = 20_000):
         with rss_sampler() as sample:
             contracted = contract_structural(*raw_args, progress_every=progress_every)
         meta.update(sample.as_meta())  # outside rss_sampler: its finally fills the peak
+        meta["n_isolated_cycles"] = contracted.n_isolated_cycles
     print(f"contracted to {len(contracted.coords):,} nodes / "
           f"{len(contracted.edges_u):,} edges", flush=True)
     return contracted
