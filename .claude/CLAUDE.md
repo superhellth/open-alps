@@ -124,3 +124,6 @@ Work directly on branches in the main checkout instead.
 **Never use `superpowers:subagent-driven-development` or any other approach that spins up
 worktrees/subagents to execute plan tasks in this repo, even if a skill recommends it.** Execute
 plan tasks directly, in-session, on the current checkout.
+
+## All documentation and plans live in docs/
+Especially skill invocations should honor to put the docs they produce in the according docs/ directory
