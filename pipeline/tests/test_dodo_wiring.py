@@ -183,30 +183,18 @@ def test_filter_start_points_depends_on_partner_betriebe():
     assert any(d.endswith("partner_betriebe.geojson") for d in deps)
 
 
-def test_fetch_tours_depends_on_huts_geojson_not_just_network():
-    # Resolving Huettenliste GUIDs to positional indices means a huts refetch that reorders or
-    # re-filters huts silently invalidates every hutIndices entry - file_dep must NOT be [].
-    deps = dodo.task_fetch_tours()["file_dep"]
-    assert any(d.endswith("huts.geojson") for d in deps)
-
-
-def test_fetch_tours_targets_all_three_outputs():
-    targets = dodo.task_fetch_tours()["targets"]
-    assert any(t.endswith("tours.json") for t in targets)
-    assert any(t.endswith("tour_traces.json") for t in targets)
-    assert any(t.endswith("tour-fetch-gaps.json") for t in targets)
-
-
-def test_fetch_tours_tracks_bbox():
-    param_names = {p["name"] for p in dodo.task_fetch_tours().get("params", [])}
-    assert "bbox_json" in param_names
-
-
 def test_match_tour_edges_depends_on_profiles_and_snaps_not_edges_npy():
     task = dodo.task_match_tour_edges()
     assert "compute_edge_profiles" in task["task_dep"]
     assert "snap_hubs" in task["task_dep"]
+    assert "fetch_tour_oa_geometry" not in task["task_dep"]
     assert not any(d.endswith("edges.npy") for d in task["file_dep"])
+
+
+def test_match_tour_edges_tracks_tour_gpx_files():
+    task = dodo.task_match_tour_edges()
+    file_deps = [str(d) for d in task["file_dep"]]
+    assert any(d.endswith(".gpx") for d in file_deps)
 
 
 def test_match_tour_edges_targets_tour_edges_directory():
@@ -253,7 +241,7 @@ def test_public_files_includes_every_tour_output():
         "tours.json", "tour-edges.pmtiles", "tour-edge-stats.json",
         "tour-edge-geometry.bin", "tour-edge-geometry.json",
         "tour-edge-payload.bin", "tour-edge-payload.json",
-        "tour-fetch-gaps.json", "tour-match-gaps.json",
+        "tour-match-gaps.json",
     ]:
         assert name in dodo.PUBLIC_FILES, name
 
@@ -265,9 +253,10 @@ def test_public_files_does_not_include_internal_tour_traces():
 
 def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
     ordered = dodo.DOIT_CONFIG["default_tasks"]
-    for name in ["fetch_tours", "match_tour_edges", "build_tour_edge_tiles", "build_tour_edge_payload"]:
+    for name in ["match_tour_edges", "build_tour_edge_tiles", "build_tour_edge_payload"]:
         assert name in ordered, name
-    assert ordered.index("fetch_tours") < ordered.index("match_tour_edges")
+    assert "fetch_tours" not in ordered
+    assert "fetch_tour_oa_geometry" not in ordered
     assert ordered.index("snap_hubs") < ordered.index("match_tour_edges")
     assert ordered.index("compute_edge_profiles") < ordered.index("match_tour_edges")
     assert ordered.index("match_tour_edges") < ordered.index("build_profiles")
