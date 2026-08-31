@@ -157,16 +157,7 @@ def _chain_for_tour(paths: list, break_threshold_m: float, hut_coords_in_order: 
     return chains, None
 
 
-import math  # noqa: E402
-
-
-def _leg_segment_m(a, b):
-    r = 6_371_000.0
-    p1, p2 = math.radians(a[1]), math.radians(b[1])
-    dphi = math.radians(b[1] - a[1])
-    dlambda = math.radians(b[0] - a[0])
-    x = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(x))
+from lib.geo import haversine_m  # noqa: E402
 
 
 def main(argv=None):
@@ -243,7 +234,8 @@ def main(argv=None):
 
                 leg_points = leg_chain_slice(oriented, from_pos[0], to_pos[0])
                 trace_length_m = sum(
-                    _leg_segment_m(leg_points[i], leg_points[i + 1]) for i in range(len(leg_points) - 1)
+                    haversine_m(leg_points[i][0], leg_points[i][1], leg_points[i + 1][0], leg_points[i + 1][1])
+                    for i in range(len(leg_points) - 1)
                 )
                 bounds = corridor_bounds(leg_points or all_points, args.corridor_buffer_m, grid)
                 subgraph = clip_subgraph_to_bounds(

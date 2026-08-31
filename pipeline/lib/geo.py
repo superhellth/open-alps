@@ -8,6 +8,7 @@ the two shapes silently drift apart (docs/superpowers/specs/2026-08-22-hub-range
 import json
 import math
 
+import numpy as np
 from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
@@ -79,3 +80,35 @@ def hub_range_polygon(huts_path, radius_km: float, n_points: int = 32):
     points = hut_points(huts_path)
     circles = [circle_polygon(lng, lat, radius_km, n_points) for lng, lat in points]
     return unary_union(circles)
+
+
+def haversine_m(lon1: float, lat1: float, lon2: float, lat2: float) -> float:
+    """Great-circle distance in meters between two (lon, lat) points, in degrees."""
+    r = 6_371_000.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
+    return 2 * r * math.asin(math.sqrt(a))
+
+
+def haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
+    """Same formula as haversine_m, vectorized against one fixed point vs. an array of points -
+    the hot-path shape used when scanning many candidate points against one query point."""
+    r = 6_371_000.0
+    p1, p2 = math.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2) ** 2 + math.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))
+
+
+def haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
+                           lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
+    """Fully-vectorized haversine over paired arrays (both endpoints vary per element)."""
+    r = 6_371_000.0
+    p1, p2 = np.radians(lat1), np.radians(lat2)
+    dphi = np.radians(lat2 - lat1)
+    dlambda = np.radians(lon2 - lon1)
+    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
+    return 2 * r * np.arcsin(np.sqrt(a))

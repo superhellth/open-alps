@@ -60,8 +60,9 @@ from lib.tour_geometry import (  # noqa: E402
     assign_hut_position, leg_chain_slice, orient_chain, reassemble_fragments,
 )
 from graph_building.match_tour_edges import (  # noqa: E402
-    _leg_segment_m, build_tour_legs, corridor_bounds, match_leg,
+    build_tour_legs, corridor_bounds, match_leg,
 )
+from lib.geo import haversine_m  # noqa: E402
 from lib.oa_geometry import fetch_oa_contents, oa_chain, oa_ids_by_tour  # noqa: E402
 
 OUT_PATH = DATA_DIR / "analysis" / "oa_corridor_spike.json"
@@ -70,7 +71,7 @@ CACHE_PATH = OSM_DIR / "oa_tours_cache.json"
 
 def run_arm(oriented, legs, tour, hut_coords, persisted_snaps, base_graph_dir, grid, args):
     """One arm's per-leg outcomes. Mirrors match_tour_edges.main()'s inner loop and calls its real
-    functions (build_tour_legs / assign_hut_position / leg_chain_slice / _leg_segment_m /
+    functions (build_tour_legs / assign_hut_position / leg_chain_slice / haversine_m /
     corridor_bounds / gather_subgraph_for_bounds / clip_subgraph_to_bounds / match_leg) - only the
     ~15 lines of orchestration are restated here, because that loop lives inline in main() and
     analysis/README.md forbids refactoring phases/ to suit a measurement script.
@@ -93,8 +94,10 @@ def run_arm(oriented, legs, tour, hut_coords, persisted_snaps, base_graph_dir, g
             continue
 
         leg_points = leg_chain_slice(oriented, from_pos[0], to_pos[0])
-        trace_length_m = sum(_leg_segment_m(leg_points[i], leg_points[i + 1])
-                             for i in range(len(leg_points) - 1))
+        trace_length_m = sum(
+            haversine_m(leg_points[i][0], leg_points[i][1], leg_points[i + 1][0], leg_points[i + 1][1])
+            for i in range(len(leg_points) - 1)
+        )
         bounds = corridor_bounds(leg_points or oriented, args.corridor_buffer_m, grid)
 
         started = time.time()
