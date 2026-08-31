@@ -39,9 +39,17 @@ hiking-ways network, and a bounded set of station/parking "hub" candidates.
 Reduces station/parking candidates to the ones that can possibly matter, using a provably correct
 (not approximate) geometric filter, before they ever reach the expensive graph query.
 
+- **Usability filter**: before the beeline filter runs, `is_usable()` hard-drops candidates that
+  can never be a real trailhead — `access`/`motor_vehicle` of `private`/`no`, a `barrier` of
+  `gate`/`lift_gate`, or a station/bus-stop tagged `disused=yes`/`abandoned=yes` (the
+  `disused:railway=*` lifecycle prefix is already excluded on import by
+  `fetch_stations_parking.py`'s tag filter). This is a hard drop, not a preference — it runs before
+  the expensive graph query, not just at final table-selection time
+  (`postprocessing/build_approach_table.py`), so `build_hub_edges.py` never wastes work routing to
+  a point that could never ship anyway.
 - **Algorithm**: builds a `scipy.spatial.cKDTree` over all hut coordinates (`hut_points()` from
-  `huts.geojson`), then for each station/parking candidate does a 1-nearest-neighbor query against
-  that tree and keeps the point only if the beeline distance to its nearest hut is
+  `huts.geojson`), then for each usable station/parking candidate does a 1-nearest-neighbor query
+  against that tree and keeps the point only if the beeline distance to its nearest hut is
   `<= config["graph"]["maxEdgeKm"]` (converted from km via `1 / 111.320` deg/km).
 - **Why this bound is correct, not heuristic**: `graph_building/build_hub_edges.py` only ever
   keeps a hut-to-hut/hub-to-hut path whose real (trail-network) walking distance is

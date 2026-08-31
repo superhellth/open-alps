@@ -12,6 +12,7 @@ from preprocessing.filter_start_points import (  # noqa: E402
     _load_osm_export_layer,
     build_id_table,
     filter_to_hut_range,
+    is_usable,
 )
 
 HUT_COORDS = np.array([(10.0, 47.0), (11.0, 47.0)])
@@ -101,6 +102,44 @@ def test_missing_access_becomes_none_not_absent():
     table = build_id_table([{"type": "parking", "osm_id": 2, "lon": 11.0, "lat": 47.0,
                             "properties": {"name": "Q"}}])
     assert table["parking"]["2"]["access"] is None
+
+
+def test_is_usable_drops_private_access():
+    assert is_usable({"access": "private"}) is False
+
+
+def test_is_usable_drops_no_access():
+    assert is_usable({"access": "no"}) is False
+
+
+def test_is_usable_drops_private_motor_vehicle():
+    assert is_usable({"motor_vehicle": "private"}) is False
+
+
+def test_is_usable_drops_gate_barrier():
+    assert is_usable({"barrier": "gate"}) is False
+
+
+def test_is_usable_drops_lift_gate_barrier():
+    assert is_usable({"barrier": "lift_gate"}) is False
+
+
+def test_is_usable_drops_disused_station():
+    assert is_usable({"disused": "yes"}) is False
+
+
+def test_is_usable_drops_abandoned_station():
+    assert is_usable({"abandoned": "yes"}) is False
+
+
+def test_is_usable_keeps_point_with_no_tags():
+    assert is_usable({}) is True
+
+
+def test_is_usable_keeps_permit_access_customers():
+    # customers/permit are real-world access values that don't mean "unusable" - spec E1's
+    # access_unknown/access_values plumbing surfaces them to the UI instead of dropping them.
+    assert is_usable({"access": "customers"}) is True
 
 
 def test_preserves_input_order_of_survivors():
