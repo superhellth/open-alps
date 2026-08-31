@@ -119,6 +119,61 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
             c_constrained_ok.append(ok_all)
             c_interior.append(interior)
 
+    # Any edge still unvisited here belongs to an isolated cycle with no keep-node anywhere on it
+    # (every node degree == 2) - the outer loop above can only be entered from a keep-node, so a
+    # pure ring never gets visited from any direction. Close each such ring into one self-loop
+    # contracted edge instead of silently dropping it, using the ring's lowest node index as an
+    # arbitrary anchor (any node on a pure ring is an equally valid contraction start point).
+    n_isolated_cycles = 0
+    for e0 in np.flatnonzero(~visited_edge).tolist():
+        if visited_edge[e0]:
+            continue
+        start = int(min(edges_i[e0], edges_j[e0]))
+        keep[start] = True
+        nbrs0, edges0 = _neighbors(start)
+        nb, e = next((nb, e) for nb, e in zip(nbrs0, edges0) if not visited_edge[e])
+        visited_edge[e] = True
+        d_sum = float(edges_dist[e])
+        road_sum = d_sum if edges_road[e] else 0.0
+        ungraded_sum = float(edges_ungraded[e])
+        inferred_sum = float(edges_inferred[e])
+        sac_max = int(edges_sac_rank[e])
+        vf_any = bool(edges_via_ferrata[e])
+        ok_all = bool(edges_constrained_ok[e])
+        interior = []
+        cur, prev_edge = nb, e
+        while cur != start:
+            interior.append((float(coords[cur, 0]), float(coords[cur, 1])))
+            cnbrs, cedges = _neighbors(cur)
+            nb2, e2 = next((nb2, e2) for nb2, e2 in zip(cnbrs, cedges) if e2 != prev_edge)
+            visited_edge[e2] = True
+            d_sum += edges_dist[e2]
+            if edges_road[e2]:
+                road_sum += edges_dist[e2]
+            ungraded_sum += edges_ungraded[e2]
+            inferred_sum += edges_inferred[e2]
+            if edges_sac_rank[e2] > sac_max:
+                sac_max = int(edges_sac_rank[e2])
+            if edges_via_ferrata[e2]:
+                vf_any = True
+            if not edges_constrained_ok[e2]:
+                ok_all = False
+            prev_edge, cur = e2, nb2
+        c_u.append(start)
+        c_v.append(start)
+        c_dist.append(d_sum)
+        c_road_m.append(road_sum)
+        c_ungraded_m.append(ungraded_sum)
+        c_inferred_m.append(inferred_sum)
+        c_sac_rank.append(sac_max)
+        c_via_ferrata.append(vf_any)
+        c_constrained_ok.append(ok_all)
+        c_interior.append(interior)
+        n_isolated_cycles += 1
+    if n_isolated_cycles:
+        print(f"  contract_structural: closed {n_isolated_cycles:,} isolated degree-2 cycle(s) "
+              f"with no junction node (see lib/contraction.py isolated-cycle handling)", flush=True)
+
     keep_idxs = np.flatnonzero(keep)
     new_index = np.full(n_nodes, -1, dtype=np.int64)
     new_index[keep_idxs] = np.arange(len(keep_idxs))
