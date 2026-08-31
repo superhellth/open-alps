@@ -26,12 +26,17 @@ source and writes into `data/osm/` or `data/dem/`. All read `pipeline/pipeline.c
 Two independent tag-filtered exports, reusing the raw extracts from `download_extracts.py` (no
 new network download):
 
-- **stations** — `osmium tags-filter n/railway=station,halt` (node-only), then
-  `osmium export --geometry-types point`, properties pruned to `{name, network, operator}`.
+- **stations** — `osmium tags-filter n/railway=station,halt n/highway=bus_stop` (node-only; two
+  filter expressions OR'ed by osmium, not one merged string — bus stops still overwhelmingly use
+  the older `highway=bus_stop` tag in AT/Bavaria OSM data, not the `public_transport=platform`
+  scheme), then `osmium export --geometry-types point`, properties pruned to
+  `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag shape as
+  parking below, so both layers are filterable the same way by
+  `filter_start_points.py`'s `is_usable()`.
 - **parking** — `osmium tags-filter nwr/amenity=parking` (nodes+ways+relations, since lots are
   usually mapped as polygons), `osmium export --geometry-types point` (so a polygon exports as its
   centroid, not its ring — keeps this a plain `Point` layer like everything else), properties
-  pruned to `{name, capacity, fee, access}`.
+  pruned to `{name, capacity, fee, access, motor_vehicle, barrier}`.
 - Per-layer features from every region are concatenated into one `FeatureCollection` each:
   `data/osm/stations.geojson`, `data/osm/parking.geojson`.
 - **doit wiring**: `file_dep=[raw/<region>-latest.osm.pbf, ...]`,

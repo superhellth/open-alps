@@ -28,6 +28,25 @@ SCRIPT_NAME = "filter_start_points.py"
 
 config = load_config()
 
+_DROP_ACCESS = {"private", "no"}
+_DROP_BARRIER = {"gate", "lift_gate"}
+
+
+def is_usable(props: dict) -> bool:
+    """Hard-drops nodes that can never be a real trailhead: private/no-access or gated points
+    (parking behind a barrier, private stations), and stations mappers tagged disused=yes/
+    abandoned=yes instead of remapping to the disused:railway=* lifecycle prefix (which
+    fetch_stations_parking.py's tag_filter already excludes on import)."""
+    if props.get("access") in _DROP_ACCESS:
+        return False
+    if props.get("motor_vehicle") in _DROP_ACCESS:
+        return False
+    if props.get("barrier") in _DROP_BARRIER:
+        return False
+    if props.get("disused") == "yes" or props.get("abandoned") == "yes":
+        return False
+    return True
+
 
 def filter_to_hut_range(start_points: list, hut_coords: np.ndarray, max_edge_km: float) -> list:
     if not start_points or len(hut_coords) == 0:
@@ -114,7 +133,11 @@ if __name__ == "__main__":
         )
         print(f"start-point candidates: {len(all_points)}")
 
-        kept = filter_to_hut_range(all_points, hut_coords, args.max_edge_km)
+        usable_points = [p for p in all_points if is_usable(p.get("properties", {}))]
+        print(f"usable (not private/gated/disused): {len(usable_points)} "
+              f"({len(all_points) - len(usable_points)} dropped)")
+
+        kept = filter_to_hut_range(usable_points, hut_coords, args.max_edge_km)
         print(f"kept within maxEdgeKm of a hut: {len(kept)}")
 
         arr = np.zeros(len(kept), dtype=[

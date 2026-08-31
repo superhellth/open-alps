@@ -6,11 +6,13 @@ is shippable or seedable as-is. This writes two things instead:
 
 1. The k-best-per-hut approach table (E1): "k fastest" is wrong on purpose - the fastest edge into
    a hut is systematically the highest, most remote trailhead (forest road, toll road, summer-only
-   pass parking), while a driver wants the valley trailhead they can actually reach. Selection is
-   time-ranked among survivors of a hard access drop, with one slot reserved per source type
-   (parking/station) where both exist, so the client's car/transit split has something to work
-   with. maxApproachTime is NOT reintroduced - an approach is a full leg, bounded by the same range
-   cap as any hut-hut edge and filtered client-side by maxLegTime.
+   pass parking), while a driver wants the valley trailhead they can actually reach. Private/
+   gated/disused points are hard-dropped upstream, in filter_start_points.py's is_usable() - by
+   the time records reach here every candidate is already usable, so selection is purely
+   time-ranked, with one slot reserved per source type (parking/station) where both exist, so the
+   client's car/transit split has something to work with. maxApproachTime is NOT reintroduced - an
+   approach is a full leg, bounded by the same range cap as any hut-hut edge and filtered
+   client-side by maxLegTime.
 
 2. The loop-closure reverse index (E2): the client's car mode requires exit start-point == entry
    start-point, and the k~=3 tables of the first and last hut essentially never share a start id -
@@ -46,8 +48,6 @@ _SOURCE_TYPE_NAME = {
     binfmt.TYPE_PARKING: "parking", binfmt.TYPE_STATION: "station",
     binfmt.TYPE_PARTNER: "partner_betrieb",
 }
-_DROP_ACCESS = {"private", "no"}
-_DROP_BARRIER = {"gate", "lift_gate"}
 
 
 def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
@@ -62,10 +62,6 @@ def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
         start_id = int(r["from_id"])
         tags = id_table.get(type_name, {}).get(str(start_id), {})
         access = tags.get("access")
-        motor_vehicle = tags.get("motor_vehicle")
-        barrier = tags.get("barrier")
-        if access in _DROP_ACCESS or motor_vehicle in _DROP_ACCESS or barrier in _DROP_BARRIER:
-            continue
 
         duration_h = speed.din_duration_h(
             float(r["distance_m"]), float(r["ascent_m"]), float(r["descent_m"])

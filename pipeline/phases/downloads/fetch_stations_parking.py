@@ -33,12 +33,20 @@ config = load_config()
 LAYERS = [
     {
         "name": "stations",
-        "tag_filter": "n/railway=station,halt",
-        "keep_fields": ["name", "network", "operator"],
+        # Two filter expressions, not one merged railway=...,highway=... string - osmium
+        # tags-filter OR's multiple expression arguments together, keeping a node that matches
+        # either. Bus stops overwhelmingly still use the older highway=bus_stop tag in AT/Bavaria
+        # OSM data (docs/backlog/access-node-coverage.md).
+        "tag_filter": ["n/railway=station,halt", "n/highway=bus_stop"],
+        # access/motor_vehicle/barrier/disused/abandoned: same usability-filtering shape as
+        # parking below, consumed by filter_start_points.py's is_usable(). network/operator
+        # dropped - unused downstream and unread by the frontend (TourSearchPage.tsx only reads
+        # properties.name).
+        "keep_fields": ["name", "access", "motor_vehicle", "barrier", "disused", "abandoned"],
     },
     {
         "name": "parking",
-        "tag_filter": "nwr/amenity=parking",
+        "tag_filter": ["nwr/amenity=parking"],
         "keep_fields": ["name", "capacity", "fee", "access", "motor_vehicle", "barrier"],
     },
 ]
@@ -54,7 +62,7 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
         print(f"filtering {src} -> {filtered}")
         with timer.step(f"{layer['name']}_tag_filter"):
             subprocess.run(
-                ["osmium", "tags-filter", str(src), layer["tag_filter"],
+                ["osmium", "tags-filter", str(src), *layer["tag_filter"],
                  "-o", str(filtered), "--overwrite"],
                 check=True,
             )

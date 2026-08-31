@@ -33,22 +33,22 @@ def test_partner_betrieb_source_type_is_not_dropped():
     assert any(r["start_id"] == 1 for r in rows)
 
 
-def test_restricted_access_start_points_are_dropped():
-    records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
-    rows = select_approaches(records, id_table={"parking": {"1": {"access": "private"}}}, k=3)
-    assert all(r["start_id"] != 1 for r in rows)
-
-
 def test_absent_access_is_kept_and_marked_unknown():
     records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
     rows = select_approaches(records, id_table={"parking": {"1": {"access": None}}}, k=3)
     assert rows[0]["access_unknown"] is True
 
 
-def test_gated_forest_road_is_dropped():
+def test_restricted_access_start_points_are_surfaced_not_dropped():
+    # private/gated/disused points are hard-dropped upstream, in filter_start_points.py's
+    # is_usable() (docs/backlog/access-node-coverage.md) - nothing reaching start_edges/
+    # records.npy can carry access="private" any more, but if id_table somehow did carry it,
+    # this stage must not silently drop it a second time (that filtering logic lives in exactly
+    # one place now).
     records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
-    rows = select_approaches(records, id_table={"parking": {"1": {"barrier": "gate"}}}, k=3)
-    assert all(r["start_id"] != 1 for r in rows)
+    rows = select_approaches(records, id_table={"parking": {"1": {"access": "private"}}}, k=3)
+    assert any(r["start_id"] == 1 for r in rows)
+    assert rows[0]["access"] == "private"
 
 
 def test_k_best_never_fills_every_slot_from_one_source_type():
