@@ -28,6 +28,7 @@ class ContractedGraph:
     edges_via_ferrata: np.ndarray
     edges_constrained_ok: np.ndarray
     interior_coords: list = field(default_factory=list)  # list[list[(lon, lat)]]
+    n_isolated_cycles: int = 0  # rings closed into self-loop edges - see contract_structural
 
 
 def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded,
@@ -190,4 +191,5 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
         edges_via_ferrata=np.array(c_via_ferrata, dtype=bool),
         edges_constrained_ok=np.array(c_constrained_ok, dtype=bool),
         interior_coords=c_interior,
+        n_isolated_cycles=n_isolated_cycles,
     )
