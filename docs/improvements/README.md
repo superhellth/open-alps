@@ -10,9 +10,9 @@ when done.
 | Plan | Title | Priority | Effort | Risk | Depends on | Status |
 |------|-------|----------|--------|------|------------|--------|
 | 005  | Add pytest pixi task + document it | P1 | S | LOW | — | DONE |
-| 008  | Argparse help text, stale doc pointer, README indexing | P3 | S | LOW | — | TODO |
-| 001  | Dedupe haversine formula into `lib/geo.py` | P1 | S | LOW | — | TODO |
-| 004  | Harden zip extraction against zip-slip | P2 | S | LOW | — | TODO |
+| 008  | Argparse help text, stale doc pointer, README indexing | P3 | S | LOW | — | DONE |
+| 001  | Dedupe haversine formula into `lib/geo.py` | P1 | S | LOW | — | DONE |
+| 004  | Harden zip extraction against zip-slip | P2 | S | LOW | — | DONE |
 | 006  | Fix isolated degree-2 cycles dropped by `contract_structural` | P2 | S/M | LOW | — | TODO |
 | 003  | Latitude-correct `nearest_point_on_polyline` | P2 | M | LOW-MED | — | TODO |
 | 007  | Test coverage for `doit_support.py` + preprocessing/download scripts | P2 | M | LOW | — | TODO |
