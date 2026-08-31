@@ -32,35 +32,6 @@ def task_fetch_huts():
     )
 
 
-def task_fetch_tours():
-    return pipeline_task(
-        "phases/downloads/fetch_tours.py",
-        # fetch_tours.py resolves Huettenliste GUIDs against huts.geojson's own feature-array
-        # position - unlike fetch_huts.py's plain network fetch, a huts refetch that reorders or
-        # re-filters huts silently invalidates every hutIndices entry, so this must be a real
-        # file_dep, not just a tracked param.
-        tracking_params=[
-            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
-        ],
-        file_dep=[OSM_DIR / "huts.geojson"],
-        targets=[
-            OSM_DIR / "tours.json", OSM_DIR / "tour_traces.json", OSM_DIR / "tour-fetch-gaps.json",
-        ],
-    )
-
-
-def task_fetch_tour_oa_geometry():
-    # Downstream of fetch_tours.py's oaId resolution - task_dep (not just file_dep on tours.json)
-    # because a re-run with the SAME tours.json content but a code change to oa_ids_by_tour's
-    # regex should still refetch, and doit's file_dep freshness check alone wouldn't catch that.
-    return pipeline_task(
-        "phases/downloads/fetch_tour_oa_geometry.py",
-        task_dep=["fetch_tours"],
-        file_dep=[OSM_DIR / "tours.json"],
-        targets=[OSM_DIR / "tour_oa_traces.json"],
-    )
-
-
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",

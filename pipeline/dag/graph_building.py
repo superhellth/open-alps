@@ -11,7 +11,7 @@ import json
 
 from lib import binfmt
 from lib.doit_support import cli_param, pipeline_task, tracking_param
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config
+from lib.pipeline import DEM_DIR, OSM_DIR, TOURS_DIR, load_config
 
 CONFIG = load_config()
 
@@ -113,28 +113,29 @@ def task_build_hub_edges():
 
 
 def task_match_tour_edges():
-    # Corridor-constrained routing of the AV's 26 official tours onto the base graph (spec
-    # 2026-08-29-official-tours-integration-design.md). task_dep, not file_dep, on
-    # compute_edge_profiles/snap_hubs: both rewrite their outputs in place without declaring them
-    # as targets - same reasoning as task_snap_hubs/task_gather_route_subgraphs above. Never a
-    # variants_json tracking param: a tour leg is not a member of graph.variants (spec §5).
+    # Corridor-constrained routing of tour folders (pipeline/tours/) onto the base graph (spec
+    # docs/superpowers/specs/2026-08-30-tour-folder-ingestion-design.md). task_dep, not file_dep,
+    # on compute_edge_profiles/snap_hubs: both rewrite their outputs in place without declaring
+    # them as targets - same reasoning as task_snap_hubs/task_gather_route_subgraphs above. Never
+    # a variants_json tracking param: a tour leg is not a member of graph.variants (spec §5 of the
+    # 2026-08-29 official-tours-integration design).
+    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # flat per spec §1; computed at DAG-build time
     return pipeline_task(
         "phases/graph_building/match_tour_edges.py",
         params=[
-            cli_param("fragment_break_m", "fragment-break-m", float, CONFIG["tourMatch"]["fragmentBreakM"]),
             cli_param("corridor_buffer_m", "corridor-buffer-m", float, CONFIG["tourMatch"]["corridorBufferM"]),
-            cli_param("max_hut_trace_m", "max-hut-trace-m", float, CONFIG["tourMatch"]["maxHutTraceM"]),
             cli_param("length_divergence_ratio", "length-divergence-ratio", float,
                       CONFIG["tourMatch"]["lengthDivergenceRatio"]),
         ],
-        task_dep=["compute_edge_profiles", "snap_hubs", "fetch_tour_oa_geometry"],
+        task_dep=["compute_edge_profiles", "snap_hubs"],
         file_dep=[
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
             OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
-            OSM_DIR / "tours.json", OSM_DIR / "tour_traces.json", OSM_DIR / "tour_oa_traces.json",
+            *tour_files,
         ],
         targets=[
             OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",
             OSM_DIR / "tour_edges" / "edge_ids.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
-            OSM_DIR / "tour-match-gaps.json",
+            OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json",
         ],
     )
