@@ -4,18 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A React map that plots all Austrian/German Alpine Club huts (`huts/`), built on data endpoints
-reverse-engineered from the Alpenverein "Bettencheck" tool. There is no backend of our own — the
-app fetches public third-party APIs directly from the browser.
-
-`caa.alpenverein.at.har` (29 MB) is the source network capture the endpoints were derived from.
-It is reference material, not build input.
-
-`huts/` is TypeScript (Vite + MUI), with a vitest test suite (`npm test`, `npm run typecheck`,
-`npm run lint` from `huts/`) — engine tests run under the default `node` environment (set in
-`vitest.config.js`), UI tests opt into `jsdom` per-file via a `// @vitest-environment jsdom`
-docblock (see `huts/src/tourSearchPage/TourSearchPage.test.tsx`). No CI pipeline runs these
-automatically yet.
+A React map that plots all Austrian/German Alpine Club huts (`huts/`) and allow multi-leg tour planning.
+All data processing that allows easy route planning lives in `pipeline/`.
 
 ## Data sources
 
@@ -42,7 +32,7 @@ not be called in a loop over the whole hut list.
 `#graph` renders `GraphPage.tsx`. Both pages are wrapped in the shared `AppShell.tsx` (top app bar +
 tab nav between the two routes).
 
-`huts/src/tourSearchPage/TourSearchPage.tsx` is the main page (formerly `App.jsx`'s job): a form
+`huts/src/tourSearchPage/TourSearchPage.tsx` is the main page: a form
 (`formState.ts` builds the `Query` from user input) over the client-side tour search engine in
 `huts/src/tourSearch/`, plus a results list (`TourList.tsx`) and map (`ResultsMap.tsx`). It fetches
 `/data/huts.geojson`, `/data/parking.geojson`, `/data/stations.geojson` and
@@ -64,12 +54,6 @@ client as not-yet-built — that note is stale.)
 `huts/src/GraphPage.tsx` (the `#graph` route) is the opt-in raw-network view for the hut-to-hut
 routing graph described below: renders `/data/trails.pmtiles` and `/data/hut-edges.pmtiles` via
 `protomaps-leaflet`, plus `/data/huts.geojson` and `/data/hut-edge-stats.json`.
-
-## Re-inspecting the HAR
-
-Response bodies in the HAR are base64 (`content.encoding`), so plain grep over the file misses
-almost everything. Decode first — the app bundle `static/js/index-BR4qdKga.js` is where the
-endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
 
 ## Hut-to-hut routing graph
 
@@ -126,4 +110,7 @@ worktrees/subagents to execute plan tasks in this repo, even if a skill recommen
 plan tasks directly, in-session, on the current checkout.
 
 ## All documentation and plans live in docs/
-Especially skill invocations should honor to put the docs they produce in the according docs/ directory
+
+Especially skill invocations should honor to put the docs they produce in the according docs/ directory.
+After completing a backlog task, remove it from `backlog.md` and remove the corresponding `.md`-file
+if it existed.
