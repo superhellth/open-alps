@@ -232,6 +232,41 @@ def _write_synthetic_base_graph(tmp_path, grid):
     return base_graph_dir, coords
 
 
+def test_cached_gather_for_bounds_returns_same_object_for_same_cell_set(tmp_path):
+    # Two different bounds that both overlap only cell 0 of a fine (1km) grid over the synthetic
+    # chain's coords - a cache hit should return the identical LocalSubgraph object, not just an
+    # equal one, proving the underlying gather_subgraph_for_bounds call was skipped.
+    import graph_building.match_tour_edges as mte
+
+    grid = Grid(BBOX, tile_size_km=1.0)
+    base_graph_dir, _ = _write_synthetic_base_graph(tmp_path, grid)
+    mte._subgraph_cache.clear()
+
+    bounds_a = {"minLng": 0.0, "maxLng": 0.002, "minLat": -0.001, "maxLat": 0.001}
+    bounds_b = {"minLng": 0.001, "maxLng": 0.003, "minLat": -0.001, "maxLat": 0.001}
+    assert grid.cell_ids_overlapping(bounds_a) == grid.cell_ids_overlapping(bounds_b)
+
+    first = mte._cached_gather_for_bounds(base_graph_dir, grid, bounds_a)
+    second = mte._cached_gather_for_bounds(base_graph_dir, grid, bounds_b)
+    assert first is second
+
+
+def test_cached_gather_for_bounds_returns_different_object_for_different_cell_set(tmp_path):
+    import graph_building.match_tour_edges as mte
+
+    grid = Grid(BBOX, tile_size_km=1.0)
+    base_graph_dir, _ = _write_synthetic_base_graph(tmp_path, grid)
+    mte._subgraph_cache.clear()
+
+    bounds_a = {"minLng": 0.0, "maxLng": 0.002, "minLat": -0.001, "maxLat": 0.001}
+    bounds_c = {"minLng": 0.02, "maxLng": 0.025, "minLat": -0.001, "maxLat": 0.001}
+    assert grid.cell_ids_overlapping(bounds_a) != grid.cell_ids_overlapping(bounds_c)
+
+    first = mte._cached_gather_for_bounds(base_graph_dir, grid, bounds_a)
+    third = mte._cached_gather_for_bounds(base_graph_dir, grid, bounds_c)
+    assert first is not third
+
+
 def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypatch):
     grid = Grid(BBOX, tile_size_km=60.0)
     base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
