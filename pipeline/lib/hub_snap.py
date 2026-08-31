@@ -21,42 +21,11 @@ from scipy.spatial import cKDTree
 
 from lib import binfmt
 from lib.edge_split import SplitResult, nearest_point_on_polyline, split_edge_at_point
+from lib.geo import haversine_m as _haversine_m
+from lib.geo import haversine_m_vec as _haversine_m_vec
+from lib.geo import haversine_m_vec_pairs as _haversine_m_vec_pairs
 from lib.grid import KM_PER_DEG_LAT, Grid
 from lib.subgraph import LocalSubgraph
-
-
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
-def _haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Same formula as _haversine_m, but against an array of points in one numpy call instead of
-    a Python-level loop - used in snap_hub_to_subgraph's node scan, the hot path (one call per hub
-    per cell against every candidate node)."""
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + math.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
-
-
-def _haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
-                            lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Fully-vectorized haversine over paired arrays (both endpoints vary per element), unlike
-    _haversine_m_vec (one fixed point vs an array) - used by _build_edge_spatial_index to compute
-    every polyline segment length in a cell in one call."""
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 @dataclass

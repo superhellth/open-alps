@@ -5,17 +5,9 @@ edge's dist/road_m/ungraded_m/inferred_m proportionally by real (haversine) dist
 polyline - not by vertex count or naive endpoint interpolation, since interior vertices are real,
 unevenly spaced trail points."""
 
-import math
 from dataclasses import dataclass
 
-
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+from lib.geo import haversine_m as _haversine_m
 
 
 def nearest_point_on_polyline(polyline: list, point: tuple) -> tuple:

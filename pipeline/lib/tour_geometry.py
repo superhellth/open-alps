@@ -4,16 +4,7 @@ any leg can be routed (spec 2026-08-29-official-tours-integration-design.md §2.
 own `paths` field is an unordered bag of fragments, not one ordered polyline per tour, but the
 fragments chain by nearest endpoint with a measured median join gap of 0-14m)."""
 
-import math
-
-
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+from lib.geo import haversine_m as _haversine_m
 
 
 def reassemble_fragments(fragments: list, break_threshold_m: float) -> list:

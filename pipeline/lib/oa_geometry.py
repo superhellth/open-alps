@@ -39,7 +39,7 @@ def oa_chain(content: dict) -> list:
     """The tour's line as the 2-D (lon, lat) tuples lib/tour_geometry.py works in. OA ships
     [lon, lat, ele] triples; the third component is dropped rather than carried - elevation here
     is OA's, not our DEM's, and every downstream consumer (assign_hut_position, corridor_bounds,
-    _leg_segment_m) indexes [0]/[1] only."""
+    haversine_m) indexes [0]/[1] only."""
     geo = content.get("geoJson") or {}
     if geo.get("type") != "LineString":
         return []
