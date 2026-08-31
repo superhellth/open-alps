@@ -190,7 +190,8 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         u = subgraph.local_nodes[e["u"]]
         v = subgraph.local_nodes[e["v"]]
         polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
-        seg_idx, frac = nearest_point_on_polyline(polyline, (hub_lon, hub_lat))
+        lng_scale = math.cos(math.radians(hub_lat))
+        seg_idx, frac = nearest_point_on_polyline(polyline, (hub_lon, hub_lat), lng_scale)
         px = polyline[seg_idx][0] + frac * (polyline[seg_idx + 1][0] - polyline[seg_idx][0])
         py = polyline[seg_idx][1] + frac * (polyline[seg_idx + 1][1] - polyline[seg_idx][1])
         d = _haversine_m(hub_lon, hub_lat, px, py)

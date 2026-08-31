@@ -10,23 +10,26 @@ from dataclasses import dataclass
 from lib.geo import haversine_m as _haversine_m
 
 
-def nearest_point_on_polyline(polyline: list, point: tuple) -> tuple:
+def nearest_point_on_polyline(polyline: list, point: tuple, lng_scale: float = 1.0) -> tuple:
     """polyline: [(lon, lat), ...], >=2 points. Returns (segment_index, fraction in [0,1])
-    identifying the closest point to `point` using planar projection - fine at the scale of a
-    single chain edge (at most a few km), where lon/lat behaves near-linearly."""
+    identifying the closest point to `point`, using a locally-flat projection where longitude
+    distances are scaled by `lng_scale` (pass cos(radians(reference_latitude)) so degrees of
+    longitude and latitude compare in real-world proportion - see hub_snap.py's _project_m for
+    the same correction applied elsewhere in the snapping path). Defaults to 1.0 (no correction)
+    for callers that intentionally want raw degree-space comparison."""
     best = (0, 0.0, float("inf"))
     for i in range(len(polyline) - 1):
         ax, ay = polyline[i]
         bx, by = polyline[i + 1]
-        dx, dy = bx - ax, by - ay
+        dx, dy = (bx - ax) * lng_scale, by - ay
         seg_len_sq = dx * dx + dy * dy
         if seg_len_sq == 0:
             t = 0.0
         else:
-            t = ((point[0] - ax) * dx + (point[1] - ay) * dy) / seg_len_sq
+            t = ((point[0] - ax) * lng_scale * dx + (point[1] - ay) * dy) / seg_len_sq
             t = min(max(t, 0.0), 1.0)
-        px, py = ax + t * dx, ay + t * dy
-        d = (point[0] - px) ** 2 + (point[1] - py) ** 2
+        px, py = ax + t * (bx - ax), ay + t * dy
+        d = ((point[0] - px) * lng_scale) ** 2 + (point[1] - py) ** 2
         if d < best[2]:
             best = (i, t, d)
     return best[0], best[1]
