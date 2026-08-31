@@ -5,74 +5,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from graph_building.match_tour_edges import _chain_for_tour, build_tour_legs  # noqa: E402
-
-
-def _tour(hut_indices, is_loop=False):
-    return {"tourId": 0, "hutIndices": hut_indices, "isLoop": is_loop}
-
-
-def test_chain_for_tour_falls_back_to_oa_when_reassembly_fails():
-    # Two fragments 10km apart - reassemble_fragments (break_threshold_m=150) leaves them as 2
-    # separate chains, so oriented is None on ArcGIS alone.
-    paths = [[(0.0, 0.0), (0.001, 0.001)], [(1.0, 1.0), (1.001, 1.001)]]
-    oa_points = [(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]
-    chains, oriented = _chain_for_tour(
-        paths, break_threshold_m=150.0, hut_coords_in_order=[(0.0, 0.0), (1.0, 1.0)],
-        is_loop=False, oa_points=oa_points,
-    )
-    assert oriented == oa_points  # already starts at hut 0, no reversal needed
-
-
-def test_chain_for_tour_prefers_arcgis_reassembly_when_it_succeeds():
-    # Single fragment - reassembly already succeeds, so a DIFFERENT-looking oa_points must be
-    # ignored (precedence: AV's own geometry wins when it's usable at all).
-    paths = [[(0.0, 0.0), (0.5, 0.5), (1.0, 1.0)]]
-    oa_points = [(9.0, 9.0), (9.5, 9.5)]
-    chains, oriented = _chain_for_tour(
-        paths, break_threshold_m=150.0, hut_coords_in_order=[(0.0, 0.0), (1.0, 1.0)],
-        is_loop=False, oa_points=oa_points,
-    )
-    assert oriented == paths[0]
-
-
-def test_chain_for_tour_reports_gap_when_neither_source_works():
-    chains, oriented = _chain_for_tour(
-        [[(0.0, 0.0), (0.001, 0.001)], [(1.0, 1.0), (1.001, 1.001)]],
-        break_threshold_m=150.0, hut_coords_in_order=[(0.0, 0.0), (1.0, 1.0)], is_loop=False,
-        oa_points=None,
-    )
-    assert oriented is None
-
-
-def test_open_tour_yields_n_minus_one_legs():
-    legs = build_tour_legs(_tour([0, 1, 2, 3]))
-    assert legs == [(0, 0, 1), (1, 1, 2), (2, 2, 3)]
-
-
-def test_loop_tour_yields_n_legs_with_contiguous_leg_index():
-    # spec §2.1 / Testing: a loop tour yields N legs, not N-1, and leg_index is contiguous -
-    # the closing leg (last hut -> first hut) is appended.
-    legs = build_tour_legs(_tour([0, 1, 2], is_loop=True))
-    assert legs == [(0, 0, 1), (1, 1, 2), (2, 2, 0)]
-    assert [leg[0] for leg in legs] == [0, 1, 2]
-
-
-def test_unresolved_hut_sentinel_splits_the_chain():
-    # -1 (fetch_tours.py's unresolved-GUID sentinel) drops BOTH legs touching it, not just one -
-    # never silently fuses the two real stages on either side into one leg (spec §1).
-    legs = build_tour_legs(_tour([0, 1, -1, 3, 4]))
-    assert legs == [(0, 0, 1), (3, 3, 4)]
-
-
-def test_empty_hut_list_yields_no_legs():
-    assert build_tour_legs(_tour([])) == []
-
-
-def test_single_hut_yields_no_legs():
-    assert build_tour_legs(_tour([0])) == []
-
-
 import numpy as np
 
 from lib import binfmt  # noqa: E402
@@ -123,13 +55,13 @@ def test_match_leg_routes_a_simple_corridor():
     assert result["path"].distance_m == 1000.0
 
 
-def test_match_leg_reports_hut_unsnapped_when_src_missing():
+def test_match_leg_reports_hub_unsnapped_when_src_missing():
     subgraph = _line_subgraph_1000m()
     src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
     persisted = {tgt_key: _node_snap(101)}  # src_key never snapped
     result = match_leg(subgraph, src_key, tgt_key, persisted, trace_length_m=1000.0,
                         length_divergence_ratio=2.0)
-    assert result == {"ok": False, "reason": "hut_unsnapped", "detail": {"missing": [src_key]}}
+    assert result == {"ok": False, "reason": "hub_unsnapped", "detail": {"missing": [src_key]}}
 
 
 def test_match_leg_reports_outside_extract_when_corridor_is_empty():
@@ -178,7 +110,8 @@ def test_build_tour_record_shape_matches_write_edge_records_expectations():
         gap_dz_m: float
 
     record = build_tour_record(
-        from_hut=0, to_hut=1, from_coord=(10.0, 47.0), to_coord=(10.01, 47.0),
+        from_key=(binfmt.TYPE_HUT, 0), to_key=(binfmt.TYPE_HUT, 1),
+        from_coord=(10.0, 47.0), to_coord=(10.01, 47.0),
         path=path, src_snap=_Snap(5.0, 0.0), tgt_snap=_Snap(3.0, 0.0),
     )
     assert record["from_id"] == 0 and record["to_id"] == 1
@@ -271,7 +204,7 @@ def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypat
     grid = Grid(BBOX, tile_size_km=60.0)
     base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
 
-    # 4 huts sitting exactly on the 4 graph nodes (LQR-shaped: single part, no unsnapped huts).
+    # 4 huts sitting exactly on the 4 graph nodes (single part, no unsnapped huts).
     hut_coords = node_coords
     huts_geojson = {
         "type": "FeatureCollection",
@@ -282,12 +215,12 @@ def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypat
         ],
     }
     (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
+    start_points = np.zeros(0, dtype=[("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1")])
+    binfmt.save_array(tmp_path / "start_points.npy", start_points)
 
     persisted_snaps = {}
     for i, node_idx in enumerate((0, 1, 2, 3)):
         result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
-        from lib.subgraph import LocalSubgraph
-
         stand_in_subgraph = LocalSubgraph(
             global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
             local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
@@ -297,119 +230,68 @@ def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypat
         persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
     pack_hub_snaps(persisted_snaps, tmp_path)
 
-    tours = [{
-        "tourId": 0, "globalId": "{TOUR-LQR}", "name": "LQR-shaped test tour",
-        "shortCode": "LQRTEST", "isLoop": False, "homepage": None,
-        "hutIndices": [0, 1, 2, 3],
-    }]
-    (tmp_path / "tours.json").write_text(json.dumps(tours), encoding="utf-8")
-    traces = [{"tourId": 0, "paths": [[list(c) for c in node_coords]]}]  # single part
-    (tmp_path / "tour_traces.json").write_text(json.dumps(traces), encoding="utf-8")
+    tours_dir = tmp_path / "tours"
+    tour_folder = tours_dir / "LQR"
+    tour_folder.mkdir(parents=True)
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "tour_folder" / "LQR"
+    for name in ("1.gpx", "2.gpx", "3.gpx"):
+        (tour_folder / name).write_text((fixtures / name).read_text(encoding="utf-8"), encoding="utf-8")
 
     import graph_building.match_tour_edges as mte
 
     monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
+    monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
     monkeypatch.setattr(
         mte, "load_config",
-        lambda: {"tourMatch": {"fragmentBreakM": 150.0, "corridorBufferM": 150.0,
-                                "maxHutTraceM": 250.0, "lengthDivergenceRatio": 2.0}},
+        lambda: {"tourMatch": {"corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0},
+                  "graph": {"maxSnapM": 100.0}},
     )
     mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
 
     records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
     tour_meta = binfmt.load_array(tmp_path / "tour_edges" / "tour_meta.npy", mmap=False)
     gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
+    tours_json = json.loads((tmp_path / "tours.json").read_text(encoding="utf-8"))
 
     assert len(records) == 3  # 3 legs, no gaps
     assert gaps == []
     assert list(tour_meta["leg_index"]) == [0, 1, 2]
     assert all(r == binfmt.VARIANT_OFFICIAL for r in records["variant"])
-    # touches both huts' own coordinates at the geometry endpoints
     assert (records["geom_offset"] >= 0).all()
     total_distance = records["distance_m"].sum()
     assert 2900.0 < total_distance < 3100.0  # ~3 x 1000m, order-of-magnitude sane
 
-
-def test_rundtour_closing_leg_is_matched(tmp_path, monkeypatch):
-    # A 4-hut Rundtour on the same synthetic straight chain: the closing leg's corridor bbox (huts
-    # 3 and 0, the chain's own endpoints) spans the WHOLE chain, and the base graph is undirected,
-    # so the router legitimately finds a path back through nodes 2 and 1 (distance ~3000m, not
-    # gapped) - this fixture can't exercise a "closing leg has no real geometry" gap (that needs a
-    # true loop shape, out of scope for this synthetic straight-chain fixture); what it does prove
-    # is that isLoop=True actually appends the N-th leg and it gets matched like any other leg.
-    grid = Grid(BBOX, tile_size_km=60.0)
-    base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
-    huts_geojson = {
-        "type": "FeatureCollection",
-        "features": [
-            {"type": "Feature", "properties": {"id": f"{{GUID-{i}}}"},
-             "geometry": {"type": "Point", "coordinates": list(c)}}
-            for i, c in enumerate(node_coords)
+    assert tours_json == [{
+        "tourId": 0, "name": "LQR",
+        "legs": [
+            {"legIndex": 0, "from": {"type": "hut", "id": 0}, "to": {"type": "hut", "id": 1}},
+            {"legIndex": 1, "from": {"type": "hut", "id": 1}, "to": {"type": "hut", "id": 2}},
+            {"legIndex": 2, "from": {"type": "hut", "id": 2}, "to": {"type": "hut", "id": 3}},
         ],
-    }
-    (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
-
-    persisted_snaps = {}
-    from lib.subgraph import LocalSubgraph
-    stand_in_subgraph = LocalSubgraph(
-        global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
-        local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE), interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
-        local_node_ele=np.zeros(0, dtype=np.float32), interior_ele=np.zeros(0, dtype=np.float32),
-    )
-    for i, node_idx in enumerate((0, 1, 2, 3)):
-        result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
-        persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
-    pack_hub_snaps(persisted_snaps, tmp_path)
-
-    tours = [{
-        "tourId": 0, "globalId": "{TOUR-LOOP}", "name": "Loop test tour", "shortCode": "LOOPTEST",
-        "isLoop": True, "homepage": None, "hutIndices": [0, 1, 2, 3],
     }]
-    (tmp_path / "tours.json").write_text(json.dumps(tours), encoding="utf-8")
-    traces = [{"tourId": 0, "paths": [[list(c) for c in node_coords]]}]
-    (tmp_path / "tour_traces.json").write_text(json.dumps(traces), encoding="utf-8")
-
-    import graph_building.match_tour_edges as mte
-    monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
-    monkeypatch.setattr(
-        mte, "load_config",
-        lambda: {"tourMatch": {"fragmentBreakM": 150.0, "corridorBufferM": 150.0,
-                                "maxHutTraceM": 250.0, "lengthDivergenceRatio": 2.0}},
-    )
-    mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
-
-    records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
-    tour_meta = binfmt.load_array(tmp_path / "tour_edges" / "tour_meta.npy", mmap=False)
-    gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
-
-    # 4 legs total (loop yields N legs, not N-1), and all 4 are matched - the closing leg (index 3,
-    # hut 3 -> hut 0) routes back through nodes 2 and 1 since the base graph is undirected and its
-    # own corridor bbox spans the whole chain.
-    assert len(records) == 4
-    assert gaps == []
-    assert list(tour_meta["leg_index"]) == [0, 1, 2, 3]
-    closing_leg = records[tour_meta["leg_index"] == 3][0]
-    assert 2900.0 < closing_leg["distance_m"] < 3100.0
 
 
-def test_golden_tour_falls_back_to_oa_when_arcgis_fragments_dont_reassemble(tmp_path, monkeypatch):
+def test_golden_tour_reports_leg_endpoint_unsnapped_when_endpoint_far_from_any_hub(tmp_path, monkeypatch):
     grid = Grid(BBOX, tile_size_km=60.0)
     base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
 
-    hut_coords = node_coords
+    # Only 3 huts on nodes 0,1,2 - node 3 (leg 3's endpoint) has NOTHING within max_snap_m.
     huts_geojson = {
         "type": "FeatureCollection",
         "features": [
             {"type": "Feature", "properties": {"id": f"{{GUID-{i}}}"},
-             "geometry": {"type": "Point", "coordinates": list(c)}}
-            for i, c in enumerate(hut_coords)
+             "geometry": {"type": "Point", "coordinates": list(node_coords[i])}}
+            for i in range(3)
         ],
     }
     (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
+    binfmt.save_array(tmp_path / "start_points.npy", np.zeros(
+        0, dtype=[("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1")],
+    ))
 
     persisted_snaps = {}
-    for i, node_idx in enumerate((0, 1, 2, 3)):
-        result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
+    for i in range(3):
+        result = SnapResult(node_index=i, gap_m=0.0, gap_dz_m=0.0)
         stand_in_subgraph = LocalSubgraph(
             global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
             local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
@@ -419,32 +301,32 @@ def test_golden_tour_falls_back_to_oa_when_arcgis_fragments_dont_reassemble(tmp_
         persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
     pack_hub_snaps(persisted_snaps, tmp_path)
 
-    tours = [{
-        "tourId": 0, "globalId": "{TOUR-OATEST}", "name": "OA-fallback test tour",
-        "shortCode": "OATEST", "isLoop": False, "homepage": None, "oaId": "1",
-        "hutIndices": [0, 1, 2, 3],
-    }]
-    (tmp_path / "tours.json").write_text(json.dumps(tours), encoding="utf-8")
-    # Deliberately broken into 2 far-apart fragments - reassemble_fragments will NOT rejoin them
-    # (default fragmentBreakM=150.0 in this test's config below).
-    traces = [{"tourId": 0, "paths": [[list(node_coords[0]), list(node_coords[1])],
-                                       [list(node_coords[2]), list(node_coords[3])]]}]
-    (tmp_path / "tour_traces.json").write_text(json.dumps(traces), encoding="utf-8")
-    (tmp_path / "tour_oa_traces.json").write_text(
-        json.dumps([{"tourId": 0, "points": [list(c) for c in node_coords]}]), encoding="utf-8",
-    )
+    tours_dir = tmp_path / "tours"
+    tour_folder = tours_dir / "LQR"
+    tour_folder.mkdir(parents=True)
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "tour_folder" / "LQR"
+    for name in ("1.gpx", "2.gpx", "3.gpx"):
+        (tour_folder / name).write_text((fixtures / name).read_text(encoding="utf-8"), encoding="utf-8")
 
     import graph_building.match_tour_edges as mte
 
     monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
+    monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
     monkeypatch.setattr(
         mte, "load_config",
-        lambda: {"tourMatch": {"fragmentBreakM": 150.0, "corridorBufferM": 150.0,
-                                "maxHutTraceM": 250.0, "lengthDivergenceRatio": 2.0}},
+        lambda: {"tourMatch": {"corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0},
+                  "graph": {"maxSnapM": 100.0}},
     )
     mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
 
     records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
     gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
-    assert len(records) == 3  # all 3 legs matched via the OA fallback, no chain_not_reassembled
-    assert gaps == []
+    tours_json = json.loads((tmp_path / "tours.json").read_text(encoding="utf-8"))
+
+    assert len(records) == 2  # legs 1,2 route; leg 3 (node 2 -> node 3) gaps
+    assert len(gaps) == 1
+    assert gaps[0]["reason"] == "leg_endpoint_unsnapped"
+    assert gaps[0]["legIndex"] == 2
+    assert gaps[0]["detail"]["endpoint"] == "to"
+    assert gaps[0]["detail"]["nearestDistM"] > 100.0
+    assert tours_json[0]["legs"][2]["to"] is None
