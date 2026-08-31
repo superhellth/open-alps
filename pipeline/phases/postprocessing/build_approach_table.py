@@ -130,11 +130,16 @@ def build_tables(records: np.ndarray, id_table: dict, k: int) -> tuple:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "start_edges"))
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"))
-    parser.add_argument("--k", type=int, default=config["approach"]["k"])
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "approaches.bin"))
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "approaches.json"))
+    parser.add_argument("--edges-dir", default=str(OSM_DIR / "start_edges"),
+                        help="directory holding start_edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"),
+                        help="path to the start-point id table (build_edge_ids.py's output)")
+    parser.add_argument("--k", type=int, default=config["approach"]["k"],
+                        help="best approach edges retained per hut (see pipeline.config.json's approach.k)")
+    parser.add_argument("--out-bin", default=str(OSM_DIR / "approaches.bin"),
+                        help="path to write the packed approach-table binary")
+    parser.add_argument("--out-manifest", default=str(OSM_DIR / "approaches.json"),
+                        help="path to write the approach-table manifest")
     args = parser.parse_args()
 
     with phase("build_approach_table.py", "build_approach_table"):

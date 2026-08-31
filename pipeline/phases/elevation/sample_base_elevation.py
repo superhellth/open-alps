@@ -117,8 +117,10 @@ def _sample_all_points(dem_path, nodes, cell_index, interior, grid, timer: StepT
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"),
+                        help="path to the materialized DEM GeoTIFF (build_dem_vrt.py's output)")
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)

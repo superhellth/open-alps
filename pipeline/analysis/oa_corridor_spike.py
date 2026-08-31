@@ -127,12 +127,17 @@ def main(argv=None):
     config = load_config()
     tm = config["tourMatch"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--fragment-break-m", type=float, default=tm["fragmentBreakM"])
-    parser.add_argument("--corridor-buffer-m", type=float, default=tm["corridorBufferM"])
-    parser.add_argument("--max-hut-trace-m", type=float, default=tm["maxHutTraceM"])
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--fragment-break-m", type=float, default=tm["fragmentBreakM"],
+                        help="gap distance (m) beyond which a tour trace is split into a new fragment")
+    parser.add_argument("--corridor-buffer-m", type=float, default=tm["corridorBufferM"],
+                        help="buffer width (m) around a tour trace used to select candidate base-graph edges")
+    parser.add_argument("--max-hut-trace-m", type=float, default=tm["maxHutTraceM"],
+                        help="max distance (m) a tour's endpoint may sit from a hut to count as matched")
     parser.add_argument("--length-divergence-ratio", type=float,
-                        default=tm["lengthDivergenceRatio"])
+                        default=tm["lengthDivergenceRatio"],
+                        help="max allowed ratio between matched-edge length and the tour trace's own length")
     parser.add_argument("--tours", default="", help="comma-separated shortCodes to limit the run")
     parser.add_argument("--no-fetch", action="store_true",
                         help="fail rather than call the Outdooractive endpoint")

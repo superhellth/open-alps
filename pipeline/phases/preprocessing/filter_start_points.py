@@ -121,7 +121,8 @@ def build_id_table(points: list) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                        help="longest hut-to-hut trail distance kept as an edge, used to filter start points to hub range (see pipeline.config.json's graph.maxEdgeKm)")
     args = parser.parse_args()
 
     with phase(SCRIPT_NAME, "filter_start_points"):

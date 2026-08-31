@@ -124,15 +124,20 @@ def main(argv=None):
     config = load_config()
     speed_model = config["graph"]["speedModel"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--smoothing-kernel-m", type=float,
-                        default=config["dem"]["smoothingKernelM"])
+                        default=config["dem"]["smoothingKernelM"],
+                        help="width (m) of the distance-weighted triangular smoothing kernel applied before summing ascent/descent (see pipeline.config.json's dem.smoothingKernelM)")
     # Declared as CLI args (not read from config directly) so dodo.py's TaskOptionsChanged can
     # track them - see task_compute_edge_profiles's comment for why a speedModel-only config edit
     # must invalidate this task's cache.
-    parser.add_argument("--speed-v0", type=float, default=speed_model["v0"])
-    parser.add_argument("--speed-k", type=float, default=speed_model["k"])
-    parser.add_argument("--speed-s0", type=float, default=speed_model["s0"])
+    parser.add_argument("--speed-v0", type=float, default=speed_model["v0"],
+                        help="Tobler-shaped speed model v0 constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--speed-k", type=float, default=speed_model["k"],
+                        help="Tobler-shaped speed model k constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--speed-s0", type=float, default=speed_model["s0"],
+                        help="Tobler-shaped speed model s0 constant (see pipeline.config.json's graph.speedModel)")
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)

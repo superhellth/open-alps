@@ -117,17 +117,27 @@ if __name__ == "__main__":
     tiles_config = config.get("hutEdgeTiles", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", required=True)
-    parser.add_argument("--id-table", required=True)
-    parser.add_argument("--layer-name", required=True)
-    parser.add_argument("--out-tiles", required=True)
-    parser.add_argument("--out-stats", required=True)
-    parser.add_argument("--out-geometry-bin", required=True)
-    parser.add_argument("--out-geometry-json", required=True)
-    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
-    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
+    parser.add_argument("--edges-dir", required=True,
+                         help="directory holding the edge records to tile (hut_edges/ or start_edges/)")
+    parser.add_argument("--id-table", required=True,
+                         help="path to the id table for the edge set being tiled (build_edge_ids.py's output)")
+    parser.add_argument("--layer-name", required=True,
+                         help="vector-tile layer name to write the edges into")
+    parser.add_argument("--out-tiles", required=True,
+                         help="path to write the output PMTiles archive")
+    parser.add_argument("--out-stats", required=True,
+                         help="path to write the per-edge stats JSON")
+    parser.add_argument("--out-geometry-bin", required=True,
+                         help="path to write the packed edge-geometry binary")
+    parser.add_argument("--out-geometry-json", required=True,
+                         help="path to write the edge-geometry manifest")
+    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6),
+                         help="lowest zoom level tippecanoe builds tiles for")
+    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14),
+                         help="highest zoom level tippecanoe builds tiles for")
     parser.add_argument("--simplify-tolerance-deg", type=float,
-                         default=tiles_config.get("simplifyToleranceDeg", 0.0003))
+                         default=tiles_config.get("simplifyToleranceDeg", 0.0003),
+                         help="geometry simplification tolerance (degrees) applied before tiling")
     args = parser.parse_args()
 
     edges_dir = Path(args.edges_dir)

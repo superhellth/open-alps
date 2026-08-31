@@ -156,9 +156,12 @@ def report(per_hub: list, total_elapsed_s: float, args) -> dict:
 def main():
     config = bhe.load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(bhe.OSM_DIR / "base_graph"))
-    parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
-    parser.add_argument("--out", default=str(DATA_DIR / "analysis" / "snap_stats.json"))
+    parser.add_argument("--base-graph-dir", default=str(bhe.OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"],
+                        help="max distance (m) a hub may be from the nearest trail node to count as on-network (see pipeline.config.json's graph.maxSnapM)")
+    parser.add_argument("--out", default=str(DATA_DIR / "analysis" / "snap_stats.json"),
+                        help="path to write the snap-statistics report as JSON")
     args = parser.parse_args()
 
     manifest = bhe.binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
