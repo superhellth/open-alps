@@ -1,253 +1,280 @@
 # Tour Folder Ingestion — Design
 
 **Problem:** The current official-tour pipeline (`fetch_tours.py`, `lib/oa_geometry.py`,
-`match_tour_edges.py`) is hacky and fragile by construction, not by accident: it depends on (1) the
-AV's own `AVT_CAA_TOUR_View_L` geometry, which ships as an *unordered bag of polyline fragments*
-that has to be reassembled and directionally disambiguated, (2) resolving each tour's Outdooractive
-id via homepage-URL regexes and, where that fails, manual name search — with several documented
-false-positive candidates (`HOMEPAGE_EMBED_OA_IDS`'s own comment in `fetch_tours.py`), (3) an
-Outdooractive API key that is silently denied for at least one tour (`PHR`) because its listing is
-paywalled (`meta.premium.userAccess: False`), and (4) corridor-constrained routing on our own
-OSM-derived graph as a *proxy* for geometry we don't actually have cleanly. Per
-`docs/superpowers/plans/2026-08-30-tour-reproducibility.md`'s own numbers, this still leaves
-`PHR`/`Achttälertour` permanently blocked and caps overall leg coverage well short of 100%.
+`match_tour_edges.py`) is fragile by construction, not by accident: it depends on (1) the AV's own
+`AVT_CAA_TOUR_View_L` geometry, which ships as an *unordered bag of polyline fragments* that has to
+be reassembled and directionally disambiguated, (2) resolving each tour's Outdooractive id via
+homepage-URL regexes and, where that fails, manual name search — with several documented
+false-positive candidates, (3) an Outdooractive API key that is silently denied for at least one
+tour (`PHR`) because its listing is paywalled, and (4) corridor-constrained routing whose corridor
+is derived from that same broken geometry.
 
-**Goal:** Replace all of it with a format that is reproducible by construction: a human (or, later,
-a future upload feature) drops one ordered, numbered GPX file per leg into a named folder. No id
-resolution, no premium gating, no fragment reassembly, no dependency on the AV's ArcGIS tour
-catalog at all. This also unifies official AV tours, other well-known third-party tours, and any
-future user-uploaded tour under one format and one code path — there is no longer a distinct
-"official tour" pipeline.
+Note what is and isn't wrong there. Corridor-constrained routing is **not** the defect — its
+*input* is. A corridor built from scrambled fragments is untrustworthy, so the search inside it was
+untrustworthy, and every sanity check bolted on afterwards (`lengthDivergenceRatio`,
+`chain_not_reassembled`) was compensating for the corridor rather than for the routing.
 
-**Scope:** This spec covers the format and how the pipeline consumes it (parse → snap endpoints →
-ship). It does **not** cover how a tour folder gets populated (manual today; a fetch helper or
-upload feature is separate future work) — see "Non-goals" below.
+**Goal:** Replace the *input* with a format that is reproducible by construction — a human (or,
+later, an upload feature) drops one ordered, numbered GPX file per leg into a named folder — and
+keep routing onto our own graph. No id resolution, no premium gating, no fragment reassembly, no
+dependency on the AV's ArcGIS tour catalog. This unifies official AV tours, third-party tours and
+future user-uploaded tours under one input format and one code path.
+
+**Scope:** the format and how the pipeline consumes it (parse → snap endpoints → route → ship).
+It does **not** cover how a tour folder gets populated — see "Non-goals".
+
+## 0. Why route, rather than ship the GPX geometry directly
+
+The obvious alternative is to ship each leg's GPX line verbatim as its own self-contained record
+and skip the graph entirely. Rejected, because it **forks the data model**: a tour leg would be the
+only routed-looking thing in the system that is not a `RECORD_DTYPE` row, with its own geometry
+representation, its own output files, its own client rendering path, and no `sac_rank` /
+`via_ferrata` / `ungraded_m` / `time_s` / elevation profile — none of which a raw GPX carries.
+Every consumer would need a second code path forever, to save one pipeline phase now.
+
+Routing keeps one model: a tour leg is a hub-to-hub edge like any other, distinguished only by
+`VARIANT_OFFICIAL` (which already exists in `binfmt.py` for exactly this) and by `tour_meta`.
+
+**The trade-off, stated honestly:** the routed path is our graph's best line between two hubs
+inside the tour's own corridor, not a byte-for-byte copy of the published line. Where OSM diverges
+from the published route the two will differ. This is accepted deliberately — bounded by the
+corridor, and now bounded *reliably*, because §1's corridor comes from a clean ordered trace rather
+than from reassembled fragments. That is the one change that makes the existing corridor machinery
+trustworthy.
 
 ## 1. Format
 
 ```
 pipeline/tours/
-  Karnischer Höhenweg/
-    1.gpx
-    2.gpx
-    ...
-    8.gpx
+  Kaisertour/
+    1.gpx  2.gpx  3.gpx  4.gpx
   Welser Höhenweg/
     1.gpx  2.gpx  3.gpx  4.gpx  5.gpx
 ```
 
 - Folder name is the tour's display name, verbatim (no slugification).
-- Each file is one leg's `<trk>/<trkseg>/<trkpt>` sequence, read as a plain ordered list of
-  `(lon, lat, ele)` — `<wpt>` entries are ignored entirely (confirmed by inspection: OA GPX exports
-  populate `<wpt>` with unrelated tourism POIs, never huts — see this spec's originating
-  conversation, no separate doc).
+- Each file is one leg's `<trk>/<trkseg>/<trkpt>` sequence, read as an ordered list of
+  `(lon, lat)`. `<ele>` is parsed but **not** shipped — elevation comes from the graph's own
+  profiles, like every other edge. `<wpt>` is ignored.
+- **`<trkpt>`'s optional `<name>` is retained** where present. OA exports name the significant
+  points along a track, and at leg boundaries that name is the stop's identity —
+  `<name>Weinbergerhaus (Berggasthof)</name>`, `Anton-Karg-Haus`, `Stripsenjochhaus`. Coverage is
+  uneven (unnamed points get a coordinate-string placeholder such as `"47.628591,12.242368"`, and
+  some legs carry no names at all), so this is **diagnostic only** — it never overrides a snap. It
+  is recorded in gap entries so an unsnapped endpoint says *what* it was, not just where.
 - **Leg order comes from the filename's integer value, sorted numerically** (`1, 2, ..., 10`, never
-  lexicographically, never directory/`readdir` order) — directory listing order is filesystem-
-  dependent and must never be trusted.
-- Tracked in git (not `data/`): unlike everything under `data/`, a curated folder of downloaded/
-  hand-fixed GPX files cannot be regenerated by rerunning a script, so it belongs with the code that
-  consumes it, survives a fresh clone, and is diffable like any other tracked input
-  (`pipeline.config.json` is the existing precedent for a tracked, hand-edited pipeline input).
+  lexicographically, never `readdir` order). A non-numeric stem is a hard error naming the file,
+  not a silently skipped input.
+- Tracked in git (not `data/`): a curated folder of downloaded/hand-fixed GPX files cannot be
+  regenerated by rerunning a script, so it belongs with the code that consumes it, survives a fresh
+  clone, and is diffable (`pipeline.config.json` is the existing precedent for a tracked,
+  hand-edited pipeline input).
 
-## 2. Hut/start-point identity — snapping, not authority
+The per-leg split is what makes the format reproducible: it supplies the leg boundaries and the
+per-leg corridor without any reassembly or orientation step. It is an **input** convention only —
+§4 stores no per-leg geometry.
 
-No manifest, no GUIDs, no AV catalog dependency for hut identity — uniform across every tour,
-official or not. Each leg's first and last trackpoint is nearest-point-matched (haversine, the
-existing `assign_hut_position` in `lib/tour_geometry.py`) against `huts.geojson`'s coordinates:
+## 2. Endpoint identity — snapping to the existing hub vocabulary
 
-- **Every internal boundary** (leg *i*'s end and leg *i+1*'s start, i.e. every junction that is not
-  the very first or very last point of the whole tour) **must** snap to a hut. The two endpoints are
-  snapped independently — never assumed identical just because two consecutive leg files were
-  authored to touch — so a real gap between them surfaces honestly instead of being silently fused.
-- **Only the tour's very first leg's start and very last leg's end** may instead snap against the
-  stations/parking "start point" layer (same data `build_hub_edges.py`'s start-edges already route
-  from) when a hut snap fails — real point-to-point tours legitimately start/end at a trailhead or
-  town, not always a hut (this GPX's own `Welser Höhenweg/5.gpx` ends in Bad Ischl, a town).
-- **Threshold: `pipeline.config.json`'s existing `graph.maxSnapM` (100m)** — deliberately *not* a
-  new config field. This reuses the graph-hub-snapping tolerance rather than inventing a second,
-  looser "trace" tolerance (the old pipeline's `tourMatch.maxHutTraceM`, 250m) purely to keep the
-  hyperparameter surface small. Real per-leg GPX tracks (dense, authored/recorded to actually reach
-  the hut) should comfortably clear 100m in the common case; if real data proves this too tight
-  (a genuine hut sitting far off-trail, as the old pipeline found for one case at 9,178m), loosen it
-  then, with evidence — not preemptively.
-- What's reused vs. not: `assign_hut_position`'s nearest-point search (a plain haversine scan over
-  coordinate lists, no graph) is kept as-is. This is **not** `snap_hubs.py`'s hub-to-graph snapping
-  (`hub_snap.py`) — that answers "where does this hut sit on the trail graph," a different question
-  computed once per hub regardless of tours, and is untouched by this design.
+No manifest, no GUIDs, no AV catalog dependency. Each leg's first and last trackpoint is
+nearest-point-matched (haversine) against the pipeline's existing hub set, and resolves to the
+established **`(type, id)` pair** — the same pair `RECORD_DTYPE` (`from_type`/`from_id`,
+`to_type`/`to_id`), `HUB_SNAP_DTYPE` (`hub_type`/`hub_id`) and `lib/hubs.py` already use, with `id`
+type-scoped exactly as `load_all_hubs` documents it:
 
-No `isLoop` field. Checked: the only two production call sites for it
-(`match_tour_edges.py:43,217`) exist solely to resolve which direction to walk a *reassembled*
-closed polyline — an ambiguity that cannot exist once each leg is already its own directed file.
-Nothing on the client side consumes it (`huts/src/` has no reference). Dropped entirely, not stored.
+| `type` | constant | `id` means |
+|---|---|---|
+| `hut` | `TYPE_HUT` | positional index into `huts.geojson` |
+| `station` | `TYPE_STATION` | OSM node id |
+| `parking` | `TYPE_PARKING` | OSM node id |
+| `partner_betrieb` | `TYPE_PARTNER` | ArcGIS `OBJECTID` |
 
-## 3. No graph-matching / no routing
+No new endpoint vocabulary is invented. This matters beyond tidiness: `match_leg` already takes
+`(type, id)` keys and `persisted_snaps` is already keyed that way, so routing from a station or
+parking endpoint needs no new machinery. The one signature that must change is
+`build_tour_record(from_hut, to_hut, from_coord, to_coord, ...)`, which currently takes bare hut
+indices and hardcodes `TYPE_HUT` into the record it writes; it takes `(type, id)` pairs instead so
+`RECORD_DTYPE`'s existing `from_type`/`to_type` columns carry a station or parking endpoint.
 
-The old pipeline's corridor-buffer + graph-pathfinding step (`match_tour_edges.py`'s
-`gather_subgraph_for_bounds`/`clip_subgraph_to_bounds`/`match_leg`/`cell_igraph`) exists to solve
-one problem: the AV's own geometry was too broken to use directly, so the best available proxy was
-searching our OSM-derived graph for a path resembling the trace. **That problem doesn't exist here**
-— each leg file already is the real, complete, ordered geometry of that exact leg, `<ele>` included.
-Routing it onto our own graph would at best reproduce the same line, and at worst pick a
-subtly-different path where OSM's trail data diverges from reality — strictly worse for the stated
-goal (reproducing the *actual* published/recorded tour).
+- Candidates are the **filtered** hub set — `start_points.npy` plus `huts.geojson`, i.e. exactly
+  what `build_hub_edges.py` routes from (`lib/hubs.py:load_all_hubs`). Never the raw
+  `stations.geojson`/`parking.geojson`, which include points `filter_start_points.py` has already
+  excluded and which therefore have no graph snap and no edges.
+- **Every internal boundary** (leg *i*'s end and leg *i+1*'s start) and the tour's first/last
+  endpoint are snapped **independently** — never assumed identical because two leg files were
+  authored to touch. Measured junction gaps on the folders currently on disk are 0–33.8 m, small
+  but real; fusing them would hide that.
+- Huts are preferred over access points when both are in range, so a leg ending at a hut beside a
+  car park resolves to the hut.
+- **Threshold: `pipeline.config.json`'s existing `graph.maxSnapM` (100 m)** — deliberately not a new
+  config field, and not the old `tourMatch.maxHutTraceM` (250 m). Validated against real data:
+  internal boundaries on the two folders on disk snap at 3.6–35.8 m, comfortably inside 100 m.
 
-Consequence: tour legs are **not** embedded into the shared `hut_edges`/`start_edges` binary format
-(`RECORD_DTYPE`, `binfmt.py`) at all. Each tour ships as its own self-contained record — see §4.
-`tour-edges.pmtiles`/`tour_edges/*`/the `tour_meta` sidecar and `build_edge_payload.py`'s
-`tour_meta` column-folding all go away (§5).
+No `isLoop` field. Its only call sites (`match_tour_edges.py:43,217`, `lib/tour_geometry.py`,
+`analysis/oa_corridor_spike.py`) exist to resolve direction on a *reassembled* closed polyline — an
+ambiguity that cannot exist once each leg is its own directed file. Nothing client-side consumes it.
+Dropped entirely.
 
-**What this deliberately gives up:** the original official-tours design
-(`docs/superpowers/specs/2026-08-29-official-tours-integration-design.md`) wanted tour legs to carry
-the *same graph-derived facts* hut edges do — `sac_rank`/`via_ferrata`/`ungraded_m` difficulty tags,
-which come from OSM trail-tag data on matched graph edges, not from a GPX file's own points. A raw
-per-leg GPX has coordinates and elevation only, never difficulty tags. This is a real, deliberate
-capability loss, not an oversight — but nothing today actually ships or consumes any of that for
-tour legs (`huts/src/` has zero references to `tour-edges`/`tour_edges`/`tourEdge` anywhere), so it
-is speculative future value being traded for a working, reproducible pipeline today. If a future
-feature genuinely needs OSM-derived difficulty facts for a tour leg, matching that leg's endpoints
-onto the graph *for that leg alone* (not for identity/geometry) is a bounded follow-up, not a
-reason to keep the current design.
+### Endpoints that do not snap are a data problem, not an algorithmic one
 
-## 4. Output shape
+Measured against the folders on disk, 3 of 4 terminal endpoints and 1 internal boundary find no hub
+within 100 m. Both causes are **coverage gaps in the hub layers**, not ingestion defects:
 
-One aggregated `data/osm/tours.json` (shipped to `huts/public/data/tours.json`, same location as
-today — no client currently reads it, per `CLAUDE.md`'s tour-suggestion-frontend note, so this is a
-free shape change):
+- Terminal endpoints are **bus stops**; `stations.geojson` is railway-only.
+- Kaisertour's leg 3→4 boundary is the **Weinbergerhaus**, a Berggasthof in neither `huts.geojson`
+  (nearest entry 2,101 m) nor `partner_betriebe.geojson` (nearest 72 km).
+
+Both are filed in `docs/backlog.md`, the access-node one at high priority. Per `CLAUDE.md`, this
+spec must **not** compensate — no looser threshold, no synthetic endpoint type, no per-tour
+override. Affected legs are reported as gaps and dropped until the hub layers cover them.
+
+## 3. Routing
+
+Per leg, unchanged in structure from today's `match_leg`:
+
+1. Build a corridor from that leg's own GPX trace, buffered by `tourMatch.corridorBufferM`.
+2. `gather_subgraph_for_bounds` → `clip_subgraph_to_bounds` for that corridor.
+3. Shortest path between the leg's two snapped hubs within the corridor, using `persisted_snaps`.
+4. Reject if the routed length diverges from the trace length by more than
+   `tourMatch.lengthDivergenceRatio`.
+
+What changes is only that steps 1 and 4 now compare against a **trustworthy** trace. Two config
+consequences follow, both to be re-tuned with evidence once the phase runs on real folders:
+
+- `corridorBufferM` (150 m) was sized for fragment-reassembly slop and can likely tighten.
+- `lengthDivergenceRatio` (2.0) is a very loose guard that only made sense against an unreliable
+  trace length; against a real GPX it should be far nearer 1.0, turning a rubber-stamp into a real
+  check that the routed line actually resembles the published one.
+
+## 4. Output shape — unified, no per-leg geometry
+
+Tour legs are ordinary `RECORD_DTYPE` rows written to `data/osm/tour_edges/` (`records.npy`,
+`geometry.npy`, `tour_meta.npy`), with `variant = VARIANT_OFFICIAL`. They pick up `time_s`,
+`ascent_m`/`descent_m`, `sac_rank`, `via_ferrata`, `ungraded_m` and elevation profiles from the
+same downstream phases as every other edge — no tour-specific handling anywhere.
+
+`tour_meta.npy` (`tour_id`, `leg_index`, row-aligned 1:1 with `records.npy`) already carries leg
+identity, so **no per-leg record is stored anywhere else**. A tour is its ordered hub sequence; its
+legs are the consecutive pairs of that sequence.
+
+`data/osm/tours.json` accordingly shrinks to a small index, shipped to `huts/public/data/`:
 
 ```jsonc
 [
   {
     "tourId": 0,
-    "name": "Welser Höhenweg",
-    "legs": [
-      {
-        "from": {"type": "start", "index": 42},   // stations/parking index, or:
-        "to":   {"type": "hut",   "index": 517},
-        "points": [[13.618, 47.710, 469.0], ...]  // [lon, lat, ele], straight from the GPX
-      },
-      { "from": {"type": "hut", "index": 517}, "to": {"type": "hut", "index": 730}, "points": [...] },
-      ...
+    "name": "Kaisertour",
+    "hubs": [
+      {"type": "station", "id": 8091317},
+      {"type": "hut",     "id": 517},
+      {"type": "hut",     "id": 730}
     ]
-  },
-  ...
+  }
 ]
 ```
 
-A single aggregated file (not one file per tour) is deliberate: `doit`'s `file_dep`/`targets` need a
-concrete file list at DAG-definition time, and a growing/shrinking set of per-tour output files as
-folders are added would either need dynamic target discovery (fragile) or a manifest file anyway —
-one file sidesteps that for no real cost, since nothing needs per-tour files individually today.
-
-`tourId` is assigned by iterating `pipeline/tours/` **sorted by folder name**, for stable, reviewable
-diffs across runs (not sorted by mtime or insertion order).
-
-`points`' third element is the GPX's own `<ele>` value, used as-is — **no DEM resampling**. This
-tour's own recorded/authored elevation is at least as trustworthy as our DEM for this purpose, and
-skipping DEM sampling means this phase has no dependency on the elevation pipeline at all.
+`tourId` is assigned by iterating `pipeline/tours/` **sorted by folder name**, for stable diffs
+across runs (not mtime, not insertion order). It is the same `tour_id` `tour_meta.npy` carries.
 
 ## 5. Gap handling
 
-One failure mode, replacing the old pipeline's six:
+Recorded in `data/osm/tour-load-gaps.json`, printed during the run (`pipeline/CLAUDE.md`'s
+progress-logging discipline). A gap drops **that leg**, not the tour — legs no longer depend on each
+other for reassembly or orientation, so every other leg still ships.
 
-- **`leg_endpoint_unsnapped`** — an endpoint (any internal boundary, or the tour's first/last after
-  trying both hut and start-point layers) found nothing within `maxSnapM`. Recorded in
-  `data/osm/tour-load-gaps.json` as `{tourName, legFile, endpoint: "internal"|"first"|"last",
-  detail: {nearestDistM, nearestType, nearestIndex}}`, printed during the run
-  (`pipeline/CLAUDE.md`'s progress-logging discipline), and that **leg** (not the whole tour) is
-  dropped from `tours.json` — every other leg of the same tour still ships, since legs no longer
-  depend on each other for reassembly or orientation.
+| reason | when |
+|---|---|
+| `leg_endpoint_unsnapped` | no hub within `maxSnapM` of a leg endpoint. Detail: `{endpoint, nearestType, nearestId, nearestDistM, gpxName}` — `gpxName` is §1's `<trkpt>` name, so the entry says *Weinbergerhaus*, not just a coordinate. |
+| `outside_extract` | corridor falls outside the OSM extract |
+| `hut_unsnapped` | an endpoint hub has no persisted graph snap |
+| `no_corridor_path` | no path between the endpoints within the corridor |
+| `length_divergent` | routed length vs. trace length exceeds `lengthDivergenceRatio` |
 
-Every gap reason the old pipeline had that existed solely because of routing/reassembly
-(`chain_not_reassembled`, `no_corridor_path`, `length_divergent`, `outside_extract`,
-`hut_far_from_trace`) is now structurally impossible — there is no path-search step left to produce
-them. `hut_unsnapped` (a hub with no persisted graph snap at all) is unrelated to this phase and
-stays exactly as-is elsewhere in the pipeline.
+The last four are today's reasons, kept as-is. `chain_not_reassembled` and `hut_far_from_trace` are
+structurally impossible now — there is no reassembly step and no chain to sit far from — and are
+removed. Reporting the nearest candidate *and its distance* even when it exceeds the threshold is
+required: that is what makes the backlog's coverage gaps measurable rather than invisible.
 
-## 6. New phase, DAG wiring
+## 6. DAG wiring
 
-New script: **`pipeline/phases/tours/load_tours.py`** (new phase category, not `graph_building/` —
-this phase never touches the base graph or does any pathfinding; it only reads `pipeline/tours/`,
-`huts.geojson`, and `stations.geojson`/`parking.geojson`). Wired via a new `pipeline/dag/tours.py`,
-mirroring the existing "one module per phase" convention (`pipeline/CLAUDE.md`).
+`match_tour_edges.py` is **retargeted, not replaced** — same corridor/route/record core, new input
+and new endpoint resolution. It stays in `phases/graph_building/` (it does pathfinding on the base
+graph) and stays wired from `dag/graph_building.py`. No new phase category, no `dag/tours.py`.
 
 ```python
-def task_load_tours():
-    tour_files = sorted(Path("pipeline/tours").rglob("*.gpx"))  # computed at DAG-build time
+def task_match_tour_edges():
+    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))   # flat per §1; computed at DAG-build time
     return pipeline_task(
-        "phases/tours/load_tours.py",
-        task_dep=["fetch_huts", "fetch_stations_parking"],
-        file_dep=[OSM_DIR / "huts.geojson", OSM_DIR / "stations.geojson",
-                   OSM_DIR / "parking.geojson", *tour_files],
-        targets=[OSM_DIR / "tours.json", OSM_DIR / "tour-load-gaps.json"],
+        "phases/graph_building/match_tour_edges.py",
+        task_dep=["snap_hubs", "compute_edge_profiles"],
+        file_dep=[OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+                  OSM_DIR / "hub_snaps.npy", *tour_files],
+        targets=[OSM_DIR / "tour_edges/records.npy", OSM_DIR / "tour_edges/geometry.npy",
+                 OSM_DIR / "tour_edges/tour_meta.npy", OSM_DIR / "tours.json",
+                 OSM_DIR / "tour-load-gaps.json"],
     )
 ```
 
-No dependency on `build_base_graph`/`snap_hubs`/elevation at all — this phase is now one of the
-pipeline's cheapest, since there's no subgraph gathering or pathfinding.
+`TOURS_DIR` is a module constant resolved from `lib/pipeline.py` like every other pipeline path —
+never a cwd-relative `Path("pipeline/tours")`. `glob("*/*.gpx")`, not `rglob`, so the flat layout
+§1 mandates is enforced rather than silently extended.
+
+`dodo.py` changes: drop `fetch_tours` and `fetch_tour_oa_geometry` from `default_tasks`; keep
+`match_tour_edges`, `build_tour_edge_tiles`, `build_tour_edge_payload`. Drop `tour-fetch-gaps.json`
+from `PUBLIC_FILES` and add `tour-load-gaps.json` alongside the existing `tour-match-gaps.json`
+entry, which it replaces.
 
 ## 7. Deletions
 
-Removed entirely:
-
-- `pipeline/phases/downloads/fetch_tours.py`, `pipeline/phases/downloads/fetch_tour_oa_geometry.py`
+- `pipeline/phases/downloads/fetch_tours.py`, `fetch_tour_oa_geometry.py`
 - `pipeline/lib/oa_geometry.py`
-- `pipeline/phases/graph_building/match_tour_edges.py`
-- `pipeline/analysis/oa_corridor_spike.py` (its whole purpose — validating the OA-fallback approach
-  — is moot)
-- `lib/tour_geometry.py`'s `reassemble_fragments`, `orient_chain`, `leg_chain_slice` (kept:
-  `assign_hut_position`, re-thresholded per §2)
-- DAG tasks: `task_fetch_tours`, `task_fetch_tour_oa_geometry` (`dag/downloads.py`),
-  `task_match_tour_edges` (`dag/graph_building.py`), `task_build_tour_edge_tiles`,
-  `task_build_tour_edge_payload` (`dag/postprocessing.py`)
-- `pipeline.config.json`'s `tourMatch` block (`fragmentBreakM`, `corridorBufferM`, `maxHutTraceM`,
-  `lengthDivergenceRatio`) — nothing left to consume it
-- `"tour_edges"` from `build_profiles.py`'s `("hut_edges", "start_edges", "tour_edges")` loop
-- `build_edge_payload.py`'s `tour_meta` optional column-folding (dead once nothing calls it with a
-  `tour_meta.npy`)
-- `dodo.py`'s shipped-output list: drop `tour-edges.pmtiles`, `tour-edge-stats.json`,
-  `tour-edge-geometry.{bin,json}`, `tour-edge-payload.{bin,json}`, `tour-fetch-gaps.json`,
-  `tour-match-gaps.json`; keep `tours.json` (still produced, new shape) and add
-  `tour-load-gaps.json` (gitignored internal file, not shipped — matches `tour-match-gaps.json`'s
-  old treatment)
+- `pipeline/analysis/oa_corridor_spike.py` (validated the OA-fallback approach — moot)
+- `lib/tour_geometry.py` **entirely**: `reassemble_fragments`, `orient_chain`, `leg_chain_slice` are
+  reassembly-only, and `assign_hut_position` is superseded — §2 needs "nearest *hub* to a given
+  endpoint", which is the transpose of its "nearest *chain point* to a given hut" and must return
+  the nearest candidate even when it exceeds the threshold (§5), which `assign_hut_position` cannot
+  (it returns `None`, discarding the distance).
+- `match_tour_edges.py`'s `build_tour_legs`, `_chain_for_tour`, `_leg_segment_m` and its
+  `tours.json`/`tour_traces.json`/OA-geometry loading
+- DAG tasks `task_fetch_tours`, `task_fetch_tour_oa_geometry` (`dag/downloads.py`)
+- `pipeline.config.json`'s `tourMatch.fragmentBreakM` and `tourMatch.maxHutTraceM`; keep
+  `corridorBufferM` and `lengthDivergenceRatio` (§3 re-tunes them)
+- Tests: `tests/test_fetch_tours.py`, `tests/test_fetch_tour_oa_geometry.py`,
+  `tests/test_tour_geometry.py`; the tour-task assertions in `tests/test_dodo_wiring.py:186-215`;
+  the reassembly/orientation cases in `tests/test_match_tour_edges.py`
 
-Kept, unchanged: `assign_hut_position` (rethresholded), everything about `huts.geojson`/
-`stations.geojson`/`parking.geojson` fetching, the entire base graph / hub-edge / elevation
-pipeline (none of it is touched by this change).
+**Kept, unchanged:** `tour_edges/*`, `TOUR_META_DTYPE`, `VARIANT_OFFICIAL`,
+`task_build_tour_edge_tiles`, `task_build_tour_edge_payload`, `build_profiles.py`'s
+`("hut_edges", "start_edges", "tour_edges")` loop, `build_edge_payload.py`'s `tour_meta`
+column-folding, and the entire base graph / hub-edge / elevation pipeline. This is the payoff of
+§0: routing keeps all of it live instead of deleting it and rebuilding a parallel path later.
 
 ## 8. Testing
 
-- Parser unit tests: a small fixture GPX (2-3 `<trkpt>`s) → correct `(lon, lat, ele)` list; numeric
-  filename sort (`1.gpx, 2.gpx, ..., 10.gpx` sorts correctly, not lexicographically); non-`.gpx`
-  files in a tour folder are ignored.
-- Snapping unit tests: a leg endpoint within `maxSnapM` of a hut resolves to that hut's index; one
-  outside it produces `leg_endpoint_unsnapped`; the first leg's start falls back to a start-point
-  match when no hut is close enough; an internal boundary never falls back to a start point even if
-  one happens to be closer than any hut.
-- Golden end-to-end test (modeled on `test_match_tour_edges.py`'s existing golden tests): a small
-  on-disk fixture under a temp `pipeline/tours/`-shaped directory with 2-3 legs, synthetic
-  `huts.geojson`/`stations.geojson`, asserting the full `tours.json` output and zero gaps.
-- Real-data smoke check: run the new phase against the actual `pipeline/tours/Welser Höhenweg/`
-  folder already on disk (5 legs, real `huts.geojson`) and confirm all 5 legs resolve cleanly
-  (leg 5's end should resolve as a `start`-type point near Bad Ischl, not a gap) — this is a real
-  `doit` task run, subject to `CLAUDE.md`'s "ask before running any pipeline task" rule.
+- **Parser:** fixture GPX → correct ordered `(lon, lat)` list; `<trkpt><name>` captured where
+  present; numeric filename sort (`1..10`, not lexicographic); non-`.gpx` ignored; non-numeric stem
+  raises naming the file.
+- **Endpoint snapping:** an endpoint within `maxSnapM` of a hut resolves to `("hut", index)`; one
+  near a station resolves to `("station", osm_id)`; a hut is preferred over an equidistant access
+  point; an endpoint beyond `maxSnapM` yields `leg_endpoint_unsnapped` **carrying the nearest
+  candidate's type, id, distance and `gpxName`**.
+- **Routing:** existing `test_match_tour_edges.py` golden tests retained for the corridor/route/
+  record core, re-driven from GPX fixtures instead of reassembled traces; `no_corridor_path` and
+  `length_divergent` still covered.
+- **Wiring:** `test_dodo_wiring.py` updated — `match_tour_edges` targets `tour_edges/*` **and**
+  `tours.json`; `fetch_tours`/`fetch_tour_oa_geometry` absent from `default_tasks`;
+  `tour-load-gaps.json` in `PUBLIC_FILES`.
+- **Real-data smoke check:** run against `pipeline/tours/` (Kaisertour 4 legs, Welser Höhenweg 5).
+  Expected today, given the backlog's open coverage gaps: **Welser legs 2–5 and Kaisertour leg 2
+  route; Welser leg 1 and Kaisertour legs 1, 3, 4 report `leg_endpoint_unsnapped`** (5 of 9). That
+  is the baseline the access-node backlog item is measured against — not a passing bar. Subject to
+  `CLAUDE.md`'s "ask before running any pipeline task" rule.
 
-## 9. Non-goals (explicitly out of scope)
+## 9. Non-goals
 
-- **Populating `pipeline/tours/`.** No fetch/conversion helper is built as part of this work
-  (e.g. automating OA's `stageTours` ids into per-leg GPX files). Folders are populated by hand for
-  now; a future automated source is separate follow-up work, informed by whatever this design proves
-  out on the folders that already exist.
-- **Difficulty facts / `sac_rank`/`via_ferrata`/`ungraded_m` for tour legs** — see §3's explicit
-  capability trade-off.
-- **Client consumption of `tours.json`** — no UI reads this file today; this spec only changes what
-  the pipeline produces.
-
-## Self-review notes
-
-- **No placeholders:** every deletion/keep decision above was checked against the actual current
-  file (grepped for every call site of `isLoop`, `tour_edges`, `tourMatch`, `maxHutTraceM` before
-  writing this) rather than assumed.
-- **Internal consistency:** §3's routing removal and §4's "self-contained, not `RECORD_DTYPE`"
-  output shape are the same decision stated twice at different levels (rationale, then concrete
-  shape) — they agree.
-- **Scope:** single cohesive subsystem (tour ingestion), no decomposition needed.
+- **Populating `pipeline/tours/`.** No fetch/conversion helper is built here. Folders are populated
+  by hand; automation is separate follow-up work.
+- **Fixing hub-layer coverage.** Bus stops and privately-run inns are `docs/backlog.md` items
+  against `fetch_stations_parking.py` / the hut layers — deliberately not worked around here.
+- **Client consumption.** No UI reads `tours.json` or `tour_edges` today; this spec only changes
+  what the pipeline produces.
