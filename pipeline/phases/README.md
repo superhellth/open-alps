@@ -103,6 +103,13 @@ Not a phase — code imported across phases:
 - **`edge_split.py`** — mid-chain edge splitting for snapping a hub onto a trail's interior.
 - **`subgraph.py`** — `gather_padded_subgraph()`, the padded-region mmap gather used by
   `build_hub_edges.py`'s per-cell workers.
+- **`geo.py`** — `hut_points()`/`circle_polygon()`/`hub_range_polygon()`, hub-range coverage
+  geometry shared by `preprocessing/compute_hub_range.py` and
+  `downloads/dem_providers/composite.py` (both must derive the same radius from
+  `HUB_RANGE_SAFETY_MARGIN` or their coverage shapes silently drift apart).
+- **`edge_output.py`** — `write_edge_records()`/`fold_endpoint_snaps()`, the record-packing shape
+  (`binfmt.RECORD_DTYPE` + `geometry.npy`) shared by `build_hub_edges.py` and
+  `match_tour_edges.py` so both emit identical on-disk edge records.
 
 Full config reference, environment setup, and "reproducing from scratch" commands:
 **`pipeline/README.md`**. Design rationale for the graph-building rewrite:
