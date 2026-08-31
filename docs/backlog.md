@@ -7,16 +7,24 @@ under `docs/superpowers/`.
 
 ## High
 
-### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
-
-Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
-Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
+### Hut-availability-based routing
+In the frontend, incorporate the hut availability checks into routing so users can actually explore routes
+without always having to double-check bed availability on another website.
 
 ## Medium
+
+### Idea: Introduce a pipeline explanation/visualization
+
+Probably in form of a static web page, either as part of the existing frontend or a new one. May be combined with the data quality monitoring layer.
 
 ### Idea: Introduce a data quality monitoring layer
 
 Simplest would be output files in a dedicated folder that collect monitoring data about our data. More sophisticated be something like a proper dashboard.
+
+### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
+
+Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
+Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
 ## Low
 
