@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Matches each official AV tour's legs (hutIndices[i] -> hutIndices[i+1], plus the closing leg
-for a Rundtour) onto the persisted base graph, constrained to the AV's own published route
-geometry rather than routed freely - see docs/superpowers/specs/2026-08-29-official-tours-
-integration-design.md. Produces data/osm/tour_edges/{records.npy, geometry.npy, edge_ids.npy,
-tour_meta.npy} (same shape as hut_edges/, plus the tour_meta.npy sidecar) and
-tour-match-gaps.json (spec §2.5's never-faked gap reasons).
+"""Matches each tour folder's legs (pipeline/tours/<Name>/<N>.gpx, spec docs/superpowers/specs/
+2026-08-30-tour-folder-ingestion-design.md) onto the persisted base graph, constrained to each
+leg's own GPX trace rather than routed freely. Produces data/osm/tour_edges/{records.npy,
+geometry.npy, edge_ids.npy, tour_meta.npy} (same shape as hut_edges/, plus the tour_meta.npy
+sidecar), data/osm/tours.json (a per-leg endpoint-intent index) and data/osm/tour-match-gaps.json
+(spec §5's never-faked gap reasons).
 
 Usage: python pipeline/phases/graph_building/match_tour_edges.py
 """
@@ -31,23 +31,10 @@ from lib.cell_igraph import (  # noqa: E402
 from lib.edge_output import fold_endpoint_snaps  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT  # noqa: E402
 from lib.subgraph import LocalSubgraph, clip_subgraph_to_bounds, gather_subgraph_for_bounds  # noqa: E402
-
-
-def build_tour_legs(tour: dict) -> list:
-    """(leg_index, from_hut_index, to_hut_index) triples in tour order, plus the Rundtour closing
-    leg (spec §2.1). A leg touching fetch_tours.py's -1 unresolved-GUID sentinel is dropped -
-    BOTH legs on either side of a -1 entry are skipped, since neither has a real hut on both ends
-    (spec §1's "split the chain" convention)."""
-    huts = tour["hutIndices"]
-    pairs = list(zip(huts, huts[1:]))
-    if tour.get("isLoop") and len(huts) >= 2:
-        pairs.append((huts[-1], huts[0]))
-    legs = []
-    for i, (a, b) in enumerate(pairs):
-        if a == -1 or b == -1:
-            continue
-        legs.append((i, a, b))
-    return legs
+from lib.geo import haversine_m  # noqa: E402
+from lib.hubs import HUB_TYPE_JSON_NAMES, load_all_hubs, nearest_hub_to_point  # noqa: E402
+from lib.pipeline import TOURS_DIR  # noqa: E402
+from lib.tour_folder import load_all_tour_folders, load_tour_folder  # noqa: E402
 
 
 _subgraph_cache: dict[tuple[str, tuple[int, ...]], LocalSubgraph] = {}
@@ -97,7 +84,7 @@ def match_leg(subgraph, src_key: tuple, tgt_key: tuple, persisted_snaps: dict,
     local_snaps = hub_snap.reconstruct_local_snaps(subgraph, {src_key, tgt_key}, persisted_snaps)
     missing = [k for k in (src_key, tgt_key) if k not in local_snaps]
     if missing:
-        return {"ok": False, "reason": "hut_unsnapped", "detail": {"missing": missing}}
+        return {"ok": False, "reason": "hub_unsnapped", "detail": {"missing": missing}}
 
     base_arrays = build_base_igraph_arrays(subgraph, local_snaps)
     graph, hub_vertex, vertex_coords = build_igraph_from_base(base_arrays, edge_mask=None)
@@ -127,21 +114,23 @@ def match_leg(subgraph, src_key: tuple, tgt_key: tuple, persisted_snaps: dict,
 
 
 from lib.edge_output import write_edge_records  # noqa: E402
-from lib.tour_geometry import (  # noqa: E402
-    assign_hut_position, leg_chain_slice, orient_chain, reassemble_fragments,
-)
 
 
-def build_tour_record(from_hut: int, to_hut: int, from_coord: tuple, to_coord: tuple,
+def build_tour_record(from_key: tuple, to_key: tuple, from_coord: tuple, to_coord: tuple,
                        path, src_snap, tgt_snap) -> dict:
     """Packs one routed leg into the dict shape lib.edge_output.write_edge_records expects -
-    applies the SAME endpoint treatment build_hub_edges.py applies (spec §2.6): snap_m/gap_dz_m
-    folded via fold_endpoint_snaps, geometry prefixed/suffixed with the hut's own coordinate."""
+    applies the SAME endpoint treatment build_hub_edges.py applies: snap_m/gap_dz_m folded via
+    fold_endpoint_snaps, geometry prefixed/suffixed with the endpoint hub's own coordinate.
+    from_key/to_key are (binfmt.TYPE_*, id) pairs - spec 2026-08-30-tour-folder-ingestion-
+    design.md §2: a tour leg's endpoint can be a hut, station, parking spot or partner business,
+    not just a hut."""
+    from_type, from_id = from_key
+    to_type, to_id = to_key
     snap_m, ascent_m, descent_m = fold_endpoint_snaps(path, src_snap, tgt_snap)
     geometry = [from_coord, *path.coords, to_coord]
     return {
-        "from_id": from_hut, "to_id": to_hut,
-        "from_type": binfmt.TYPE_HUT, "to_type": binfmt.TYPE_HUT,
+        "from_id": from_id, "to_id": to_id,
+        "from_type": from_type, "to_type": to_type,
         "variant": binfmt.VARIANT_OFFICIAL,
         "distance_m": float(path.distance_m + snap_m),
         "road_m": float(path.road_m),
@@ -154,46 +143,19 @@ def build_tour_record(from_hut: int, to_hut: int, from_coord: tuple, to_coord: t
     }
 
 
-def _chain_for_tour(paths: list, break_threshold_m: float, hut_coords_in_order: list, is_loop: bool,
-                     oa_points: list | None = None):
-    """Reassembles + orients a tour's fragments (spec §2.2), falling back to Outdooractive's
-    already-ordered line (docs/superpowers/plans/2026-08-30-tour-reproducibility.md Task 3/4) when
-    the AV's own fragments don't reassemble into one chain - spec §2.7's spike showed this recovers
-    29 of 37 previously chain_not_reassembled legs across 9 tours, with a byte-identical control on
-    a tour where reassembly already worked. The AV's own geometry always wins when it's usable at
-    all: `oa_points` is only consulted when reassembly did NOT produce exactly one chain.
-
-    Returns (chains, oriented_primary) - `chains` is always the ArcGIS reassembly result (used by
-    main()'s whole-tour-bbox fallback regardless of which source oriented_primary came from);
-    oriented_primary is None only when BOTH sources fail, which is when callers gap the tour as
-    chain_not_reassembled (spec §2.5)."""
-    chains = reassemble_fragments(paths, break_threshold_m)
-    if len(chains) == 1:
-        return chains, orient_chain(chains[0], hut_coords_in_order, is_loop)
-    if oa_points:
-        return chains, orient_chain(oa_points, hut_coords_in_order, is_loop)
-    return chains, None
-
-
-from lib.geo import haversine_m  # noqa: E402
-
-
 def main(argv=None):
     config = load_config()
     tm = config["tourMatch"]
+    max_snap_m = config["graph"]["maxSnapM"]
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--out-dir", default=str(OSM_DIR),
                         help="directory to write matched tour edge output into")
-    parser.add_argument("--fragment-break-m", type=float, default=tm["fragmentBreakM"],
-                        help="gap distance (m) beyond which a tour trace is split into a new fragment")
     parser.add_argument("--corridor-buffer-m", type=float, default=tm["corridorBufferM"],
-                        help="buffer width (m) around a tour trace used to select candidate base-graph edges")
-    parser.add_argument("--max-hut-trace-m", type=float, default=tm["maxHutTraceM"],
-                        help="max distance (m) a tour's endpoint may sit from a hut to count as matched")
+                        help="buffer width (m) around a leg's GPX trace used to select candidate base-graph edges")
     parser.add_argument("--length-divergence-ratio", type=float, default=tm["lengthDivergenceRatio"],
-                        help="max allowed ratio between matched-edge length and the tour trace's own length")
+                        help="max allowed ratio between matched-edge length and the leg's own GPX trace length")
     args = parser.parse_args(argv)
 
     from lib.grid import Grid
@@ -202,77 +164,76 @@ def main(argv=None):
     manifest = binfmt.load_manifest(base_graph_dir / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    with open(OSM_DIR / "tours.json", encoding="utf-8") as fh:
-        tours = json.load(fh)
-    with open(OSM_DIR / "tour_traces.json", encoding="utf-8") as fh:
-        traces_by_tour_id = {t["tourId"]: t["paths"] for t in json.load(fh)}
-    oa_traces_path = OSM_DIR / "tour_oa_traces.json"
-    oa_points_by_tour_id = {}
-    if oa_traces_path.exists():
-        with open(oa_traces_path, encoding="utf-8") as fh:
-            oa_points_by_tour_id = {t["tourId"]: t["points"] for t in json.load(fh) if t["points"]}
-    with open(OSM_DIR / "huts.geojson", encoding="utf-8") as fh:
-        hut_features = json.load(fh)["features"]
-    hut_coords = [tuple(f["geometry"]["coordinates"]) for f in hut_features]
+    hubs = load_all_hubs(OSM_DIR)
 
     hub_snaps_arr = binfmt.load_array(Path(args.out_dir) / "hub_snaps.npy", mmap=False)
     hub_snap_interior_arr = binfmt.load_array(Path(args.out_dir) / "hub_snap_interior.npy", mmap=False)
     persisted_snaps = hub_snap.load_persisted_snaps(hub_snaps_arr, hub_snap_interior_arr)
 
-    all_records, tour_meta_rows, gaps = [], [], []
+    tour_folders = load_all_tour_folders(TOURS_DIR)
+    all_records, tour_meta_rows, gaps, tours_index = [], [], [], []
 
-    with phase(SCRIPT_NAME, "match_tour_edges", n_tours=len(tours)):
-        for tour in tours:
-            legs = build_tour_legs(tour)
-            if not legs:
-                continue
-            hut_coords_in_order = [hut_coords[h] for h in tour["hutIndices"] if h != -1]
-            paths = traces_by_tour_id.get(tour["tourId"], [])
-            chains, oriented = _chain_for_tour(
-                paths, args.fragment_break_m, hut_coords_in_order, tour["isLoop"],
-                oa_points=oa_points_by_tour_id.get(tour["tourId"]),
-            )
-            all_points = [p for chain in chains for p in chain]
+    with phase(SCRIPT_NAME, "match_tour_edges", n_tours=len(tour_folders)):
+        for tour_id, (tour_name, folder) in enumerate(tour_folders):
+            legs = load_tour_folder(folder)
+            tour_legs_json = []
 
-            for leg_index, from_hut, to_hut in legs:
-                from_coord, to_coord = hut_coords[from_hut], hut_coords[to_hut]
-                gap_ctx = {"tourId": tour["tourId"], "shortCode": tour["shortCode"], "legIndex": leg_index}
+            for leg_number, points in legs:
+                leg_index = leg_number - 1
+                gap_ctx = {"tourId": tour_id, "tourName": tour_name, "legIndex": leg_index}
 
-                if oriented is None:
-                    gaps.append({**gap_ctx, "reason": "chain_not_reassembled", "detail": {"n_chains": len(chains)}})
+                from_chosen, from_nearest, from_dist = nearest_hub_to_point(hubs, points[0], max_snap_m)
+                to_chosen, to_nearest, to_dist = nearest_hub_to_point(hubs, points[-1], max_snap_m)
+
+                def _hub_json(hub):
+                    return {"type": HUB_TYPE_JSON_NAMES[hub["type"]], "id": hub["id"]} if hub else None
+
+                tour_legs_json.append({
+                    "legIndex": leg_index, "from": _hub_json(from_chosen), "to": _hub_json(to_chosen),
+                })
+
+                if from_chosen is None or to_chosen is None:
+                    endpoint = "from" if from_chosen is None else "to"
+                    nearest, dist = (from_nearest, from_dist) if from_chosen is None else (to_nearest, to_dist)
+                    gaps.append({
+                        **gap_ctx, "reason": "leg_endpoint_unsnapped",
+                        "detail": {
+                            "endpoint": endpoint,
+                            "nearestType": HUB_TYPE_JSON_NAMES[nearest["type"]] if nearest else None,
+                            "nearestId": nearest["id"] if nearest else None,
+                            "nearestDistM": dist,
+                        },
+                    })
                     continue
 
-                from_pos = assign_hut_position(oriented, from_coord, args.max_hut_trace_m)
-                to_pos = assign_hut_position(oriented, to_coord, args.max_hut_trace_m)
-                if from_pos is None or to_pos is None:
-                    gaps.append({**gap_ctx, "reason": "hut_far_from_trace",
-                                 "detail": {"from_dist_m": from_pos and from_pos[1],
-                                            "to_dist_m": to_pos and to_pos[1]}})
-                    continue
+                from_key = (from_chosen["type"], from_chosen["id"])
+                to_key = (to_chosen["type"], to_chosen["id"])
+                from_coord = (from_chosen["lon"], from_chosen["lat"])
+                to_coord = (to_chosen["lon"], to_chosen["lat"])
 
-                leg_points = leg_chain_slice(oriented, from_pos[0], to_pos[0])
                 trace_length_m = sum(
-                    haversine_m(leg_points[i][0], leg_points[i][1], leg_points[i + 1][0], leg_points[i + 1][1])
-                    for i in range(len(leg_points) - 1)
+                    haversine_m(points[i][0], points[i][1], points[i + 1][0], points[i + 1][1])
+                    for i in range(len(points) - 1)
                 )
-                bounds = corridor_bounds(leg_points or all_points, args.corridor_buffer_m, grid)
+                bounds = corridor_bounds(points, args.corridor_buffer_m, grid)
                 subgraph = clip_subgraph_to_bounds(
                     _cached_gather_for_bounds(base_graph_dir, grid, bounds), bounds,
                 )
 
-                src_key, tgt_key = (binfmt.TYPE_HUT, from_hut), (binfmt.TYPE_HUT, to_hut)
-                result = match_leg(subgraph, src_key, tgt_key, persisted_snaps,
+                result = match_leg(subgraph, from_key, to_key, persisted_snaps,
                                     trace_length_m, args.length_divergence_ratio)
                 if not result["ok"]:
                     gaps.append({**gap_ctx, "reason": result["reason"], "detail": result["detail"]})
                     continue
 
                 record = build_tour_record(
-                    from_hut, to_hut, from_coord, to_coord,
+                    from_key, to_key, from_coord, to_coord,
                     result["path"], result["src_snap"], result["tgt_snap"],
                 )
                 all_records.append(record)
-                tour_meta_rows.append((tour["tourId"], leg_index))
+                tour_meta_rows.append((tour_id, leg_index))
+
+            tours_index.append({"tourId": tour_id, "name": tour_name, "legs": tour_legs_json})
 
     print(f"tour legs matched: {len(all_records)}, gaps: {len(gaps)}")
 
@@ -283,10 +244,14 @@ def main(argv=None):
         tour_meta_arr[i] = row
     binfmt.save_array(out_dir / "tour_meta.npy", tour_meta_arr)
 
+    tours_path = Path(args.out_dir) / "tours.json"
+    with open(tours_path, "w", encoding="utf-8") as fh:
+        json.dump(tours_index, fh)
+
     gaps_path = Path(args.out_dir) / "tour-match-gaps.json"
     with open(gaps_path, "w", encoding="utf-8") as fh:
         json.dump(gaps, fh)
-    print(f"written {out_dir} and {gaps_path}")
+    print(f"written {out_dir}, {tours_path} and {gaps_path}")
 
 
 if __name__ == "__main__":
