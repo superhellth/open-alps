@@ -31,7 +31,8 @@ SCRIPT_NAME = "filter_trails.py"
 config = load_config()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--tag-filter", default=config["trailTagFilter"])
+parser.add_argument("--tag-filter", default=config["trailTagFilter"],
+                    help="osmium tags-filter expression selecting trail ways (see pipeline.config.json's trailTagFilter)")
 args = parser.parse_args()
 
 hub_range_path = OSM_DIR / "hub_range.geojson"

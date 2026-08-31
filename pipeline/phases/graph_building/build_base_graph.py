@@ -19,6 +19,7 @@ import osmium
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt, grading  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
+from lib.geo import haversine_m_vec_pairs as haversine_m_vec  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
@@ -27,14 +28,6 @@ from lib.timing import StepTimer, phase  # noqa: E402
 SCRIPT_NAME = "build_base_graph.py"
 
 config = load_config()
-
-def haversine_m_vec(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 class WayGraphHandler(osmium.SimpleHandler):
@@ -234,9 +227,12 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"])
+    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+                        help="merged trails.osm.pbf to stream and contract into the base graph")
+    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory to write the persisted base graph arrays into")
+    parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"],
+                        help="grid cell size (km) each node is assigned to, for later per-cell lookup by build_hub_edges.py (see pipeline.config.json's graph.tileSizeKm)")
     args = parser.parse_args(argv)
 
     # stream_osm and contract keep their own phase() records (with rss_sampler meta) - they are

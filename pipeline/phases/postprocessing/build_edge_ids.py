@@ -49,9 +49,12 @@ def pack_edge_ids(records: np.ndarray, flat_edge_ids: np.ndarray) -> tuple:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"))
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-ids.bin"))
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-ids.json"))
+    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"),
+                        help="directory holding hut_edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-ids.bin"),
+                        help="path to write the packed hut-edge-id binary")
+    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-ids.json"),
+                        help="path to write the hut-edge-id manifest")
     args = parser.parse_args()
 
     with phase("build_edge_ids.py", "build_edge_ids"):

@@ -41,9 +41,12 @@ def cell_dir_for(out_dir: Path, cell_id: int) -> Path:
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "route_subgraphs"))
-    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--out-dir", default=str(OSM_DIR / "route_subgraphs"),
+                        help="directory to write the persisted per-cell padded subgraph gathers into")
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                        help="longest hut-to-hut trail distance kept as an edge, used to size each cell's padded buffer (see pipeline.config.json's graph.maxEdgeKm)")
     args = parser.parse_args()
 
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")

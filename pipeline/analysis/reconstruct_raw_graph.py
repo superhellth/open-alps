@@ -31,6 +31,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
+# same formula and earth radius as build_base_graph.py's haversine_m_vec (both import this same
+# shared function), so reconstructed segment distances sum back to the persisted chain distances
+from lib.geo import haversine_m_vec_pairs as _haversine_m_vec  # noqa: E402
 from lib.pipeline import OSM_DIR  # noqa: E402
 
 
@@ -52,17 +55,6 @@ class RawGraph:
         return (self.coords, self.edges_i, self.edges_j, self.edges_dist, self.edges_road,
                 self.edges_ungraded, self.edges_inferred, self.edges_sac_rank,
                 self.edges_via_ferrata, self.edges_constrained_ok)
-
-
-def _haversine_m_vec(lon1, lat1, lon2, lat2):
-    # same formula and earth radius as build_base_graph.py's haversine_m_vec, so reconstructed
-    # segment distances sum back to the persisted chain distances
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 def select_edges_in_cells(nodes, edges, cell_ids) -> np.ndarray:
@@ -130,7 +122,8 @@ def reconstruct_raw(nodes, edges, interior, edge_ids) -> RawGraph:
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
     args = parser.parse_args(argv)
 
     d = Path(args.base_graph)

@@ -167,12 +167,16 @@ def profile_one(base_graph_dir, fraction, out_path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--fractions", default="0.05,0.1,0.25,0.5,0.75,1.0")
-    parser.add_argument("--out", default=str(DATA_DIR / "contraction_scaling.jsonl"))
+    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--fractions", default="0.05,0.1,0.25,0.5,0.75,1.0",
+                        help="comma-separated fractions of the base graph to contract, for the scaling sweep")
+    parser.add_argument("--out", default=str(DATA_DIR / "contraction_scaling.jsonl"),
+                        help="path to write the scaling results as JSON lines")
     parser.add_argument("--profile-fraction", type=float, default=None,
                         help="skip the sweep; cProfile one contraction at this fraction")
-    parser.add_argument("--profile-out", default=str(DATA_DIR / "contraction.prof"))
+    parser.add_argument("--profile-out", default=str(DATA_DIR / "contraction.prof"),
+                        help="path to write the cProfile output when --profile-fraction is set")
     args = parser.parse_args(argv)
 
     if args.profile_fraction is not None:

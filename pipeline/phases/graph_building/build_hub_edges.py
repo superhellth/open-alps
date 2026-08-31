@@ -293,11 +293,16 @@ def _run_cell(args):
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--route-subgraphs-dir", default=str(OSM_DIR / "route_subgraphs"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR))
-    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
-    parser.add_argument("--workers", type=int, default=None)
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                         help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--route-subgraphs-dir", default=str(OSM_DIR / "route_subgraphs"),
+                         help="directory holding gather_route_subgraphs.py's persisted per-cell gathers")
+    parser.add_argument("--out-dir", default=str(OSM_DIR),
+                         help="directory to write hut_edges/ and start_edges/ into")
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                         help="longest hut-to-hut trail distance kept as an edge (see pipeline.config.json's graph.maxEdgeKm)")
+    parser.add_argument("--workers", type=int, default=None,
+                         help="number of worker processes for the per-cell routing pass (default: os.cpu_count())")
     args = parser.parse_args()
 
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")

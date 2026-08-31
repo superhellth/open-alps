@@ -63,11 +63,16 @@ def pack_edges(records: np.ndarray, hut_ids: list, tour_meta: np.ndarray = None)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"))
-    parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"))
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-payload.bin"))
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-payload.json"))
-    parser.add_argument("--tour-meta", default=None)
+    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"),
+                        help="directory holding hut_edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"),
+                        help="path to the hut master-data GeoJSON")
+    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-payload.bin"),
+                        help="path to write the packed hut-edge-payload binary")
+    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-payload.json"),
+                        help="path to write the hut-edge-payload manifest")
+    parser.add_argument("--tour-meta", default=None,
+                        help="optional path to a row-aligned tour_meta.npy (tour_id/leg_index) to fold into the payload; omit for the no-tour-meta default shape")
     args = parser.parse_args()
 
     with phase("build_edge_payload.py", "build_edge_payload"):

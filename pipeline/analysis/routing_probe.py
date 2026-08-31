@@ -447,8 +447,10 @@ def _fit_speed_constants(duration_pairs: list) -> dict:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--pairs", type=int, default=200)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--pairs", type=int, default=200,
+                         help="number of random hut pairs to sample for the probe")
+    parser.add_argument("--seed", type=int, default=42,
+                         help="RNG seed for reproducible pair sampling")
     parser.add_argument("--direction-sample", type=int, default=30,
                          help="route this many of the sampled pairs both directions too")
     args = parser.parse_args()
