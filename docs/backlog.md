@@ -7,12 +7,6 @@ under `docs/superpowers/`.
 
 ## High
 
-### [Access-node coverage and quality (`stations.geojson` / `parking.geojson`)](backlog/access-node-coverage.md)
-
-`stations.geojson` is railway-only (no bus stops), and unusable nodes (disused stations, private/
-gated parking) aren't filtered out. Measured: 3 of 4 terminal tour endpoints have no access node
-within 100 m, and every failing case is a bus stop.
-
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
@@ -20,4 +14,12 @@ Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
 ## Medium
 
-_(none yet)_
+### Idea: Introduce a data quality monitoring layer
+
+Simplest would be output files in a dedicated folder that collect monitoring data about our data. More sophisticated be something like a proper dashboard.
+
+## Low
+
+### GPX Tool
+
+A small webpage that helps bring GPX tours into a format the pipeline can ingest. Should support: Extending legs to a proper end (dont end on a mountain like Chiemgautour), slicing into legs, as some Tours are one big tour, not split into legs. So needs huts overlay, quality of life features.
