@@ -39,6 +39,7 @@ import math
 import os
 import socket
 import subprocess
+import sys
 import threading
 import time
 import urllib.error
@@ -51,6 +52,9 @@ from pathlib import Path
 import rasterio
 from rasterio.io import MemoryFile
 from rasterio.warp import transform_bounds, transform
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+from lib.pipeline import safe_extractall  # noqa: E402
 
 TILE_URL_TEMPLATE = "https://download1.bayernwolke.de/a/dgm/dgm5xyz/{tile_id}.zip"
 DEFAULT_WORKERS = 16
@@ -219,7 +223,7 @@ def _download_tile(tile_id: str, raw_dir: Path) -> Path | None:
                 time.sleep(TILE_DOWNLOAD_RETRY_BACKOFF_S * (attempt + 1))
 
     with zipfile.ZipFile(zip_path) as zf:
-        zf.extractall(extract_dir)
+        safe_extractall(zf, extract_dir)
 
     grids = sorted(extract_dir.rglob("*.txt"))
     return grids[0] if grids else None
