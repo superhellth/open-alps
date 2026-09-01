@@ -12,6 +12,15 @@ import { trimSharedHubIds, hasOverlap } from './overlap.js'
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from './types.js'
 import type { GraphData, LegSummary, Query, SearchResult, SourceType, TourResult } from './types.js'
 
+function hutAvailable(h: number, offsetDays: number, availability: Query['availability']): boolean {
+  if (!availability) return true
+  const ohrsId = availability.ohrsIdByHutIndex.get(h)
+  if (ohrsId == null) return true // no OHRS id (direct-booking-only) or huts.geojson lacked it: pass/unknown
+  const free = availability.freeByOffset.get(offsetDays)
+  if (free === 'unknown' || free === undefined) return true // fetch failed for this night: pass/unknown
+  return free.has(ohrsId)
+}
+
 function requiredSourceType(mode: Query['mode']): SourceType | null {
   if (mode === 'transit') return SOURCE_TYPE_STATION
   if (mode === 'car') return SOURCE_TYPE_PARKING
@@ -23,7 +32,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   const {
     mode, legCountMin, legCountMax, sacCeiling, allowUngraded = false,
     maxLegTimeH, minLegTimeH = 0, legAscentCapM = Infinity, maxEleM = null, allowViaFerrata = true,
-    allowedHutIndices,
+    allowedHutIndices, availability,
   } = query
   const constraints = { maxLegTimeH, minLegTimeH, legAscentCapM, maxEleM, allowViaFerrata }
   const killCounters = createKillCounters()
@@ -65,6 +74,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   let layer = new Map<number, Map<string, State>>()
   for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
     if (allowedHutIndices && !allowedHutIndices.has(h)) { killCounters.hutFiltered++; continue }
+    if (!hutAvailable(h, 1, availability)) { killCounters.availability++; continue }
     for (const approachLeg of getApproachLegs(h, graphData.approaches)) {
       if (gateSourceType != null && approachLeg.sourceType !== gateSourceType) continue
       if (!legPasses(approachLeg, constraints, killCounters)) continue
@@ -116,6 +126,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
           const h2 = leg.toIndex
           if (allowedHutIndices && !allowedHutIndices.has(h2)) { killCounters.hutFiltered++; continue }
           if (s.path.includes(h2)) { killCounters.revisit++; continue }
+          if (!hutAvailable(h2, s.path.length + 1, availability)) { killCounters.availability++; continue }
           if (!legPasses(leg, constraints, killCounters)) continue
 
           const sortedIdsNew = graphData.hutEdgeIds.getSortedIds(leg.edgeId)
