@@ -117,6 +117,10 @@ export interface Query {
   maxEleM?: number | null
   allowViaFerrata?: boolean
   allowedHutIndices?: Set<number>
+  availability?: {
+    ohrsIdByHutIndex: Map<number, string | null>
+    freeByOffset: Map<number, Set<string> | 'unknown'>
+  }
 }
 
 export interface KillCounters {
@@ -128,6 +132,7 @@ export interface KillCounters {
   revisit: number
   hutFiltered: number
   trackOverlap: number
+  availability: number
 }
 
 export interface ReverseIndexEntry {

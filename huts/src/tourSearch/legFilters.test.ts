@@ -57,4 +57,8 @@ describe('legPasses', () => {
   it('createKillCounters starts trackOverlap at 0', () => {
     expect(createKillCounters().trackOverlap).toBe(0)
   })
+
+  it('createKillCounters starts availability at 0', () => {
+    expect(createKillCounters().availability).toBe(0)
+  })
 })

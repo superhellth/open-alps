@@ -11,7 +11,7 @@ export interface LegConstraints {
 export function createKillCounters(): KillCounters {
   return {
     maxLegTime: 0, minLegTime: 0, legAscentCap: 0, maxEleM: 0, viaFerrata: 0, revisit: 0,
-    hutFiltered: 0, trackOverlap: 0,
+    hutFiltered: 0, trackOverlap: 0, availability: 0,
   }
 }
 
