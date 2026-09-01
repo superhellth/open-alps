@@ -170,3 +170,134 @@ def filter_sub_edges_near_trace(sub_edges: list, extra_nodes: dict, trace: list,
             used_labels.add(se.to_node)
     kept_extra_nodes = {label: coord for label, coord in extra_nodes.items() if label in used_labels}
     return kept, kept_extra_nodes
+
+
+def materialize_anchor(subgraph, snap, next_node_id: int):
+    """Materializes one endpoint hub's snap into the leg map (spec §2's "Endpoint anchoring"),
+    mirroring build_base_igraph_arrays' node-snap/mid-chain-snap split exactly:
+    - node snap: the anchor IS an existing parent-edge endpoint label (0..n-1) - nothing to add.
+    - mid-chain snap: mints one new node at split.split_coord, emits the two halves (tagged
+      edge_id*3+1/+2, spec §2) as bidirectional SubEdges IN PLACE OF the whole parent edge - the
+      caller (build_leg_map) is responsible for excluding the parent's own edge_id*3 sub-edges
+      when an anchor claims that edge.
+    Returns (anchor_label, extra_sub_edges, extra_node_coords, next_node_id)."""
+    if snap.node_index is not None:
+        return snap.node_index, [], {}, next_node_id
+
+    ei = snap.edge_local_index
+    e = subgraph.local_edges[ei]
+    u, v = int(e["u"]), int(e["v"])
+    split = snap.split
+    anchor = next_node_id
+    next_node_id += 1
+    extra_nodes = {anchor: split.split_coord}
+
+    node_lon, node_lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+    u_coord = (float(node_lon[u]), float(node_lat[u]))
+    v_coord = (float(node_lon[v]), float(node_lat[v]))
+    base_edge_id = int(e["edge_id"]) * 3
+
+    halves = [
+        # (from_label, to_label, from_coord, to_coord, interior, dist, road, ungraded, inferred, tag)
+        (u, anchor, u_coord, split.split_coord, list(split.interior_to_u),
+         split.dist_to_u, split.road_m_to_u, split.ungraded_m_to_u, split.inferred_m_to_u,
+         base_edge_id + 1),
+        (anchor, v, split.split_coord, v_coord, list(split.interior_to_v),
+         split.dist_to_v, split.road_m_to_v, split.ungraded_m_to_v, split.inferred_m_to_v,
+         base_edge_id + 2),
+    ]
+
+    extra_edges = []
+    for from_lbl, to_lbl, from_c, to_c, interior, dist_m, road_m, ungraded_m, inferred_m, tag in halves:
+        full_coords = [from_c, *interior, to_c]
+        seg_lengths = [
+            haversine_m(*full_coords[i], *full_coords[i + 1]) for i in range(len(full_coords) - 1)
+        ]
+        total = sum(seg_lengths) or 1.0
+        labels = [from_lbl, *[None] * len(interior), to_lbl]
+        # interior points of a split half are not shared with anything else, so they get fresh
+        # labels of their own too (a hub snap on a leg with >1 interior point per half).
+        for i in range(1, len(labels) - 1):
+            labels[i] = next_node_id
+            extra_nodes[next_node_id] = interior[i - 1]
+            next_node_id += 1
+        n_seg = len(seg_lengths)
+        for direction in (1, -1):
+            seg_order = range(n_seg) if direction == 1 else range(n_seg - 1, -1, -1)
+            for si in seg_order:
+                ratio = seg_lengths[si] / total
+                frm, to = (labels[si], labels[si + 1]) if direction == 1 else (labels[si + 1], labels[si])
+                extra_edges.append(SubEdge(
+                    from_node=frm, to_node=to, base_edge_id=tag, direction=direction,
+                    segment_index=si, dist_m=seg_lengths[si], road_m=road_m * ratio,
+                    ungraded_m=ungraded_m * ratio, inferred_m=inferred_m * ratio,
+                    ascent_m=0.0, descent_m=0.0,  # split halves inherit, don't divide - lib/cell_igraph.py:110-113
+                    max_ele_m=max(
+                        float(subgraph.local_node_ele[u]), float(subgraph.local_node_ele[v])
+                    ),
+                    sac_rank=int(e["sac_rank"]), via_ferrata=bool(e["via_ferrata"]),
+                ))
+
+    return anchor, extra_edges, extra_nodes, next_node_id
+
+
+@dataclasses.dataclass
+class LegMap:
+    inmem_map: object
+    sub_edges: list  # every kept SubEdge actually added to inmem_map
+    src_anchor: int
+    tgt_anchor: int
+
+
+def build_leg_map(subgraph, src_snap, tgt_snap, trace: list, max_dist_m: float) -> LegMap:
+    """Assembles one leg's per-leg InMemMap (spec §2): expand every corridor edge's interior into
+    tagged bidirectional sub-edges, materialize both endpoint anchors (replacing the whole parent
+    edge for a mid-chain anchor so its plain edge_id*3 form never coexists with the split halves),
+    filter to hmmMaxDistM of the trace, then build the map. Never touches the whole base graph -
+    only `subgraph` (the leg's own corridor gather, unchanged from today's match_leg)."""
+    next_id = len(subgraph.local_nodes)
+    sub_edges, extra_nodes = expand_edge_interiors(subgraph, next_node_id=next_id)
+    next_id = max([next_id, *[k + 1 for k in extra_nodes]], default=next_id)
+
+    replaced_parent_edge_ids = set()
+    for snap in (src_snap, tgt_snap):
+        if snap.node_index is None:
+            replaced_parent_edge_ids.add(int(subgraph.local_edges[snap.edge_local_index]["edge_id"]) * 3)
+
+    sub_edges = [se for se in sub_edges if se.base_edge_id not in replaced_parent_edge_ids]
+
+    src_anchor, src_extra_edges, src_extra_nodes, next_id = materialize_anchor(subgraph, src_snap, next_id)
+    tgt_anchor, tgt_extra_edges, tgt_extra_nodes, next_id = materialize_anchor(subgraph, tgt_snap, next_id)
+
+    sub_edges = [*sub_edges, *src_extra_edges, *tgt_extra_edges]
+    extra_nodes = {**extra_nodes, **src_extra_nodes, **tgt_extra_nodes}
+
+    node_lon, node_lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+    node_coords = {i: (float(node_lon[i]), float(node_lat[i])) for i in range(len(subgraph.local_nodes))}
+    node_coords.update(extra_nodes)
+
+    kept, kept_extra_nodes = filter_sub_edges_near_trace(
+        sub_edges, extra_nodes, trace, max_dist_m, node_coords,
+    )
+    # The two anchors must always survive filtering, even if geometrically borderline - a
+    # dropped anchor breaks the invariant Task 9's reconcile_endpoints relies on.
+    kept_labels = {se.from_node for se in kept} | {se.to_node for se in kept}
+    for anchor in (src_anchor, tgt_anchor):
+        if anchor not in kept_labels and anchor in node_coords:
+            kept_extra_nodes.setdefault(anchor, node_coords[anchor])
+
+    parent_node_labels = {
+        lbl for se in kept for lbl in (se.from_node, se.to_node) if lbl < len(subgraph.local_nodes)
+    }
+    all_nodes = {lbl: node_coords[lbl] for lbl in parent_node_labels}
+    all_nodes.update(kept_extra_nodes)
+    if src_anchor not in all_nodes:
+        all_nodes[src_anchor] = node_coords[src_anchor]
+    if tgt_anchor not in all_nodes:
+        all_nodes[tgt_anchor] = node_coords[tgt_anchor]
+
+    inmem_map = build_inmem_map(all_nodes)
+    for se in kept:
+        inmem_map.add_edge(se.from_node, se.to_node)
+
+    return LegMap(inmem_map=inmem_map, sub_edges=kept, src_anchor=src_anchor, tgt_anchor=tgt_anchor)
