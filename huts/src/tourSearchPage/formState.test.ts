@@ -45,3 +45,25 @@ describe('isFilterSelectionValid', () => {
     expect(isFilterSelectionValid({ ...DEFAULT_FORM, allowServiced: false, allowSelfService: false })).toBe(false)
   })
 })
+
+describe('buildQuery availability wiring', () => {
+  const availability = { ohrsIdByHutIndex: new Map([[0, 'ohrsA']]), freeByOffset: new Map([[1, new Set(['ohrsA'])]]) }
+
+  it('attaches availability when onlyAvailable is checked', () => {
+    const form = { ...DEFAULT_FORM, startDate: '2026-08-20', onlyAvailable: true }
+    const q = buildQuery(form, hutsByIndex, availability)
+    expect(q.availability).toBe(availability)
+  })
+
+  it('omits availability when onlyAvailable is unchecked, even if data was fetched', () => {
+    const form = { ...DEFAULT_FORM, startDate: '2026-08-20', onlyAvailable: false }
+    const q = buildQuery(form, hutsByIndex, availability)
+    expect(q.availability).toBeUndefined()
+  })
+
+  it('omits availability when no data was fetched, even if onlyAvailable is checked', () => {
+    const form = { ...DEFAULT_FORM, startDate: '', onlyAvailable: true }
+    const q = buildQuery(form, hutsByIndex)
+    expect(q.availability).toBeUndefined()
+  })
+})
