@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
 import TourSearchPage from './TourSearchPage.js'
 import * as tourSearchIndex from '../tourSearch/index.js'
+import * as availability from '../availability/fetchAvailability.js'
 import type { GraphData, SearchResult } from '../tourSearch/types.js'
 
 // vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
@@ -52,7 +53,10 @@ beforeEach(() => {
     'fetch',
     vi.fn((url: string) => {
       if (url.includes('huts.geojson')) {
-        return fetchJsonMock({ type: 'FeatureCollection', features: [{ properties: { id: 0, name: 'HutA' }, geometry: { type: 'Point', coordinates: [11.0, 47.0] } }] })
+        return fetchJsonMock({
+          type: 'FeatureCollection',
+          features: [{ properties: { id: 'HutA', name: 'HutA', hutType: 'av', serviced: true, ohrsHutId: '179', tenantCode: 8 }, geometry: { type: 'Point', coordinates: [11.0, 47.0] } }],
+        })
       }
       if (url.includes('parking.geojson')) {
         return fetchJsonMock({
@@ -168,5 +172,30 @@ describe('TourSearchPage', () => {
     await userEvent.click(screen.getByLabelText('AV-Hütte'))
     await userEvent.click(screen.getByLabelText('Sonstige Hütte'))
     expect(screen.getByRole('button', { name: 'Touren suchen' })).toBeDisabled()
+  })
+
+  it('fetches availability when a start date is set and shows a free-bed badge on the result hut', async () => {
+    vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map([[1, new Set(['179'])]]))
+
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+
+    await userEvent.type(screen.getByLabelText(/Startdatum/), '2026-08-20')
+    await userEvent.click(screen.getByRole('button', { name: 'Touren suchen' }))
+
+    await waitFor(() => expect(availability.fetchAvailabilityByOffset).toHaveBeenCalledWith(new Date('2026-08-20'), 1, 3))
+    await waitFor(() => expect(screen.getByText(/1 Tour gefunden/)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByText(/Parkplatz Test/))
+    await waitFor(() => expect(screen.getByText('frei')).toBeInTheDocument())
+  })
+
+  it('the "nur Touren mit Verfügbarkeit" checkbox is hidden until a start date is picked', async () => {
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    expect(screen.queryByLabelText(/nur Touren mit Verfügbarkeit/)).not.toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText(/Startdatum/), '2026-08-20')
+    expect(screen.getByLabelText(/nur Touren mit Verfügbarkeit/)).toBeInTheDocument()
   })
 })

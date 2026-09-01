@@ -6,6 +6,8 @@ import type { SelectChangeEvent } from '@mui/material'
 import { loadTourSearchData, findTours } from '../tourSearch/index.js'
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { GraphData, SearchResult, TourMode } from '../tourSearch/types.js'
+import { fetchAvailabilityByOffset } from '../availability/fetchAvailability.js'
+import type { FreeByOffset } from '../availability/types.js'
 import AppShell from '../AppShell.js'
 import type { StartPoint } from './types.js'
 import type { HutClass, HutOperator } from '../hutClass.js'
@@ -28,6 +30,8 @@ function TourSearchPage() {
   const [hutCoordsById, setHutCoordsById] = useState<Map<number, { lat: number; lng: number }>>(new Map())
   const [startById, setStartById] = useState<Map<number, StartPoint>>(new Map())
   const [hutsByIndex, setHutsByIndex] = useState<(HutClass | null)[]>([])
+  const [hutOhrsByIndex, setHutOhrsByIndex] = useState<Map<number, { ohrsHutId: string | null; tenantCode: number | null }>>(new Map())
+  const [freeByOffset, setFreeByOffset] = useState<FreeByOffset | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [result, setResult] = useState<SearchResult | null>(null)
@@ -80,6 +84,17 @@ function TourSearchPage() {
             return { operator: props.hutType, serviced: props.serviced ?? true }
           }),
         )
+        setHutOhrsByIndex(
+          new Map(
+            hutsByIdx
+              .map((f, i) => {
+                if (!f) return null
+                const props = f.properties as { ohrsHutId?: string | null; tenantCode?: number | null }
+                return [i, { ohrsHutId: props.ohrsHutId ?? null, tenantCode: props.tenantCode ?? null }] as const
+              })
+              .filter((entry): entry is readonly [number, { ohrsHutId: string | null; tenantCode: number | null }] => entry != null),
+          ),
+        )
 
         const starts = new Map<number, StartPoint>()
         for (const f of stationsFc.features) {
@@ -128,6 +143,11 @@ function TourSearchPage() {
     return chains
   }, [result, sortKey])
 
+  const ohrsIdByHutIndex = useMemo(
+    () => new Map([...hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const)),
+    [hutOhrsByIndex],
+  )
+
   const hutClassByIndex = useMemo(
     () => new Map(hutsByIndex.map((c, i) => [i, c]).filter((entry): entry is [number, HutClass] => entry[1] != null)),
     [hutsByIndex],
@@ -150,16 +170,26 @@ function TourSearchPage() {
 
   const selectedChain = expandedChain !== null ? (displayedChains[expandedChain] ?? null) : null
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!graphData) return
     setSearching(true)
     setResult(null)
     setExpandedChain(null)
+
+    let fetchedAvailability: FreeByOffset | null = null
+    if (form.startDate) {
+      fetchedAvailability = await fetchAvailabilityByOffset(new Date(form.startDate), form.numOfPeople, form.legCountRange[1] - 1)
+    }
+    setFreeByOffset(fetchedAvailability)
+
     // Defer the heavy synchronous findTours call a tick so React can paint the spinner first
     // (spec D: no Web Worker in this spec's scope).
     setTimeout(() => {
-      const query = buildQuery(form, hutsByIndex)
+      const query = buildQuery(
+        form, hutsByIndex,
+        fetchedAvailability ? { ohrsIdByHutIndex, freeByOffset: fetchedAvailability } : undefined,
+      )
       setResult(findTours(query, graphData))
       setPage(1)
       setSearching(false)
@@ -170,6 +200,7 @@ function TourSearchPage() {
     setForm(DEFAULT_FORM)
     setResult(null)
     setExpandedChain(null)
+    setFreeByOffset(null)
   }
 
   return (
@@ -303,6 +334,38 @@ function TourSearchPage() {
             </Accordion>
           </Box>
 
+          <Box sx={{ width: 220 }}>
+            <Typography variant="subtitle2">Startdatum (optional)</Typography>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="Startdatum"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.startDate}
+              onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+            />
+            {form.startDate && (
+              <>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Personenzahl"
+                  sx={{ mt: 1 }}
+                  slotProps={{ htmlInput: { min: 1, max: 9 } }}
+                  value={form.numOfPeople}
+                  onChange={(e) => setForm((f) => ({ ...f, numOfPeople: Number(e.target.value) || 1 }))}
+                />
+                <FormControlLabel
+                  sx={{ display: 'block' }}
+                  control={<Checkbox checked={form.onlyAvailable} onChange={(e) => setForm((f) => ({ ...f, onlyAvailable: e.target.checked }))} />}
+                  label="nur Touren mit Verfügbarkeit"
+                />
+              </>
+            )}
+          </Box>
+
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 'auto' }}>
             <Button type="submit" variant="contained" disabled={!graphData || searching || !isFilterSelectionValid(form)} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
               Touren suchen
@@ -330,6 +393,11 @@ function TourSearchPage() {
               expandedChain={expandedChain}
               setExpandedChain={setExpandedChain}
               mode={form.mode}
+              freeByOffset={freeByOffset}
+              ohrsIdByHutIndex={ohrsIdByHutIndex}
+              hutOhrsByIndex={hutOhrsByIndex}
+              startDate={form.startDate ? new Date(form.startDate) : null}
+              numOfPeople={form.numOfPeople}
             />
           )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
