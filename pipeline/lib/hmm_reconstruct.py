@@ -7,7 +7,8 @@ reconciliation logic can be tested and read independently."""
 import dataclasses
 
 from lib.cell_igraph import PathResult, build_igraph_with_snaps
-from lib.hub_snap import SnapResult
+from lib.hmm_match import SubEdge
+from lib.hub_snap import SnapRejection, SnapResult, snap_hub_to_subgraph
 
 
 def reconstruct_matched_path(leg_map, node_path: list) -> PathResult:
@@ -66,25 +67,81 @@ class BridgeTooLong:
     cap_m: float
 
 
-def _bridge_node_path_and_length(subgraph, anchor_label: int, decoded_end_label: int):
-    """Dijkstra INSIDE the corridor subgraph from the anchor to wherever the decode actually
-    starts/ends (spec §2's bridge case: "between the hub and where the recorded track begins, the
-    trace describes no shape at all, so shortest-path is the only defensible reconstruction").
-    anchor_label/decoded_end_label are subgraph.local_nodes' own node indices (0..n-1) - the same
-    label space leg_map's InMemMap uses for parent-edge endpoints (Task 5/7 never renumber those),
-    so this is only ever called with a node-snap anchor and a decoded endpoint that is itself an
-    original graph node (never a minted interior/split-point label)."""
+def _bridge_into_leg_map(subgraph, leg_map, anchor_label: int, decoded_end_label: int):
+    """Routes INSIDE the corridor subgraph from a real-node anchor to wherever the decode
+    actually starts/ends (spec §2's bridge case: "between the hub and where the recorded track
+    begins, the trace describes no shape at all, so shortest-path is the only defensible
+    reconstruction"). Unlike leg_map's own graph, `subgraph` was never filtered to hmmMaxDistM of
+    the trace, so it can reach an anchor whose own edges got filtered out entirely for sitting
+    off-corridor.
+
+    decoded_end_label is looked up by its own COORDINATE (leg_map.node_coords), not assumed to
+    already be a subgraph node index - match_trace's decode can just as easily land on an
+    interior/split-point label lib/hmm_match.py minted, which does not exist as a vertex in
+    `subgraph`'s own igraph at all.
+
+    Mutates leg_map.sub_edges/leg_map.node_coords in place: any bridge-traversed edge that
+    build_leg_map's own hmmMaxDistM filter dropped, or any real subgraph node leg_map never kept,
+    is added back so reconstruct_matched_path's (from_node, to_node) lookup and match_leg's
+    coordinate fill-in both still work against the reconciled path. Returns
+    (bridge_node_labels, bridge_length_m) - bridge_node_labels starts at anchor_label and ends at
+    decoded_end_label, both already leg_map-compatible; anchor_label is always a node-snap (a
+    mid-chain anchor is always already the decode's own start/end by construction, so is never
+    bridged from - only the decoded_end side needs coordinate-based re-location)."""
+    end_lon, end_lat = leg_map.node_coords[decoded_end_label]
+    end_snap = snap_hub_to_subgraph(subgraph, end_lon, end_lat, max_snap_m=1.0)
+    if isinstance(end_snap, SnapRejection):
+        # decoded_end_label's own coordinate came from this exact subgraph in the first place
+        # (Task 5/7's expansion never invents geometry) - failing to re-locate it within 1m only
+        # happens if the corridor gather itself changed between building leg_map and calling
+        # this, which never happens within one match_leg call.
+        raise AssertionError(
+            f"could not re-locate decoded endpoint {decoded_end_label} on its own subgraph"
+        )
+
     graph, hub_vertex, _ = build_igraph_with_snaps(
-        subgraph,
-        {"anchor": SnapResult(node_index=anchor_label),
-         "decoded_end": SnapResult(node_index=decoded_end_label)},
+        subgraph, {"anchor": SnapResult(node_index=anchor_label), "decoded_end": end_snap},
     )
     src_v, tgt_v = hub_vertex["anchor"], hub_vertex["decoded_end"]
     if src_v == tgt_v:
         return [anchor_label], 0.0
-    vpath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="vpath")[0]
-    length = graph.distances(src_v, tgt_v, weights="weight")[0][0]
-    return vpath, length
+
+    epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
+    if not epath:
+        return [anchor_label], float("inf")
+
+    # Walk the edge path into a vertex path ourselves (rather than a second get_shortest_paths
+    # call for vpath) so the vertex/edge sequences can never disagree on a tie-broken alternate
+    # shortest path - mirrors accumulate_path's own cur-pointer walk.
+    node_lon, node_lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+    existing_pairs = {(se.from_node, se.to_node) for se in leg_map.sub_edges}
+    cur = src_v
+    translated = [anchor_label]
+    length = 0.0
+    for eid in epath:
+        e = graph.es[eid]
+        forward = e.source == cur
+        nxt = e.target if forward else e.source
+        length += e["weight"]
+        label = decoded_end_label if nxt == tgt_v else nxt
+        if label not in leg_map.node_coords:
+            leg_map.node_coords[label] = (float(node_lon[nxt]), float(node_lat[nxt]))
+        from_label = translated[-1]
+        if (from_label, label) not in existing_pairs:
+            leg_map.sub_edges.append(SubEdge(
+                from_node=from_label, to_node=label, base_edge_id=e["base_edge_id"],
+                direction=1 if forward else -1, segment_index=0,
+                dist_m=e["dist"], road_m=e["road_m"], ungraded_m=e["ungraded_m"],
+                inferred_m=e["inferred_m"],
+                ascent_m=e["ascent_m"] if forward else e["descent_m"],
+                descent_m=e["descent_m"] if forward else e["ascent_m"],
+                max_ele_m=e["max_ele_m"], sac_rank=e["sac_rank"], via_ferrata=e["via_ferrata"],
+            ))
+            existing_pairs.add((from_label, label))
+        translated.append(label)
+        cur = nxt
+
+    return translated, length
 
 
 def reconcile_endpoints(subgraph, leg_map, node_path: list, endpoint_bridge_max_m: float):
@@ -98,8 +155,8 @@ def reconcile_endpoints(subgraph, leg_map, node_path: list, endpoint_bridge_max_
             idx = result.index(leg_map.src_anchor)
             result = result[idx:]
         else:
-            bridge_nodes, bridge_len = _bridge_node_path_and_length(
-                subgraph, leg_map.src_anchor, result[0],
+            bridge_nodes, bridge_len = _bridge_into_leg_map(
+                subgraph, leg_map, leg_map.src_anchor, result[0],
             )
             if bridge_len > endpoint_bridge_max_m:
                 return BridgeTooLong(endpoint="from", bridge_m=bridge_len,
@@ -111,8 +168,8 @@ def reconcile_endpoints(subgraph, leg_map, node_path: list, endpoint_bridge_max_
             idx = len(result) - 1 - result[::-1].index(leg_map.tgt_anchor)
             result = result[:idx + 1]
         else:
-            bridge_nodes, bridge_len = _bridge_node_path_and_length(
-                subgraph, leg_map.tgt_anchor, result[-1],
+            bridge_nodes, bridge_len = _bridge_into_leg_map(
+                subgraph, leg_map, leg_map.tgt_anchor, result[-1],
             )
             if bridge_len > endpoint_bridge_max_m:
                 return BridgeTooLong(endpoint="to", bridge_m=bridge_len,
