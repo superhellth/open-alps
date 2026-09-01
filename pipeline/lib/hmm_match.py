@@ -9,6 +9,8 @@ Coordinate order: leuvenmapmatching wants (lat, lon); everything else in this pi
 points, EDGE_DTYPE/COORD_DTYPE columns, PathResult) is (lon, lat). The swap happens at exactly two
 boundaries in this module - _latlon() below - and nowhere else."""
 
+from leuvenmapmatching.map.inmem import InMemMap
+
 from lib.geo import haversine_m
 
 
@@ -40,3 +42,12 @@ def resample_trace(points: list, resample_m: float) -> list:
             last = p
     out.append(points[-1])
     return out
+
+
+def build_inmem_map(nodes: dict) -> InMemMap:
+    """nodes: {node_label: (lon, lat), ...}. Returns an InMemMap with every node added (no edges
+    yet - Task 6's build_leg_map adds edges on top of this)."""
+    m = InMemMap("leg", use_latlon=True, use_rtree=True, index_edges=True)
+    for label, coord in nodes.items():
+        m.add_node(label, _latlon(coord))
+    return m

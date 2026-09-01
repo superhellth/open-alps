@@ -35,3 +35,14 @@ def test_resample_preserves_endpoints_of_a_dense_trace():
     out = resample_trace(dense, resample_m=25.0)
     assert out[0] == dense[0]
     assert out[-1] == dense[-1]
+
+
+def test_inmem_map_round_trips_lon_lat_through_the_lat_lon_boundary():
+    from lib.hmm_match import build_inmem_map
+
+    nodes = {0: (11.123, 47.456), 1: (11.130, 47.460)}
+    m = build_inmem_map(nodes)
+    lat0, lon0 = m.node_coordinates(0)
+    assert (lon0, lat0) == nodes[0]
+    lat1, lon1 = m.node_coordinates(1)
+    assert (lon1, lat1) == nodes[1]
