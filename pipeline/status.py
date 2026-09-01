@@ -25,3 +25,51 @@ def build_children_map(tasks) -> dict[str, list[str]]:
     for names in children.values():
         names.sort()
     return children
+
+
+def compute_local_status(tasks, tasks_by_name, dep_manager) -> dict[str, str]:
+    """status_is_ignore checked before get_status, in that order - get_status only ever returns
+    'up-to-date' | 'run' | 'error'; 'ignore' is a separate query (matches doit's own
+    cmd_list.py:_print_task)."""
+    status_by_name = {}
+    for t in tasks:
+        if dep_manager.status_is_ignore(t):
+            status_by_name[t.name] = "ignore"
+        else:
+            status_by_name[t.name] = dep_manager.get_status(t, tasks_by_name).status
+    return status_by_name
+
+
+def compute_may_rerun(tasks_by_name, local_status: dict[str, str]) -> dict[str, bool]:
+    """True for a task that is locally up-to-date but has a 'run'-status ancestor anywhere
+    upstream in task_dep - the third, honest marker this tool needs so it never renders a green
+    leaf under a red parent (get_status is a purely local check; it knows nothing about an
+    upstream task about to rewrite its inputs)."""
+    memo: dict[str, bool] = {}
+
+    def has_stale_ancestor(name: str) -> bool:
+        if name in memo:
+            return memo[name]
+        memo[name] = False  # doit's task_dep graph is acyclic; this guards recursion regardless
+        result = any(
+            local_status[dep] == "run" or has_stale_ancestor(dep)
+            for dep in tasks_by_name[name].task_dep
+        )
+        memo[name] = result
+        return result
+
+    return {
+        name: local_status[name] == "up-to-date" and has_stale_ancestor(name)
+        for name in tasks_by_name
+    }
+
+
+def marker_for(name: str, local_status: dict[str, str], may_rerun: dict[str, bool]) -> tuple[str, str]:
+    """(symbol, rich color): up-to-date -> green check; run -> red dot; up-to-date-with-stale-
+    ancestor -> yellow tilde; ignore/error -> yellow question mark."""
+    task_status = local_status[name]
+    if task_status == "up-to-date":
+        return ("~", "yellow") if may_rerun[name] else ("✓", "green")
+    if task_status == "run":
+        return ("●", "red")
+    return ("?", "yellow")  # ignore or error
