@@ -362,3 +362,81 @@ def test_golden_tour_reports_leg_endpoint_unsnapped_when_endpoint_far_from_any_h
     assert gaps[0]["detail"]["endpoint"] == "to"
     assert gaps[0]["detail"]["nearestDistM"] > 100.0
     assert tours_json[0]["legs"][2]["to"] is None
+
+
+def test_golden_tour_uses_hmm_config_and_still_matches_all_legs(tmp_path, monkeypatch):
+    # Same fixture as test_golden_single_part_tour_matches_all_legs_end_to_end, but asserts the
+    # five new config keys are actually threaded through main() -> match_leg (spec §7's
+    # "changing hmmObsNoiseM would not invalidate the task" concern, exercised at the config-
+    # plumbing level here; the DAG cli_param/TaskOptionsChanged wiring itself is doit-level and
+    # not unit-testable from this file).
+    grid = Grid(BBOX, tile_size_km=60.0)
+    base_graph_dir, node_coords = _write_synthetic_base_graph(tmp_path, grid)
+    hut_coords = node_coords
+    huts_geojson = {
+        "type": "FeatureCollection",
+        "features": [
+            {"type": "Feature", "properties": {"id": f"{{GUID-{i}}}"},
+             "geometry": {"type": "Point", "coordinates": list(c)}}
+            for i, c in enumerate(hut_coords)
+        ],
+    }
+    (tmp_path / "huts.geojson").write_text(json.dumps(huts_geojson), encoding="utf-8")
+    start_points = np.zeros(0, dtype=[("lon", "f8"), ("lat", "f8"), ("osm_id", "i8"), ("type", "u1")])
+    binfmt.save_array(tmp_path / "start_points.npy", start_points)
+
+    persisted_snaps = {}
+    for i, node_idx in enumerate((0, 1, 2, 3)):
+        result = SnapResult(node_index=node_idx, gap_m=0.0, gap_dz_m=0.0)
+        stand_in_subgraph = LocalSubgraph(
+            global_node_ids=np.arange(4), local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
+            local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
+            interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+            local_node_ele=np.zeros(0, dtype=np.float32), interior_ele=np.zeros(0, dtype=np.float32),
+        )
+        persisted_snaps[(binfmt.TYPE_HUT, i)] = to_persisted(stand_in_subgraph, result)
+    pack_hub_snaps(persisted_snaps, tmp_path)
+
+    tours_dir = tmp_path / "tours"
+    tour_folder = tours_dir / "LQR"
+    tour_folder.mkdir(parents=True)
+    fixtures = Path(__file__).resolve().parent / "fixtures" / "tour_folder" / "LQR"
+    for name in ("1.gpx", "2.gpx", "3.gpx"):
+        (tour_folder / name).write_text((fixtures / name).read_text(encoding="utf-8"), encoding="utf-8")
+
+    import graph_building.match_tour_edges as mte
+
+    monkeypatch.setattr(mte, "OSM_DIR", tmp_path)
+    monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
+    monkeypatch.setattr(
+        mte, "load_config",
+        lambda: {
+            "tourMatch": {
+                "corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0,
+                "hmmResampleM": 25.0, "hmmObsNoiseM": 25.0, "hmmMaxDistM": 150.0,
+                "hmmDistNoiseM": 25.0, "endpointBridgeMaxM": 250.0,
+            },
+            "graph": {"maxSnapM": 100.0},
+        },
+    )
+    mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
+
+    records = binfmt.load_array(tmp_path / "tour_edges" / "records.npy", mmap=False)
+    gaps = json.loads((tmp_path / "tour-match-gaps.json").read_text(encoding="utf-8"))
+    assert len(records) == 3
+    assert gaps == []
+
+
+def test_length_divergent_still_reachable_after_hmm_decode_succeeds():
+    # spec §8's "length_divergent still reachable": a fixture where the decode succeeds
+    # end-to-end but the winning path's total length still exceeds lengthDivergenceRatio.
+    subgraph = _line_subgraph_1000m()
+    src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
+    persisted = {src_key: _node_snap(100), tgt_key: _node_snap(101)}
+    # a trace only 100m long, but the only routable path is the 1000m edge - decode succeeds
+    # (it's the only candidate within hmmMaxDistM of a 100m trace sitting on top of its start),
+    # length check must still catch the 10x divergence.
+    trace_points = [(0.0, 0.0), (0.0009, 0.0)]
+    result = match_leg(subgraph, src_key, tgt_key, persisted, trace_points=trace_points,
+                        length_divergence_ratio=2.0, **_HMM_KWARGS)
+    assert result["reason"] == "length_divergent"

@@ -126,6 +126,12 @@ def task_match_tour_edges():
             cli_param("corridor_buffer_m", "corridor-buffer-m", float, CONFIG["tourMatch"]["corridorBufferM"]),
             cli_param("length_divergence_ratio", "length-divergence-ratio", float,
                       CONFIG["tourMatch"]["lengthDivergenceRatio"]),
+            cli_param("hmm_resample_m", "hmm-resample-m", float, CONFIG["tourMatch"]["hmmResampleM"]),
+            cli_param("hmm_obs_noise_m", "hmm-obs-noise-m", float, CONFIG["tourMatch"]["hmmObsNoiseM"]),
+            cli_param("hmm_max_dist_m", "hmm-max-dist-m", float, CONFIG["tourMatch"]["hmmMaxDistM"]),
+            cli_param("hmm_dist_noise_m", "hmm-dist-noise-m", float, CONFIG["tourMatch"]["hmmDistNoiseM"]),
+            cli_param("endpoint_bridge_max_m", "endpoint-bridge-max-m", float,
+                      CONFIG["tourMatch"]["endpointBridgeMaxM"]),
         ],
         task_dep=["compute_edge_profiles", "snap_hubs"],
         file_dep=[

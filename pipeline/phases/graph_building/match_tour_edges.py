@@ -175,6 +175,16 @@ def main(argv=None):
                         help="buffer width (m) around a leg's GPX trace used to select candidate base-graph edges")
     parser.add_argument("--length-divergence-ratio", type=float, default=tm["lengthDivergenceRatio"],
                         help="max allowed ratio between matched-edge length and the leg's own GPX trace length")
+    parser.add_argument("--hmm-resample-m", type=float, default=tm["hmmResampleM"],
+                        help="minimum trace point spacing for HMM matching (decimate-only)")
+    parser.add_argument("--hmm-obs-noise-m", type=float, default=tm["hmmObsNoiseM"],
+                        help="emission Gaussian width for HMM matching (~real GPX accuracy)")
+    parser.add_argument("--hmm-max-dist-m", type=float, default=tm["hmmMaxDistM"],
+                        help="hard candidate-edge cutoff for HMM matching")
+    parser.add_argument("--hmm-dist-noise-m", type=float, default=tm["hmmDistNoiseM"],
+                        help="transition-probability width for HMM matching")
+    parser.add_argument("--endpoint-bridge-max-m", type=float, default=tm["endpointBridgeMaxM"],
+                        help="cap on the hub-snap-to-matched-path bridge at each leg endpoint")
     args = parser.parse_args(argv)
 
     from lib.grid import Grid
@@ -230,17 +240,18 @@ def main(argv=None):
                 from_coord = (from_chosen["lon"], from_chosen["lat"])
                 to_coord = (to_chosen["lon"], to_chosen["lat"])
 
-                trace_length_m = sum(
-                    haversine_m(points[i][0], points[i][1], points[i + 1][0], points[i + 1][1])
-                    for i in range(len(points) - 1)
-                )
                 bounds = corridor_bounds(points, args.corridor_buffer_m, grid)
                 subgraph = clip_subgraph_to_bounds(
                     _cached_gather_for_bounds(base_graph_dir, grid, bounds), bounds,
                 )
 
-                result = match_leg(subgraph, from_key, to_key, persisted_snaps,
-                                    trace_length_m, args.length_divergence_ratio)
+                result = match_leg(
+                    subgraph, from_key, to_key, persisted_snaps, trace_points=points,
+                    length_divergence_ratio=args.length_divergence_ratio,
+                    hmm_resample_m=args.hmm_resample_m, hmm_obs_noise_m=args.hmm_obs_noise_m,
+                    hmm_max_dist_m=args.hmm_max_dist_m, hmm_dist_noise_m=args.hmm_dist_noise_m,
+                    endpoint_bridge_max_m=args.endpoint_bridge_max_m,
+                )
                 if not result["ok"]:
                     gaps.append({**gap_ctx, "reason": result["reason"], "detail": result["detail"]})
                     continue
