@@ -4,7 +4,10 @@ shape, different internals"), plus spec §2's endpoint trim/bridge reconciliatio
 from hmm_match.py so the matching core (map construction + decoding) and the accumulation/
 reconciliation logic can be tested and read independently."""
 
-from lib.cell_igraph import PathResult
+import dataclasses
+
+from lib.cell_igraph import PathResult, build_igraph_with_snaps
+from lib.hub_snap import SnapResult
 
 
 def reconstruct_matched_path(leg_map, node_path: list) -> PathResult:
@@ -54,3 +57,66 @@ def reconstruct_matched_path(leg_map, node_path: list) -> PathResult:
         trail_coords, distance_m, road_m, ungraded_m, inferred_m, ascent_m, descent_m,
         max_ele_m, max_sac_rank, has_via_ferrata, base_edge_ids,
     )
+
+
+@dataclasses.dataclass
+class BridgeTooLong:
+    endpoint: str
+    bridge_m: float
+    cap_m: float
+
+
+def _bridge_node_path_and_length(subgraph, anchor_label: int, decoded_end_label: int):
+    """Dijkstra INSIDE the corridor subgraph from the anchor to wherever the decode actually
+    starts/ends (spec §2's bridge case: "between the hub and where the recorded track begins, the
+    trace describes no shape at all, so shortest-path is the only defensible reconstruction").
+    anchor_label/decoded_end_label are subgraph.local_nodes' own node indices (0..n-1) - the same
+    label space leg_map's InMemMap uses for parent-edge endpoints (Task 5/7 never renumber those),
+    so this is only ever called with a node-snap anchor and a decoded endpoint that is itself an
+    original graph node (never a minted interior/split-point label)."""
+    graph, hub_vertex, _ = build_igraph_with_snaps(
+        subgraph,
+        {"anchor": SnapResult(node_index=anchor_label),
+         "decoded_end": SnapResult(node_index=decoded_end_label)},
+    )
+    src_v, tgt_v = hub_vertex["anchor"], hub_vertex["decoded_end"]
+    if src_v == tgt_v:
+        return [anchor_label], 0.0
+    vpath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="vpath")[0]
+    length = graph.distances(src_v, tgt_v, weights="weight")[0][0]
+    return vpath, length
+
+
+def reconcile_endpoints(subgraph, leg_map, node_path: list, endpoint_bridge_max_m: float):
+    """Spec §2's trim-or-bridge: reconciles a decoded node_path (never lied to about where the
+    trace starts) to leg_map.src_anchor/tgt_anchor. Mirrored at both ends. Returns the reconciled
+    node_path, or a BridgeTooLong if either end's bridge exceeds endpoint_bridge_max_m."""
+    result = list(node_path)
+
+    if result[0] != leg_map.src_anchor:
+        if leg_map.src_anchor in result:
+            idx = result.index(leg_map.src_anchor)
+            result = result[idx:]
+        else:
+            bridge_nodes, bridge_len = _bridge_node_path_and_length(
+                subgraph, leg_map.src_anchor, result[0],
+            )
+            if bridge_len > endpoint_bridge_max_m:
+                return BridgeTooLong(endpoint="from", bridge_m=bridge_len,
+                                      cap_m=endpoint_bridge_max_m)
+            result = [*bridge_nodes[:-1], *result]
+
+    if result[-1] != leg_map.tgt_anchor:
+        if leg_map.tgt_anchor in result:
+            idx = len(result) - 1 - result[::-1].index(leg_map.tgt_anchor)
+            result = result[:idx + 1]
+        else:
+            bridge_nodes, bridge_len = _bridge_node_path_and_length(
+                subgraph, leg_map.tgt_anchor, result[-1],
+            )
+            if bridge_len > endpoint_bridge_max_m:
+                return BridgeTooLong(endpoint="to", bridge_m=bridge_len,
+                                      cap_m=endpoint_bridge_max_m)
+            result = [*result, *bridge_nodes[1:]]
+
+    return result
