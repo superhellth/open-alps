@@ -14,6 +14,9 @@ export interface FormState {
   allowedOperators: Set<HutOperator>
   allowServiced: boolean
   allowSelfService: boolean
+  startDate: string
+  numOfPeople: number
+  onlyAvailable: boolean
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -28,6 +31,9 @@ export const DEFAULT_FORM: FormState = {
   allowedOperators: new Set(['av', 'sonstige']),
   allowServiced: true,
   allowSelfService: false,
+  startDate: '',
+  numOfPeople: 1,
+  onlyAvailable: false,
 }
 
 function hutClassAllowed(c: HutClass, form: FormState): boolean {
@@ -49,7 +55,11 @@ export function isFilterSelectionValid(form: FormState): boolean {
   return true
 }
 
-export function buildQuery(form: FormState, hutsByIndex: (HutClass | null)[]): Query {
+export function buildQuery(
+  form: FormState,
+  hutsByIndex: (HutClass | null)[],
+  availability?: Query['availability'],
+): Query {
   return {
     mode: form.mode,
     legCountMin: form.legCountRange[0],
@@ -62,5 +72,6 @@ export function buildQuery(form: FormState, hutsByIndex: (HutClass | null)[]): Q
     maxEleM: form.maxEleM === '' ? null : toNumberOrDefault(form.maxEleM, Infinity),
     allowViaFerrata: form.allowViaFerrata,
     allowedHutIndices: allowedHutIndices(form, hutsByIndex),
+    availability: form.onlyAvailable ? availability : undefined,
   }
 }
