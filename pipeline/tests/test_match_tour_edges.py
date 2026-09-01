@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 import numpy as np
+import pytest
 
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
@@ -45,22 +46,44 @@ def _node_snap(global_node_id, gap_m=0.0, gap_dz_m=0.0):
                           gap_m=gap_m, gap_dz_m=gap_dz_m)
 
 
+_HMM_KWARGS = dict(hmm_resample_m=25.0, hmm_obs_noise_m=25.0, hmm_max_dist_m=150.0,
+                    hmm_dist_noise_m=25.0, endpoint_bridge_max_m=250.0)
+
+
 def test_match_leg_routes_a_simple_corridor():
     subgraph = _line_subgraph_1000m()
     src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
     persisted = {src_key: _node_snap(100), tgt_key: _node_snap(101)}
-    result = match_leg(subgraph, src_key, tgt_key, persisted, trace_length_m=1000.0,
-                        length_divergence_ratio=2.0)
+    trace_points = [(0.0, 0.0), (0.009, 0.0)]  # ~1000m, matches _line_subgraph_1000m's own edge
+    result = match_leg(subgraph, src_key, tgt_key, persisted, trace_points=trace_points,
+                        length_divergence_ratio=2.0, **_HMM_KWARGS)
     assert result["ok"] is True
-    assert result["path"].distance_m == 1000.0
+    # HMM matching computes distance from the actual node coordinates (haversine), not the
+    # subgraph edge's own "dist" field - 0.009deg of longitude at the equator is ~1000.75m.
+    assert result["path"].distance_m == pytest.approx(1000.7543398010286)
+
+
+def test_match_leg_path_excludes_the_two_anchor_snap_points_themselves():
+    # mirrors accumulate_path's existing contract: build_tour_record prepends/appends the hub
+    # coordinate itself, so path.coords must NOT already contain the anchor snap points.
+    subgraph = _line_subgraph_1000m()
+    src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
+    persisted = {src_key: _node_snap(100), tgt_key: _node_snap(101)}
+    result = match_leg(subgraph, src_key, tgt_key, persisted,
+                        trace_points=[(0.0, 0.0), (0.009, 0.0)], length_divergence_ratio=2.0,
+                        **_HMM_KWARGS)
+    assert result["ok"] is True
+    # a 2-node line has no interior coords once its own two endpoints are excluded
+    assert result["path"].coords == []
 
 
 def test_match_leg_reports_hub_unsnapped_when_src_missing():
     subgraph = _line_subgraph_1000m()
     src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
     persisted = {tgt_key: _node_snap(101)}  # src_key never snapped
-    result = match_leg(subgraph, src_key, tgt_key, persisted, trace_length_m=1000.0,
-                        length_divergence_ratio=2.0)
+    result = match_leg(subgraph, src_key, tgt_key, persisted,
+                        trace_points=[(0.0, 0.0), (0.009, 0.0)], length_divergence_ratio=2.0,
+                        **_HMM_KWARGS)
     assert result == {"ok": False, "reason": "hub_unsnapped", "detail": {"missing": [src_key]}}
 
 
@@ -73,8 +96,8 @@ def test_match_leg_reports_outside_extract_when_corridor_is_empty():
         local_node_ele=np.zeros(0, dtype=np.float32), interior_ele=np.zeros(0, dtype=np.float32),
     )
     src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
-    result = match_leg(empty, src_key, tgt_key, {}, trace_length_m=1000.0,
-                        length_divergence_ratio=2.0)
+    result = match_leg(empty, src_key, tgt_key, {}, trace_points=[(0.0, 0.0), (0.009, 0.0)],
+                        length_divergence_ratio=2.0, **_HMM_KWARGS)
     assert result["reason"] == "outside_extract"
 
 
@@ -83,8 +106,9 @@ def test_match_leg_reports_length_divergent_when_routed_far_exceeds_trace():
     src_key, tgt_key = (binfmt.TYPE_HUT, 0), (binfmt.TYPE_HUT, 1)
     persisted = {src_key: _node_snap(100), tgt_key: _node_snap(101)}
     # routed 1000m vs a trace of only 100m - ratio 10x, past the 2.0 divergence ratio.
-    result = match_leg(subgraph, src_key, tgt_key, persisted, trace_length_m=100.0,
-                        length_divergence_ratio=2.0)
+    result = match_leg(subgraph, src_key, tgt_key, persisted,
+                        trace_points=[(0.0, 0.0), (0.0009, 0.0)], length_divergence_ratio=2.0,
+                        **_HMM_KWARGS)
     assert result["reason"] == "length_divergent"
 
 
@@ -243,7 +267,11 @@ def test_golden_single_part_tour_matches_all_legs_end_to_end(tmp_path, monkeypat
     monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
     monkeypatch.setattr(
         mte, "load_config",
-        lambda: {"tourMatch": {"corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0},
+        lambda: {"tourMatch": {
+                      "corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0,
+                      "hmmResampleM": 25.0, "hmmObsNoiseM": 25.0, "hmmMaxDistM": 150.0,
+                      "hmmDistNoiseM": 25.0, "endpointBridgeMaxM": 250.0,
+                  },
                   "graph": {"maxSnapM": 100.0}},
     )
     mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])
@@ -314,7 +342,11 @@ def test_golden_tour_reports_leg_endpoint_unsnapped_when_endpoint_far_from_any_h
     monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
     monkeypatch.setattr(
         mte, "load_config",
-        lambda: {"tourMatch": {"corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0},
+        lambda: {"tourMatch": {
+                      "corridorBufferM": 150.0, "lengthDivergenceRatio": 2.0,
+                      "hmmResampleM": 25.0, "hmmObsNoiseM": 25.0, "hmmMaxDistM": 150.0,
+                      "hmmDistNoiseM": 25.0, "endpointBridgeMaxM": 250.0,
+                  },
                   "graph": {"maxSnapM": 100.0}},
     )
     mte.main(["--base-graph-dir", str(base_graph_dir), "--out-dir", str(tmp_path)])

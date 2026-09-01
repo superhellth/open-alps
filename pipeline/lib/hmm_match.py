@@ -248,6 +248,7 @@ class LegMap:
     sub_edges: list  # every kept SubEdge actually added to inmem_map
     src_anchor: int
     tgt_anchor: int
+    node_coords: dict = None  # every node label -> (lon, lat) actually added to inmem_map
 
 
 def build_leg_map(subgraph, src_snap, tgt_snap, trace: list, max_dist_m: float) -> LegMap:
@@ -300,7 +301,8 @@ def build_leg_map(subgraph, src_snap, tgt_snap, trace: list, max_dist_m: float) 
     for se in kept:
         inmem_map.add_edge(se.from_node, se.to_node)
 
-    return LegMap(inmem_map=inmem_map, sub_edges=kept, src_anchor=src_anchor, tgt_anchor=tgt_anchor)
+    return LegMap(inmem_map=inmem_map, sub_edges=kept, src_anchor=src_anchor, tgt_anchor=tgt_anchor,
+                  node_coords=all_nodes)
 
 
 @dataclasses.dataclass
