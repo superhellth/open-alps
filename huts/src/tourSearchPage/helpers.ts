@@ -1,5 +1,6 @@
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { SearchResult, TourResult } from '../tourSearch/types.js'
+import type { FreeByOffset } from '../availability/types.js'
 
 export const PAGE_SIZE = 25
 
@@ -81,4 +82,37 @@ export function toNumberOrDefault(value: string, fallback: number): number {
   if (value === '') return fallback
   const n = Number(value)
   return Number.isFinite(n) ? n : fallback
+}
+
+export type AvailabilityBadge = 'free' | 'unavailable' | 'direct' | 'unknown' | null
+
+/** Mirrors search.ts's hutAvailable() classification (spec §3), but returns which of the four UI
+ *  states applies instead of a pass/fail boolean — used for badges-only mode, where every hut in
+ *  an already-found chain is labeled independently of whether the search itself was constrained. */
+export function hutAvailabilityBadge(
+  hutIndex: number,
+  offsetDays: number,
+  ohrsIdByHutIndex: Map<number, string | null> | null,
+  freeByOffset: FreeByOffset | null,
+): AvailabilityBadge {
+  if (!ohrsIdByHutIndex || !freeByOffset) return null
+  const ohrsId = ohrsIdByHutIndex.get(hutIndex)
+  if (ohrsId == null) return 'direct'
+  const free = freeByOffset.get(offsetDays)
+  if (free === 'unknown' || free === undefined) return 'unknown'
+  return free.has(ohrsId) ? 'free' : 'unavailable'
+}
+
+export const AVAILABILITY_BADGE_LABEL: Record<Exclude<AvailabilityBadge, null>, string> = {
+  free: 'frei',
+  unavailable: 'ausgebucht/geschlossen',
+  direct: 'Direktbuchung',
+  unknown: 'unbekannt',
+}
+
+export const AVAILABILITY_BADGE_COLOR: Record<Exclude<AvailabilityBadge, null>, string> = {
+  free: '#2e7d32',
+  unavailable: '#c62828',
+  direct: '#616161',
+  unknown: '#9e9e9e',
 }
