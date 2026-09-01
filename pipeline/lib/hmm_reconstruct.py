@@ -67,48 +67,50 @@ class BridgeTooLong:
     cap_m: float
 
 
-def _bridge_into_leg_map(subgraph, leg_map, anchor_label: int, decoded_end_label: int):
-    """Routes INSIDE the corridor subgraph from a real-node anchor to wherever the decode
-    actually starts/ends (spec §2's bridge case: "between the hub and where the recorded track
-    begins, the trace describes no shape at all, so shortest-path is the only defensible
-    reconstruction"). Unlike leg_map's own graph, `subgraph` was never filtered to hmmMaxDistM of
-    the trace, so it can reach an anchor whose own edges got filtered out entirely for sitting
-    off-corridor.
-
-    decoded_end_label is looked up by its own COORDINATE (leg_map.node_coords), not assumed to
-    already be a subgraph node index - match_trace's decode can just as easily land on an
-    interior/split-point label lib/hmm_match.py minted, which does not exist as a vertex in
-    `subgraph`'s own igraph at all.
-
-    Mutates leg_map.sub_edges/leg_map.node_coords in place: any bridge-traversed edge that
-    build_leg_map's own hmmMaxDistM filter dropped, or any real subgraph node leg_map never kept,
-    is added back so reconstruct_matched_path's (from_node, to_node) lookup and match_leg's
-    coordinate fill-in both still work against the reconciled path. Returns
-    (bridge_node_labels, bridge_length_m) - bridge_node_labels starts at anchor_label and ends at
-    decoded_end_label, both already leg_map-compatible; anchor_label is always a node-snap (a
-    mid-chain anchor is always already the decode's own start/end by construction, so is never
-    bridged from - only the decoded_end side needs coordinate-based re-location)."""
-    end_lon, end_lat = leg_map.node_coords[decoded_end_label]
-    end_snap = snap_hub_to_subgraph(subgraph, end_lon, end_lat, max_snap_m=1.0)
-    if isinstance(end_snap, SnapRejection):
-        # decoded_end_label's own coordinate came from this exact subgraph in the first place
+def _snap_leg_map_label(subgraph, leg_map, label: int):
+    """Resolves any leg_map node label (real subgraph node, or a synthetic interior/split-point
+    label lib/hmm_match.py minted) to a SnapResult against `subgraph`, by coordinate - never by
+    assuming the label is itself a valid subgraph vertex index, which it need not be."""
+    lon, lat = leg_map.node_coords[label]
+    snap = snap_hub_to_subgraph(subgraph, lon, lat, max_snap_m=1.0)
+    if isinstance(snap, SnapRejection):
+        # This label's own coordinate came from this exact subgraph in the first place
         # (Task 5/7's expansion never invents geometry) - failing to re-locate it within 1m only
         # happens if the corridor gather itself changed between building leg_map and calling
         # this, which never happens within one match_leg call.
-        raise AssertionError(
-            f"could not re-locate decoded endpoint {decoded_end_label} on its own subgraph"
-        )
+        raise AssertionError(f"could not re-locate leg_map label {label} on its own subgraph")
+    return snap
 
-    graph, hub_vertex, _ = build_igraph_with_snaps(
-        subgraph, {"anchor": SnapResult(node_index=anchor_label), "decoded_end": end_snap},
-    )
-    src_v, tgt_v = hub_vertex["anchor"], hub_vertex["decoded_end"]
+
+def _bridge_into_leg_map(subgraph, leg_map, from_label: int, to_label: int):
+    """Routes INSIDE the corridor subgraph from from_label to to_label, in that exact traversal
+    direction (spec §2's bridge case: "between the hub and where the recorded track begins, the
+    trace describes no shape at all, so shortest-path is the only defensible reconstruction").
+    Unlike leg_map's own graph, `subgraph` was never filtered to hmmMaxDistM of the trace, so it
+    can reach an anchor whose own edges got filtered out entirely for sitting off-corridor.
+
+    Both endpoints are looked up by their own COORDINATE (leg_map.node_coords) via
+    _snap_leg_map_label, not assumed to already be subgraph node indices - match_trace's decode
+    can land on an interior/split-point label lib/hmm_match.py minted, which does not exist as a
+    vertex in `subgraph`'s own igraph at all.
+
+    Mutates leg_map.sub_edges/leg_map.node_coords in place: any bridge-traversed edge that
+    build_leg_map's own hmmMaxDistM filter dropped, or any real subgraph node leg_map never kept,
+    is added back (in the from_label -> to_label direction actually walked) so
+    reconstruct_matched_path's (from_node, to_node) lookup and match_leg's coordinate fill-in both
+    still work against the reconciled path. Returns (bridge_node_labels, bridge_length_m) -
+    bridge_node_labels starts at from_label and ends at to_label, both already leg_map-compatible."""
+    from_snap = _snap_leg_map_label(subgraph, leg_map, from_label)
+    to_snap = _snap_leg_map_label(subgraph, leg_map, to_label)
+
+    graph, hub_vertex, _ = build_igraph_with_snaps(subgraph, {"from": from_snap, "to": to_snap})
+    src_v, tgt_v = hub_vertex["from"], hub_vertex["to"]
     if src_v == tgt_v:
-        return [anchor_label], 0.0
+        return [from_label], 0.0
 
     epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
     if not epath:
-        return [anchor_label], float("inf")
+        return [from_label], float("inf")
 
     # Walk the edge path into a vertex path ourselves (rather than a second get_shortest_paths
     # call for vpath) so the vertex/edge sequences can never disagree on a tie-broken alternate
@@ -116,20 +118,20 @@ def _bridge_into_leg_map(subgraph, leg_map, anchor_label: int, decoded_end_label
     node_lon, node_lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
     existing_pairs = {(se.from_node, se.to_node) for se in leg_map.sub_edges}
     cur = src_v
-    translated = [anchor_label]
+    translated = [from_label]
     length = 0.0
     for eid in epath:
         e = graph.es[eid]
         forward = e.source == cur
         nxt = e.target if forward else e.source
         length += e["weight"]
-        label = decoded_end_label if nxt == tgt_v else nxt
+        label = to_label if nxt == tgt_v else nxt
         if label not in leg_map.node_coords:
             leg_map.node_coords[label] = (float(node_lon[nxt]), float(node_lat[nxt]))
-        from_label = translated[-1]
-        if (from_label, label) not in existing_pairs:
+        from_node_label = translated[-1]
+        if (from_node_label, label) not in existing_pairs:
             leg_map.sub_edges.append(SubEdge(
-                from_node=from_label, to_node=label, base_edge_id=e["base_edge_id"],
+                from_node=from_node_label, to_node=label, base_edge_id=e["base_edge_id"],
                 direction=1 if forward else -1, segment_index=0,
                 dist_m=e["dist"], road_m=e["road_m"], ungraded_m=e["ungraded_m"],
                 inferred_m=e["inferred_m"],
@@ -137,7 +139,7 @@ def _bridge_into_leg_map(subgraph, leg_map, anchor_label: int, decoded_end_label
                 descent_m=e["descent_m"] if forward else e["ascent_m"],
                 max_ele_m=e["max_ele_m"], sac_rank=e["sac_rank"], via_ferrata=e["via_ferrata"],
             ))
-            existing_pairs.add((from_label, label))
+            existing_pairs.add((from_node_label, label))
         translated.append(label)
         cur = nxt
 
@@ -169,7 +171,7 @@ def reconcile_endpoints(subgraph, leg_map, node_path: list, endpoint_bridge_max_
             result = result[:idx + 1]
         else:
             bridge_nodes, bridge_len = _bridge_into_leg_map(
-                subgraph, leg_map, leg_map.tgt_anchor, result[-1],
+                subgraph, leg_map, result[-1], leg_map.tgt_anchor,
             )
             if bridge_len > endpoint_bridge_max_m:
                 return BridgeTooLong(endpoint="to", bridge_m=bridge_len,

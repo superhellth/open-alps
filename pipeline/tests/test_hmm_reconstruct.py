@@ -124,6 +124,28 @@ def test_reconcile_endpoints_bridges_when_anchor_is_off_the_decoded_path():
     assert result[-1] == 2
 
 
+def test_reconcile_endpoints_bridges_the_target_side_in_the_correct_direction():
+    # Regression: the "to"-side bridge was spliced in the wrong direction/order, duplicating the
+    # decoded path's own last node into a (X, X) self-loop reconstruct_matched_path could never
+    # find in leg_map.sub_edges - crashed match_leg against real Kaisertour data.
+    from lib.hmm_reconstruct import reconcile_endpoints
+
+    subgraph = _corridor_with_gap_to_anchor()
+    leg_map = LegMap(inmem_map=None, sub_edges=[
+        SubEdge(from_node=0, to_node=1, base_edge_id=300, direction=1, segment_index=0,
+                dist_m=80.0, road_m=0.0, ungraded_m=0.0, inferred_m=80.0,
+                ascent_m=2.0, descent_m=0.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False),
+    ], src_anchor=0, tgt_anchor=2, node_coords={0: (0.0, 0.0), 1: (0.0007, 0.0), 2: (0.005, 0.0)})
+
+    # decode covers 0->1 only; tgt_anchor (node 2) sits off the decoded path's own end.
+    result = reconcile_endpoints(subgraph=subgraph, leg_map=leg_map, node_path=[0, 1],
+                                  endpoint_bridge_max_m=1000.0)
+    assert result == [0, 1, 2]  # no duplicate of node 1
+
+    path = reconstruct_matched_path(leg_map, result)
+    assert path.base_edge_ids == [300, 303]  # walks the bridged 1->2 edge (edge_id 101 -> *3)
+
+
 def test_reconcile_endpoints_bridges_to_a_synthetic_mid_edge_decode_endpoint():
     # Regression: the decoded path's own start/end can be a minted interior/split-point label
     # (lib/hmm_match.py's expand_edge_interiors/materialize_anchor), not necessarily an original
