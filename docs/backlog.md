@@ -9,7 +9,8 @@ under `docs/superpowers/`.
 
 ![alt text](image.png)
 ![alt text](image-1.png)
-bugs?
+![alt text](image-2.png)
+bugs? Some of this should be solved by rerunning the pipeline with the duplication avoidance
 
 ## Medium
 
@@ -35,6 +36,10 @@ At the moment the data/ folder is quite a mess. Lets enforce more structure onto
 Atm code is quite unstructured not skill-checked with improve codebase architecture
 
 ## Low
+
+### Include Aerial lift in access nodes?
+
+Explore if it would make sense to include aerial lifts in access nodes or as routable way. Nice to have for a later point
 
 ### Settle invariant: official/third-party tours - dont ship gap legs
 
