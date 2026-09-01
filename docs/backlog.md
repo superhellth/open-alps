@@ -5,12 +5,6 @@ explanation, evidence and pointers live in the dedicated file under `docs/backlo
 priority first within each section. An item graduates out of here when it gets its own spec or plan
 under `docs/superpowers/`.
 
-## High
-
-### Hut-availability-based routing
-In the frontend, incorporate the hut availability checks into routing so users can actually explore routes
-without always having to double-check bed availability on another website.
-
 ## Medium
 
 ### Idea: Introduce a pipeline explanation/visualization
