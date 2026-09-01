@@ -178,3 +178,48 @@ def test_materialize_anchor_mid_chain_snap_splits_parent_edge():
     assert len(extra_edges) == 8
     forward_from_u = [se for se in extra_edges if se.direction == 1 and se.base_edge_id == 127]
     assert forward_from_u[0].from_node == 0  # u-side half starts at the parent's u (label 0)
+
+
+def _summit_corridor_subgraph():
+    """4 nodes: 0 (src hub) --- 1 (low, direct) --- 3 (tgt hub), and 0 --- 2 (summit, higher)
+    --- 3: a short low path and a longer path over a "summit" node, mirroring Kaisertour leg 1's
+    shape (spec §8)."""
+    nodes = np.zeros(4, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.005, 0.0002, 0)   # low waypoint, close to the direct chord
+    nodes[2] = (0.005, 0.003, 0)    # summit, well off the direct chord
+    nodes[3] = (0.010, 0.0, 0)
+    edges = np.zeros(4, dtype=binfmt.EDGE_DTYPE)
+    # low direct route: 0->1->3, short
+    edges[0] = (0, 1, 400.0, 0.0, 0.0, 0.0, 400.0, 20.0, 5.0, 1, False, True, 0, 0, 1)
+    edges[1] = (1, 3, 400.0, 0.0, 0.0, 0.0, 400.0, 5.0, 20.0, 1, False, True, 0, 0, 2)
+    # summit route: 0->2->3, longer
+    edges[2] = (0, 2, 550.0, 0.0, 0.0, 0.0, 550.0, 300.0, 5.0, 1, False, True, 0, 0, 3)
+    edges[3] = (2, 3, 550.0, 0.0, 0.0, 0.0, 550.0, 5.0, 300.0, 1, False, True, 0, 0, 4)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    return LocalSubgraph(
+        global_node_ids=np.array([0, 1, 2, 3]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.array([1000.0, 1050.0, 1600.0, 1200.0], dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+
+
+def test_match_trace_prefers_the_summit_path_when_trace_follows_it():
+    from lib.hmm_match import build_leg_map, match_trace, resample_trace
+
+    subgraph = _summit_corridor_subgraph()
+    src_snap = SnapResult(node_index=0, gap_m=0.0, gap_dz_m=0.0)
+    tgt_snap = SnapResult(node_index=3, gap_m=0.0, gap_dz_m=0.0)
+    trace = resample_trace(
+        [(0.0, 0.0), (0.003, 0.0018), (0.005, 0.003), (0.007, 0.0018), (0.010, 0.0)],
+        resample_m=25.0,
+    )
+    leg_map = build_leg_map(subgraph, src_snap, tgt_snap, trace, max_dist_m=150.0)
+    node_path = match_trace(leg_map, trace, obs_noise_m=25.0, max_dist_m=150.0, dist_noise_m=25.0)
+
+    assert not isinstance(node_path, type(None))
+    summit_sub_edges = [se for se in leg_map.sub_edges if se.base_edge_id in (9, 12)]  # edges 3,4 -> *3
+    summit_labels = {se.from_node for se in summit_sub_edges} | {se.to_node for se in summit_sub_edges}
+    assert 2 in node_path  # the summit node itself is visited
+    assert set(node_path) & summit_labels
