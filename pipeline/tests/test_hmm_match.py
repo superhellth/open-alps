@@ -135,3 +135,46 @@ def test_filter_sub_edges_near_trace_drops_far_edges_keeps_near_ones():
         [near, far], extra_nodes={}, trace=trace, max_dist_m=150.0, node_coords=node_coords,
     )
     assert kept == [near]
+
+
+from lib.hub_snap import SnapResult
+from lib.edge_split import SplitResult
+
+
+def test_materialize_anchor_node_snap_reuses_existing_node_label():
+    from lib.hmm_match import materialize_anchor
+
+    subgraph = _curved_edge_subgraph()
+    snap = SnapResult(node_index=0, gap_m=5.0, gap_dz_m=0.0)
+    anchor, extra_edges, extra_nodes, next_id = materialize_anchor(subgraph, snap, next_node_id=2)
+    assert anchor == 0
+    assert extra_edges == []
+    assert extra_nodes == {}
+    assert next_id == 2
+
+
+def test_materialize_anchor_mid_chain_snap_splits_parent_edge():
+    from lib.hmm_match import materialize_anchor
+
+    subgraph = _curved_edge_subgraph()
+    split = SplitResult(
+        split_coord=(0.0009, 0.0004), dist_to_u=110.0, dist_to_v=130.0,
+        road_m_to_u=0.0, road_m_to_v=0.0, ungraded_m_to_u=0.0, ungraded_m_to_v=0.0,
+        inferred_m_to_u=110.0, inferred_m_to_v=130.0,
+        interior_to_u=[(0.0004, 0.0005)], interior_to_v=[(0.0013, 0.0003)],
+    )
+    snap = SnapResult(node_index=None, edge_local_index=0, split=split, gap_m=8.0, gap_dz_m=1.0)
+    anchor, extra_edges, extra_nodes, next_id = materialize_anchor(subgraph, snap, next_node_id=2)
+
+    # 3 new nodes minted: the split point itself, plus one per half's own interior point (each
+    # half is expanded into its own segments the same way expand_edge_interiors expands a whole
+    # parent edge, so its interior points need labels of their own too).
+    assert next_id == 5
+    assert extra_nodes[anchor] == split.split_coord
+    ids = {se.base_edge_id for se in extra_edges}
+    assert ids == {126 + 1, 126 + 2}  # edge_id 42 -> 126 base; +1/+2 halves, never plain 126
+    # bidirectional: 2 halves x 2 directions each = 4 sub-edges, but each half's own interior
+    # (1 point) means 2 segments per direction -> 2 halves x 2 segments x 2 directions = 8.
+    assert len(extra_edges) == 8
+    forward_from_u = [se for se in extra_edges if se.direction == 1 and se.base_edge_id == 127]
+    assert forward_from_u[0].from_node == 0  # u-side half starts at the parent's u (label 0)
