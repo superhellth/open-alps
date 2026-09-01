@@ -39,7 +39,12 @@
   "approach": { "k": 3 },
   "tourMatch": {
     "corridorBufferM": 150.0,
-    "lengthDivergenceRatio": 2.0
+    "lengthDivergenceRatio": 2.0,
+    "hmmResampleM": 25.0,
+    "hmmObsNoiseM": 25.0,
+    "hmmMaxDistM": 150.0,
+    "hmmDistNoiseM": 25.0,
+    "endpointBridgeMaxM": 250.0
   },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
   "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 }
