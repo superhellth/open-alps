@@ -5,8 +5,10 @@ import {
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import type { SearchResult, TourMode, TourResult } from '../tourSearch/types.js'
-import { PAGE_SIZE, SORT_LABEL, VILLAGE_EMPTY_STATE_HINT, killCounterGuidance, legWaypointLabels, type SortKey } from './helpers.js'
+import { hutAvailabilityBadge, AVAILABILITY_BADGE_LABEL, AVAILABILITY_BADGE_COLOR, PAGE_SIZE, SORT_LABEL, VILLAGE_EMPTY_STATE_HINT, killCounterGuidance, legWaypointLabels, type SortKey } from './helpers.js'
 import { hutClassBadge, OPERATOR_COLOR, type HutClass } from '../hutClass.js'
+import type { FreeByOffset } from '../availability/types.js'
+import AvailabilityDetailPanel from './AvailabilityDetailPanel.js'
 
 // Memoized so the (up to PAGE_SIZE) result cards and tables are only reconciled when the search
 // results/sort/paging actually change — not on every keystroke in the sibling filter bar (every
@@ -16,6 +18,7 @@ import { hutClassBadge, OPERATOR_COLOR, type HutClass } from '../hutClass.js'
 const TourList = memo(function TourList({
   result, displayedChains, pageChains, page, pageCount, setPage,
   sortKey, setSortKey, hutNameById, hutClassByIndex, startLabel, expandedChain, setExpandedChain, mode,
+  freeByOffset, ohrsIdByHutIndex, hutOhrsByIndex, startDate, numOfPeople,
 }: {
   result: SearchResult
   displayedChains: TourResult[]
@@ -31,6 +34,11 @@ const TourList = memo(function TourList({
   expandedChain: number | null
   setExpandedChain: (i: number | null) => void
   mode: TourMode
+  freeByOffset: FreeByOffset | null
+  ohrsIdByHutIndex: Map<number, string | null>
+  hutOhrsByIndex: Map<number, { ohrsHutId: string | null; tenantCode: number | null }>
+  startDate: Date | null
+  numOfPeople: number
 }) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -102,22 +110,35 @@ const TourList = memo(function TourList({
                 <CardContent sx={{ pt: 0 }}>
                   <Typography variant="body2" sx={{ mb: 1 }}>
                     {startLabel(chain.startId)}
-                    {chain.huts.map((h) => (
-                      <span key={h}>
-                        {' → '}
-                        {hutNameById.get(h) ?? h}
-                        {hutClassByIndex.has(h) && (
-                          <span
-                            style={{
-                              marginLeft: 4, padding: '0 4px', borderRadius: 3, fontSize: '0.7rem',
-                              color: '#fff', backgroundColor: OPERATOR_COLOR[hutClassByIndex.get(h)!.operator],
-                            }}
-                          >
-                            {hutClassBadge(hutClassByIndex.get(h)!)}
-                          </span>
-                        )}
-                      </span>
-                    ))}
+                    {chain.huts.map((h, idx) => {
+                      const badge = hutAvailabilityBadge(h, idx + 1, ohrsIdByHutIndex, freeByOffset)
+                      return (
+                        <span key={h}>
+                          {' → '}
+                          {hutNameById.get(h) ?? h}
+                          {hutClassByIndex.has(h) && (
+                            <span
+                              style={{
+                                marginLeft: 4, padding: '0 4px', borderRadius: 3, fontSize: '0.7rem',
+                                color: '#fff', backgroundColor: OPERATOR_COLOR[hutClassByIndex.get(h)!.operator],
+                              }}
+                            >
+                              {hutClassBadge(hutClassByIndex.get(h)!)}
+                            </span>
+                          )}
+                          {badge && (
+                            <span
+                              style={{
+                                marginLeft: 4, padding: '0 4px', borderRadius: 3, fontSize: '0.7rem',
+                                color: '#fff', backgroundColor: AVAILABILITY_BADGE_COLOR[badge],
+                              }}
+                            >
+                              {AVAILABILITY_BADGE_LABEL[badge]}
+                            </span>
+                          )}
+                        </span>
+                      )
+                    })}
                     {' → '}
                     {startLabel(chain.exitStartId)}
                   </Typography>
@@ -146,6 +167,15 @@ const TourList = memo(function TourList({
                       })}
                     </TableBody>
                   </Table>
+                  {startDate && (
+                    <AvailabilityDetailPanel
+                      chain={chain}
+                      hutNameById={hutNameById}
+                      hutOhrsByIndex={hutOhrsByIndex}
+                      startDate={startDate}
+                      numOfPeople={numOfPeople}
+                    />
+                  )}
                 </CardContent>
               )}
             </Card>
