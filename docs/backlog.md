@@ -26,6 +26,10 @@ Atm code is quite unstructured not skill-checked with improve codebase architect
 
 ## Low
 
+### Settle invariant: official/third-party tours - dont ship gap legs
+
+At the moment the third-party/official/folder-ingestion part of the pipeline emits a document that contains gap legs. Should be reported in the data quality layer, not shipped to frontend
+
 ### GPX Tool
 
 A small webpage that helps bring GPX tours into a format the pipeline can ingest. Should support: Extending legs to a proper end (dont end on a mountain like Chiemgautour), slicing into legs, as some Tours are one big tour, not split into legs. So needs huts overlay, quality of life features.
