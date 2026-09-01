@@ -441,3 +441,64 @@ describe('searchChains village mode', () => {
     expect(chains.some((c) => c.startId !== c.exitStartId)).toBe(true)
   })
 })
+
+describe('searchChains availability pruning', () => {
+  const availability = (ohrsIdByHutIndex: Map<number, string | null>, freeByOffset: Map<number, Set<string> | 'unknown'>) =>
+    ({ ohrsIdByHutIndex, freeByOffset })
+
+  it('rejects the whole chain when the seed hut has no free beds on night 1', () => {
+    const { chains, killCounters } = searchChains(
+      {
+        mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, 'ohrsA']]), new Map([[1, new Set<string>()]])),
+      },
+      graphData,
+    )
+    expect(chains).toHaveLength(0)
+    expect(killCounters.availability).toBeGreaterThan(0)
+  })
+
+  it('a hut with ohrsHutId null (direct-booking-only) always passes, regardless of freeByOffset', () => {
+    const { chains } = searchChains(
+      {
+        mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, null]]), new Map([[1, new Set<string>()]])),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it("an 'unknown' offset always passes", () => {
+    const { chains } = searchChains(
+      {
+        mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, 'ohrsA']]), new Map<number, Set<string> | 'unknown'>([[1, 'unknown']])),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it('rejects an expansion hut with no free beds on its own night, without killing earlier huts', () => {
+    const { chains, killCounters } = searchChains(
+      {
+        mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints,
+        availability: availability(
+          new Map([[0, 'ohrsA'], [1, 'ohrsB']]),
+          new Map<number, Set<string> | 'unknown'>([[1, new Set(['ohrsA'])], [2, new Set<string>()]]),
+        ),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.includes(1))).toBe(false)
+    expect(chains.some((c) => c.huts.length === 3)).toBe(false)
+    expect(killCounters.availability).toBeGreaterThan(0)
+  })
+
+  it('is byte-for-byte identical to an unconstrained search when availability is absent', () => {
+    const withoutAvailability = searchChains({ mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints }, graphData)
+    const withUndefinedAvailability = searchChains({ mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, availability: undefined }, graphData)
+    expect(withUndefinedAvailability.chains).toEqual(withoutAvailability.chains)
+  })
+})
