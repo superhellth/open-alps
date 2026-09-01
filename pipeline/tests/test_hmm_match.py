@@ -112,3 +112,26 @@ def test_expand_edge_interiors_produces_tagged_bidirectional_chain():
     bwd_descent = sum(se.descent_m for se in backward)
     assert bwd_ascent == pytest.approx(fwd_descent)
     assert bwd_descent == pytest.approx(fwd_ascent)
+
+
+from lib.edge_split import nearest_point_on_polyline
+
+
+def test_filter_sub_edges_near_trace_drops_far_edges_keeps_near_ones():
+    from lib.hmm_match import (
+        SubEdge, filter_sub_edges_near_trace,
+    )
+
+    node_coords = {0: (0.0, 0.0), 1: (0.0, 0.001), 2: (0.01, 0.0), 3: (0.01, 0.001)}
+    near = SubEdge(from_node=0, to_node=1, base_edge_id=3, direction=1, segment_index=0,
+                    dist_m=100.0, road_m=0.0, ungraded_m=0.0, inferred_m=100.0,
+                    ascent_m=0.0, descent_m=0.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False)
+    far = SubEdge(from_node=2, to_node=3, base_edge_id=6, direction=1, segment_index=0,
+                   dist_m=100.0, road_m=0.0, ungraded_m=0.0, inferred_m=100.0,
+                   ascent_m=0.0, descent_m=0.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False)
+    trace = [(0.0, 0.0), (0.0, 0.001)]  # right on top of `near`, ~1km+ from `far`
+
+    kept, kept_nodes = filter_sub_edges_near_trace(
+        [near, far], extra_nodes={}, trace=trace, max_dist_m=150.0, node_coords=node_coords,
+    )
+    assert kept == [near]

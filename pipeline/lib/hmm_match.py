@@ -10,9 +10,11 @@ points, EDGE_DTYPE/COORD_DTYPE columns, PathResult) is (lon, lat). The swap happ
 boundaries in this module - _latlon() below - and nowhere else."""
 
 import dataclasses
+import math
 
 from leuvenmapmatching.map.inmem import InMemMap
 
+from lib.edge_split import nearest_point_on_polyline
 from lib.geo import haversine_m
 
 
@@ -136,3 +138,35 @@ def expand_edge_interiors(subgraph, next_node_id: int):
                 ))
 
     return sub_edges, extra_nodes, next_node_id
+
+
+def _min_dist_to_polyline_m(point: tuple, trace: list, lng_scale: float) -> float:
+    seg_idx, frac = nearest_point_on_polyline(trace, point, lng_scale=lng_scale)
+    ax, ay = trace[seg_idx]
+    bx, by = trace[seg_idx + 1]
+    px, py = ax + frac * (bx - ax), ay + frac * (by - ay)
+    return haversine_m(point[0], point[1], px, py)
+
+
+def filter_sub_edges_near_trace(sub_edges: list, extra_nodes: dict, trace: list,
+                                 max_dist_m: float, node_coords: dict) -> tuple:
+    """Drops any sub-edge whose closer endpoint is further than max_dist_m from `trace` - spec
+    §2's "Bounding the map": no candidate outside the emission cutoff can ever win a Viterbi
+    state. node_coords must map every from_node/to_node label used by sub_edges to (lon, lat)
+    (parent endpoints + extra_nodes combined)."""
+    lng_scale = math.cos(math.radians(sum(p[1] for p in trace) / len(trace)))
+    kept = []
+    used_labels = set()
+    for se in sub_edges:
+        from_coord = node_coords[se.from_node]
+        to_coord = node_coords[se.to_node]
+        d = min(
+            _min_dist_to_polyline_m(from_coord, trace, lng_scale),
+            _min_dist_to_polyline_m(to_coord, trace, lng_scale),
+        )
+        if d <= max_dist_m:
+            kept.append(se)
+            used_labels.add(se.from_node)
+            used_labels.add(se.to_node)
+    kept_extra_nodes = {label: coord for label, coord in extra_nodes.items() if label in used_labels}
+    return kept, kept_extra_nodes
