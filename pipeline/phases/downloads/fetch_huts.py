@@ -38,6 +38,8 @@ from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_huts.py"
 
+OUT_FIELDS = "OBJECTID,id,name,kategorie_nr,verein_nr,meereshoehe,ohrs_hut_id"
+
 _AV_VEREIN_NRS = (8, 5, 3)  # ÖAV, DAV, Alpenverein Südtirol
 _PARTNER_VEREIN_NRS = (19, 9, 17, 16)  # Bergsteigerdörfer Partnerbetrieb, ÖAV Vertragshaus
 _SELBSTVERSORGER_KATEGORIE_NRS = (20, 60)  # Biwak, Jugendherberge/Jugendheim
@@ -62,10 +64,11 @@ def classify_hut(kategorie_nr, verein_nr):
 def split_features(features):
     """Splits ArcGIS features (each {"attributes": {...}, "geometry": {"x", "y"}}) into
     (hut_features, partner_features) - plain GeoJSON Feature dicts, in the input order within
-    each list. Hut features carry hutType/serviced/elevation properties; partner features keep
-    the same minimal {id, name} shape stations.geojson/parking.geojson already use, with "id" set
-    to the ArcGIS layer's OBJECTID (an int) - not the "id" attribute, which is a GUID string huts
-    use for their own properties.id and that filter_start_points.py's partner-betrieb loader
+    each list. Hut features carry hutType/serviced/elevation/ohrsHutId/tenantCode properties;
+    ohrsHutId is null for direct-booking-only huts (docs/alpenverein-api.md §1). Partner features
+    keep the same minimal {id, name} shape stations.geojson/parking.geojson already use, with "id"
+    set to the ArcGIS layer's OBJECTID (an int) - not the "id" attribute, which is a GUID string
+    huts use for their own properties.id and that filter_start_points.py's partner-betrieb loader
     (Task 3) does not expect."""
     huts, partners = [], []
     for f in features:
@@ -84,6 +87,7 @@ def split_features(features):
                 "properties": {
                     "id": a["id"], "name": a["name"], "hutType": hut_type,
                     "serviced": serviced, "elevation": a.get("meereshoehe"),
+                    "ohrsHutId": a.get("ohrs_hut_id"), "tenantCode": a.get("verein_nr"),
                 },
                 "geometry": geometry,
             })
@@ -104,7 +108,7 @@ if __name__ == "__main__":
     url = (
         "https://services1.arcgis.com/PHS4LHADrqt5glC9/arcgis/rest/services/"
         "AVT_GEO_CAA_HUETTEN_View_P/FeatureServer/0/query"
-        "?where=1%3D1&outFields=OBJECTID,id,name,kategorie_nr,verein_nr,meereshoehe"
+        f"?where=1%3D1&outFields={OUT_FIELDS}"
         "&returnGeometry=true&outSR=4326&resultRecordCount=8000&f=json"
     )
 
