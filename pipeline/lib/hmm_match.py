@@ -13,6 +13,7 @@ import dataclasses
 import math
 
 from leuvenmapmatching.map.inmem import InMemMap
+from leuvenmapmatching.matcher.distance import DistanceMatcher
 
 from lib.edge_split import nearest_point_on_polyline
 from lib.geo import haversine_m
@@ -256,8 +257,7 @@ def build_leg_map(subgraph, src_snap, tgt_snap, trace: list, max_dist_m: float) 
     filter to hmmMaxDistM of the trace, then build the map. Never touches the whole base graph -
     only `subgraph` (the leg's own corridor gather, unchanged from today's match_leg)."""
     next_id = len(subgraph.local_nodes)
-    sub_edges, extra_nodes = expand_edge_interiors(subgraph, next_node_id=next_id)
-    next_id = max([next_id, *[k + 1 for k in extra_nodes]], default=next_id)
+    sub_edges, extra_nodes, next_id = expand_edge_interiors(subgraph, next_node_id=next_id)
 
     replaced_parent_edge_ids = set()
     for snap in (src_snap, tgt_snap):
@@ -301,3 +301,53 @@ def build_leg_map(subgraph, src_snap, tgt_snap, trace: list, max_dist_m: float) 
         inmem_map.add_edge(se.from_node, se.to_node)
 
     return LegMap(inmem_map=inmem_map, sub_edges=kept, src_anchor=src_anchor, tgt_anchor=tgt_anchor)
+
+
+@dataclasses.dataclass
+class DecodeFailure:
+    trace_index: int
+    lon: float
+    lat: float
+    nearest_candidate_dist_m: float
+
+
+def match_trace(leg_map: LegMap, trace: list, obs_noise_m: float, max_dist_m: float,
+                 dist_noise_m: float):
+    """Viterbi-decodes `trace` (resampled, (lon, lat)) against leg_map.inmem_map (spec §3).
+    non_emitting_states=True lets the decode traverse intermediate edges between two distant
+    observations without demanding an observation for each - the mechanism that also performs
+    spec §2's "shortest sub-path between consecutive Viterbi-selected states" concatenation
+    internally, so this function does not re-derive that itself.
+
+    Returns the ordered list of InMemMap node labels the winning path visits (including every
+    intermediate node from non-emitting stretches), or a DecodeFailure if the decode could not
+    cover the whole trace (spec §4).
+
+    Note: DistanceMatcher.node_path is a plain attribute (a list of visited (from, to) state
+    pairs), not a method - matcher.node_path_to_only_nodes() flattens it to the ordered node-label
+    list this function returns. Confirmed against the installed leuvenmapmatching 1.1.4; the
+    installed InMemMap also has no all_node_coordinates()-style accessor, so DecodeFailure's
+    nearest-candidate distance is computed from leg_map.inmem_map.all_nodes() instead."""
+    latlon_trace = [_latlon(p) for p in trace]
+    matcher = DistanceMatcher(
+        leg_map.inmem_map, max_dist=max_dist_m, obs_noise=obs_noise_m, dist_noise=dist_noise_m,
+        non_emitting_states=True,
+    )
+    _, last_idx = matcher.match(latlon_trace, unique=False)
+
+    if last_idx is None or last_idx < len(latlon_trace) - 1:
+        failed_at = 0 if last_idx is None else last_idx + 1
+        lat, lon = latlon_trace[failed_at]
+        nearest = min(
+            (haversine_m(lon, lat, *_lonlat(coord))
+             for _, coord in leg_map.inmem_map.all_nodes()),
+            default=float("inf"),
+        )
+        return DecodeFailure(trace_index=failed_at, lon=lon, lat=lat,
+                              nearest_candidate_dist_m=nearest)
+
+    node_path = matcher.node_path_to_only_nodes(matcher.node_path)
+    if not node_path:
+        lat, lon = latlon_trace[0]
+        return DecodeFailure(trace_index=0, lon=lon, lat=lat, nearest_candidate_dist_m=float("inf"))
+    return node_path
