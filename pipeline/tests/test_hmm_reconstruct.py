@@ -43,3 +43,25 @@ def test_reconstruct_matched_path_does_not_dedupe_an_out_and_back_spur():
     # outbound spur (dir +1): ascent 10/descent 4; inbound (dir -1): ascent 4/descent 10.
     assert path.ascent_m == 10.0 + 10.0 + 4.0 + 10.0  # 0->1, 1->3, 3->1, 1->2 in order
     assert path.descent_m == 4.0 + 4.0 + 10.0 + 4.0
+
+
+def test_reconstruct_matched_path_apportions_a_turnaround_mid_edge():
+    # An edge with 2 interior points expands (Task 5) into 3 segments per direction; a decode
+    # that turns around at the middle interior node walks only 2 of those 3 segments each way -
+    # exactly spec §5's apportionment, achieved for free by segment-level expansion.
+    from lib.hmm_match import SubEdge
+
+    leg_map, _ = _line_leg_map()
+    seg_a = SubEdge(from_node=1, to_node=10, base_edge_id=6, direction=1, segment_index=0,
+                     dist_m=100.0, road_m=0.0, ungraded_m=0.0, inferred_m=100.0,
+                     ascent_m=5.0, descent_m=1.0, max_ele_m=1400.0, sac_rank=1, via_ferrata=False)
+    seg_b = SubEdge(from_node=10, to_node=2, base_edge_id=6, direction=1, segment_index=1,
+                     dist_m=200.0, road_m=0.0, ungraded_m=0.0, inferred_m=200.0,
+                     ascent_m=15.0, descent_m=3.0, max_ele_m=1500.0, sac_rank=1, via_ferrata=False)
+    leg_map.sub_edges = [se for se in leg_map.sub_edges if se.base_edge_id != 6] + [seg_a, seg_b]
+
+    # turnaround happens exactly at node 10 (the middle interior point) - only seg_a is walked.
+    path = reconstruct_matched_path(leg_map, node_path=[0, 1, 10])
+    assert path.distance_m == 200.0 + 100.0  # edge 0->1 (200) + partial edge 6 up to node 10
+    assert path.base_edge_ids == [3, 6]
+    assert path.ascent_m == 10.0 + 5.0  # 0->1's ascent + seg_a's own apportioned ascent
