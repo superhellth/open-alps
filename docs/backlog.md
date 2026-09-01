@@ -24,6 +24,10 @@ Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
 At the moment hut ids are sequential, not stable
 
+### Refactor frontend code
+
+Atm code is quite unstructured not skill-checked with improve codebase architecture
+
 ## Low
 
 ### GPX Tool
