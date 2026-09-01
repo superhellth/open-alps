@@ -7,14 +7,6 @@ under `docs/superpowers/`.
 
 ## Medium
 
-### Idea: Introduce a pipeline explanation/visualization
-
-Probably in form of a static web page, either as part of the existing frontend or a new one. May be combined with the data quality monitoring layer.
-
-### Idea: Introduce a data quality monitoring layer
-
-Simplest would be output files in a dedicated folder that collect monitoring data about our data. More sophisticated be something like a proper dashboard.
-
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
@@ -23,6 +15,10 @@ Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 ### Stable hut ids
 
 At the moment hut ids are sequential, not stable
+
+### Strucute data/ folder
+
+At the moment the data/ folder is quite a mess. Lets enforce more structure onto it.
 
 ### Refactor frontend code
 
@@ -33,3 +29,11 @@ Atm code is quite unstructured not skill-checked with improve codebase architect
 ### GPX Tool
 
 A small webpage that helps bring GPX tours into a format the pipeline can ingest. Should support: Extending legs to a proper end (dont end on a mountain like Chiemgautour), slicing into legs, as some Tours are one big tour, not split into legs. So needs huts overlay, quality of life features.
+
+### Idea: Introduce a pipeline explanation/visualization
+
+Probably in form of a static web page, either as part of the existing frontend or a new one. May be combined with the data quality monitoring layer.
+
+### Idea: Introduce a data quality monitoring layer
+
+Simplest would be output files in a dedicated folder that collect monitoring data about our data. More sophisticated be something like a proper dashboard.
