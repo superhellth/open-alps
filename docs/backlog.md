@@ -5,12 +5,22 @@ explanation, evidence and pointers live in the dedicated file under `docs/backlo
 priority first within each section. An item graduates out of here when it gets its own spec or plan
 under `docs/superpowers/`.
 
+## High
+
+![alt text](image.png)
+![alt text](image-1.png)
+bugs?
+
 ## Medium
 
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
 Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
+
+### Make legs of selected tour hoverable
+
+Atm the legs of the selected tour in the frontend are displayed but are not hoverable. Height profile should be displayed somewhere, making it more interactive
 
 ### Stable hut ids
 
