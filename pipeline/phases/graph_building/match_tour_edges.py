@@ -25,9 +25,7 @@ from lib.timing import phase  # noqa: E402
 SCRIPT_NAME = "match_tour_edges.py"
 
 from lib import hub_snap  # noqa: E402
-from lib.cell_igraph import (  # noqa: E402
-    accumulate_path, build_base_igraph_arrays, build_igraph_from_base,
-)
+from lib.cell_igraph import _check_routable  # noqa: E402
 from lib.edge_output import fold_endpoint_snaps  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT  # noqa: E402
 from lib.subgraph import LocalSubgraph, clip_subgraph_to_bounds, gather_subgraph_for_bounds  # noqa: E402
@@ -35,6 +33,10 @@ from lib.geo import haversine_m  # noqa: E402
 from lib.hubs import HUB_TYPE_JSON_NAMES, load_all_hubs, nearest_hub_to_point  # noqa: E402
 from lib.pipeline import TOURS_DIR  # noqa: E402
 from lib.tour_folder import load_all_tour_folders, load_tour_folder  # noqa: E402
+from lib.hmm_match import build_leg_map, match_trace, resample_trace, DecodeFailure  # noqa: E402
+from lib.hmm_reconstruct import (  # noqa: E402
+    BridgeTooLong, reconcile_endpoints, reconstruct_matched_path,
+)
 
 
 _subgraph_cache: dict[tuple[str, tuple[int, ...]], LocalSubgraph] = {}
@@ -70,14 +72,14 @@ def corridor_bounds(points: list, buffer_m: float, grid) -> dict:
 
 
 def match_leg(subgraph, src_key: tuple, tgt_key: tuple, persisted_snaps: dict,
-              trace_length_m: float, length_divergence_ratio: float) -> dict:
-    """Routes one leg's src_key->tgt_key hut pair inside `subgraph` (already gathered as the leg's
-    own corridor, spec §2.3) using the SAME igraph-building/path-walking primitives
-    build_hub_edges.py uses (build_base_igraph_arrays/build_igraph_from_base/accumulate_path) -
-    unmasked (edge_mask=None), since a tour leg is not a member of graph.variants (spec §5).
-
-    Returns {"ok": True, "path": PathResult, "src_snap": SnapResult, "tgt_snap": SnapResult} or
-    {"ok": False, "reason": <spec §2.5 reason>, "detail": {...}} - never a placeholder result."""
+              trace_points: list, length_divergence_ratio: float, hmm_resample_m: float,
+              hmm_obs_noise_m: float, hmm_max_dist_m: float, hmm_dist_noise_m: float,
+              endpoint_bridge_max_m: float) -> dict:
+    """Matches one leg's src_key->tgt_key trace (trace_points, the leg's OWN GPX points) inside
+    `subgraph` (already gathered as the leg's own corridor, spec §2) via HMM map matching (spec
+    2026-09-01-corridor-hmm-map-matching-design.md), replacing the single-Dijkstra core this used
+    to be. Returns {"ok": True, "path": PathResult, "src_snap": SnapResult, "tgt_snap": SnapResult}
+    or {"ok": False, "reason": <spec §4 reason>, "detail": {...}}."""
     if len(subgraph.local_nodes) == 0:
         return {"ok": False, "reason": "outside_extract", "detail": {}}
 
@@ -86,21 +88,38 @@ def match_leg(subgraph, src_key: tuple, tgt_key: tuple, persisted_snaps: dict,
     if missing:
         return {"ok": False, "reason": "hub_unsnapped", "detail": {"missing": missing}}
 
-    base_arrays = build_base_igraph_arrays(subgraph, local_snaps)
-    graph, hub_vertex, vertex_coords = build_igraph_from_base(base_arrays, edge_mask=None)
-    src_v, tgt_v = hub_vertex.get(src_key), hub_vertex.get(tgt_key)
-    if src_v is None or tgt_v is None:
-        return {"ok": False, "reason": "no_corridor_path", "detail": {}}
-
-    if src_v == tgt_v:
-        epath = []
-    else:
-        epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
-        if not epath:
-            return {"ok": False, "reason": "no_corridor_path", "detail": {}}
-    path = accumulate_path(graph, vertex_coords, src_v, tgt_v, epath)
+    _check_routable(subgraph)
 
     src_snap, tgt_snap = local_snaps[src_key], local_snaps[tgt_key]
+    trace_length_m = sum(
+        haversine_m(trace_points[i][0], trace_points[i][1], trace_points[i + 1][0], trace_points[i + 1][1])
+        for i in range(len(trace_points) - 1)
+    )
+
+    resampled = resample_trace(trace_points, hmm_resample_m)
+    leg_map = build_leg_map(subgraph, src_snap, tgt_snap, resampled, hmm_max_dist_m)
+    decoded = match_trace(leg_map, resampled, hmm_obs_noise_m, hmm_max_dist_m, hmm_dist_noise_m)
+    if isinstance(decoded, DecodeFailure):
+        return {
+            "ok": False, "reason": "hmm_match_broken",
+            "detail": {
+                "trace_index": decoded.trace_index, "lon": decoded.lon, "lat": decoded.lat,
+                "nearest_candidate_dist_m": decoded.nearest_candidate_dist_m,
+            },
+        }
+
+    reconciled = reconcile_endpoints(subgraph, leg_map, decoded, endpoint_bridge_max_m)
+    if isinstance(reconciled, BridgeTooLong):
+        return {
+            "ok": False, "reason": "endpoint_bridge_too_long",
+            "detail": {"endpoint": reconciled.endpoint, "bridge_m": reconciled.bridge_m,
+                       "cap_m": reconciled.cap_m},
+        }
+
+    path = reconstruct_matched_path(leg_map, reconciled)
+    node_coords = leg_map.node_coords or {}
+    path = path._replace(coords=[node_coords[n] for n in reconciled[1:-1] if n in node_coords])
+
     routed_m = path.distance_m + src_snap.gap_m + tgt_snap.gap_m
     if trace_length_m > 0:
         ratio = routed_m / trace_length_m
