@@ -116,12 +116,42 @@ def test_reconcile_endpoints_bridges_when_anchor_is_off_the_decoded_path():
         SubEdge(from_node=1, to_node=2, base_edge_id=303, direction=1, segment_index=0,
                 dist_m=300.0, road_m=0.0, ungraded_m=0.0, inferred_m=300.0,
                 ascent_m=10.0, descent_m=2.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False),
-    ], src_anchor=0, tgt_anchor=2)
+    ], src_anchor=0, tgt_anchor=2, node_coords={0: (0.0, 0.0), 1: (0.0007, 0.0), 2: (0.005, 0.0)})
 
     result = reconcile_endpoints(subgraph=subgraph, leg_map=leg_map, node_path=[1, 2],
                                   endpoint_bridge_max_m=250.0)
     assert result[0] == 0  # bridged in from anchor 0
     assert result[-1] == 2
+
+
+def test_reconcile_endpoints_bridges_to_a_synthetic_mid_edge_decode_endpoint():
+    # Regression: the decoded path's own start/end can be a minted interior/split-point label
+    # (lib/hmm_match.py's expand_edge_interiors/materialize_anchor), not necessarily an original
+    # subgraph node - bridging must locate it by coordinate on `subgraph`, not assume its label is
+    # already a valid subgraph vertex index (that assumption crashed with igraph's own "Invalid
+    # vertex ID" against real tour data, since label 10 below does not exist in `subgraph` at all).
+    from lib.hmm_reconstruct import reconcile_endpoints
+
+    subgraph = _corridor_with_gap_to_anchor()
+    leg_map = LegMap(inmem_map=None, sub_edges=[
+        SubEdge(from_node=10, to_node=2, base_edge_id=304, direction=1, segment_index=1,
+                dist_m=150.0, road_m=0.0, ungraded_m=0.0, inferred_m=150.0,
+                ascent_m=5.0, descent_m=1.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False),
+    ], src_anchor=0, tgt_anchor=2,
+        node_coords={0: (0.0, 0.0), 1: (0.0007, 0.0), 2: (0.005, 0.0), 10: (0.003, 0.0)})
+
+    # decode starts at label 10 - a point strictly between real nodes 1 and 2 along edge 101,
+    # never itself a subgraph vertex.
+    result = reconcile_endpoints(subgraph=subgraph, leg_map=leg_map, node_path=[10, 2],
+                                  endpoint_bridge_max_m=1000.0)
+    assert result[0] == 0  # bridged in from anchor 0
+    assert result[-1] == 2
+    assert result[-2] == 10  # the original decoded-path label is preserved, not a virtual id
+
+    # reconstruct_matched_path must be able to walk the whole reconciled path afterwards - the
+    # bridge's own traversed edges have to have been materialized into leg_map.sub_edges.
+    path = reconstruct_matched_path(leg_map, result)
+    assert path.base_edge_ids[-1] == 304  # the original (unbridged) edge is still walked last
 
 
 def test_reconcile_endpoints_reports_bridge_too_long_past_the_cap():
@@ -132,7 +162,7 @@ def test_reconcile_endpoints_reports_bridge_too_long_past_the_cap():
         SubEdge(from_node=1, to_node=2, base_edge_id=303, direction=1, segment_index=0,
                 dist_m=300.0, road_m=0.0, ungraded_m=0.0, inferred_m=300.0,
                 ascent_m=10.0, descent_m=2.0, max_ele_m=1000.0, sac_rank=1, via_ferrata=False),
-    ], src_anchor=0, tgt_anchor=2)
+    ], src_anchor=0, tgt_anchor=2, node_coords={0: (0.0, 0.0), 1: (0.0007, 0.0), 2: (0.005, 0.0)})
 
     result = reconcile_endpoints(subgraph=subgraph, leg_map=leg_map, node_path=[1, 2],
                                   endpoint_bridge_max_m=50.0)  # cap below the 80m gap
