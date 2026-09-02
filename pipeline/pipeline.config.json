@@ -36,7 +36,7 @@
     "smoothingKernelM": 30,
     "profilePoints": 30
   },
-  "approach": { "k": 3 },
+  "approach": { "k": 3, "selectK": 20 },
   "tourMatch": {
     "corridorBufferM": 150.0,
     "lengthDivergenceRatio": 2.0,
