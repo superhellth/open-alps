@@ -140,7 +140,8 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     # level column/interior/max_ele_m work doesn't depend on the variant, only which resulting
     # edges get kept does (opt #1: this used to rerun that work from scratch once per variant, see
     # BaseIgraphArrays' docstring).
-    base_arrays = build_base_igraph_arrays(subgraph, snaps)
+    with timer.step("build_base_arrays"):
+        base_arrays = build_base_igraph_arrays(subgraph, snaps)
     for variant in variants:
         mask = variants_lib.edge_mask(subgraph.local_edges, variant)
         with timer.step("build_igraph"):
