@@ -24,9 +24,13 @@ are missing from the top-k the second clobbers the first — 160 of 613 huts wit
 lose an available source type on the 2026-09-02 run.
 
 ![alt text](image.png)
-![alt text](image-1.png)
-![alt text](image-2.png)
-bugs? Some of this should be solved by rerunning the pipeline with the duplication avoidance
+![alt text](image-4.png)
+![alt text](image-3.png)
+ui issue or pipeline bug?
+
+![alt text](image-5.png)
+![alt text](image-6.png)
+unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlapping solution?
 
 ## Medium
 
@@ -45,9 +49,31 @@ barriers that also poison the key `select_approach_pairs.py` ranks on.
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
 Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
+### Extend overlap avoidance to approach/exit legs
+
+The 2026-08-29 overlap-avoidance work (`docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md`)
+only covers hut-to-hut legs. Approach legs (start point → first hut) and exit legs (last hut →
+start point) carry their own `base_edge_id`s but are never checked against `usedEdgeIds` in
+`search.ts`, so a suggested tour can still walk in or out over a trail segment another leg in the
+chain already used. Needs the same edge-id treatment threaded through the start-edges data (flagged
+as a 147 MB-class sidecar problem to solve first in the original design's "Out of scope" section).
+
 ### Make legs of selected tour hoverable
 
 Atm the legs of the selected tour in the frontend are displayed but are not hoverable. Height profile should be displayed somewhere, making it more interactive
+
+### No point-by-point elevation profile for approach/exit legs
+
+Hut-to-hut legs carry a point-by-point `elevation_profile` in `hut-edge-stats.json`, but
+`start-edge-stats.json` (the equivalent for approach/exit legs) is deliberately excluded from
+`PUBLIC_FILES` (654 MB, no consumer per `docs/superpowers/specs/2026-08-27-tour-geometry-design.md`),
+and `start_edges/records.npy` doesn't carry the profile at all today. So a tour's first and last leg
+can never get a height-profile chart, only aggregate `ascent_m`/`descent_m`. Needs a pipeline change
+to compute/emit a simplified, byte-range-fetchable elevation profile for `start_edges` (mirroring the
+`hut-edge-geometry.bin` approach for lon/lat, not a 654 MB inline JSON blob), before "make legs
+hoverable" above can cover the whole tour instead of just the hut-to-hut middle.
+In general we want to ensure hut-to-hut and access legs to be treated as similarly as possible and
+to share as much code as possible.
 
 ### Stable hut ids
 
