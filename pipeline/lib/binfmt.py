@@ -47,6 +47,15 @@ RECORD_DTYPE = np.dtype([
     ("prefix_ids", "i4", (8,)), ("prefix_count", "u1"),
     ("suffix_ids", "i4", (8,)), ("suffix_count", "u1"),
 ])
+
+# build_hub_edges.py's B3 output (spec 2026-09-02-hub-edge-scaling-design.md): hut -> access-point
+# distance/time ONLY, no geometry, no path walk - one row per (hut, start, variant). The cheap,
+# complete "which trailheads can reach which hut" answer select_approach_pairs.py ranks/selects
+# over before build_access_edges.py pays for a path walk on the survivors only.
+ACCESS_DISTANCE_DTYPE = np.dtype([
+    ("hut_id", "u2"), ("start_id", "i8"), ("start_type", "u1"), ("variant", "u1"),
+    ("distance_m", "f4"), ("time_s", "f4"),
+])
 PROFILE_DTYPE = np.dtype("f4")
 
 # Persisted hub->base-graph snap (snap_hubs.py's output, consumed by build_hub_edges.py). Keyed
@@ -113,6 +122,7 @@ UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profi
 EDGE_SCHEMA_VERSION = 2
 SNAP_SCHEMA_VERSION = 2
 RECORD_SCHEMA_VERSION = 3  # bumped: RECORD_DTYPE gained edge_id_offset/count + prefix/suffix ids
+ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

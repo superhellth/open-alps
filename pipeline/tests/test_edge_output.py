@@ -8,6 +8,32 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from lib import binfmt  # noqa: E402
 from lib.edge_output import K_TRAVERSAL, write_edge_records  # noqa: E402
+from lib.edge_output import write_access_distances  # noqa: E402
+
+
+def _access_row(hut_id=3, start_id=100, start_type=binfmt.TYPE_PARKING, variant=0,
+                 distance_m=1200.0, time_s=900.0):
+    return {"hut_id": hut_id, "start_id": start_id, "start_type": start_type, "variant": variant,
+            "distance_m": distance_m, "time_s": time_s}
+
+
+def test_write_access_distances_round_trips_fields(tmp_path):
+    path = tmp_path / "access_distances.npy"
+    write_access_distances([_access_row(), _access_row(hut_id=7, start_type=binfmt.TYPE_STATION)],
+                            path)
+    arr = binfmt.load_array(path, mmap=False)
+    assert len(arr) == 2
+    assert arr["hut_id"].tolist() == [3, 7]
+    assert arr["start_type"].tolist() == [binfmt.TYPE_PARKING, binfmt.TYPE_STATION]
+    assert arr["distance_m"][0] == pytest.approx(1200.0)
+    assert arr["time_s"][0] == pytest.approx(900.0)
+
+
+def test_write_access_distances_handles_empty_input(tmp_path):
+    path = tmp_path / "access_distances.npy"
+    write_access_distances([], path)
+    arr = binfmt.load_array(path, mmap=False)
+    assert len(arr) == 0
 
 
 def _rec(from_id=0, to_id=1, variant=0, geometry=None, base_edge_ids=None):
