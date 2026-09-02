@@ -82,6 +82,7 @@ At the moment hut ids are sequential, not stable
 ### Strucute data/ folder
 
 At the moment the data/ folder is quite a mess. Lets enforce more structure onto it.
+resume data-orga
 
 ### Refactor frontend code
 
@@ -114,3 +115,11 @@ Probably in form of a static web page, either as part of the existing frontend o
 ### Idea: Introduce a data quality monitoring layer
 
 Simplest would be output files in a dedicated folder that collect monitoring data about our data. More sophisticated be something like a proper dashboard.
+
+### Pipeline config file restructure
+
+There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
+
+### superpowers spec/ and plan/ history
+
+I am losing oversight over which specs have plans and which plans were implemented. How do we tread historical docs?
