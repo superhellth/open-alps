@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -103,3 +104,43 @@ def test_reconstruct_local_snaps_omits_a_key_missing_from_persisted():
     subgraph = _line_subgraph([100, 101], edge_id=7)
     out = hub_snap.reconstruct_local_snaps(subgraph, [(TYPE_HUT, 999)], {})
     assert out == {}
+
+
+def test_node_index_is_built_once_and_cached(monkeypatch):
+    # D3: the KD-tree build (O(nodes log nodes)) must happen once per subgraph, not once per hub -
+    # same caching contract _build_edge_spatial_index already has for the edge index.
+    subgraph = _line_subgraph([100, 101], edge_id=7)
+    calls = []
+    real_build = hub_snap._build_node_spatial_index
+
+    def _counting_build(sg):
+        calls.append(1)
+        return real_build(sg)
+
+    monkeypatch.setattr(hub_snap, "_build_node_spatial_index", _counting_build)
+
+    hub_snap.snap_hub_to_subgraph(subgraph, hub_lon=0.0001, hub_lat=0.0, max_snap_m=50.0)
+    hub_snap.snap_hub_to_subgraph(subgraph, hub_lon=0.0002, hub_lat=0.0, max_snap_m=50.0)
+
+    assert len(calls) == 1
+
+
+def test_nearest_node_matches_the_closest_node_by_projected_distance():
+    subgraph = _line_subgraph([100, 101], edge_id=7)
+    idx, dist_m = hub_snap._nearest_node(subgraph, hub_lon=0.0001, hub_lat=0.0)
+    assert idx == 0
+    assert dist_m == pytest.approx(11.1, rel=0.05)  # 0.0001 deg lon at the equator
+
+
+def test_nearest_node_on_an_empty_subgraph_reports_no_candidate():
+    empty = LocalSubgraph(
+        global_node_ids=np.zeros(0, dtype=np.int64),
+        local_nodes=np.zeros(0, dtype=binfmt.NODE_DTYPE),
+        local_edges=np.zeros(0, dtype=binfmt.EDGE_DTYPE),
+        interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(0, dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+    idx, dist_m = hub_snap._nearest_node(empty, hub_lon=0.0, hub_lat=0.0)
+    assert idx is None
+    assert dist_m == float("inf")
