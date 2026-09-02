@@ -37,6 +37,42 @@ def test_keeps_point_near_the_second_hut_only():
     assert kept[0]["osm_id"] == 3
 
 
+def test_keeps_a_point_due_east_at_the_true_km_distance():
+    # Regression for spec C1: the old filter thresholded at max_edge_km/111.320 degrees - the
+    # km-per-degree of LATITUDE, not longitude. At 47.5N a degree of longitude is ~75.2km, so a
+    # point exactly 20km due east of a hut (well inside a 30km cap) sat at 20/75.2 = 0.266 deg,
+    # OUTSIDE the old 30/111.320 = 0.269deg threshold by a hair for some points, and farther out
+    # points up to ~30km east were dropped outright even though they're inside range. Use a point
+    # at a longitude offset that is trail-irrelevant-but-real-world-close: 25km due east at
+    # 47.5N is 25/75.2 = 0.3325 deg of longitude - OUTSIDE the old latitude-based threshold
+    # (30/111.320 = 0.2695 deg) even though 25km < 30km max_edge_km.
+    lat = 47.5
+    hut_coords = np.array([(11.0, lat)])
+    lon_offset_deg_for_25km_east = 25.0 / (111.320 * np.cos(np.radians(lat)))
+    points = [{"lon": 11.0 + lon_offset_deg_for_25km_east, "lat": lat, "osm_id": 1, "type": "parking"}]
+    kept = filter_to_hut_range(points, hut_coords, max_edge_km=30.0)
+    assert len(kept) == 1
+
+
+def test_still_drops_a_point_genuinely_farther_than_max_edge_km_in_any_direction():
+    lat = 47.5
+    hut_coords = np.array([(11.0, lat)])
+    lon_offset_deg_for_50km_east = 50.0 / (111.320 * np.cos(np.radians(lat)))
+    points = [{"lon": 11.0 + lon_offset_deg_for_50km_east, "lat": lat, "osm_id": 1, "type": "parking"}]
+    kept = filter_to_hut_range(points, hut_coords, max_edge_km=30.0)
+    assert len(kept) == 0
+
+
+def test_still_drops_a_point_genuinely_far_north_south():
+    # sanity check that the latitude axis (unaffected by the bug) still behaves correctly after
+    # the fix - km-per-degree of latitude is ~constant everywhere, so no projection is needed
+    # there, only on longitude.
+    hut_coords = np.array([(11.0, 47.0)])
+    points = [{"lon": 11.0, "lat": 47.0 + 1.0, "osm_id": 1, "type": "parking"}]  # ~111km north
+    kept = filter_to_hut_range(points, hut_coords, max_edge_km=30.0)
+    assert len(kept) == 0
+
+
 def test_load_layer_reads_top_level_feature_id(tmp_path):
     # osmium export --add-unique-id=type_id (fetch_stations_parking.py) puts the id on the
     # Feature itself as "<type-char><digits>" (e.g. "n8091317"), not inside "properties" -
