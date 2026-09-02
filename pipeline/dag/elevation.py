@@ -68,7 +68,10 @@ def task_build_profiles():
         "phases/elevation/build_profiles.py",
         params=[cli_param("profile_points", "profile-points", int,
                           CONFIG["dem"].get("profilePoints", 30))],
-        task_dep=["build_hub_edges", "match_tour_edges"],  # same files they mutate in place
+        # start_edges/ is now build_access_edges' target, not build_hub_edges' (spec
+        # 2026-09-02-hub-edge-scaling-design.md B1/B7) - same "mutates records.npy in place
+        # without declaring it as a target" reasoning as before, just against the new owner.
+        task_dep=["build_hub_edges", "build_access_edges", "match_tour_edges"],
         file_dep=[
             OSM_DIR / "base_graph" / "interior_ele.npy",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy",
