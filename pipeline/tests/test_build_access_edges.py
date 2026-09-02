@@ -40,10 +40,11 @@ def test_materializes_geometry_only_for_selected_targets():
     snaps = snap_hubs_for_cell(subgraph, [hut], all_hubs, max_snap_m=50.0)
     selected_targets_by_hut = {1: [station]}
 
-    records = route_selected_pairs_for_cell(
+    records, unreachable_skipped = route_selected_pairs_for_cell(
         subgraph, [hut], selected_targets_by_hut, snaps, variants=FAST_ANY_ONLY,
     )
 
+    assert unreachable_skipped == 0
     assert len(records) == 1
     r = records[0]
     # A3: stored access -> hut, even though the router walked hut -> access.
@@ -59,11 +60,12 @@ def test_unselected_target_is_never_routed():
     station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
     snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
 
-    records = route_selected_pairs_for_cell(
+    records, unreachable_skipped = route_selected_pairs_for_cell(
         subgraph, [hut], selected_targets_by_hut={1: []}, snaps=snaps, variants=FAST_ANY_ONLY,
     )
 
     assert records == []
+    assert unreachable_skipped == 0
 
 
 def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
@@ -86,7 +88,7 @@ def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
     station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
     snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
 
-    records = route_selected_pairs_for_cell(
+    records, _ = route_selected_pairs_for_cell(
         subgraph, [hut], {1: [station]}, snaps, variants=FAST_ANY_ONLY,
     )
 
@@ -94,3 +96,39 @@ def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
     # the SAME physical climb is now traversed 1->0, so it must land in descent, not ascent.
     assert records[0]["descent_m"] >= 80.0
     assert records[0]["ascent_m"] < 80.0
+
+
+def test_unreachable_selected_target_is_skipped_not_emitted_as_zero_distance():
+    # selected_targets_by_hut is variant-agnostic (a pair select_approach_pairs.py kept because it
+    # was reachable under ONE variant can be genuinely disconnected under another's edge mask) - a
+    # station on its own, disconnected island must be dropped, not accumulate_path's empty-epath
+    # fallthrough silently emitting a phantom zero-distance/zero-geometry edge for it.
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    island_nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    island_nodes[0] = (1.0, 0.0, 0)
+    island_nodes[1] = (1.009, 0.0, 0)
+    island_edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    # u=2, v=3: the island's own local node indices once concatenated after the 2-node line above.
+    island_edges[0] = (2, 3, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False,
+                        True, 0, 0, 1)
+    island = {"id": 3, "type": binfmt.TYPE_STATION, "lon": 1.0001, "lat": 0.0}
+    nodes = np.concatenate([subgraph.local_nodes, island_nodes])
+    edges = np.concatenate([subgraph.local_edges, island_edges])
+    disconnected_subgraph = LocalSubgraph(
+        global_node_ids=np.array([100, 101, 200, 201]), local_nodes=nodes, local_edges=edges,
+        interior=subgraph.interior,
+        local_node_ele=np.zeros(4, dtype=np.float32),
+        interior_ele=subgraph.interior_ele,
+    )
+    snaps = snap_hubs_for_cell(disconnected_subgraph, [hut], [hut, station, island],
+                                max_snap_m=50.0)
+
+    records, unreachable_skipped = route_selected_pairs_for_cell(
+        disconnected_subgraph, [hut], {1: [station, island]}, snaps, variants=FAST_ANY_ONLY,
+    )
+
+    assert len(records) == 1
+    assert records[0]["from_id"] == station["id"]
+    assert unreachable_skipped == 1
