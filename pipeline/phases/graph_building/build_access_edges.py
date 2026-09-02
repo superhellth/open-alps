@@ -41,29 +41,34 @@ SCRIPT_NAME = "build_access_edges.py"
 
 
 def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_by_hut: dict,
-                                   snaps: dict, variants: list, timer: StepTimer = None) -> list:
+                                   snaps: dict, variants: list, timer: StepTimer = None) -> tuple:
     """hut_sources: this cell's core huts (build_hub_edges.py already proved these are the only
     valid Dijkstra sources for access edges, A1). selected_targets_by_hut: {hut_id: [access hub
     dict, ...]} - EXACTLY the targets select_approach_pairs.py kept for that hut; a hut with an
     empty or missing list here is simply not routed.
 
-    Returns one dict per materialized record, access->hut oriented (A3): the path is walked
-    hut->access (matching build_hub_edges.py's own direction, so both passes agree on which
-    subgraph/snap state produced a given distance), then reversed before being packed - reverse
-    path.coords, SWAP ascent_m/descent_m (base-graph ascent/descent is stored in a fixed u->v
-    direction; a path walking v->u must swap them, same rule accumulate_path already applies per
-    edge), THEN call fold_endpoint_snaps with (access_snap, hut_snap) order - fold_endpoint_snaps
-    attributes each end's gap differently for departure vs. arrival, so it must see the
-    already-reoriented path and the two snaps in the SAME (access-first) order the caller will
-    store the record in."""
+    Returns (records, n_unreachable_skipped). records: one dict per materialized record,
+    access->hut oriented (A3): the path is walked hut->access (matching build_hub_edges.py's own
+    direction, so both passes agree on which subgraph/snap state produced a given distance), then
+    reversed before being packed - reverse path.coords, SWAP ascent_m/descent_m (base-graph
+    ascent/descent is stored in a fixed u->v direction; a path walking v->u must swap them, same
+    rule accumulate_path already applies per edge), THEN call fold_endpoint_snaps with
+    (access_snap, hut_snap) order - fold_endpoint_snaps attributes each end's gap differently for
+    departure vs. arrival, so it must see the already-reoriented path and the two snaps in the
+    SAME (access-first) order the caller will store the record in.
+
+    n_unreachable_skipped counts (hut, access, variant) tries where the target was unreachable
+    under that variant's masked graph - expected, since selected_targets_by_hut is variant-agnostic
+    (see __main__'s targets_by_hut) while reachability isn't; see accumulate_path's docstring."""
     timer = timer if timer is not None else StepTimer()
     if not hut_sources:
-        return []
+        return [], 0
 
     with timer.step("build_base_arrays"):
         base_arrays = build_base_igraph_arrays(subgraph, snaps)
 
     records = []
+    unreachable_skipped = [0]
     for variant in variants:
         mask = variants_lib.edge_mask(subgraph.local_edges, variant)
         with timer.step("build_igraph"):
@@ -94,6 +99,15 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
             for t, tv in zip(routable, target_vs):
                 path = (path_by_vertex[tv] if tv != src_v
                         else accumulate_path(graph, vertex_coords, src_v, tv, []))
+                if path is None:
+                    # selected_targets_by_hut is variant-agnostic (targets_by_hut's docstring in
+                    # __main__): a pair select_approach_pairs.py kept because it was reachable
+                    # under ONE variant (or pulled in by the reverse-closure) can be genuinely
+                    # disconnected under a more restrictive variant's edge mask here. Skip it
+                    # rather than let accumulate_path's empty-epath case masquerade as a real
+                    # zero-distance edge.
+                    unreachable_skipped[0] += 1
+                    continue
                 tgt_snap = snaps[(t["type"], t["id"])]
                 # A3: reverse before folding - fold_endpoint_snaps' gap attribution depends on
                 # traversal direction, so it must see the path already reoriented access->hut.
@@ -121,7 +135,7 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
                     "geometry": geometry,
                     "base_edge_ids": reversed_path.base_edge_ids,
                 })
-    return records
+    return records, unreachable_skipped[0]
 
 
 def _run_cell(args):
@@ -136,10 +150,13 @@ def _run_cell(args):
         keys.update((t["type"], t["id"]) for t in targets)
     with timer.step("snap"):
         local_snaps = hub_snap.reconstruct_local_snaps(subgraph, keys, local_persisted)
-    records = route_selected_pairs_for_cell(
+    records, unreachable_skipped = route_selected_pairs_for_cell(
         subgraph, hut_sources, selected_targets_by_hut, local_snaps, variants=variants, timer=timer,
     )
-    return {"cell_id": cell_id, "elapsed_s": time.time() - t0, "records": records, "timer": timer}
+    return {
+        "cell_id": cell_id, "elapsed_s": time.time() - t0, "records": records,
+        "unreachable_skipped": unreachable_skipped, "timer": timer,
+    }
 
 
 if __name__ == "__main__":
@@ -200,25 +217,29 @@ if __name__ == "__main__":
     total = len(tasks)
     print(f"{total} cells with selected pairs to materialize", flush=True)
     shard_records = []
+    total_unreachable_skipped = 0
     tracker = ProgressTracker(total)
     run_timer = StepTimer()
     with phase(SCRIPT_NAME, "build_access_edges", n_cells=total,
                n_pairs=len(selected), workers=args.workers) as meta:
         for result in run_pool(tasks, _run_cell, workers=args.workers):
             shard_records.append(result["records"])
+            total_unreachable_skipped += result["unreachable_skipped"]
             run_timer.merge(result["timer"])
             eta = tracker.eta_suffix()
             print(
                 f"[{tracker.completed}/{total}] cell {result['cell_id']}: "
-                f"{result['elapsed_s']:.1f}s -> {len(result['records'])} records | {eta}",
+                f"{result['elapsed_s']:.1f}s -> {len(result['records'])} records "
+                f"({result['unreachable_skipped']} unreachable skipped) | {eta}",
                 flush=True,
             )
-        meta.update(run_timer.as_meta())
+        meta.update(run_timer.as_meta(), unreachable_skipped=total_unreachable_skipped)
 
     print(f"step totals (summed over workers): {run_timer.summary()}", flush=True)
 
     access_records = [r for shard in shard_records for r in shard]
-    print(f"materialized access edges: {len(access_records)}", flush=True)
+    print(f"materialized access edges: {len(access_records)} "
+          f"({total_unreachable_skipped} unreachable pairs skipped)", flush=True)
 
     out_dir = Path(args.out_dir)
     write_edge_records(access_records, out_dir / "start_edges", write_edge_ids=False)

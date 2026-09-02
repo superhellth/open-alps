@@ -248,7 +248,7 @@ PathResult = namedtuple(
 )
 
 
-def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: list) -> PathResult:
+def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: list) -> PathResult | None:
     """Shared by path_for (one src->tgt pair) and build_hub_edges.py's batched path query (opt #2:
     one src_v -> many targets get_shortest_paths call instead of one call per target - igraph's
     single-target get_shortest_paths still runs a full one-to-many Dijkstra from src_v internally,
@@ -261,9 +261,17 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     ascent_m/descent_m are stored per base-graph edge in a fixed u->v direction (spec-neutral, not
     tied to any particular traversal), so a path walking an edge v->u must swap them - otherwise a
     descent reported for the forward direction would silently become the reported ascent for the
-    reverse one."""
+    reverse one.
+
+    Returns None if tgt_v is unreachable from src_v on this (possibly variant-masked) graph -
+    igraph's get_shortest_paths reports that the same way it reports the trivial src_v==tgt_v case
+    (an empty epath), so callers that don't already know reachability (e.g. a variant-agnostic
+    target list routed against several differently-masked graphs) MUST check for None rather than
+    treat an empty epath as a real zero-distance path."""
     if src_v == tgt_v:
         return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False, [])
+    if not epath:
+        return None
     trail_coords = []
     distance_m = 0.0
     road_m = 0.0
@@ -306,12 +314,12 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     )
 
 
-def path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult:
+def path_for(graph, vertex_coords: dict, src_v: int, tgt_v: int) -> PathResult | None:
     """Walks the time-shortest src_v->tgt_v path (spec A3/A1 - `weight` == `time_s`). Single-pair
     convenience wrapper over accumulate_path - a caller walking several targets from the same
     src_v (build_hub_edges.py's compute_hub_edges_for_cell) should batch one get_shortest_paths
     call across all of them instead of calling this once per target, see accumulate_path's
-    docstring."""
+    docstring. Returns None if tgt_v is unreachable - see accumulate_path."""
     if src_v == tgt_v:
         return accumulate_path(graph, vertex_coords, src_v, tgt_v, [])
     epath = graph.get_shortest_paths(src_v, to=tgt_v, weights="weight", output="epath")[0]
