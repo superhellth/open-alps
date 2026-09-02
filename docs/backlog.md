@@ -7,6 +7,12 @@ under `docs/superpowers/`.
 
 ## High
 
+### [Approach table drops a reserved source-type slot](backlog/approach-reserved-type-slot-overwrite.md)
+
+`select_approaches` writes every reserved source-type slot into `selected[-1]`, so when two types
+are missing from the top-k the second clobbers the first — 102 of 610 huts affected on the current
+run.
+
 ![alt text](image.png)
 ![alt text](image-1.png)
 ![alt text](image-2.png)
@@ -36,6 +42,12 @@ At the moment the data/ folder is quite a mess. Lets enforce more structure onto
 Atm code is quite unstructured not skill-checked with improve codebase architecture
 
 ## Low
+
+### [Exact approach selection via a scalars-only path walk](backlog/exact-approach-selection-scalars-only-path-walk.md)
+
+Drops `accumulate_path`'s coordinate accumulation to get true ascent/descent in the distance pass,
+making approach selection exactly equal to today's instead of a top-20 over-selection. Only
+actionable after the hub-edge scaling spec's §A+§B land.
 
 ### Include Aerial lift in access nodes?
 
