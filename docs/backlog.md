@@ -7,11 +7,21 @@ under `docs/superpowers/`.
 
 ## High
 
+### [start_edges ignores the max-edge range cap](backlog/start-edges-range-cap-violation.md)
+
+100,592 of 471,196 `start_edges` rows (21%) exceed `graph.maxEdgeKm`, up to 267,637 m with 12,903 m
+of ascent — routed paths with real geometry, shipped into the approach table's reverse index.
+
+### [Routed edge geometry drops trail detail](backlog/hut-edge-geometry-drops-trail-detail.md)
+
+1,438 straight hops over 500 m (worst 3,929 m) across 700 of 8,238 `hut_edges` records, none of
+them at an endpoint. Base graph, subgraph cache and mid-chain snaps are all ruled out.
+
 ### [Approach table drops a reserved source-type slot](backlog/approach-reserved-type-slot-overwrite.md)
 
 `select_approaches` writes every reserved source-type slot into `selected[-1]`, so when two types
-are missing from the top-k the second clobbers the first — 102 of 610 huts affected on the current
-run.
+are missing from the top-k the second clobbers the first — 160 of 613 huts with candidates (26%)
+lose an available source type on the 2026-09-02 run.
 
 ![alt text](image.png)
 ![alt text](image-1.png)
@@ -19,6 +29,21 @@ run.
 bugs? Some of this should be solved by rerunning the pipeline with the duplication avoidance
 
 ## Medium
+
+### [Degenerate zero-length start_edges rows](backlog/degenerate-zero-length-start-edges.md)
+
+82,017 rows (17%) carry `max_ele_m == 0`; all are sub-166 m snap-coincident legs whose unset
+maximum elevation is written as sea level into the column the client's altitude cap reads.
+
+### [Base-graph time_s has a nonsense tail](backlog/base-graph-time-s-outliers.md)
+
+1,011 edges imply under 0.05 m/s, 20 exceed a year, worst 2.95e12 s for a flat 118 m edge — silent
+barriers that also poison the key `select_approach_pairs.py` ranks on.
+
+### [Duplicate start points across region extracts](backlog/duplicate-start-points-across-region-extracts.md)
+
+236 redundant hubs (200 station, 36 parking) where the austria/bayern extracts overlap at the
+border — each snaps, routes and ships twice.
 
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 

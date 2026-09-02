@@ -25,11 +25,22 @@ insertion and that type is lost. With `_SOURCE_TYPE_NAME` iterating parking → 
 partner_betrieb, a hut whose top-3 is all parking and which has both a station and a partner
 business ends up with the partner business and **no station at all**.
 
-**Measured on the current run** (`data/osm/start_edges/records.npy`, FAST_ANY, k=3): two or more
+**Measured on the pre-B3 run** (`data/osm/start_edges/records.npy`, FAST_ANY, k=3): two or more
 source types are missing from the top-3 for **102 of 610 huts (17%)**, so each of those loses one
 reserved slot. Shipped `approaches.bin` confirms the effect on output shape: 609 of 610 huts have
 exactly 3 rows — the reservation only ever replaces, never extends, so a hut that legitimately
 needs three type slots plus its best-by-duration entries cannot express that in `k=3`.
+
+**Re-measured on the 2026-09-02 run** (after the hub-edge scaling work, so `start_edges` is now
+`select_approach_pairs.py`'s survivors rather than the whole pool): **160 of 613 huts with
+candidates (26%) end up with an available source type absent from their approach rows** — parking
+129, station 28, partner_betrieb 3. Rows-per-hut is `{1: 1, 2: 2, 3: 610}`, still confirming
+replace-never-extend. A further **233 of 846 huts have zero approach rows at all**, which is a
+separate coverage question, not this bug.
+
+The scaling work neither caused nor fixed this: types survive selection intact (0 huts lose a type
+between `access_distances.npy` and `start_edges`, since `select_approach_pairs.py` takes top-k per
+`(hut_id, start_type)`), so the loss is entirely in `select_approaches`.
 
 **Two separable decisions for whoever fixes this:**
 
