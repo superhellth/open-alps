@@ -22,6 +22,9 @@ _SNAP_SCHEMA_VERSION_PARAM = tracking_param("snap_schema_version", int, binfmt.S
 _RECORD_SCHEMA_VERSION_PARAM = tracking_param(
     "record_schema_version", int, binfmt.RECORD_SCHEMA_VERSION
 )
+_ACCESS_DISTANCE_SCHEMA_VERSION_PARAM = tracking_param(
+    "access_distance_schema_version", int, binfmt.ACCESS_DISTANCE_SCHEMA_VERSION
+)
 
 
 def task_build_base_graph():
@@ -91,6 +94,10 @@ def task_gather_route_subgraphs():
 
 
 def task_build_hub_edges():
+    # B1/B3 of spec 2026-09-02-hub-edge-scaling-design.md: this task now writes hut_edges/ (full
+    # geometry, unchanged) and access_distances.npy (distance/time scalars only, no geometry) -
+    # start_edges/ is now build_access_edges' target, materialized only for the pairs
+    # select_approach_pairs.py selects out of access_distances.npy.
     return pipeline_task(
         "phases/graph_building/build_hub_edges.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
@@ -100,6 +107,7 @@ def task_build_hub_edges():
             # "up to date" and silently skip the rebuild.
             tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
             _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,
+            _ACCESS_DISTANCE_SCHEMA_VERSION_PARAM,
         ],
         task_dep=["snap_hubs", "gather_route_subgraphs"],
         file_dep=[
@@ -108,7 +116,28 @@ def task_build_hub_edges():
             OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
             OSM_DIR / "route_subgraphs" / "manifest.json",
         ],
-        targets=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy"],
+        targets=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "access_distances.npy"],
+    )
+
+
+def task_build_access_edges():
+    # B5/B6: the second and final igraph pass, restricted to select_approach_pairs.py's survivor
+    # list - this is what writes the actual start_edges/ every downstream consumer reads.
+    return pipeline_task(
+        "phases/graph_building/build_access_edges.py",
+        tracking_params=[
+            tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
+            _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,
+        ],
+        task_dep=["select_approach_pairs", "snap_hubs", "gather_route_subgraphs"],
+        file_dep=[
+            OSM_DIR / "base_graph" / "manifest.json",
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
+            OSM_DIR / "route_subgraphs" / "manifest.json",
+            OSM_DIR / "selected_access_pairs.npy",
+        ],
+        targets=[OSM_DIR / "start_edges" / "records.npy"],
     )
 
 

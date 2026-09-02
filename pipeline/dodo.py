@@ -38,13 +38,13 @@ from dag.elevation import (  # noqa: E402,F401
     task_build_dem_vrt, task_build_profiles, task_compute_edge_profiles, task_sample_base_elevation,
 )
 from dag.graph_building import (  # noqa: E402,F401
-    task_build_base_graph, task_build_hub_edges, task_gather_route_subgraphs,
-    task_match_tour_edges, task_snap_hubs,
+    task_build_access_edges, task_build_base_graph, task_build_hub_edges,
+    task_gather_route_subgraphs, task_match_tour_edges, task_snap_hubs,
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
     task_build_hut_edge_tiles, task_build_start_edge_tiles, task_build_tour_edge_payload,
-    task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_build_tour_edge_tiles, task_build_trail_tiles, task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,
@@ -81,6 +81,7 @@ DOIT_CONFIG = {
         "fetch_stations_parking", "filter_start_points",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
+        "select_approach_pairs", "build_access_edges",
         "match_tour_edges",
         "build_profiles",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",

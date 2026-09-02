@@ -8,6 +8,18 @@ from lib.pipeline import OSM_DIR, load_config
 CONFIG = load_config()
 
 
+def task_select_approach_pairs():
+    # B2/B4: global selection over access_distances.npy - must run whole-table (loop-closure
+    # reverse index isn't cell-local), so it is its own task rather than in-worker selection.
+    return pipeline_task(
+        "phases/postprocessing/select_approach_pairs.py",
+        params=[cli_param("k", "k", int, CONFIG["approach"].get("selectK", 20))],
+        task_dep=["build_hub_edges"],
+        file_dep=[OSM_DIR / "access_distances.npy"],
+        targets=[OSM_DIR / "selected_access_pairs.npy"],
+    )
+
+
 def task_build_trail_tiles():
     tiles_cfg = CONFIG.get("trailTiles", {})
     return pipeline_task(
