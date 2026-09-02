@@ -26,16 +26,18 @@ source and writes into `data/osm/` or `data/dem/`. All read `pipeline/pipeline.c
 Two independent tag-filtered exports, reusing the raw extracts from `download_extracts.py` (no
 new network download):
 
-- **stations** — two node-only tag-filter pipelines, unioned with `osmium cat`: rail is a plain
-  `osmium tags-filter n/railway=station,halt`; bus is three sequential AND stages
-  (`n/highway=bus_stop` → `n/public_transport=platform` → `n/name`, each stage's output feeding
-  the next, since `osmium tags-filter` only ORs the tags named in one call) — bare
-  `highway=bus_stop` alone matches ~5x as many nodes as this narrowed set, most unnamed
+- **stations** — two node-only tag-filter pipelines, unioned (and re-sorted by ID) with
+  `osmium sort`: rail is `n/railway=station,halt` → `n/name` (two AND stages); bus is three AND
+  stages (`n/highway=bus_stop` → `n/public_transport=platform` → `n/name`) — each stage's output
+  feeding the next, since `osmium tags-filter` only ORs the tags named in one call. Rail does
+  **not** require `public_transport=platform` — that tag is essentially never present on
+  `railway=station,halt` nodes in this data and would drop real stations, not filter noise. Bare
+  `highway=bus_stop` alone matches ~5x as many nodes as the narrowed bus set, most unnamed
   poles/duplicates that add routing cost in `build_hub_edges.py` without real trailhead value.
-  Both pipelines' output is `osmium export --geometry-types point`'d and unioned, then properties
-  pruned to `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag
-  shape as parking below, so both layers are filterable the same way by
-  `filter_start_points.py`'s `is_usable()`.
+  Both pipelines' final output is `osmium export --geometry-types point`'d, then properties pruned
+  to `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag shape
+  as parking below, so both layers are filterable the same way by `filter_start_points.py`'s
+  `is_usable()`.
 - **parking** — `osmium tags-filter nwr/amenity=parking` (nodes+ways+relations, since lots are
   usually mapped as polygons), `osmium export --geometry-types point` (so a polygon exports as its
   centroid, not its ring — keeps this a plain `Point` layer like everything else), properties
