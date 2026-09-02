@@ -26,12 +26,15 @@ source and writes into `data/osm/` or `data/dem/`. All read `pipeline/pipeline.c
 Two independent tag-filtered exports, reusing the raw extracts from `download_extracts.py` (no
 new network download):
 
-- **stations** — `osmium tags-filter n/railway=station,halt n/highway=bus_stop` (node-only; two
-  filter expressions OR'ed by osmium, not one merged string — bus stops still overwhelmingly use
-  the older `highway=bus_stop` tag in AT/Bavaria OSM data, not the `public_transport=platform`
-  scheme), then `osmium export --geometry-types point`, properties pruned to
-  `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag shape as
-  parking below, so both layers are filterable the same way by
+- **stations** — two node-only tag-filter pipelines, unioned with `osmium cat`: rail is a plain
+  `osmium tags-filter n/railway=station,halt`; bus is three sequential AND stages
+  (`n/highway=bus_stop` → `n/public_transport=platform` → `n/name`, each stage's output feeding
+  the next, since `osmium tags-filter` only ORs the tags named in one call) — bare
+  `highway=bus_stop` alone matches ~5x as many nodes as this narrowed set, most unnamed
+  poles/duplicates that add routing cost in `build_hub_edges.py` without real trailhead value.
+  Both pipelines' output is `osmium export --geometry-types point`'d and unioned, then properties
+  pruned to `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag
+  shape as parking below, so both layers are filterable the same way by
   `filter_start_points.py`'s `is_usable()`.
 - **parking** — `osmium tags-filter nwr/amenity=parking` (nodes+ways+relations, since lots are
   usually mapped as polygons), `osmium export --geometry-types point` (so a polygon exports as its

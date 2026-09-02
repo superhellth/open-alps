@@ -33,11 +33,19 @@ config = load_config()
 LAYERS = [
     {
         "name": "stations",
-        # Two filter expressions, not one merged railway=...,highway=... string - osmium
-        # tags-filter OR's multiple expression arguments together, keeping a node that matches
-        # either. Bus stops overwhelmingly still use the older highway=bus_stop tag in AT/Bavaria
-        # OSM data (docs/backlog/access-node-coverage.md).
-        "tag_filter": ["n/railway=station,halt", "n/highway=bus_stop"],
+        # Two pipelines, unioned via `osmium cat` rather than OR'd in one tags-filter call: the
+        # rail branch is a plain tag match, but the bus branch needs an AND (bus_stop AND
+        # public_transport=platform AND a name) - `osmium tags-filter` only ORs across the tags
+        # named in one call, so an AND has to be built as sequential filter passes, each narrowing
+        # the previous stage's output (docs/backlog/access-node-coverage.md). Without the
+        # public_transport=platform + name narrowing, plain highway=bus_stop pulled in ~5x the
+        # prior access-point count (~15.6k -> ~84.5k, see data/timings.jsonl's hub_edge_query
+        # meta), most of it unnamed poles/duplicates that inflate build_hub_edges.py's per-cell
+        # routing cost roughly linearly in access-point count without adding real trailhead value.
+        "tag_filter_pipelines": [
+            ["n/railway=station,halt"],
+            ["n/highway=bus_stop", "n/public_transport=platform", "n/name"],
+        ],
         # access/motor_vehicle/barrier/disused/abandoned: same usability-filtering shape as
         # parking below, consumed by filter_start_points.py's is_usable(). network/operator
         # dropped - unused downstream and unread by the frontend (TourSearchPage.tsx only reads
@@ -46,10 +54,28 @@ LAYERS = [
     },
     {
         "name": "parking",
-        "tag_filter": ["nwr/amenity=parking"],
+        "tag_filter_pipelines": [["nwr/amenity=parking"]],
         "keep_fields": ["name", "capacity", "fee", "access", "motor_vehicle", "barrier"],
     },
 ]
+
+
+def run_filter_pipeline(src: Path, pipeline: list, tmp_prefix: Path, tmp_files: list) -> Path:
+    """Runs `pipeline`'s tag-filter expressions as sequential AND stages - each stage's output
+    feeds the next as input, so only objects matching every stage survive - and returns the last
+    stage's output path. Every stage's output (named tmp_prefix-s{i}.osm.pbf) is appended to
+    `tmp_files` for the caller to clean up once it's done with the pipeline's final output."""
+    current = src
+    out = current
+    for i, expr in enumerate(pipeline):
+        out = tmp_prefix.with_name(f"{tmp_prefix.name}-s{i}.osm.pbf")
+        subprocess.run(
+            ["osmium", "tags-filter", str(current), expr, "-o", str(out), "--overwrite"],
+            check=True,
+        )
+        tmp_files.append(out)
+        current = out
+    return out
 
 
 def export_layer(layer: dict, timer: StepTimer) -> None:
@@ -61,11 +87,27 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
         filtered = OSM_DIR / f"{region['name']}-{layer['name']}.osm.pbf"
         print(f"filtering {src} -> {filtered}")
         with timer.step(f"{layer['name']}_tag_filter"):
-            subprocess.run(
-                ["osmium", "tags-filter", str(src), *layer["tag_filter"],
-                 "-o", str(filtered), "--overwrite"],
-                check=True,
-            )
+            pipeline_outputs = []
+            tmp_files = []
+            for p, pipeline in enumerate(layer["tag_filter_pipelines"]):
+                tmp_prefix = OSM_DIR / f"{region['name']}-{layer['name']}-p{p}"
+                stage_out = run_filter_pipeline(src, pipeline, tmp_prefix, tmp_files)
+                pipeline_outputs.append(stage_out)
+            if len(pipeline_outputs) > 1:
+                # `osmium sort` merges multiple inputs (like `cat`) AND restores the by-ID
+                # ordering `osmium export` requires - a plain `cat` concatenation leaves node IDs
+                # out of order (each pipeline's output is independently ID-sorted, but the union
+                # of two sorted sequences isn't itself sorted) and `export` refuses to run on that.
+                subprocess.run(
+                    ["osmium", "sort", *[str(p) for p in pipeline_outputs],
+                     "-o", str(filtered), "--overwrite"],
+                    check=True,
+                )
+            else:
+                pipeline_outputs[0].replace(filtered)
+                tmp_files.remove(pipeline_outputs[0])
+            for tmp in tmp_files:
+                tmp.unlink(missing_ok=True)
 
         with timer.step(f"{layer['name']}_export"):
             result = subprocess.run(
