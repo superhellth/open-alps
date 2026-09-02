@@ -86,6 +86,19 @@ def write_edge_records(records: list, out_dir: Path, write_edge_ids: bool = Fals
         binfmt.save_array(out_dir / "edge_ids.npy", np.array(flat_edge_ids, dtype="i4"))
 
 
+def write_access_distances(rows: list, path: Path) -> None:
+    """Packs build_hub_edges.py's hut->access scalar rows (spec 2026-09-02-hub-edge-scaling-
+    design.md B3: distance/time only, no geometry, no path walk) into one flat
+    binfmt.ACCESS_DISTANCE_DTYPE array. Each row: {hut_id, start_id, start_type, variant,
+    distance_m, time_s} - distance_m already has both ends' snap gap folded in (SnapResult.gap_m
+    is direction-free, unlike ascent_m/descent_m, so no path walk is needed to fold it)."""
+    arr = np.zeros(len(rows), dtype=binfmt.ACCESS_DISTANCE_DTYPE)
+    for i, r in enumerate(rows):
+        arr[i] = (r["hut_id"], r["start_id"], r["start_type"], r["variant"],
+                   r["distance_m"], r["time_s"])
+    binfmt.save_array(path, arr)
+
+
 def fold_endpoint_snaps(path, src_snap, tgt_snap) -> tuple:
     """Prices the hub-to-trail gap at both ends into distance/ascent/descent (spec E3 of
     2026-08-19-pipeline-v2-design.md): a routed path only sums routed edges, so the snap gap
