@@ -50,6 +50,18 @@ def is_usable(props: dict) -> bool:
     return True
 
 
+def dedupe_by_osm_id(points: list) -> list:
+    """Collapses redundant `(type, osm_id)` rows into one. The AT/Bayern region extracts overlap
+    at the border, and fetch_stations_parking.py filters+exports per region then concatenates -
+    nothing merges the result, so a station/parking node inside the overlap band is emitted twice
+    at byte-identical coordinates (see docs/backlog/duplicate-start-points-across-region-extracts.md).
+    Keeps the first occurrence, same as a stable dict-based dedup."""
+    seen = {}
+    for p in points:
+        seen.setdefault((p["type"], p["osm_id"]), p)
+    return list(seen.values())
+
+
 def filter_to_hut_range(start_points: list, hut_coords: np.ndarray, max_edge_km: float) -> list:
     """C1/C2 of spec 2026-09-02-hub-edge-scaling-design.md: the old version built a cKDTree over
     raw (lon, lat) degrees and thresholded at max_edge_km / KM_PER_DEG_LAT - that constant is
@@ -153,7 +165,11 @@ if __name__ == "__main__":
         )
         print(f"start-point candidates: {len(all_points)}")
 
-        usable_points = [p for p in all_points if is_usable(p.get("properties", {}))]
+        deduped_points = dedupe_by_osm_id(all_points)
+        print(f"deduped (type, osm_id): {len(deduped_points)} "
+              f"({len(all_points) - len(deduped_points)} redundant rows dropped)")
+
+        usable_points = [p for p in deduped_points if is_usable(p.get("properties", {}))]
         print(f"usable (not private/gated/disused): {len(usable_points)} "
               f"({len(all_points) - len(usable_points)} dropped)")
 

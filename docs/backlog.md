@@ -40,11 +40,6 @@ maximum elevation is written as sea level into the column the client's altitude 
 1,011 edges imply under 0.05 m/s, 20 exceed a year, worst 2.95e12 s for a flat 118 m edge — silent
 barriers that also poison the key `select_approach_pairs.py` ranks on.
 
-### [Duplicate start points across region extracts](backlog/duplicate-start-points-across-region-extracts.md)
-
-236 redundant hubs (200 station, 36 parking) where the austria/bayern extracts overlap at the
-border — each snaps, routes and ships twice.
-
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
