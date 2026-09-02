@@ -404,8 +404,9 @@ def test_compute_hub_edges_for_cell_fills_the_step_timer():
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY, timer=timer,
     )
-    assert set(timer.seconds) == {"snap", "build_igraph", "distances", "paths"}
+    assert set(timer.seconds) == {"snap", "build_base_arrays", "build_igraph", "distances", "paths"}
     assert timer.calls["snap"] == 1          # one timed pass over the whole snap loop
+    assert timer.calls["build_base_arrays"] == 1   # built ONCE per cell, not once per variant
     assert timer.calls["snap_hubs"] == 2     # both huts snapped onto the line
     assert timer.calls["distances"] == 2     # one distance query per core hub
 
