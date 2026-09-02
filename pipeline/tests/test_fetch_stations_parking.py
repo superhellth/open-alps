@@ -12,11 +12,13 @@ def _layer(name):
 
 
 def test_stations_tag_filter_includes_rail_and_narrowed_bus_stops():
-    # Rail is a single-stage pipeline (plain OR'd tag match); bus is a three-stage AND pipeline
-    # (bus_stop -> public_transport=platform -> name), since osmium tags-filter only ORs the tags
-    # named in one call - an AND needs sequential filter passes.
+    # Rail is a two-stage AND pipeline (railway=station,halt -> name); bus is a three-stage AND
+    # pipeline (bus_stop -> public_transport=platform -> name), since osmium tags-filter only ORs
+    # the tags named in one call - an AND needs sequential filter passes. Rail does NOT require
+    # public_transport=platform - that tag is essentially never present on railway=station/halt
+    # nodes (measured), so requiring it would drop real stations rather than filter noise.
     pipelines = _layer("stations")["tag_filter_pipelines"]
-    assert ["n/railway=station,halt"] in pipelines
+    assert ["n/railway=station,halt", "n/name"] in pipelines
     assert ["n/highway=bus_stop", "n/public_transport=platform", "n/name"] in pipelines
 
 

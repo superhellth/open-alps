@@ -33,17 +33,21 @@ config = load_config()
 LAYERS = [
     {
         "name": "stations",
-        # Two pipelines, unioned via `osmium cat` rather than OR'd in one tags-filter call: the
-        # rail branch is a plain tag match, but the bus branch needs an AND (bus_stop AND
-        # public_transport=platform AND a name) - `osmium tags-filter` only ORs across the tags
-        # named in one call, so an AND has to be built as sequential filter passes, each narrowing
-        # the previous stage's output (docs/backlog/access-node-coverage.md). Without the
-        # public_transport=platform + name narrowing, plain highway=bus_stop pulled in ~5x the
-        # prior access-point count (~15.6k -> ~84.5k, see data/timings.jsonl's hub_edge_query
-        # meta), most of it unnamed poles/duplicates that inflate build_hub_edges.py's per-cell
-        # routing cost roughly linearly in access-point count without adding real trailhead value.
+        # Two pipelines, unioned via `osmium sort` rather than OR'd in one tags-filter call - an
+        # AND needs sequential filter passes since `osmium tags-filter` only ORs across the tags
+        # named in one call. Both require a name (measured: only ~0.3% of rail station/halt nodes
+        # in AT+Bayern lack one, so this is a free no-op there, but it matters for bus stops - see
+        # below). The bus branch additionally requires public_transport=platform - NOT applied to
+        # rail, since that tag is essentially never present on railway=station/halt nodes in this
+        # data (measured 1694->1 AT, 1331->0 Bayern; it marks the platform way/node, not the
+        # station node) and would wipe out real stations rather than filter noise. Without the
+        # bus branch's public_transport=platform + name narrowing, plain highway=bus_stop pulled
+        # in ~5x the prior access-point count (~15.6k -> ~84.5k, see data/timings.jsonl's
+        # hub_edge_query meta), most of it unnamed poles/duplicates that inflate
+        # build_hub_edges.py's per-cell routing cost roughly linearly in access-point count
+        # without adding real trailhead value.
         "tag_filter_pipelines": [
-            ["n/railway=station,halt"],
+            ["n/railway=station,halt", "n/name"],
             ["n/highway=bus_stop", "n/public_transport=platform", "n/name"],
         ],
         # access/motor_vehicle/barrier/disused/abandoned: same usability-filtering shape as
