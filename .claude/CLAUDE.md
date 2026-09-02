@@ -114,3 +114,7 @@ plan tasks directly, in-session, on the current checkout.
 Especially skill invocations should honor to put the docs they produce in the according docs/ directory.
 After completing a backlog task, remove it from `backlog.md` and remove the corresponding `.md`-file
 if it existed.
+
+## No historical comments
+
+When writing comments dont cite historic reasons for the change. State what the current version does concisely.

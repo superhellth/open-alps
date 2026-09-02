@@ -11,6 +11,7 @@ from preprocessing.filter_start_points import (  # noqa: E402
     _load_arcgis_layer,
     _load_osm_export_layer,
     build_id_table,
+    dedupe_by_osm_id,
     filter_to_hut_range,
     is_usable,
 )
@@ -176,6 +177,47 @@ def test_is_usable_keeps_permit_access_customers():
     # customers/permit are real-world access values that don't mean "unusable" - spec E1's
     # access_unknown/access_values plumbing surfaces them to the UI instead of dropping them.
     assert is_usable({"access": "customers"}) is True
+
+
+def test_dedupe_drops_same_type_and_osm_id_seen_twice():
+    # The AT/Bayern region extracts overlap at the border, so a single real-world node can be
+    # exported once per region and land in stations.geojson/parking.geojson twice at
+    # byte-identical coordinates - docs/backlog/duplicate-start-points-across-region-extracts.md.
+    points = [
+        {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "station"},
+        {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "station"},
+    ]
+    deduped = dedupe_by_osm_id(points)
+    assert len(deduped) == 1
+    assert deduped[0]["osm_id"] == 42
+
+
+def test_dedupe_keeps_same_osm_id_across_different_types():
+    # osm_id is only unique WITHIN a layer (station/parking/partner_betrieb draw from different
+    # id spaces), so the same numeric id under two types must not collide.
+    points = [
+        {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "station"},
+        {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "parking"},
+    ]
+    deduped = dedupe_by_osm_id(points)
+    assert len(deduped) == 2
+
+
+def test_dedupe_keeps_the_first_occurrence():
+    first = {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "station", "properties": {"name": "A"}}
+    second = {"lon": 13.0, "lat": 47.5, "osm_id": 42, "type": "station", "properties": {"name": "B"}}
+    deduped = dedupe_by_osm_id([first, second])
+    assert len(deduped) == 1
+    assert deduped[0]["properties"]["name"] == "A"
+
+
+def test_dedupe_preserves_order_and_leaves_distinct_points_alone():
+    points = [
+        {"lon": 10.0, "lat": 47.0, "osm_id": 1, "type": "parking"},
+        {"lon": 11.0, "lat": 47.0, "osm_id": 2, "type": "station"},
+    ]
+    deduped = dedupe_by_osm_id(points)
+    assert [p["osm_id"] for p in deduped] == [1, 2]
 
 
 def test_preserves_input_order_of_survivors():
