@@ -7,21 +7,6 @@ under `docs/superpowers/`.
 
 ## High
 
-### [Approach table drops a reserved source-type slot](backlog/approach-reserved-type-slot-overwrite.md)
-
-`select_approaches` writes every reserved source-type slot into `selected[-1]`, so when two types
-are missing from the top-k the second clobbers the first — 160 of 613 huts with candidates (26%)
-lose an available source type on the 2026-09-02 run.
-
-![alt text](image.png)
-![alt text](image-4.png)
-![alt text](image-3.png)
-ui issue or pipeline bug?
-
-![alt text](image-5.png)
-![alt text](image-6.png)
-unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlapping solution?
-
 ## Medium
 
 ### [Approach selection doesn't penalize long walks through urban/street terrain](backlog/approach-urban-walk-unpenalized.md)
