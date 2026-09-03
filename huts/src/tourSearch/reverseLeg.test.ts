@@ -40,7 +40,7 @@ describe('forwardHutLeg', () => {
 
 describe('start-edge reversal (approach/exit)', () => {
   const approach: ApproachRecord = {
-    hutIndex: 15, startId: 32854131, sourceType: SOURCE_TYPE_STATION, accessUnknown: false,
+    hutIndex: 15, startId: 32854131, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false,
     distanceM: 4000, ascentM: 300, descentM: 100, access: null, edgeId: 7,
   }
 
