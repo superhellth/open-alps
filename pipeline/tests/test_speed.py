@@ -38,3 +38,17 @@ def test_zero_length_segment_costs_nothing_and_does_not_divide_by_zero():
 def test_din_duration_blends_horizontal_and_vertical():
     # 8 km with 600 m up / 500 m down: t_h = 2.0, t_v = 2.0 + 1.0 = 3.0 -> 3.0 + 1.0 = 4.0 h
     assert speed.din_duration_h(8000.0, 600.0, 500.0) == pytest.approx(4.0)
+
+
+def test_technical_time_matches_3d_distance_over_pace():
+    dist_m, dz_m, pace_ms = 30.0, 40.0, 0.2
+    expected = np.hypot(dist_m, dz_m) / pace_ms  # 50 m / 0.2 m/s = 250 s
+    got = speed.technical_time_s(np.array([dist_m]), np.array([dz_m]), pace_ms=pace_ms)[0]
+    assert got == pytest.approx(expected)
+
+
+def test_technical_time_is_symmetric_in_the_sign_of_dz():
+    # unlike edge_time_s's Tobler model, technical_time_s must not favour descent over ascent
+    up = speed.technical_time_s(np.array([30.0]), np.array([40.0]), pace_ms=0.2)[0]
+    down = speed.technical_time_s(np.array([30.0]), np.array([-40.0]), pace_ms=0.2)[0]
+    assert up == pytest.approx(down)
