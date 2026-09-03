@@ -32,4 +32,4 @@ new row when a new spec is written.
 | 2026-09-03 | [`data/` directory restructure](specs/2026-09-03-data-directory-restructure-design.md) | **in progress** |
 | 2026-09-03 | [Steep-terrain time model](specs/2026-09-03-steep-terrain-time-model-design.md) | done |
 | 2026-09-03 | [Approach table: duration/source-type/variant matrix](specs/2026-09-03-approach-table-duration-matrix-design.md) | done |
-| 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | **in progress** |
+| 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | done |
