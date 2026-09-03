@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import '@testing-library/jest-dom/vitest'
-import GraphPage from './GraphPage.js'
+import AdminPage from './AdminPage.js'
 
 afterEach(() => {
   cleanup()
@@ -41,10 +41,10 @@ function stubFetch() {
   )
 }
 
-describe('GraphPage hut classification', () => {
+describe('AdminPage hut classification', () => {
   it('renders a checkbox group and dims non-matching markers without hiding them', async () => {
     stubFetch()
-    const { container } = render(<GraphPage />)
+    const { container } = render(<AdminPage />)
     await waitFor(() => expect(screen.getByText(/2 Hütten/)).toBeInTheDocument())
 
     const markersBefore = container.querySelectorAll('path.leaflet-interactive')
@@ -69,7 +69,7 @@ describe('GraphPage hut classification', () => {
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
-    render(<GraphPage />)
+    render(<AdminPage />)
     await waitFor(() => expect(screen.getByText(/0 Hütten/)).toBeInTheDocument())
   })
 })

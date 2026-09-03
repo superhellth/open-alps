@@ -6,7 +6,7 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: { main: '#1b5e20' }, // matches the existing map header green
-    secondary: { main: '#e65100' }, // matches GraphPage's edge-orange accent
+    secondary: { main: '#e65100' }, // matches AdminPage's edge-orange accent
   },
   typography: {
     fontFamily: 'system-ui, sans-serif',

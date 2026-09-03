@@ -24,7 +24,7 @@ npm run dev
 
 The app fetches Alpine Club hut data live at runtime — no setup needed for that. It also fetches
 static files from `huts/public/data/` (`stations.geojson`, `parking.geojson`, and, for the
-opt-in `#graph` route, `huts.geojson`/`trails.pmtiles`/`hut-edges.pmtiles`/`hut-edge-stats.json`).
+internal-only `#admin` route, `huts.geojson`/`trails.pmtiles`/`hut-edges.pmtiles`/`hut-edge-stats.json`).
 **Those files aren't checked into git** (see `.gitignore`) — on a fresh clone `huts/public/data/`
 is empty and those requests 404 until you've run the pipeline below at least once and copied its
 output in. `npm run build` / `npm run lint` / `npm run preview` are also available (see

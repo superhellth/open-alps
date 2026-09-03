@@ -3,7 +3,7 @@ import { AppBar, Box, Tab, Tabs, Toolbar, Typography } from '@mui/material'
 
 const TABS = [
   { hash: '', label: 'Tourensuche' },
-  { hash: '#graph', label: 'Trail-Graph' },
+  { hash: '#admin', label: 'Admin' },
 ] as const
 
 interface AppShellProps {

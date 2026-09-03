@@ -1,6 +1,6 @@
 # phases/postprocessing/ — package for the browser app
 
-Builds the static assets `huts/`'s `GraphPage.jsx`/`App.jsx` actually fetch: vector tiles (too
+Builds the static assets `huts/`'s `AdminPage.tsx`/`TourSearchPage.tsx` actually fetch: vector tiles (too
 large to ship as plain GeoJSON) plus small JSON sidecars for hover/UI data that PMTiles can't
 serve on its own.
 
@@ -8,7 +8,7 @@ serve on its own.
 
 Ships the *full* raw OSM trail network (26.5M nodes for AT+Bayern — the reason this can't be
 plain GeoJSON) as one static PMTiles archive, rendered client-side via `protomaps-leaflet` behind
-an opt-in toggle in `GraphPage.jsx` (`TrailTilesLayer`).
+an opt-in toggle in `AdminPage.tsx` (`TrailTilesLayer`).
 
 1. `osmium export trails.osm.pbf --geometry-types=linestring -f geojsonseq -o -` piped directly
    (no intermediate file) into a Python filter loop.
