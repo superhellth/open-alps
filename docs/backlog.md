@@ -7,19 +7,6 @@ under `docs/superpowers/`.
 
 ## High
 
-### [start_edges ignores the max-edge range cap](backlog/start-edges-range-cap-violation.md)
-
-Fixed in code (`9eb5b90`, `build_access_edges.py` now re-checks the routed, snap-inclusive distance
-against `max_edge_km` and drops over-cap records). On-disk data still has 100,592 of 471,196 rows over
-30 km — pending a `build_access_edges`/`build_hub_edges` rerun to confirm 0 flagged.
-
-### [Routed edge geometry drops trail detail](backlog/hut-edge-geometry-drops-trail-detail.md)
-
-Root cause found and fixed in `lib/cell_igraph.py` (igraph silently canonicalizes an undirected
-edge's source/target to ascending vertex-id order, breaking `accumulate_path`'s forward/reverse
-detection — also swapped `ascent_m`/`descent_m` on affected edges, not just geometry). Pending a
-`build_hub_edges`/`build_access_edges`/`match_tour_edges` rerun to confirm 0 flagged in data.
-
 ### [Approach table drops a reserved source-type slot](backlog/approach-reserved-type-slot-overwrite.md)
 
 `select_approaches` writes every reserved source-type slot into `selected[-1]`, so when two types
@@ -36,12 +23,6 @@ ui issue or pipeline bug?
 unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlapping solution?
 
 ## Medium
-
-### [Degenerate zero-length start_edges rows](backlog/degenerate-zero-length-start-edges.md)
-
-The sentinel half is fixed in code (`88b08aa`, zero-length paths now carry real vertex elevation
-instead of `0.0`), pending rebuild to confirm. Whether the 82,017 degenerate rows (17%, sub-166 m
-snap-coincident legs) should be emitted at all is still an open design call.
 
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
@@ -123,34 +104,37 @@ There are some hard to understand entries in the current config file. Maybe we c
 
 ### Quality issues
 
-Snapshot from `data/quality/graph_building.json`, generated 08:04 on 2026-09-03 — **before** the
-igraph vertex-scrambling fix (`9eb5b90`, ~13:00) and the elevation-sentinel fix (`88b08aa`, ~13:30),
-so it does not yet reflect either. `vertex_gap_*`/`self_retrace_*` rows below are exactly the
-round-trip artifact `9eb5b90` fixes (walk to the far end of an edge, walk back, jump again on the
-next one) and `scalar_sanity_start_edges` is exactly what `88b08aa` targets — all expected to drop
-toward baseline once `build_hub_edges`/`build_access_edges`/`match_tour_edges` rerun, but unconfirmed
-until they do. `snap_health` and `connectivity` are untouched by either fix.
+Snapshot from `data/quality/graph_building.json`, generated 14:15 local on 2026-09-03 — **after** the
+igraph vertex-scrambling fix (`9eb5b90`), the elevation-sentinel fix (`88b08aa`), and a full
+`build_hub_edges`/`build_access_edges`/`match_tour_edges` rebuild, so it reflects both. Confirmed
+fixed by this run: `range_cap_hut_edges`/`range_cap_start_edges` (both 0) and
+`scalar_sanity_hut_edges`/`scalar_sanity_start_edges` (both 0) — both now-removed backlog items,
+resolved. `vertex_gap_hut_edges`/`self_retrace_hut_edges`/`vertex_gap_start_edges`/`self_retrace_start_edges`
+dropped sharply but did not reach 0 — see
+[hut-edge-geometry-drops-trail-detail](backlog/hut-edge-geometry-drops-trail-detail.md) for the
+residual. `snap_health` and `connectivity` are untouched by either fix, as expected.
 
   Over baseline — worth attention:
 
-  ┌───────────────────────────┬─────────┬──────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │           Check           │ Flagged │ Baseline │                                                                   Note                                                                   │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ vertex_gap_start_edges    │ 122,794 │ 0        │ massive, but baseline=0 for start_edges looks like a placeholder default (never calibrated for this layer), not a real prior measurement │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ self_retrace_start_edges  │ 15,477  │ 0        │ same caveat — likely never-calibrated baseline, not a true regression                                                                    │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ vertex_gap_base_graph     │ 3,389   │ 0        │ same — base_graph also defaults to baseline 0 in code                                                                                    │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ snap_health               │ 609     │ 225      │ real regression, +384. All sampled flags are hut snap issues with reason vertical_offset                                                 │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ scalar_sanity_start_edges │ 88,443  │ 82,017   │ +6,426, moderate regression                                                                                                              │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ self_retrace_hut_edges    │ 281     │ 270      │ +11, minor drift                                                                                                                         │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ connectivity              │ 4       │ 0        │ one row per route variant (FAST_ANY/T2/T3/T3_UNGRADED), each showing large isolated-hut counts (81–294 huts outside the largest          │
-  │                           │         │          │ component)                                                                                                                               │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ vertex_gap_tour_edges     │ 1       │ 0        │ 1 of 5 official-tour edges checked — a 555m gap in a Kaisertour segment                                                                  │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ self_retrace_tour_edges   │ 1       │ 0        │ 1 of 5 — a 1.3km self-retrace on the same tour, edge 259→796                                                                             │
+  ┌────────────────────────────┬─────────┬──────────┬─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │            Check           │ Flagged │ Baseline │                                                                  Note                                                                   │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ vertex_gap_start_edges     │ 5,719   │ 0        │ down from 122,794 pre-rebuild; baseline=0 for start_edges is a never-calibrated placeholder, not a real prior measurement                │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ self_retrace_start_edges   │ 219     │ 0        │ down from 15,477 pre-rebuild; same baseline caveat                                                                                        │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ vertex_gap_base_graph      │ 3,389   │ 0        │ unchanged — base_graph also defaults to baseline 0 in code, untouched by either fix                                                       │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ snap_health                │ 609     │ 225      │ unchanged, real regression +384. All sampled flags are hut snap issues with reason vertical_offset                                        │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ connectivity               │ 4       │ 0        │ unchanged — one row per route variant (FAST_ANY/T2/T3/T3_UNGRADED), each showing large isolated-hut counts (81–294 huts outside the       │
+  │                            │         │          │ largest component)                                                                                                                         │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ vertex_gap_tour_edges      │ 1       │ 0        │ unchanged — 1 of 5 official-tour edges checked, a Kaisertour segment gap                                                                  │
+  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
+  │ self_retrace_tour_edges    │ 1       │ 0        │ unchanged — 1 of 5, edge 259→796                                                                                                           │
+  └────────────────────────────┴─────────┴──────────┴─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+  Now at or below baseline (previously over): `vertex_gap_hut_edges` 120 vs. 700,
+  `self_retrace_hut_edges` 9 vs. 270, `scalar_sanity_hut_edges` 0 vs. 24, `scalar_sanity_start_edges`
+  0 vs. 82,017, `range_cap_hut_edges` 0 vs. 25, `range_cap_start_edges` 0 vs. 100,592.
