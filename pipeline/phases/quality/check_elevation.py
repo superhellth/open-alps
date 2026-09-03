@@ -78,7 +78,7 @@ def check_implied_speed(edges: np.ndarray, min_speed_ms: float, max_flagged: int
     ]
     return build_check(
         "implied_speed", {"min_speed_ms": min_speed_ms}, checked=len(edges),
-        flagged_rows=flagged, baseline=1011, max_flagged_rows=max_flagged,
+        flagged_rows=flagged, baseline=0, max_flagged_rows=max_flagged,
         sort_key=lambda r: -r["implied_speed_ms"],
     )
 
