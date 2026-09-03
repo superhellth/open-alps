@@ -50,10 +50,11 @@ _SOURCE_TYPE_NAME = {
 }
 
 
-def gather_candidates(records: np.ndarray, id_table: dict) -> dict:
+def gather_candidates(records: np.ndarray, id_table: dict, variant_ids: set) -> dict:
     by_hut = defaultdict(list)
     for edge_id, r in enumerate(records):
-        if int(r["variant"]) != binfmt.VARIANT_FAST_ANY:
+        variant = int(r["variant"])
+        if variant not in variant_ids:
             continue
         type_name = _SOURCE_TYPE_NAME.get(int(r["from_type"]))
         if type_name is None:
@@ -70,6 +71,7 @@ def gather_candidates(records: np.ndarray, id_table: dict) -> dict:
             "hut_id": int(r["to_id"]),
             "start_id": start_id,
             "source_type": int(r["from_type"]),
+            "variant": variant,
             "edge_id": edge_id,
             "access": access,
             "access_unknown": access is None,
