@@ -32,6 +32,14 @@ def edge_time_s(dist_m, dz_m, *, v0: float, k: float, s0: float):
     return np.where(dist_m > 0, dist_m / v_ms, 0.0)
 
 
+def technical_time_s(dist_m, dz_m, *, pace_ms: float):
+    """Constant pace over 3D distance - via ferrata / T5-T6 terrain isn't walking, and its pace
+    isn't primarily a function of horizontal slope the way Tobler assumes."""
+    dist_m = np.asarray(dist_m, dtype=np.float64)
+    dz_m = np.asarray(dz_m, dtype=np.float64)
+    return np.hypot(dist_m, dz_m) / pace_ms
+
+
 def din_duration_h(distance_m: float, ascent_m: float, descent_m: float) -> float:
     """DIN 33466. NEVER call this with a routing-penalised distance - a road does not take longer
     to walk (spec A3)."""
