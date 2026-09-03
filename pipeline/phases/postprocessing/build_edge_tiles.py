@@ -82,6 +82,8 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
     stats = []
     point_counts = []
     all_points = []
+    profile_counts = []
+    all_profiles = []
     for edge_id in range(len(records)):
         r = records[edge_id]
         g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
@@ -92,7 +94,9 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
         all_points.append(simplified)
 
         p_off, p_count = int(r["profile_offset"]), int(r["profile_count"])
-        profile = profiles[p_off:p_off + p_count].tolist() if p_count else []
+        profile_counts.append(p_count)
+        if p_count:
+            all_profiles.append(profiles[p_off:p_off + p_count])
 
         stats.append({
             "edge_id": edge_id,
@@ -102,14 +106,16 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
             "road_m": float(r["road_m"]),
             "ascent_m": float(r["ascent_m"]) if r["ascent_m"] != binfmt.UNSET else None,
             "descent_m": float(r["descent_m"]) if r["descent_m"] != binfmt.UNSET else None,
-            "elevation_profile": profile,
             "sac_scale": int(r["sac_rank"]) if r["sac_rank"] >= 0 else None,
             "via_ferrata": bool(r["via_ferrata"]),
         })
     geometry_points = (
         np.concatenate(all_points, axis=0).astype("f4") if all_points else np.zeros((0, 2), dtype="f4")
     )
-    return stats, point_counts, geometry_points
+    elevation_values = (
+        np.concatenate(all_profiles, axis=0).astype("f4") if all_profiles else np.zeros(0, dtype="f4")
+    )
+    return stats, point_counts, geometry_points, profile_counts, elevation_values
 
 
 if __name__ == "__main__":
@@ -131,6 +137,10 @@ if __name__ == "__main__":
                          help="path to write the packed edge-geometry binary")
     parser.add_argument("--out-geometry-json", required=True,
                          help="path to write the edge-geometry manifest")
+    parser.add_argument("--out-elevation-bin", required=True,
+                         help="path to write the packed edge-elevation binary")
+    parser.add_argument("--out-elevation-json", required=True,
+                         help="path to write the edge-elevation manifest")
     parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6),
                          help="lowest zoom level tippecanoe builds tiles for")
     parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14),
@@ -172,7 +182,7 @@ if __name__ == "__main__":
                 tf.write(b"\n")
 
         with timer.step("build_stats"):
-            stats, point_counts, geometry_points = build_stats(
+            stats, point_counts, geometry_points, profile_counts, elevation_values = build_stats(
                 records, geometry, profiles, id_table, args.simplify_tolerance_deg
             )
         print(f"writing {args.out_stats} ...", flush=True)
@@ -185,6 +195,12 @@ if __name__ == "__main__":
             with open(args.out_geometry_json, "wb") as f:
                 f.write(orjson.dumps({"point_counts": point_counts}))
 
+        print(f"writing {args.out_elevation_bin} and {args.out_elevation_json} ...", flush=True)
+        with timer.step("write_elevation"):
+            Path(args.out_elevation_bin).write_bytes(elevation_values.tobytes())
+            with open(args.out_elevation_json, "wb") as f:
+                f.write(orjson.dumps({"profile_counts": profile_counts}))
+
         mbtiles = edges_dir / "tiling_input.mbtiles"
         print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
               f"-> {args.out_tiles} ...", flush=True)
@@ -193,4 +209,5 @@ if __name__ == "__main__":
         meta["n_edges"] = len(records)
         meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
-    print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin} and {args.out_geometry_json}")
+    print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin}, "
+          f"{args.out_geometry_json}, {args.out_elevation_bin} and {args.out_elevation_json}")
