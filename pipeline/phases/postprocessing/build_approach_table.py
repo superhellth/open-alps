@@ -83,33 +83,31 @@ def gather_candidates(records: np.ndarray, id_table: dict, variant_ids: set) -> 
     return dict(by_hut)
 
 
-def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
-    by_hut = gather_candidates(records, id_table)
+def bucket_index(duration_h: float, boundaries: list) -> int:
+    for i, b in enumerate(boundaries):
+        if duration_h <= b:
+            return i
+    return len(boundaries)
+
+
+def select_approaches(records: np.ndarray, id_table: dict, duration_buckets: list,
+                       variant_ids: set) -> list:
+    by_hut = gather_candidates(records, id_table, variant_ids)
 
     rows = []
     for candidates in by_hut.values():
-        candidates.sort(key=lambda c: c["duration_h"])
-        selected = candidates[:k]
-        present_types = {c["source_type"] for c in selected}
-        for source_type in _SOURCE_TYPE_NAME:
-            if source_type in present_types:
-                continue
-            best_other = next(
-                (c for c in candidates if c["source_type"] == source_type), None
-            )
-            if best_other is None:
-                continue
-            if selected:
-                selected[-1] = best_other
-            else:
-                selected = [best_other]
-            present_types.add(source_type)
-        rows.extend(selected)
+        by_cell = defaultdict(list)
+        for c in candidates:
+            cell = (c["source_type"], c["variant"], bucket_index(c["duration_h"], duration_buckets))
+            by_cell[cell].append(c)
+        for cell_candidates in by_cell.values():
+            rows.append(min(cell_candidates, key=lambda c: c["duration_h"]))
     return rows
 
 
-def build_tables(records: np.ndarray, id_table: dict, k: int) -> tuple:
-    approaches = select_approaches(records, id_table, k)
+def build_tables(records: np.ndarray, id_table: dict, duration_buckets: list,
+                  variant_ids: set) -> tuple:
+    approaches = select_approaches(records, id_table, duration_buckets, variant_ids)
     retained_start_ids = {row["start_id"] for row in approaches}
 
     hut_to_starts = defaultdict(list)
