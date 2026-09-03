@@ -37,7 +37,11 @@
     "minSlopeSegmentM": 30,
     "profilePoints": 30
   },
-  "approach": { "k": 3, "selectK": 20 },
+  "approach": {
+    "durationBucketsH": [4, 6],
+    "variants": ["FAST_ANY"],
+    "selectK": 20
+  },
   "tourMatch": {
     "corridorBufferM": 150.0,
     "lengthDivergenceRatio": 2.0,
