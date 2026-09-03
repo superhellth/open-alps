@@ -5,8 +5,8 @@ import type { ApproachesData } from './types.js'
 
 const approachesData: ApproachesData = {
   records: [
-    { hutIndex: 15, startId: 32854131, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 19812, ascentM: 746, descentM: 488, access: null, edgeId: 1000 },
-    { hutIndex: 16, startId: 999, sourceType: SOURCE_TYPE_PARKING, accessUnknown: false, distanceM: 3000, ascentM: 200, descentM: 100, access: null, edgeId: 1001 },
+    { hutIndex: 15, startId: 32854131, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 19812, ascentM: 746, descentM: 488, access: null, edgeId: 1000 },
+    { hutIndex: 16, startId: 999, sourceType: SOURCE_TYPE_PARKING, variant: 0, accessUnknown: false, distanceM: 3000, ascentM: 200, descentM: 100, access: null, edgeId: 1001 },
   ],
   reverseIndex: {
     hut_to_starts: {
@@ -29,6 +29,11 @@ describe('getApproachLegs', () => {
 
   it('a hut with no approach rows gets an empty array', () => {
     expect(getApproachLegs(999, approachesData)).toEqual([])
+  })
+
+  it('passes variant through onto the returned leg', () => {
+    const legs = getApproachLegs(15, approachesData)
+    expect(legs[0]).toMatchObject({ variant: 0 })
   })
 })
 
