@@ -145,53 +145,52 @@ if __name__ == "__main__":
     # external tippecanoe run, and the mbtiles->pmtiles conversion. Splitting them is the only
     # way to tell "our code got slower" from "there are simply more edges to tile".
     timer = StepTimer()
-    with timer.step("load_arrays"):
-        records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
-        geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
-        profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
-        with open(args.id_table, encoding="utf-8") as f:
-            id_table = json.load(f)
+    with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name,
+               min_zoom=args.min_zoom, max_zoom=args.max_zoom) as meta:
+        with timer.step("load_arrays"):
+            records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
+            geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
+            profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
+            with open(args.id_table, encoding="utf-8") as f:
+                id_table = json.load(f)
 
-    print(f"streaming {len(records):,} edges -> tiling input + stats ...", flush=True)
-    tiling_input = edges_dir / "tiling_input.geojsonseq"
-    lons, lats = geometry["lon"], geometry["lat"]
-    with timer.step("write_tiling_input"), open(tiling_input, "wb") as tf:
-        for edge_id in range(len(records)):
-            r = records[edge_id]
-            g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
-            coords = np.column_stack(
-                [lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]]
-            ).tolist()
-            tf.write(orjson.dumps({
-                "type": "Feature",
-                "properties": {"edge_id": edge_id},
-                "geometry": {"type": "LineString", "coordinates": coords},
-            }))
-            tf.write(b"\n")
+        print(f"streaming {len(records):,} edges -> tiling input + stats ...", flush=True)
+        tiling_input = edges_dir / "tiling_input.geojsonseq"
+        lons, lats = geometry["lon"], geometry["lat"]
+        with timer.step("write_tiling_input"), open(tiling_input, "wb") as tf:
+            for edge_id in range(len(records)):
+                r = records[edge_id]
+                g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
+                coords = np.column_stack(
+                    [lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]]
+                ).tolist()
+                tf.write(orjson.dumps({
+                    "type": "Feature",
+                    "properties": {"edge_id": edge_id},
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                }))
+                tf.write(b"\n")
 
-    with timer.step("build_stats"):
-        stats, point_counts, geometry_points = build_stats(
-            records, geometry, profiles, id_table, args.simplify_tolerance_deg
-        )
-    print(f"writing {args.out_stats} ...", flush=True)
-    with timer.step("write_stats"), open(args.out_stats, "wb") as f:
-        f.write(orjson.dumps(stats))
+        with timer.step("build_stats"):
+            stats, point_counts, geometry_points = build_stats(
+                records, geometry, profiles, id_table, args.simplify_tolerance_deg
+            )
+        print(f"writing {args.out_stats} ...", flush=True)
+        with timer.step("write_stats"), open(args.out_stats, "wb") as f:
+            f.write(orjson.dumps(stats))
 
-    print(f"writing {args.out_geometry_bin} and {args.out_geometry_json} ...", flush=True)
-    with timer.step("write_geometry"):
-        Path(args.out_geometry_bin).write_bytes(geometry_points.tobytes())
-        with open(args.out_geometry_json, "wb") as f:
-            f.write(orjson.dumps({"point_counts": point_counts}))
+        print(f"writing {args.out_geometry_bin} and {args.out_geometry_json} ...", flush=True)
+        with timer.step("write_geometry"):
+            Path(args.out_geometry_bin).write_bytes(geometry_points.tobytes())
+            with open(args.out_geometry_json, "wb") as f:
+                f.write(orjson.dumps({"point_counts": point_counts}))
 
-    mbtiles = edges_dir / "tiling_input.mbtiles"
-    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
-          f"-> {args.out_tiles} ...", flush=True)
-    build_pmtiles(timer, tiling_input, mbtiles, args.out_tiles, args.layer_name,
-                  args.min_zoom, args.max_zoom)
-    # Nothing left to time - phase() here exists only to land the split in timings.jsonl next to
-    # every other phase, keyed by layer so hut_edges and start_edges stay distinguishable.
-    with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name, n_edges=len(records),
-               min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
-        pass
+        mbtiles = edges_dir / "tiling_input.mbtiles"
+        print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
+              f"-> {args.out_tiles} ...", flush=True)
+        build_pmtiles(timer, tiling_input, mbtiles, args.out_tiles, args.layer_name,
+                      args.min_zoom, args.max_zoom)
+        meta["n_edges"] = len(records)
+        meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
     print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin} and {args.out_geometry_json}")
