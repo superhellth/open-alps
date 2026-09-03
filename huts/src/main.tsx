@@ -4,7 +4,7 @@ import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import './index.css'
 import theme from './theme.js'
-import GraphPage from './GraphPage.js'
+import AdminPage from './adminPage/AdminPage.js'
 import TourSearchPage from './tourSearchPage/TourSearchPage.js'
 
 function subscribeHash(callback: () => void) {
@@ -14,7 +14,7 @@ function subscribeHash(callback: () => void) {
 
 function Router() {
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
-  if (hash === '#graph') return <GraphPage />
+  if (hash === '#admin') return <AdminPage />
   return <TourSearchPage />
 }
 

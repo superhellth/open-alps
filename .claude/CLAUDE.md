@@ -29,8 +29,8 @@ not be called in a loop over the whole hut list.
 
 `huts/src/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
 (`theme.ts`)/`CssBaseline`: the default route (no hash) renders `tourSearchPage/TourSearchPage.tsx`,
-`#graph` renders `GraphPage.tsx`. Both pages are wrapped in the shared `AppShell.tsx` (top app bar +
-tab nav between the two routes).
+`#admin` renders `adminPage/AdminPage.tsx`. Both pages are wrapped in the shared `AppShell.tsx` (top
+app bar + tab nav between the two routes).
 
 `huts/src/tourSearchPage/TourSearchPage.tsx` is the main page: a form
 (`formState.ts` builds the `Query` from user input) over the client-side tour search engine in
@@ -51,9 +51,12 @@ reversed-direction duplicates and suppresses near-identical routes; `adjacency.t
 supporting graph/filtering primitives. (`pipeline/CLAUDE.md`'s "Deferred" note still describes this
 client as not-yet-built — that note is stale.)
 
-`huts/src/GraphPage.tsx` (the `#graph` route) is the opt-in raw-network view for the hut-to-hut
-routing graph described below: renders `/data/trails.pmtiles` and `/data/hut-edges.pmtiles` via
-`protomaps-leaflet`, plus `/data/huts.geojson` and `/data/hut-edge-stats.json`.
+`huts/src/adminPage/AdminPage.tsx` (the `#admin` route) is the internal-only, not user-facing
+debugging/sanity-check view of the raw hut-to-hut routing graph: renders `/data/trails.pmtiles` and
+`/data/hut-edges.pmtiles` via `protomaps-leaflet`, plus `/data/huts.geojson` and
+`/data/hut-edge-stats.json`. Its Leaflet layer components (`TrailLayers.tsx`, `HoverInspector.tsx`,
+`EdgeHoverPanel.tsx`) and binary-geometry decoder (`decodeEdgeGeometry.ts`) live alongside it in
+`adminPage/`, mirroring how `tourSearchPage/` decomposes `TourSearchPage.tsx`.
 
 ## Hut-to-hut routing graph
 

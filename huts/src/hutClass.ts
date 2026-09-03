@@ -15,7 +15,7 @@ const OPERATOR_BADGE: Record<HutOperator, string> = {
   sonstige: 'SO',
 }
 
-// Colours distinguishable in both light and dark map tile contexts, distinct from GraphPage's
+// Colours distinguishable in both light and dark map tile contexts, distinct from AdminPage's
 // existing snapped/unsnapped green (#1b5e20/#43a047) and gray (#616161/#bdbdbd).
 export const OPERATOR_COLOR: Record<HutOperator, string> = {
   av: '#1565c0',
