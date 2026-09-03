@@ -9,9 +9,10 @@ osmium export dumps every OSM tag verbatim, which is noisy (source, fixme, surve
 KEEP_FIELDS below prunes each layer's raw properties down to a fixed field set, mirroring 05's
 outFields=id,name approach for the Alpenverein API.
 
-Parking is mapped as ways/polygons (the lot's outline), not points - `--geometry-types point`
-makes osmium export emit each polygon's centroid instead of its shape, keeping this layer a plain
-Point FeatureCollection like every other layer here.
+Most real-world parking is mapped as a way/relation polygon (the lot's outline), not a node -
+`--geometry-types point` alone only matches actual OSM nodes and silently drops those, so the
+parking layer also requests `polygon` and `_area_to_point` below converts each assembled area back
+to a centroid Point, keeping this layer a plain Point FeatureCollection like every other layer here.
 
 Usage: python pipeline/phases/downloads/fetch_stations_parking.py
 Requires osmium-tool on PATH (same as filter_trails.py).
@@ -21,6 +22,8 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+
+from shapely.geometry import shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
@@ -60,8 +63,31 @@ LAYERS = [
         "name": "parking",
         "tag_filter_pipelines": [["nwr/amenity=parking"]],
         "keep_fields": ["name", "capacity", "fee", "access", "motor_vehicle", "barrier"],
+        # point,polygon (not just point): most real parking lots are mapped as a closed way, not
+        # a node - see module docstring and _area_to_point.
+        "geometry_types": "point,polygon",
     },
 ]
+
+
+def _area_to_point(feat: dict) -> dict:
+    """A node-mapped parking spot passes through unchanged (already a Point). A way/relation
+    mapped as an area comes back from `osmium export --geometry-types point,polygon` as a
+    Polygon/MultiPolygon under a synthetic "aNNNN" id - osmium's area-id convention encodes the
+    source element as way_id*2 (even) or relation_id*2+1 (odd, multipolygon relations). Decode
+    that back to a real w<id>/r<id> (matching the "n<id>" scheme real nodes already get from
+    --add-unique-id=type_id) and replace the geometry with its centroid, so downstream code
+    (filter_start_points.py's osm_id, dedupe_by_osm_id) sees a stable id and every feature in the
+    layer stays a plain Point regardless of how the source was mapped."""
+    geom = feat["geometry"]
+    if geom["type"] == "Point":
+        return feat
+    area_id = int(feat["id"][1:])
+    prefix, real_id = ("w", area_id // 2) if area_id % 2 == 0 else ("r", (area_id - 1) // 2)
+    centroid = shape(geom).centroid
+    feat["id"] = f"{prefix}{real_id}"
+    feat["geometry"] = {"type": "Point", "coordinates": [centroid.x, centroid.y]}
+    return feat
 
 
 def run_filter_pipeline(src: Path, pipeline: list, tmp_prefix: Path, tmp_files: list) -> Path:
@@ -120,11 +146,13 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
                 # numeric id) - not inside "properties" - which filter_start_points.py's osm_id
                 # depends on to identify every station/parking point.
                 ["osmium", "export", str(filtered), "-f", "geojson",
-                 "--geometry-types", "point", "--add-unique-id=type_id"],
+                 "--geometry-types", layer.get("geometry_types", "point"),
+                 "--add-unique-id=type_id"],
                 check=True, capture_output=True, text=True, encoding="utf-8",
             )
         fc = json.loads(result.stdout)
         for feat in fc["features"]:
+            _area_to_point(feat)
             raw_props = feat["properties"]
             feat["properties"] = {k: raw_props[k] for k in layer["keep_fields"] if k in raw_props}
         features.extend(fc["features"])
