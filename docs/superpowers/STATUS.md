@@ -29,3 +29,4 @@ new row when a new spec is written.
 | 2026-09-01 | [Official Tours — Frontend Integration](specs/2026-09-01-official-tours-frontend-design.md) | **in progress** |
 | 2026-09-02 | [Data Quality Monitoring Layer](specs/2026-09-02-data-quality-monitoring-design.md) | **in progress** |
 | 2026-09-02 | [Scaling `build_hub_edges` to a bus-stop-sized access-point set](specs/2026-09-02-hub-edge-scaling-design.md) | done |
+| 2026-09-03 | [`data/` directory restructure](specs/2026-09-03-data-directory-restructure-design.md) | **in progress** |
