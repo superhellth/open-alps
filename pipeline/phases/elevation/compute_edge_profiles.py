@@ -46,6 +46,29 @@ def smooth_profile(elevations, seg_len_m, kernel_m: float) -> np.ndarray:
     return (weight @ elevations) / weight.sum(axis=1)
 
 
+def merge_segments(seg_len, dz, min_segment_m: float) -> tuple:
+    """Merges consecutive (seg_len, dz) pairs from the smoothed profile until each merged
+    segment's horizontal run is at least min_segment_m, so slope is computed over a wider run than
+    the raw per-point digitization (spec 2026-09-03-steep-terrain-time-model-design.md §1). A
+    trailing remainder shorter than min_segment_m is kept as its own final segment, never dropped
+    or force-merged - dropping it would silently discard real distance/elevation."""
+    seg_len = np.asarray(seg_len, dtype=np.float64)
+    dz = np.asarray(dz, dtype=np.float64)
+    merged_len, merged_dz = [], []
+    run_len, run_dz = 0.0, 0.0
+    for length, delta in zip(seg_len, dz):
+        run_len += length
+        run_dz += delta
+        if run_len >= min_segment_m:
+            merged_len.append(run_len)
+            merged_dz.append(run_dz)
+            run_len, run_dz = 0.0, 0.0
+    if run_len > 0:
+        merged_len.append(run_len)
+        merged_dz.append(run_dz)
+    return np.array(merged_len, dtype=np.float64), np.array(merged_dz, dtype=np.float64)
+
+
 def edge_ascent_descent(smoothed, edge_starts, edge_counts) -> tuple:
     """Plain signed-delta sums along each edge's smoothed profile - no threshold, no hysteresis.
     `smoothed` is the tight concatenation of every edge's own point sequence in edge order
