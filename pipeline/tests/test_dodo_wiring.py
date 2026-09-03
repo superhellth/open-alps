@@ -133,14 +133,16 @@ def test_build_base_graph_tracks_road_highway_tags_and_bbox():
     assert dodo.task_build_base_graph()["uptodate"]
 
 
-def test_build_approach_table_tracks_k_and_is_not_hardcoded_into_the_action():
-    # config["approach"]["k"] used to be baked straight into the action's f-string with no
-    # params/uptodate at all - doit's up-to-date check never diffs the action string (only
-    # file_dep hashes and declared uptodate checks), so a k retune silently never reran this.
+def test_build_approach_table_tracks_duration_buckets_and_variants_and_is_not_hardcoded_into_the_action():
+    # config["approach"]["durationBucketsH"]/["variants"] used to be baked straight into the
+    # action's f-string with no params/uptodate at all - doit's up-to-date check never diffs the
+    # action string (only file_dep hashes and declared uptodate checks), so a retune silently
+    # never reran this.
     task = dodo.task_build_approach_table()
-    assert "k" in {p["name"] for p in task["params"]}
+    assert {"duration_buckets_h", "variants"} <= {p["name"] for p in task["params"]}
     assert task["uptodate"]
-    assert any("%(k)s" in action for action in task["actions"])
+    assert any("%(duration_buckets_h)s" in action for action in task["actions"])
+    assert any("%(variants)s" in action for action in task["actions"])
 
 
 def test_edge_tile_tasks_track_zoom_and_hover_tolerance():
