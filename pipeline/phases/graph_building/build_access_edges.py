@@ -20,8 +20,6 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
@@ -134,8 +132,7 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
                     "distance_m": float(reversed_path.distance_m + snap_m),
                     "road_m": float(reversed_path.road_m),
                     "ascent_m": float(ascent_m), "descent_m": float(descent_m),
-                    "max_ele_m": (float(reversed_path.max_ele_m)
-                                  if np.isfinite(reversed_path.max_ele_m) else 0.0),
+                    "max_ele_m": float(reversed_path.max_ele_m),
                     "ungraded_m": float(reversed_path.ungraded_m),
                     "inferred_m": float(reversed_path.inferred_m),
                     "snap_m": float(snap_m),
