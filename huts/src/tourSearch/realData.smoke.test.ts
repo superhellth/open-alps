@@ -34,6 +34,7 @@ function loadApproachesFromDisk(): ApproachesData {
   for (let i = 0; i < manifest.rows; i++) {
     records[i] = {
       hutIndex: c.hut_id[i], startId: c.start_id[i], sourceType: c.source_type[i] as ApproachRecord['sourceType'],
+      variant: c.variant[i],
       accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
       ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       access: manifest.access_values ? manifest.access_values[i] : null,

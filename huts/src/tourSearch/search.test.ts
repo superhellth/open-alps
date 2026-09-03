@@ -32,7 +32,7 @@ const graphData: GraphData = {
   },
   approaches: {
     records: [
-      { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
+      { hutIndex: 0, startId: 100, sourceType: 1, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
     ],
     reverseIndex: {
       hut_to_starts: {
@@ -152,7 +152,7 @@ describe('searchChains (overlap avoidance)', () => {
     },
     approaches: {
       records: [
-        { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
+        { hutIndex: 0, startId: 100, sourceType: 1, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
       ],
       reverseIndex: {
         hut_to_starts: {
@@ -350,7 +350,7 @@ describe('dominance pruning (Section B) is exact', () => {
       records: [edge(0, 1, 3000), edge(0, 2, 4000), edge(1, 2, 2000), edge(1, 3, 3500), edge(2, 3, 3000)],
     },
     approaches: {
-      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null, edgeId: 8000 }],
+      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null, edgeId: 8000 }],
       reverseIndex: {
         hut_to_starts: {
           3: [{ hut_id: 3, start_id: 200, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 1000, ascent_m: 20, descent_m: 50, edge_id: 8001 }],
@@ -411,7 +411,7 @@ describe('searchChains village mode', () => {
     ...graphData,
     approaches: {
       records: [
-        { hutIndex: 0, startId: 300, sourceType: 3, accessUnknown: false, distanceM: 1500, ascentM: 80, descentM: 40, access: null, edgeId: 9100 },
+        { hutIndex: 0, startId: 300, sourceType: 3, variant: 0, accessUnknown: false, distanceM: 1500, ascentM: 80, descentM: 40, access: null, edgeId: 9100 },
       ],
       reverseIndex: {
         hut_to_starts: {
