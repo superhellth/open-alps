@@ -127,7 +127,13 @@ def task_build_approach_table():
             f"--out-bin {OSM_DIR / 'approaches.bin'}",
             f"--out-manifest {OSM_DIR / 'approaches.json'}",
         ],
-        params=[cli_param("k", "k", int, CONFIG["approach"]["k"])],
+        params=[
+            cli_param(
+                "duration_buckets_h", "duration-buckets-h", str,
+                ",".join(str(b) for b in CONFIG["approach"]["durationBucketsH"]),
+            ),
+            cli_param("variants", "variants", str, ",".join(CONFIG["approach"]["variants"])),
+        ],
         file_dep=[OSM_DIR / "start_edges" / "records.npy", OSM_DIR / "start_points_id_table.json"],
         targets=[OSM_DIR / "approaches.bin", OSM_DIR / "approaches.json"],
     )
