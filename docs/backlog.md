@@ -9,8 +9,9 @@ under `docs/superpowers/`.
 
 ### [start_edges ignores the max-edge range cap](backlog/start-edges-range-cap-violation.md)
 
-100,592 of 471,196 `start_edges` rows (21%) exceed `graph.maxEdgeKm`, up to 267,637 m with 12,903 m
-of ascent — routed paths with real geometry, shipped into the approach table's reverse index.
+Fixed in code (`9eb5b90`, `build_access_edges.py` now re-checks the routed, snap-inclusive distance
+against `max_edge_km` and drops over-cap records). On-disk data still has 100,592 of 471,196 rows over
+30 km — pending a `build_access_edges`/`build_hub_edges` rerun to confirm 0 flagged.
 
 ### [Routed edge geometry drops trail detail](backlog/hut-edge-geometry-drops-trail-detail.md)
 
@@ -38,8 +39,9 @@ unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlappin
 
 ### [Degenerate zero-length start_edges rows](backlog/degenerate-zero-length-start-edges.md)
 
-82,017 rows (17%) carry `max_ele_m == 0`; all are sub-166 m snap-coincident legs whose unset
-maximum elevation is written as sea level into the column the client's altitude cap reads.
+The sentinel half is fixed in code (`88b08aa`, zero-length paths now carry real vertex elevation
+instead of `0.0`), pending rebuild to confirm. Whether the 82,017 degenerate rows (17%, sub-166 m
+snap-coincident legs) should be emitted at all is still an open design call.
 
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
@@ -119,31 +121,22 @@ Probably in form of a static web page, either as part of the existing frontend o
 
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
 
-At baseline (no regression):
-  - scalar_sanity_hut_edges: 24/24
-  - scalar_sanity_tour_edges: 0/0
-  - tour_ingestion_gaps: 4/4 (this baseline is trivially self-matching by construction)
-  
+### Quality issues
+
+Snapshot from `data/quality/graph_building.json`, generated 08:04 on 2026-09-03 — **before** the
+igraph vertex-scrambling fix (`9eb5b90`, ~13:00) and the elevation-sentinel fix (`88b08aa`, ~13:30),
+so it does not yet reflect either. `vertex_gap_*`/`self_retrace_*` rows below are exactly the
+round-trip artifact `9eb5b90` fixes (walk to the far end of an edge, walk back, jump again on the
+next one) and `scalar_sanity_start_edges` is exactly what `88b08aa` targets — all expected to drop
+toward baseline once `build_hub_edges`/`build_access_edges`/`match_tour_edges` rerun, but unconfirmed
+until they do. `snap_health` and `connectivity` are untouched by either fix.
+
   Over baseline — worth attention:
 
   ┌───────────────────────────┬─────────┬──────────┬──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
   │           Check           │ Flagged │ Baseline │                                                                   Note                                                                   │
   ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
   │ vertex_gap_start_edges    │ 122,794 │ 0        │ massive, but baseline=0 for start_edges looks like a placeholder default (never calibrated for this layer), not a real prior measurement │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ self_retrace_start_edges  │ 15,477  │ 0        │ same caveat — likely never-calibrated baseline, not a true regression                                                                    │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ vertex_gap_base_graph     │ 3,389   │ 0        │ same — base_graph also defaults to baseline 0 in code                                                                                    │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ snap_health               │ 609     │ 225      │ real regression, +384. All sampled flags are hut snap issues with reason vertical_offset                                                 │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ scalar_sanity_start_edges │ 88,443  │ 82,017   │ +6,426, moderate regression                                                                                                              │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ self_retrace_hut_edges    │ 281     │ 270      │ +11, minor drift                                                                                                                         │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ connectivity              │ 4       │ 0        │ one row per route variant (FAST_ANY/T2/T3/T3_UNGRADED), each showing large isolated-hut counts (81–294 huts outside the largest          │
-  │                           │         │          │ component)                                                                                                                               │
-  ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
   ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
   │ self_retrace_start_edges  │ 15,477  │ 0        │ same caveat — likely never-calibrated baseline, not a true regression                                                                    │
   ├───────────────────────────┼─────────┼──────────┼──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤

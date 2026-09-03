@@ -2,6 +2,21 @@
 
 **Priority:** High
 
+**Status: fixed in code — pending a `build_access_edges`/`build_hub_edges` rerun to confirm 0 flagged
+in data.** As of `9eb5b90`, `task_build_access_edges` (`pipeline/dag/graph_building.py`) now declares
+a `max_edge_km` param, and `route_selected_pairs_for_cell` (`build_access_edges.py`) drops any record
+whose routed, snap-gap-inclusive `distance_m` exceeds it (`continue` instead of shipping) — closing
+exactly the gap this doc's "Where to look" section identified (§2: the cap was applied in the distance
+pass but lost in the geometry pass). `build_hub_edges.py`'s equivalent check for `hut_edges` was also
+moved to run after `fold_endpoint_snaps` instead of before, which explains this doc's ~111 m "benign"
+`hut_edges` overshoot. The upstream `access_distances.npy` distance pass was already capped, so
+`select_approach_pairs.py`'s top-k was never the problem. The design question below ("truncated
+approach or none for a remote hut") is now answered as **none** — an over-cap pair is dropped rather
+than shipped.
+
+On the current (unrebuilt) `data/osm/start_edges/records.npy`: still 100,592 of 471,196 rows over
+30 km, worst 267,637 m — unchanged, since this data predates the fix.
+
 `graph.maxEdgeKm` (30) is the range cap every hub edge is supposed to obey — it is the
 `--max-edge-km` param on `build_hub_edges.py` and `gather_route_subgraphs.py`, and
 `build_approach_table.py`'s module docstring leans on it explicitly ("an approach is a full leg,

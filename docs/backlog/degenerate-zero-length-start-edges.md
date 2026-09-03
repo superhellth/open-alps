@@ -2,6 +2,14 @@
 
 **Priority:** Medium
 
+**Status: problem 1 (the sentinel) fixed in code, pending rebuild — problem 2 (the rows themselves)
+still open.** As of `88b08aa`, `accumulate_path`'s `src_v == tgt_v` branch (`lib/cell_igraph.py`)
+returns the real vertex elevation (`graph.vs[src_v]["ele_m"]`, threaded through from a new
+per-vertex `vertex_ele_ms` array) instead of `0.0`, so a genuinely zero-length path can no longer be
+confused with an unset/sea-level measurement. `data/osm/start_edges/records.npy` still needs
+`build_access_edges`/`build_hub_edges` to rerun before this shows up as 0 flagged. Whether the
+82,017 degenerate rows should be emitted at all (problem 2 below) is untouched by this fix.
+
 `RECORD_DTYPE`'s `max_ele_m` is `0.0` on 82,017 of 471,196 `start_edges` rows (17.4%) and 24 of
 8,238 `hut_edges` rows on the 2026-09-02 run. Zero is not a possible maximum elevation in this bbox
 — the lowest node in the sampled DEM is 120.0 m (`base_graph/node_ele.npy`: 120.0–3793.5;
