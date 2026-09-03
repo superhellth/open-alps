@@ -8,7 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
-from postprocessing.build_approach_table import build_tables, select_approaches  # noqa: E402
+from postprocessing.build_approach_table import (  # noqa: E402
+    build_tables, gather_candidates, select_approaches,
+)
 
 
 def _record(from_id, from_type, to_id, distance_m, ascent_m, descent_m,
@@ -121,3 +123,35 @@ def test_reverse_index_is_bounded_by_the_start_edge_table():
     id_table = {}
     approaches, index = build_tables(records, id_table, k=3)
     assert sum(len(v) for v in index["start_to_huts"].values()) <= len(records)
+
+
+def test_gather_candidates_returns_every_fast_any_candidate_per_hut():
+    records = _records([
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0),
+        _record(2, binfmt.TYPE_STATION, 7, 2000.0, 60.0, 25.0),
+        _record(3, binfmt.TYPE_PARKING, 9, 500.0, 10.0, 5.0),
+    ])
+    by_hut = gather_candidates(records, id_table={})
+    assert set(by_hut.keys()) == {7, 9}
+    assert len(by_hut[7]) == 2
+    assert {c["start_id"] for c in by_hut[7]} == {1, 2}
+
+
+def test_gather_candidates_excludes_non_fast_any_variants():
+    records = _records([
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0, variant=binfmt.VARIANT_FAST_T2),
+    ])
+    by_hut = gather_candidates(records, id_table={})
+    assert by_hut == {}
+
+
+def test_select_approaches_still_selects_k_best_after_refactor():
+    # regression guard: select_approaches' own behavior must be byte-for-byte unchanged by
+    # routing through gather_candidates.
+    records = _records([
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0),
+        _record(2, binfmt.TYPE_PARKING, 7, 500.0, 10.0, 5.0),
+    ])
+    rows = select_approaches(records, id_table={}, k=1)
+    assert len(rows) == 1
+    assert rows[0]["start_id"] == 2  # the faster of the two

@@ -50,7 +50,7 @@ _SOURCE_TYPE_NAME = {
 }
 
 
-def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
+def gather_candidates(records: np.ndarray, id_table: dict) -> dict:
     by_hut = defaultdict(list)
     for edge_id, r in enumerate(records):
         if int(r["variant"]) != binfmt.VARIANT_FAST_ANY:
@@ -78,6 +78,11 @@ def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
             "descent_m": float(r["descent_m"]),
             "duration_h": duration_h,
         })
+    return dict(by_hut)
+
+
+def select_approaches(records: np.ndarray, id_table: dict, k: int) -> list:
+    by_hut = gather_candidates(records, id_table)
 
     rows = []
     for candidates in by_hut.values():
