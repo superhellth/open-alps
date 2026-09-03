@@ -83,3 +83,111 @@ def test_tour_gaps_reshapes_gap_entries_into_flagged_rows():
     assert check["summary"]["flagged"] == 1
     assert check["flagged"][0]["tourName"] == "Kaisertour"
     assert check["flagged"][0]["reason"] == "leg_endpoint_unsnapped"
+
+
+from quality.check_graph_building import (  # noqa: E402 (extend the existing import line)
+    check_scalar_sanity, check_self_retrace, check_vertex_gap, polyline_for_base_edge,
+    polyline_for_record,
+)
+
+
+def test_polyline_for_record_slices_geometry_by_offset_and_count():
+    geometry = np.zeros(5, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"] = [0, 1, 2, 3, 4]
+    geometry["lat"] = [0, 0, 0, 0, 0]
+    record = np.zeros(1, dtype=binfmt.RECORD_DTYPE)[0]
+    record["geom_offset"], record["geom_count"] = 1, 3
+    coords = polyline_for_record(record, geometry)
+    assert coords.tolist() == [[1, 0], [2, 0], [3, 0]]
+
+
+def test_polyline_for_base_edge_concatenates_node_interior_node():
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes["lon"], nodes["lat"] = [0.0, 2.0], [0.0, 0.0]
+    interior = np.zeros(1, dtype=binfmt.COORD_DTYPE)
+    interior["lon"], interior["lat"] = [1.0], [0.0]
+    edge = np.zeros(1, dtype=binfmt.EDGE_DTYPE)[0]
+    edge["u"], edge["v"], edge["interior_offset"], edge["interior_count"] = 0, 1, 0, 1
+    coords = polyline_for_base_edge(edge, nodes, interior)
+    assert coords.tolist() == [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]
+
+
+def _poly_row(lons, lats, **identity):
+    coords = np.column_stack([lons, lats]).astype(np.float64)
+    return (identity, coords)
+
+
+def test_vertex_gap_flags_a_long_hop_between_consecutive_vertices():
+    # ~0.01 deg longitude at the equator is ~1.1km - use a big jump to be unambiguous regardless
+    # of latitude-dependent scaling.
+    polylines = [_poly_row([11.0, 11.0, 11.5], [47.0, 47.001, 47.001], from_id=1, to_id=2, variant="FAST_ANY")]
+    check = check_vertex_gap(polylines, "hut_edges", max_gap_m=500, max_flagged=500)
+    assert check["summary"]["flagged"] == 1
+    assert check["flagged"][0]["max_gap_m"] > 500
+
+
+def test_vertex_gap_does_not_flag_dense_polyline():
+    lons = np.linspace(11.0, 11.001, 20)
+    lats = np.full(20, 47.0)
+    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    check = check_vertex_gap(polylines, "hut_edges", max_gap_m=500, max_flagged=500)
+    assert check["summary"]["flagged"] == 0
+
+
+def test_self_retrace_flags_a_far_apart_revisit_of_the_same_cell():
+    # a path that returns to (near) its own start after going far away and coming back - separated
+    # by well over 200m of path length.
+    lons = [11.0, 11.01, 11.0]
+    lats = [47.0, 47.0, 47.0]
+    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    check = check_self_retrace(polylines, "hut_edges", snap_tolerance_m=5, min_separation_m=200,
+                                max_flagged=500)
+    assert check["summary"]["flagged"] == 1
+
+
+def test_self_retrace_does_not_flag_a_nearby_switchback():
+    # consecutive points revisiting a cell within the separation window must NOT flag (spec:
+    # naive 5m-only rule flags 98.5% of real trail geometry at switchbacks).
+    lons = [11.0, 11.00002, 11.00004]
+    lats = [47.0, 47.0, 47.0]
+    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    check = check_self_retrace(polylines, "hut_edges", snap_tolerance_m=5, min_separation_m=200,
+                                max_flagged=500)
+    assert check["summary"]["flagged"] == 0
+
+
+def _scalar_record(max_ele_m=1000.0, ascent_m=100.0, descent_m=100.0, distance_m=1000.0):
+    r = np.zeros(1, dtype=binfmt.RECORD_DTYPE)[0]
+    r["max_ele_m"], r["ascent_m"], r["descent_m"], r["distance_m"] = (
+        max_ele_m, ascent_m, descent_m, distance_m,
+    )
+    return r
+
+
+def test_scalar_sanity_flags_max_ele_below_dem_minimum():
+    records = np.array([_scalar_record(max_ele_m=0.0)])
+    check = check_scalar_sanity(records, "start_edges", ascent_cap_m=5000, dem_min_ele_m=120.0,
+                                 max_flagged=500)
+    assert any(r["reason"] == "max_ele_below_dem_minimum" for r in check["flagged"])
+
+
+def test_scalar_sanity_flags_ascent_over_cap():
+    records = np.array([_scalar_record(ascent_m=6000.0)])
+    check = check_scalar_sanity(records, "start_edges", ascent_cap_m=5000, dem_min_ele_m=120.0,
+                                 max_flagged=500)
+    assert any(r["reason"] == "ascent_over_cap" for r in check["flagged"])
+
+
+def test_scalar_sanity_flags_negative_distance_ascent_descent():
+    records = np.array([_scalar_record(distance_m=-1.0, ascent_m=-1.0, descent_m=-1.0)])
+    check = check_scalar_sanity(records, "start_edges", ascent_cap_m=5000, dem_min_ele_m=120.0,
+                                 max_flagged=500)
+    reasons = {r["reason"] for r in check["flagged"]}
+    assert {"negative_distance", "negative_ascent", "negative_descent"} <= reasons
+
+
+def test_scalar_sanity_clean_case_flags_nothing():
+    records = np.array([_scalar_record()])
+    check = check_scalar_sanity(records, "start_edges", ascent_cap_m=5000, dem_min_ele_m=120.0,
+                                 max_flagged=500)
+    assert check["summary"]["flagged"] == 0
