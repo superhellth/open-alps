@@ -1,60 +1,65 @@
 # Routed edge geometry drops trail detail (straight hops up to 3.9 km)
 
-**Priority:** High
+**Status: root cause found, fix applied in code — pending a hub-edge rebuild to confirm in data.**
 
 Stored edge geometry contains long straight hops that no trail follows. On the 2026-09-02 run,
 `hut_edges/geometry.npy` holds **1,438 consecutive-vertex segments longer than 500 m, spread over
 700 of 8,238 records** — the worst is **3,929 m**, inside a record with 1,766 geometry points.
 
-Nothing should be able to insert a straight hop of that length: `graph.maxSnapM` is 100 m and
-`tourMatch.endpointBridgeMaxM` is 250 m. And the hops are not endpoint artifacts — **0 of the 700
-occur on a record's first or last segment**, so the folded hub snap is not the source. They sit
-mid-path, and the same hop recurs across many records and all four variants (the 3,929 m one shows
-up in at least 11 records routed by different hut pairs), which is the signature of a shared
-underlying connection, not a per-record accident.
+## Root cause
 
-## What has been ruled out
+`lib/cell_igraph.py`'s `accumulate_path` decides whether to walk an edge's `interior` polyline
+forward or reversed with `forward = e.source == cur` (`e` an igraph edge). That's wrong:
+`ig.Graph(edges=[(u, v), ...], directed=False)` **canonicalizes every undirected edge's
+`source`/`target` to ascending vertex-id order**, discarding which side of the pair was actually
+inserted as `u`. Confirmed directly:
 
-| layer | finding |
-| --- | --- |
-| Base graph | Not the source. Its own per-edge max vertex gap is p50 28 m, p99.9 460 m. |
-| Subgraph cache | Not the source. `route_subgraphs/*/local_edges.npy` carries `interior_offset=1265336, interior_count=196` for the edge under the worst hop — identical to `base_graph/edges.npy`. |
-| Mid-chain snaps | Not the source. Across all 1,251 edge-kind snaps, parent interior points = 24,404, points kept by the split halves = 24,404. Zero loss. |
-| `inferred_m` | Not an explanation. That field is about SAC grading, not geometry: its median is 8.3 km per record and its correlation with hop length is −0.26; 6,214 records have `inferred_m > 500` and no hop at all. |
+```python
+>>> ig.Graph(n=5, edges=[(3, 1)], directed=False).es[0].tuple
+(1, 3)
+```
 
-## What the evidence points at
+Whenever an edge's local `u` index happens to be greater than its local `v` index, `e.source` is
+igraph's `v`, not the caller's `u` — but `interior` (and `ascent_m`/`descent_m`, spec-neutral in
+the u→v direction) are stored in the *original* u→v order from `build_base_igraph_arrays`. Walking
+such an edge starting from `cur == u` now reads `forward = False` (since `e.source` is `v`, not
+`u`), so `accumulate_path` uses the un-reversed interior anyway — i.e. it enters the edge at `u`,
+immediately emits the interior in u→v order starting from a point *near v* (the far end), walks
+back down to end up near `u` again, then the next edge's entry point (near the *true* `v`) creates
+the second half of the round trip. Two roughly edge-length jumps result — reproduced exactly for
+`hut_edges` row `138→124` FAST_ANY: `edge_id=449644`, walked at `epath` index 43, worst gap
+3,939.4766 m — the same value logged for this record's flagged row in `data/quality/graph_building.json`.
 
-Sampling 200 of the >500 m hops: 119 have both ends land within 30 m of real base-graph nodes, and
-**117 of those 119 node pairs are joined by a base-graph edge that carries a non-empty interior
-polyline** — geometry that exists upstream and is absent from the emitted record. So the loss
-happens between `subgraph.local_edges` and `write_edge_records`, i.e. in
-`lib/cell_igraph.py`'s `interiors` construction (~line 101) / `build_igraph_base`'s `_filter` /
-`accumulate_path`'s `trail_coords.extend(interior)` (~line 293).
+The bug also mis-swaps `ascent_m`/`descent_m` for the same edges (not just display geometry) —
+`accumulate_path` uses the same wrong `forward` flag to decide whether to add `ascent_m` or
+`descent_m` in the direction of travel — so a fraction of edges in every routed record (hut_edges,
+start_edges, tour_edges — anything through `lib/cell_igraph.py`) may have been reporting a climb as
+a descent and vice versa, independent of the geometry defect.
 
-**One thing that does not fit and needs explaining first:** the record holding the worst hop
-(`hut_edges` row 2734, `138→124`, FAST_ANY, 58 base edges traversed) does **not** list that
-candidate edge (`edge_id=449644`) in its `edge_ids.npy` slice. Either the nearest-node attribution
-above picked the wrong edge, or the path traversed a synthetic/parallel edge whose interior is
-genuinely empty. Resolving that is the first step of the debugging pass — reconstruct one affected
-record's traversal edge by edge and find the first point where the emitted polyline diverges from
-the concatenated base-graph interiors.
+## Fix
 
-When decoding `edge_ids.npy`, note that `base_edge_ids` are encoded `3n` / `3n+1` / `3n+2`
-(`lib/cell_igraph.py:129,163,178` — original edge and the two halves of a mid-chain split), so raw
-ids do not index `base_graph/edges.npy` directly.
+`build_igraph_from_base` now also stores an `orig_u` edge attribute (the value actually inserted as
+`u`, immune to igraph's canonicalization), and `accumulate_path` computes `forward =
+e["orig_u"] == cur` instead of `e.source == cur`. `nxt` (the other endpoint) is now derived as
+"whichever of `e.source`/`e.target` isn't `cur`", independent of canonicalization.
 
-## Why it matters
+Regression test: `pipeline/tests/test_cell_igraph.py` (new file — `lib/cell_igraph.py` had no
+dedicated tests before this) constructs a two-node, one-edge subgraph with `u` deliberately given
+the *larger* local index (forcing igraph to canonicalize), asserts both directions' `coords` and
+`ascent_m`/`descent_m` come out right, and includes a control case where `u < v` (never broken) for
+contrast. Verified to fail (`ascent_m`/`descent_m` swapped) against the pre-fix code.
 
-This is the "straight line ignoring the trail network" the map has been showing. It is display-only
-— `distance_m`/`time_s`/`ascent_m` come from edge attributes and are unaffected — but the drawn
-route is what a user judges the tour by, and a 3.9 km straight line across a valley reads as a
-broken product.
+Reproduced live against the current `data/osm/route_subgraphs/cell_14` cache for hut pair
+`138→124`: worst gap dropped from 3,939.5 m to 182.5 m (normal trail vertex spacing) with the fix,
+total `distance_m` unchanged (28,587.6 m, from `dist` attributes, which were never affected).
 
-(For the record: the screenshot in `docs/backlog.md` that first prompted this was *not* this bug.
-Its route is dashed end to end, which in `ResultsMap.tsx:186-193` means `isFallback`, and its
-straight leg lies exactly on the line between two hut markers. That one is `loadLegGeometry`
-rejecting or still in flight — a separate, frontend-side issue. This bug was found by measurement
-afterwards and is real independently of it.)
+## Remaining step
+
+The fix is in `lib/cell_igraph.py` only — `data/osm/hut_edges/`, `start_edges/`, `tour_edges/`
+still hold geometry/ascent/descent computed by the old code and need `build_hub_edges.py` (+
+`build_access_edges.py`, `match_tour_edges.py`) rerun to pick it up. That's a multi-hour class of
+task (see root `CLAUDE.md`'s pipeline-run rule) — not run as part of this fix; ask before
+triggering it.
 
 Found while measuring baselines for the data-quality monitoring layer
 (`docs/superpowers/specs/2026-09-02-data-quality-monitoring-design.md` §4.3.4, which turns the

@@ -62,7 +62,7 @@ def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagge
 
     return build_check(
         "start_point_integrity", {}, checked=len(start_points), flagged_rows=flagged,
-        baseline=236, max_flagged_rows=max_flagged,
+        baseline=0, max_flagged_rows=max_flagged,
     )
 
 

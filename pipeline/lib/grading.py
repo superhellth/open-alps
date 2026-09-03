@@ -38,6 +38,17 @@ PAVED_SURFACES = {"asphalt", "paving_stones", "concrete"}
 
 _BAD_VISIBILITY = {"bad", "horrible", "no"}
 _BLOCKED_ACCESS = {"private", "no"}
+_FOOT_OVERRIDE = {"yes", "permissive", "designated"}
+
+
+def is_impassable(tags: dict) -> bool:
+    """access=no (closed paths, restricted service tunnels/tracks) with no foot-specific
+    override - these aren't legal or physical hiking routes at all and must never enter the
+    graph in any variant, unlike excluded_from_constrained's difficulty-based exclusions.
+    access=private is left alone: in this dataset it's routinely used for alpine hut-access
+    tracks that are legally private for vehicles but walkable, so excluding it would drop real
+    approaches, not just closed ones."""
+    return tags.get("access", "") == "no" and tags.get("foot", "") not in _FOOT_OVERRIDE
 
 
 def classify_way(tags: dict) -> WayGrade:

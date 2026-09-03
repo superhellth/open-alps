@@ -57,6 +57,24 @@ def test_via_ferrata_is_never_constrained_passable():
     assert h.edges_constrained_ok == [False]
 
 
+def test_way_handler_skips_access_no_ways_entirely():
+    # e.g. an underground railway-construction tunnel tagged highway=service, access=no - not a
+    # hiking route in any variant, so it must never enter edges_i/edges_j at all (not just get
+    # excluded_from_constrained).
+    h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "service", "access": "no", "tunnel": "yes"}))
+    assert h.edges_i == []
+    assert h.coords == []
+
+
+def test_way_handler_keeps_access_no_way_with_foot_override():
+    h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "service", "access": "no", "foot": "yes"}))
+    assert h.edges_i == [0]
+
+
 def test_way_handler_no_longer_takes_a_road_penalty_factor():
     import inspect
     assert "road_penalty_factor" not in inspect.signature(bbg.WayGraphHandler.__init__).parameters

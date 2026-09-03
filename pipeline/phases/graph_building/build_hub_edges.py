@@ -255,13 +255,14 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
 
                 path = (path_by_vertex[tv] if tv != src_v
                         else accumulate_path(graph, vertex_coords, src_v, tv, []))
-                # spec C8: the cutoff above ran on `dist`, but the routed path is TIME-shortest,
-                # whose distance_m can exceed the cap - re-check on the routed path itself.
-                if path.distance_m > max_edge_m:
-                    continue
                 # spec E3: the path sums only routed edges, so the hub-to-trail gap at both ends
                 # is priced in here - it was contributing zero distance/ascent/descent otherwise.
                 snap_m, ascent_m, descent_m = fold_endpoint_snaps(path, src_snap, tgt_snap)
+                # spec C8: the cutoff above ran on `dist`, but the routed path is TIME-shortest,
+                # whose distance_m (+ the snap gap folded in above, which is what's actually
+                # shipped as distance_m below) can exceed the cap - re-check on that final value.
+                if path.distance_m + snap_m > max_edge_m:
+                    continue
                 geometry = [(hub["lon"], hub["lat"]), *path.coords, (t["lon"], t["lat"])]
                 hut_records.append({
                     "from_id": hub["id"], "from_type": hub["type"],

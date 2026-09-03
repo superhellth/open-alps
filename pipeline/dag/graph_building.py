@@ -125,6 +125,7 @@ def task_build_access_edges():
     # list - this is what writes the actual start_edges/ every downstream consumer reads.
     return pipeline_task(
         "phases/graph_building/build_access_edges.py",
+        params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
         tracking_params=[
             tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
             _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,

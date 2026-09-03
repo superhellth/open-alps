@@ -55,6 +55,9 @@ class WayGraphHandler(osmium.SimpleHandler):
         return idx
 
     def way(self, w):
+        tags = dict(w.tags)
+        if grading.is_impassable(tags):
+            return
         nodes = [n for n in w.nodes if n.location.valid()]
         if len(nodes) < 2:
             return
@@ -66,7 +69,6 @@ class WayGraphHandler(osmium.SimpleHandler):
             idxs[k] = self._idx_for(n.ref, lon, lat)
             lons[k], lats[k] = lon, lat
         dists = haversine_m_vec(lons[:-1], lats[:-1], lons[1:], lats[1:])
-        tags = dict(w.tags)
         highway = tags.get("highway", "")
         is_road = highway in self.road_tags
         grade = grading.classify_way(tags)

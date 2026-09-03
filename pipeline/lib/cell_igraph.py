@@ -210,6 +210,13 @@ def build_igraph_from_base(base: BaseIgraphArrays, edge_mask: np.ndarray = None)
             x for i, x in enumerate(lst[base.n_orig:], start=base.n_orig) if kept_mask[i]
         ]
 
+    # igraph canonicalizes an undirected edge's (source, target) to ascending vertex-id order at
+    # construction time, discarding which side of edges_uv was actually "u" - so an edge whose
+    # local u-index happens to be greater than its v-index comes back with source/target swapped
+    # relative to insertion. `interior`/ascent_m/descent_m are stored in the ORIGINAL u->v
+    # direction, so accumulate_path needs this untouched-by-igraph copy of u to detect true
+    # traversal direction rather than trusting e.source (see accumulate_path's `forward`).
+    orig_u = _filter([uv[0] for uv in base.edges_uv])
     graph = ig.Graph(n=base.next_vertex, edges=_filter(base.edges_uv), edge_attrs={
         "weight": _filter(base.times), "dist": _filter(base.dists), "time_s": _filter(base.times),
         "road_m": _filter(base.road_ms), "ungraded_m": _filter(base.ungraded_ms),
@@ -217,7 +224,7 @@ def build_igraph_from_base(base: BaseIgraphArrays, edge_mask: np.ndarray = None)
         "descent_m": _filter(base.descent_ms), "max_ele_m": _filter(base.max_ele_ms),
         "sac_rank": _filter(base.sac_ranks), "via_ferrata": _filter(base.via_ferratas),
         "constrained_ok": _filter(base.constrained_oks), "interior": _filter(base.interiors),
-        "base_edge_id": _filter(base.base_edge_ids),
+        "base_edge_id": _filter(base.base_edge_ids), "orig_u": orig_u,
     }, directed=False)
     return graph, base.hub_vertex, base.vertex_coords
 
@@ -286,8 +293,11 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     cur = src_v
     for eid in epath:
         e = graph.es[eid]
-        forward = e.source == cur
-        nxt = e.target if forward else e.source
+        # e.source is igraph's canonicalized endpoint (ascending vertex id), NOT necessarily the
+        # side inserted as "u" - compare against orig_u instead, see build_igraph_from_base.
+        # nxt is "whichever endpoint isn't cur", independent of that canonicalization.
+        forward = e["orig_u"] == cur
+        nxt = e.target if cur == e.source else e.source
         interior = e["interior"] if forward else list(reversed(e["interior"]))
         trail_coords.append(vertex_coords[cur])
         trail_coords.extend(interior)
