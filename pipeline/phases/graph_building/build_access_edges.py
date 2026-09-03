@@ -18,6 +18,7 @@ hub_snap_interior.npy (snap_hubs.py), data/osm/route_subgraphs/ (gather_route_su
 import argparse
 import sys
 import time
+import warnings
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -91,10 +92,18 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
             target_vs = [hub_vertex[(t["type"], t["id"])] for t in routable]
             unique_path_vs = sorted({tv for tv in target_vs if tv != src_v})
             with timer.step("paths"):
-                epaths = (
-                    graph.get_shortest_paths(src_v, to=unique_path_vs, weights="weight", output="epath")
-                    if unique_path_vs else []
-                )
+                if unique_path_vs:
+                    # Some targets are legitimately unreachable under this variant's masked
+                    # subgraph even though select_approach_pairs.py kept the pair (it's
+                    # variant-agnostic, see this function's docstring) - igraph warns per such
+                    # target, but the None path is already handled below via unreachable_skipped.
+                    with warnings.catch_warnings():
+                        warnings.filterwarnings("ignore", message="Couldn't reach some vertices",
+                                                 category=RuntimeWarning)
+                        epaths = graph.get_shortest_paths(src_v, to=unique_path_vs, weights="weight",
+                                                            output="epath")
+                else:
+                    epaths = []
             path_by_vertex = {
                 tv: accumulate_path(graph, vertex_coords, src_v, tv, epath)
                 for tv, epath in zip(unique_path_vs, epaths)
