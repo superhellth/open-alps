@@ -259,3 +259,12 @@ def test_parse_variant_names_rejects_unknown_name():
     import pytest
     with pytest.raises(ValueError, match="NOT_A_REAL_VARIANT"):
         parse_variant_names("NOT_A_REAL_VARIANT")
+
+
+def test_every_selected_row_carries_a_variant_ready_for_the_variant_column():
+    records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
+    rows = select_approaches(
+        records, id_table={}, duration_buckets=[4, 6], variant_ids={binfmt.VARIANT_FAST_ANY},
+    )
+    assert all(isinstance(r["variant"], int) for r in rows)
+    assert rows[0]["variant"] == binfmt.VARIANT_FAST_ANY
