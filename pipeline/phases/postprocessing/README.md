@@ -78,20 +78,17 @@ Reduces `start_edges/records.npy` (92,426 records over 27,261 parkings + 3,025 s
 AT+Bayern — neither shippable nor seedable as-is) to two things, written into `approaches.bin`/
 `approaches.json`:
 
-1. **k-best-per-hut approach table** (`--k`, default `config.approach.k`) — "k fastest" is
-   deliberately not what this ranks: the fastest edge into a hut is systematically its highest,
-   most remote trailhead, while a driver wants the valley trailhead they can actually reach.
-   Selection is time-ranked among survivors of a hard access drop, with one slot reserved per
-   source type (parking/station) where both exist, so the client's car/transit split has something
-   to work with. Only `VARIANT_FAST_ANY` records are candidates — an approach is a fastest,
-   unconstrained leg to the hub, not a difficulty-graded one. `maxApproachTime` is not
-   reintroduced (root `CLAUDE.md`) — an approach is bounded by the same `maxEdgeKm` range cap as
-   any hut-hut edge, filtered client-side.
+1. **Duration/source-type/variant matrix** (`--duration-buckets-h`/`--variants`, default
+   `config.approach.durationBucketsH`/`config.approach.variants`) — every candidate is bucketed
+   into a `(source_type, variant, duration_bucket)` cell and the fastest candidate per non-empty
+   cell is kept; no top-k, no reserved-slot overwrite. `maxApproachTime` is not reintroduced (root
+   `CLAUDE.md`) — an approach is bounded by the same `maxEdgeKm` range cap as any hut-hut edge,
+   filtered client-side.
 2. **Loop-closure reverse index** — the client's car mode requires exit start-point == entry
-   start-point, and the k≈3 tables of a tour's first and last hut essentially never share a start
-   id, so a post-filter would annihilate the result set. Every `start_edges` record whose start
-   point appears in *any* hut's retained approach ships too (all variants, since closure needs
-   whatever the client already has open), keyed both hut→starts and start→huts.
+   start-point, and a tour's first and last hut's approach-table rows essentially never share a
+   start id, so a post-filter would annihilate the result set. Every `start_edges` record whose
+   start point appears in *any* hut's retained approach ships too (all variants, since closure
+   needs whatever the client already has open), keyed both hut→starts and start→huts.
 
 - **doit wiring**: `file_dep=[start_edges/records.npy, start_points_id_table.json]`,
   `targets=[approaches.bin, approaches.json]`.
