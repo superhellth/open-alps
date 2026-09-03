@@ -50,6 +50,9 @@ from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,
     task_verify_trails,
 )
+from dag.quality import (  # noqa: E402,F401
+    task_check_elevation, task_check_graph_building, task_check_preprocessing,
+)
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
@@ -87,6 +90,7 @@ DOIT_CONFIG = {
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "build_tour_edge_tiles",
         "build_approach_table", "build_edge_payload", "build_edge_ids", "build_tour_edge_payload",
+        "check_preprocessing", "check_elevation", "check_graph_building",
         "copy_public_data",
     ],
 }
