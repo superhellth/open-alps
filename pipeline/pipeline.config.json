@@ -47,5 +47,15 @@
     "endpointBridgeMaxM": 250.0
   },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
-  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 }
+  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 },
+  "quality": {
+    "maxFlaggedRows": 500,
+    "elevation": { "plausibleRangeM": [-50, 4300], "minSpeedMs": 0.05 },
+    "graphBuilding": {
+      "maxVertexGapM": 500, "snapToleranceM": 5, "minRetraceSeparationM": 200, "ascentCapM": 5000
+    },
+    "postprocessing": {
+      "minLengthM": 300, "straightnessThreshold": 0.97, "maxPointsForStraightnessFlag": 4
+    }
+  }
 }
