@@ -96,15 +96,19 @@ def edge_ascent_descent(smoothed, edge_starts, edge_counts) -> tuple:
 
 
 def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele, kernel_m,
-                                  speed_model, timer: StepTimer):
+                                  speed_model, timer: StepTimer, *, min_slope_segment_m: float,
+                                  technical_pace_ms: float, min_speed_ms: float):
     """Per base-graph edge: reconstructs its point sequence (u -> interior[offset:offset+count]
-    -> v), smooths the elevation profile (kernel_m), computes time_s from the smoothed profile
-    (lib.speed.edge_time_s), and appends the smoothed profile to a flat buffer. The per-edge
-    reconstruction is a Python loop (same pattern as build_base_graph.py's pack_and_write
-    pack_interior loop) - smoothing is an inherently per-edge local operation, a global vectorised
-    pass would leak across edge boundaries the same way un-masked ascent/descent would.
-    ascent_m/descent_m are filled afterwards in ONE vectorised batch call to edge_ascent_descent
-    over every edge's smoothed profile at once."""
+    -> v), smooths the elevation profile (kernel_m), merges segments up to min_slope_segment_m
+    before computing slope (spec §1), picks technical_time_s over edge_time_s for via_ferrata/
+    sac_rank>=5 edges (spec §2), clamps the result to min_speed_ms (spec §3), and appends the
+    smoothed profile to a flat buffer. The per-edge reconstruction is a Python loop (same pattern
+    as build_base_graph.py's pack_and_write pack_interior loop) - smoothing/merging is an
+    inherently per-edge local operation, a global vectorised pass would leak across edge
+    boundaries the same way un-masked ascent/descent would. ascent_m/descent_m are filled
+    afterwards in ONE vectorised batch call to edge_ascent_descent over every edge's smoothed
+    profile at once - they stay on the fine-grained (unmerged) profile, since merging would
+    understate real elevation gain/loss on a genuine staircase."""
     n_edges = len(edges)
     time_s = np.zeros(n_edges, dtype=np.float64)
     edge_point_counts = np.empty(n_edges, dtype=np.int64)
@@ -113,6 +117,7 @@ def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele
     node_lon, node_lat = nodes["lon"], nodes["lat"]
     interior_lon, interior_lat = interior["lon"], interior["lat"]
     interior_offset, interior_count = edges["interior_offset"], edges["interior_count"]
+    edge_sac_rank, edge_via_ferrata = edges["sac_rank"], edges["via_ferrata"]
 
     with timer.step("smooth"):
         for i in range(n_edges):
@@ -129,7 +134,19 @@ def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele
                 else np.zeros(0)
             smoothed = smooth_profile(elev, seg_len, kernel_m)
             all_smoothed.append(smoothed)
-            time_s[i] = float(speed.edge_time_s(seg_len, np.diff(smoothed), **speed_model).sum())
+
+            merged_len, merged_dz = merge_segments(seg_len, np.diff(smoothed), min_slope_segment_m)
+            is_technical = bool(edge_via_ferrata[i]) or int(edge_sac_rank[i]) >= 5
+            if is_technical:
+                edge_time = float(speed.technical_time_s(merged_len, merged_dz,
+                                                          pace_ms=technical_pace_ms).sum())
+            else:
+                edge_time = float(speed.edge_time_s(merged_len, merged_dz, **speed_model).sum())
+
+            dist_total = float(seg_len.sum())
+            if dist_total > 0:
+                edge_time = min(edge_time, dist_total / min_speed_ms)
+            time_s[i] = edge_time
 
             if (i + 1) % 200_000 == 0 or i + 1 == n_edges:
                 print(f"  smooth/time_s: {i + 1:,}/{n_edges:,} edges", flush=True)
