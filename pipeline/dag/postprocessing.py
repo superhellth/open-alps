@@ -57,6 +57,8 @@ def task_build_hut_edge_tiles():
             f"--out-stats {OSM_DIR / 'hut-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'hut-edge-geometry.bin'}",
             f"--out-geometry-json {OSM_DIR / 'hut-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'hut-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'hut-edge-elevation.json'}",
         ],
         params=_hut_edge_tiles_params(),
         # records.npy's profile_offset/profile_count are rewritten in place by build_profiles but
@@ -67,6 +69,7 @@ def task_build_hut_edge_tiles():
         targets=[
             OSM_DIR / "hut-edges.pmtiles", OSM_DIR / "hut-edge-stats.json",
             OSM_DIR / "hut-edge-geometry.bin", OSM_DIR / "hut-edge-geometry.json",
+            OSM_DIR / "hut-edge-elevation.bin", OSM_DIR / "hut-edge-elevation.json",
         ],
     )
 
@@ -82,6 +85,8 @@ def task_build_start_edge_tiles():
             f"--out-stats {OSM_DIR / 'start-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'start-edge-geometry.bin'}",
             f"--out-geometry-json {OSM_DIR / 'start-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'start-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'start-edge-elevation.json'}",
         ],
         params=_hut_edge_tiles_params(),
         task_dep=["build_profiles"],  # see task_build_hut_edge_tiles's comment
@@ -89,6 +94,7 @@ def task_build_start_edge_tiles():
         targets=[
             OSM_DIR / "start-edges.pmtiles", OSM_DIR / "start-edge-stats.json",
             OSM_DIR / "start-edge-geometry.bin", OSM_DIR / "start-edge-geometry.json",
+            OSM_DIR / "start-edge-elevation.bin", OSM_DIR / "start-edge-elevation.json",
         ],
     )
 
@@ -107,6 +113,8 @@ def task_build_tour_edge_tiles():
             f"--out-stats {OSM_DIR / 'tour-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'tour-edge-geometry.bin'}",
             f"--out-geometry-json {OSM_DIR / 'tour-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'tour-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'tour-edge-elevation.json'}",
         ],
         params=_hut_edge_tiles_params(),
         task_dep=["build_profiles"],  # same in-place-rewrite reasoning as the other two edge-tile tasks
@@ -114,6 +122,7 @@ def task_build_tour_edge_tiles():
         targets=[
             OSM_DIR / "tour-edges.pmtiles", OSM_DIR / "tour-edge-stats.json",
             OSM_DIR / "tour-edge-geometry.bin", OSM_DIR / "tour-edge-geometry.json",
+            OSM_DIR / "tour-edge-elevation.bin", OSM_DIR / "tour-edge-elevation.json",
         ],
     )
 
