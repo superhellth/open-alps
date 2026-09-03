@@ -115,6 +115,14 @@ Especially skill invocations should honor to put the docs they produce in the ac
 After completing a backlog task, remove it from `backlog.md` and remove the corresponding `.md`-file
 if it existed.
 
+`docs/superpowers/STATUS.md` indexes every spec under `docs/superpowers/specs/` with its current
+status (`done` / `in progress` / `superseded by X`). Specs are permanent history and are never
+deleted. Implementation plans under `docs/superpowers/plans/` are disposable — once a plan's work
+has actually shipped, delete the plan file; the spec plus git history remains the record. Keep
+STATUS.md current: add a row for every new spec, delete a plan file and flip its spec's row to
+`done` once the work lands, and mark a spec `superseded by X` rather than deleting it when a later
+spec replaces it.
+
 ## No historical comments
 
 When writing comments dont cite historic reasons for the change. State what the current version does concisely.
