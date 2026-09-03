@@ -38,12 +38,13 @@ means new hosting/TLS/uptime to maintain, not just a build step. A static PMTile
 alongside the rest of the app, with zoom-dependent detail via the tile pyramid, gets the same
 effective result with zero extra infrastructure.
 
-## `build_edge_tiles.py` — hut/start edges as tiles + stats
+## `build_edge_tiles.py` — hut/start/tour edges as tiles + stats
 
-One script, invoked twice by `dodo.py` (`--edges-dir`/`--layer-name` swapped) — once over
-`hut_edges/`, once over `start_edges/` — splitting each edge set's `records.npy`/`geometry.npy`/
-`profiles.npy` (post-`elevation/compute_edge_profiles.py`+`build_profiles.py`) into two smaller
-app-facing assets instead of shipping the raw binary arrays directly.
+One script, invoked three times by `dodo.py` (`--edges-dir`/`--layer-name` swapped) — once over
+`hut_edges/`, once over `start_edges/`, once over `tour_edges/` — splitting each edge set's
+`records.npy`/`geometry.npy`/`profiles.npy` (post-`elevation/compute_edge_profiles.py`+
+`build_profiles.py`) into three smaller app-facing assets instead of shipping the raw binary arrays
+directly.
 
 - **Per edge** (`edge_id` = array index into `records.npy`): writes a tiling-input feature
   stripped to just `{edge_id}` properties, plus computes an iterative/vectorized
@@ -51,26 +52,35 @@ app-facing assets instead of shipping the raw binary arrays directly.
   `config.hutEdgeTiles.hoverSimplifyToleranceDeg`, default ~0.0003° / ~11m) — a much smaller
   geometry used only for hover hit-testing, kept separate from the full-resolution tile geometry.
 - **`build_stats()`** — writes one JSON array indexed by `edge_id`, holding everything
-  non-geometric the app's hover UI needs: `from_hut_id, to_hut_id, distance_m, road_m, ascent_m,
-  descent_m, elevation_profile, sac_scale, via_ferrata`. This exists because PMTiles has no
+  non-geometric, non-elevation the app's hover UI needs: `from_hut_id, to_hut_id, distance_m,
+  road_m, ascent_m, descent_m, sac_scale, via_ferrata`. This exists because PMTiles has no
   feature-level query API — a rendered tile can be drawn, but there's no "give me properties for
   edge N" lookup, so the app needs this separate flat JSON copy for hover. `from_hut_id`/
   `to_hut_id` are resolved from the numeric `(type, id)` pair stored in `records.npy` back to
   their original string/OSM id via `start_points_id_table.json` (huts pass through as-is —
   `huts.geojson` never needed a separate id table since hut ids are already strings). The
-  RDP-simplified hover geometry itself is written separately (below), not inlined into this JSON.
+  RDP-simplified hover geometry and the elevation profile are both written separately (below), not
+  inlined into this JSON.
 - **`*-edge-geometry.bin`/`*-edge-geometry.json`** — the RDP-simplified `positions` per edge,
   split out of `build_stats()`'s output into their own byte-packed sidecar: a flat `f4` `[lng,
   lat]` array (`.bin`) plus a `point_counts` array (`.json`) giving each edge's slice length in
   order, since a plain JSON array of coordinate pairs per edge would repeat the same nesting
   overhead `hut-edge-stats.json` was designed to avoid.
+- **`*-edge-elevation.bin`/`*-edge-elevation.json`** — the point-by-point elevation profile per
+  edge, split out of `build_stats()`'s output the same way `positions` is: a flat `f4` array of
+  every edge's elevation values back to back in `edge_id` order (`.bin`) plus a `profile_counts`
+  array giving each edge's slice length in order (`.json`) — same prefix-sum-offset shape as
+  `point_counts`, kept as a separately-named field since geometry point count (RDP-simplified) and
+  elevation sample count (fixed at `config.dem.profilePoints`, 0 for a degenerate edge) are
+  different quantities.
 - **`*-edges.pmtiles`** — full-resolution edge geometry, `{edge_id}`-only properties, built via the
   same tippecanoe → pmtiles-convert pipeline as `build_trail_tiles.py` above (`-l hut_edges`/`-l
   start_edges`, same `min-zoom`/`max-zoom`/`--drop-densest-as-needed`).
 - Deletes intermediate `.geojsonseq`/`.mbtiles` files.
-- **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`),
-  `targets=[hut-edges.pmtiles, hut-edge-stats.json]` (resp. `start-edges.pmtiles`,
-  `start-edge-stats.json`).
+- **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`,
+  `tour_edges/records.npy`), `targets=[hut-edges.pmtiles, hut-edge-stats.json,
+  hut-edge-geometry.bin, hut-edge-geometry.json, hut-edge-elevation.bin, hut-edge-elevation.json]`
+  (resp. `start-edge-*`, `tour-edge-*`).
 
 ## `build_approach_table.py` — approach/exit table + loop-closure reverse index
 
