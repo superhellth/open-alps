@@ -11,10 +11,13 @@ OSM way in question) and a rebuild picks that up.
 
 ## Sparse OSM way geometry — long straight-line hops in routed edges
 
-**Symptom:** the `vertex_gap_hut_edges`/`vertex_gap_start_edges` data-quality checks
-(`pipeline/phases/quality/check_graph_building.py`) flag consecutive-vertex gaps of hundreds to
-thousands of metres in some routed edges' stored polylines — on the map, these render as an
-unnaturally straight line cutting across terrain instead of following the trail's real curve.
+**Symptom:** the `vertex_gap_base_graph`/`vertex_gap_hut_edges`/`vertex_gap_start_edges`
+data-quality checks (`pipeline/phases/quality/check_graph_building.py`) flag consecutive-vertex
+gaps of hundreds to thousands of metres in some edges' stored polylines — on the map, these render
+as an unnaturally straight line cutting across terrain instead of following the trail's real curve.
+`vertex_gap_base_graph` flags the same sparse ways one layer earlier, directly on `base_graph`
+edges, before contraction/routing ever threads them into a `hut_edges`/`start_edges` record — same
+root cause, same verdict, not a separate defect.
 
 **Root cause:** some OSM ways are mapped with GPS detail only at their two ends and a single
 straight-line guess across the stretch in between — common for remote alpine terrain (scree,
@@ -38,8 +41,10 @@ is no pipeline-side fix — inventing intermediate shape points would mean fabri
 we don't have, not recovering it.
 
 **Status:** confirmed on the 2026-09-03 rebuild, 120 `vertex_gap_hut_edges` flags total (of 8,314
-records checked), most sharing this same pattern (identical `max_gap_m` values repeating across
-records that funnel through the same sparse way). Investigated closing out the former
+records checked) and 3,389 `vertex_gap_base_graph` flags (of 4,730,712 edges checked), most sharing
+this same pattern (identical `max_gap_m` values repeating across records that funnel through the
+same sparse way — e.g. `edge_id 3023176` above is the same base-graph edge flagged directly by
+`vertex_gap_base_graph`). Investigated closing out the former
 `docs/backlog/hut-edge-geometry-drops-trail-detail.md` backlog item (removed once resolved — see
 git history for the full investigation). That item's other residual, `self_retrace_hut_edges`, was
 a *different*, actually-fixable defect (hub-snap preferring a far node over a much closer trail
