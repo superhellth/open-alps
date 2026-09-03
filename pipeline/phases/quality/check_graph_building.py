@@ -18,6 +18,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
+from lib.geo import haversine_m_vec_pairs  # noqa: E402
 from lib.pipeline import DEM_DIR, OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
@@ -135,6 +136,128 @@ def check_tour_gaps(gaps: list, max_flagged: int) -> dict:
     )
 
 
+def polyline_for_record(record, geometry: np.ndarray) -> np.ndarray:
+    """Returns a (n, 2) lon/lat array for one hut_edges/start_edges/tour_edges record, sliced out
+    of that layer's flat geometry.npy by geom_offset/geom_count."""
+    offset, count = int(record["geom_offset"]), int(record["geom_count"])
+    sl = geometry[offset:offset + count]
+    return np.column_stack([sl["lon"], sl["lat"]]).astype(np.float64)
+
+
+def polyline_for_base_edge(edge, nodes: np.ndarray, interior: np.ndarray) -> np.ndarray:
+    """Returns a (n, 2) lon/lat array for one base_graph/edges.npy row: its u node, interior
+    polyline, then its v node - the same concatenation build_base_graph.py's contraction reasons
+    about, reconstructed for a check rather than for routing."""
+    u, v = int(edge["u"]), int(edge["v"])
+    offset, count = int(edge["interior_offset"]), int(edge["interior_count"])
+    interior_slice = interior[offset:offset + count]
+    lons = np.concatenate([[nodes[u]["lon"]], interior_slice["lon"], [nodes[v]["lon"]]])
+    lats = np.concatenate([[nodes[u]["lat"]], interior_slice["lat"], [nodes[v]["lat"]]])
+    return np.column_stack([lons, lats]).astype(np.float64)
+
+
+def check_vertex_gap(polylines: list, layer_name: str, max_gap_m: float, max_flagged: int) -> dict:
+    """§4.3.4: the longest gap between consecutive vertices of a record's polyline. Vectorized
+    per record (haversine over the whole coords array at once via slicing), not per point."""
+    flagged = []
+    checked = 0
+    for identity, coords in polylines:
+        checked += 1
+        if len(coords) < 2:
+            continue
+        seg_dist = haversine_m_vec_pairs(
+            coords[:-1, 0], coords[:-1, 1], coords[1:, 0], coords[1:, 1],
+        )
+        worst_idx = int(np.argmax(seg_dist))
+        max_gap = float(seg_dist[worst_idx])
+        if max_gap > max_gap_m:
+            flagged.append({
+                "layer": layer_name, **identity, "max_gap_m": max_gap,
+                "gap_at_segment": worst_idx, "n_points": len(coords),
+            })
+    return build_check(
+        f"vertex_gap_{layer_name}", {"max_vertex_gap_m": max_gap_m}, checked=checked,
+        flagged_rows=flagged, baseline=700 if layer_name == "hut_edges" else 0,
+        max_flagged_rows=max_flagged, sort_key=lambda r: r["max_gap_m"],
+    )
+
+
+def check_self_retrace(polylines: list, layer_name: str, snap_tolerance_m: float,
+                        min_separation_m: float, max_flagged: int) -> dict:
+    """§4.3.5: a record's own polyline revisiting a snap_tolerance_m grid cell where the two
+    visits are more than min_separation_m apart along the path. The separation term is what keeps
+    ordinary switchback geometry from flagging (spec: naive 5m-only rule hits 98.5% of records)."""
+    flagged = []
+    checked = 0
+    for identity, coords in polylines:
+        checked += 1
+        if len(coords) < 3:
+            continue
+        lat0 = float(np.mean(coords[:, 1]))
+        m_per_deg_lat = 111_320.0
+        m_per_deg_lon = 111_320.0 * max(np.cos(np.radians(lat0)), 1e-6)
+        cell_x = np.round(coords[:, 0] * m_per_deg_lon / snap_tolerance_m).astype(np.int64)
+        cell_y = np.round(coords[:, 1] * m_per_deg_lat / snap_tolerance_m).astype(np.int64)
+
+        seg_dist = haversine_m_vec_pairs(coords[:-1, 0], coords[:-1, 1], coords[1:, 0], coords[1:, 1])
+        cum_dist = np.concatenate([[0.0], np.cumsum(seg_dist)])
+
+        by_cell = defaultdict(list)
+        for i in range(len(coords)):
+            by_cell[(int(cell_x[i]), int(cell_y[i]))].append(i)
+
+        worst_separation_m = 0.0
+        for indices in by_cell.values():
+            if len(indices) < 2:
+                continue
+            span = float(cum_dist[max(indices)] - cum_dist[min(indices)])
+            worst_separation_m = max(worst_separation_m, span)
+
+        if worst_separation_m > min_separation_m:
+            flagged.append({
+                "layer": layer_name, **identity, "retrace_separation_m": worst_separation_m,
+                "n_points": len(coords),
+            })
+    return build_check(
+        f"self_retrace_{layer_name}",
+        {"snap_tolerance_m": snap_tolerance_m, "min_retrace_separation_m": min_separation_m},
+        checked=checked, flagged_rows=flagged, baseline=270 if layer_name == "hut_edges" else 0,
+        max_flagged_rows=max_flagged, sort_key=lambda r: r["retrace_separation_m"],
+    )
+
+
+def check_scalar_sanity(records: np.ndarray, layer_name: str, ascent_cap_m: float,
+                         dem_min_ele_m: float, max_flagged: int) -> dict:
+    """§4.3.6: max_ele_m below the DEM's lowest sampled node, ascent_m over ascent_cap_m, and any
+    negative distance/ascent/descent."""
+    flagged = []
+    for i in range(len(records)):
+        r = records[i]
+        reasons = []
+        if float(r["max_ele_m"]) < dem_min_ele_m:
+            reasons.append("max_ele_below_dem_minimum")
+        if float(r["ascent_m"]) > ascent_cap_m:
+            reasons.append("ascent_over_cap")
+        if float(r["distance_m"]) < 0:
+            reasons.append("negative_distance")
+        if float(r["ascent_m"]) < 0:
+            reasons.append("negative_ascent")
+        if float(r["descent_m"]) < 0:
+            reasons.append("negative_descent")
+        for reason in reasons:
+            flagged.append({
+                "layer": layer_name, "row": i, "from_id": int(r["from_id"]), "to_id": int(r["to_id"]),
+                "max_ele_m": float(r["max_ele_m"]), "ascent_m": float(r["ascent_m"]),
+                "distance_m": float(r["distance_m"]), "reason": reason,
+            })
+    return build_check(
+        f"scalar_sanity_{layer_name}", {"ascent_cap_m": ascent_cap_m, "dem_min_ele_m": dem_min_ele_m},
+        checked=len(records), flagged_rows=flagged,
+        baseline=82_017 if layer_name == "start_edges" else (24 if layer_name == "hut_edges" else 0),
+        max_flagged_rows=max_flagged,
+    )
+
+
 def main(argv=None):
     config = load_config()
     q = config.get("quality", {})
@@ -146,6 +269,15 @@ def main(argv=None):
     parser.add_argument("--out", default=str(QUALITY_DIR / "graph_building.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+    graph_building_cfg = q.get("graphBuilding", {})
+    parser.add_argument("--max-vertex-gap-m", type=float,
+                         default=graph_building_cfg.get("maxVertexGapM", 500))
+    parser.add_argument("--snap-tolerance-m", type=float,
+                         default=graph_building_cfg.get("snapToleranceM", 5))
+    parser.add_argument("--min-retrace-separation-m", type=float,
+                         default=graph_building_cfg.get("minRetraceSeparationM", 200))
+    parser.add_argument("--ascent-cap-m", type=float,
+                         default=graph_building_cfg.get("ascentCapM", 5000))
     args = parser.parse_args(argv)
 
     osm_dir = Path(args.osm_dir)
@@ -172,6 +304,54 @@ def main(argv=None):
             c = check_range_cap(records, layer_name, args.max_edge_km, args.max_flagged_rows)
             print(f"range_cap[{layer_name}]: {c['summary']['flagged']:,} / "
                   f"{c['summary']['checked']:,} flagged", flush=True)
+            checks.append(c)
+
+        base_graph_dir = osm_dir / "base_graph"
+        nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
+        base_edges = binfmt.load_array(base_graph_dir / "edges.npy", mmap=False)
+        interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
+        node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy", mmap=False)
+        dem_min_ele_m = float(np.min(node_ele)) if len(node_ele) else 0.0
+
+        base_polylines = [
+            ({"edge_id": int(base_edges[i]["edge_id"]), "u": int(base_edges[i]["u"]),
+              "v": int(base_edges[i]["v"])}, polyline_for_base_edge(base_edges[i], nodes, interior))
+            for i in range(len(base_edges))
+        ]
+        c = check_vertex_gap(base_polylines, "base_graph", args.max_vertex_gap_m, args.max_flagged_rows)
+        print(f"vertex_gap[base_graph]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+              flush=True)
+        checks.append(c)
+
+        for layer_name in EDGE_LAYERS:
+            records_path = osm_dir / layer_name / "records.npy"
+            geometry_path = osm_dir / layer_name / "geometry.npy"
+            if not records_path.exists() or not geometry_path.exists():
+                continue
+            records = binfmt.load_array(records_path, mmap=False)
+            geometry = binfmt.load_array(geometry_path, mmap=False)
+            polylines = [
+                ({"from_id": int(records[i]["from_id"]), "to_id": int(records[i]["to_id"]),
+                  "variant": binfmt.VARIANT_NAMES.get(int(records[i]["variant"]), str(int(records[i]["variant"])))},
+                 polyline_for_record(records[i], geometry))
+                for i in range(len(records))
+            ]
+
+            c = check_vertex_gap(polylines, layer_name, args.max_vertex_gap_m, args.max_flagged_rows)
+            print(f"vertex_gap[{layer_name}]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+                  flush=True)
+            checks.append(c)
+
+            c = check_self_retrace(polylines, layer_name, args.snap_tolerance_m,
+                                    args.min_retrace_separation_m, args.max_flagged_rows)
+            print(f"self_retrace[{layer_name}]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+                  flush=True)
+            checks.append(c)
+
+            c = check_scalar_sanity(records, layer_name, args.ascent_cap_m, dem_min_ele_m,
+                                     args.max_flagged_rows)
+            print(f"scalar_sanity[{layer_name}]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+                  flush=True)
             checks.append(c)
 
         gaps_path = osm_dir / "tour-match-gaps.json"
