@@ -534,6 +534,24 @@ def test_route_exceeding_max_edge_km_is_dropped():
     assert all(r["distance_m"] <= 500.0 for r in hut_records)
 
 
+def test_route_exceeding_cap_only_once_the_snap_gap_is_added_is_dropped():
+    # the routed trail leg alone (1000.0m) is under a 1005m cap, but both hubs sit off the trail
+    # line - once their snap gaps are folded in, the shipped distance_m exceeds the cap and the
+    # record must be dropped, not shipped over-cap (the cap check must run on the final
+    # snap-inclusive distance_m, not on path.distance_m alone).
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003},
+    ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
+    hut_records, _ = compute_hub_edges_for_cell(
+        subgraph, core_hubs, core_hubs, max_edge_km=1.005, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert hut_records == []
+
+
 def test_a_variant_with_no_obeying_path_emits_no_record():
     # NOT a fallback to the unconstrained path: a constrained row that cannot connect a pair must
     # produce nothing, or the guarantee it exists for is broken

@@ -41,7 +41,7 @@ def test_materializes_geometry_only_for_selected_targets():
     selected_targets_by_hut = {1: [station]}
 
     records, unreachable_skipped = route_selected_pairs_for_cell(
-        subgraph, [hut], selected_targets_by_hut, snaps, variants=FAST_ANY_ONLY,
+        subgraph, [hut], selected_targets_by_hut, snaps, variants=FAST_ANY_ONLY, max_edge_km=5.0,
     )
 
     assert unreachable_skipped == 0
@@ -62,6 +62,7 @@ def test_unselected_target_is_never_routed():
 
     records, unreachable_skipped = route_selected_pairs_for_cell(
         subgraph, [hut], selected_targets_by_hut={1: []}, snaps=snaps, variants=FAST_ANY_ONLY,
+        max_edge_km=5.0,
     )
 
     assert records == []
@@ -89,7 +90,7 @@ def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
     snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
 
     records, _ = route_selected_pairs_for_cell(
-        subgraph, [hut], {1: [station]}, snaps, variants=FAST_ANY_ONLY,
+        subgraph, [hut], {1: [station]}, snaps, variants=FAST_ANY_ONLY, max_edge_km=5.0,
     )
 
     # the edge is 80m of ascent walking 0->1 (hut's side); reversed to access(2)->hut(1) storage
@@ -127,8 +128,25 @@ def test_unreachable_selected_target_is_skipped_not_emitted_as_zero_distance():
 
     records, unreachable_skipped = route_selected_pairs_for_cell(
         disconnected_subgraph, [hut], {1: [station, island]}, snaps, variants=FAST_ANY_ONLY,
+        max_edge_km=5.0,
     )
 
     assert len(records) == 1
     assert records[0]["from_id"] == station["id"]
     assert unreachable_skipped == 1
+
+
+def test_route_exceeding_max_edge_km_is_dropped():
+    # same C8 divergence as build_hub_edges.py's test_route_exceeding_max_edge_km_is_dropped: the
+    # materialized path here is TIME-shortest and can exceed the cap even though
+    # select_approach_pairs.py's dist-weighted cutoff would not have allowed it through.
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
+
+    records, _ = route_selected_pairs_for_cell(
+        subgraph, [hut], {1: [station]}, snaps, variants=FAST_ANY_ONLY, max_edge_km=0.5,
+    )
+
+    assert records == []

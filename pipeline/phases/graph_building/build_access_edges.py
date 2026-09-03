@@ -41,11 +41,17 @@ SCRIPT_NAME = "build_access_edges.py"
 
 
 def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_by_hut: dict,
-                                   snaps: dict, variants: list, timer: StepTimer = None) -> tuple:
+                                   snaps: dict, variants: list, max_edge_km: float,
+                                   timer: StepTimer = None) -> tuple:
     """hut_sources: this cell's core huts (build_hub_edges.py already proved these are the only
     valid Dijkstra sources for access edges, A1). selected_targets_by_hut: {hut_id: [access hub
     dict, ...]} - EXACTLY the targets select_approach_pairs.py kept for that hut; a hut with an
     empty or missing list here is simply not routed.
+
+    max_edge_km: select_approach_pairs.py already filtered candidates on access_distances.npy's
+    dist-weighted cutoff, but the path materialized here is TIME-shortest (weights="weight") and
+    can exceed that cap once its own distance_m is computed (same C8 divergence build_hub_edges.py
+    guards against for hut_edges) - re-checked below on the final, snap-gap-inclusive distance_m.
 
     Returns (records, n_unreachable_skipped). records: one dict per materialized record,
     access->hut oriented (A3): the path is walked hut->access (matching build_hub_edges.py's own
@@ -63,6 +69,7 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
     timer = timer if timer is not None else StepTimer()
     if not hut_sources:
         return [], 0
+    max_edge_m = max_edge_km * 1000
 
     with timer.step("build_base_arrays"):
         base_arrays = build_base_igraph_arrays(subgraph, snaps)
@@ -117,6 +124,8 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
                     base_edge_ids=list(reversed(path.base_edge_ids)),
                 )
                 snap_m, ascent_m, descent_m = fold_endpoint_snaps(reversed_path, tgt_snap, src_snap)
+                if reversed_path.distance_m + snap_m > max_edge_m:
+                    continue
                 geometry = [(t["lon"], t["lat"]), *reversed_path.coords, (hub["lon"], hub["lat"])]
                 records.append({
                     "from_id": t["id"], "from_type": t["type"],
@@ -140,7 +149,7 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
 
 def _run_cell(args):
     route_subgraphs_dir, base_graph_dir, cell_id, hut_sources, selected_targets_by_hut, \
-        variants, local_persisted = args
+        variants, local_persisted, max_edge_km = args
     t0 = time.time()
     timer = StepTimer()
     with timer.step("gather_subgraph"):
@@ -151,7 +160,8 @@ def _run_cell(args):
     with timer.step("snap"):
         local_snaps = hub_snap.reconstruct_local_snaps(subgraph, keys, local_persisted)
     records, unreachable_skipped = route_selected_pairs_for_cell(
-        subgraph, hut_sources, selected_targets_by_hut, local_snaps, variants=variants, timer=timer,
+        subgraph, hut_sources, selected_targets_by_hut, local_snaps, variants=variants,
+        max_edge_km=max_edge_km, timer=timer,
     )
     return {
         "cell_id": cell_id, "elapsed_s": time.time() - t0, "records": records,
@@ -167,6 +177,8 @@ if __name__ == "__main__":
     parser.add_argument("--selected-pairs", default=str(OSM_DIR / "selected_access_pairs.npy"))
     parser.add_argument("--out-dir", default=str(OSM_DIR),
                          help="directory to write start_edges/ into")
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                         help="longest hut-to-access trail distance kept as an edge (see pipeline.config.json's graph.maxEdgeKm)")
     parser.add_argument("--workers", type=int, default=None)
     args = parser.parse_args()
 
@@ -211,7 +223,7 @@ if __name__ == "__main__":
         local_persisted = {k: persisted_snaps[k] for k in keys if k in persisted_snaps}
         tasks.append((
             Path(args.route_subgraphs_dir), Path(args.base_graph_dir), cell_id, cell_huts,
-            selected_targets_by_hut, active_variants, local_persisted,
+            selected_targets_by_hut, active_variants, local_persisted, args.max_edge_km,
         ))
 
     total = len(tasks)
