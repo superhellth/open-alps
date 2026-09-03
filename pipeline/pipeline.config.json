@@ -11,7 +11,7 @@
     "maxSnapAscentM": 25,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
     "tileSizeKm": 60,
-    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
+    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05, "technicalPaceMs": 0.2, "minSpeedMs": 0.15 },
     "variants": ["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]
   },
   "dem": {
@@ -34,6 +34,7 @@
       ]
     },
     "smoothingKernelM": 30,
+    "minSlopeSegmentM": 30,
     "profilePoints": 30
   },
   "approach": { "k": 3, "selectK": 20 },
