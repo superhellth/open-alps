@@ -1,8 +1,8 @@
 import { forwardStartLeg, reverseStartLeg } from './reverseLeg.js'
 import type { ApproachesData, StartLeg } from './types.js'
 
-/** The curated k-best-per-hut table, FAST_ANY only (docs/tour-suggestion-payload.md §6):
- *  "an approach is a fastest, unconstrained leg to the hub, not a difficulty-graded one." */
+/** The curated duration/source-type/variant matrix table (docs/tour-suggestion-payload.md §6):
+ *  one row per non-empty (source_type, variant, duration_bucket) cell, fastest candidate wins. */
 export function getApproachLegs(hutIndex: number, approachesData: ApproachesData): StartLeg[] {
   return approachesData.records
     .filter((r) => r.hutIndex === hutIndex)
