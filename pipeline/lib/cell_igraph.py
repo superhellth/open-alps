@@ -41,6 +41,7 @@ class BaseIgraphArrays:
     constrained_oks: list
     interiors: list
     max_ele_ms: list
+    vertex_ele_ms: list
     vertex_coords: dict
     hub_vertex: dict
     edges_to_remove: set
@@ -122,6 +123,12 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
     ]
 
     vertex_coords = {i: (float(n["lon"]), float(n["lat"])) for i, n in enumerate(subgraph.local_nodes)}
+    # Per-vertex absolute elevation, keyed by igraph vertex id - not derivable from edge attrs
+    # alone (accumulate_path's trivial src_v == tgt_v case walks zero edges), so it has to be
+    # its own array. A mid-chain snap gets its parent edge's max_ele_m (same apportionment
+    # limitation max_ele_ms already accepts above - no per-point elevation survives
+    # split_edge_at_point).
+    vertex_ele_ms = node_ele.tolist()
 
     n_orig = len(subgraph.local_edges)
     edge_source = list(range(n_orig))
@@ -159,6 +166,7 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
         constrained_oks.append(base_constrained_ok)
         interiors.append(list(split.interior_to_u))
         max_ele_ms.append(base_max_ele)
+        vertex_ele_ms.append(base_max_ele)
         edge_source.append(ei)
         base_edge_ids.append(int(edge_ids_col[ei]) * 3 + 1)
         edges_uv.append((vid, v))
@@ -183,6 +191,7 @@ def build_base_igraph_arrays(subgraph: LocalSubgraph, hub_snaps: dict) -> BaseIg
         road_ms=road_ms, ungraded_ms=ungraded_ms, inferred_ms=inferred_ms, ascent_ms=ascent_ms,
         descent_ms=descent_ms, sac_ranks=sac_ranks, via_ferratas=via_ferratas,
         constrained_oks=constrained_oks, interiors=interiors, max_ele_ms=max_ele_ms,
+        vertex_ele_ms=vertex_ele_ms,
         vertex_coords=vertex_coords, hub_vertex=hub_vertex, edges_to_remove=edges_to_remove,
         edge_source=edge_source, base_edge_ids=base_edge_ids,
     )
@@ -226,6 +235,7 @@ def build_igraph_from_base(base: BaseIgraphArrays, edge_mask: np.ndarray = None)
         "constrained_ok": _filter(base.constrained_oks), "interior": _filter(base.interiors),
         "base_edge_id": _filter(base.base_edge_ids), "orig_u": orig_u,
     }, directed=False)
+    graph.vs["ele_m"] = base.vertex_ele_ms
     return graph, base.hub_vertex, base.vertex_coords
 
 
@@ -276,7 +286,7 @@ def accumulate_path(graph, vertex_coords: dict, src_v: int, tgt_v: int, epath: l
     target list routed against several differently-masked graphs) MUST check for None rather than
     treat an empty epath as a real zero-distance path."""
     if src_v == tgt_v:
-        return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -1, False, [])
+        return PathResult([], 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, float(graph.vs[src_v]["ele_m"]), -1, False, [])
     if not epath:
         return None
     trail_coords = []

@@ -69,6 +69,19 @@ def test_interior_direction_survives_igraph_source_target_canonicalization():
     assert reverse_result.descent_m == 100.0
 
 
+def test_trivial_path_uses_vertex_elevation_not_zero():
+    # src_v == tgt_v (two different hub keys snapped onto the SAME base-graph node) walks no
+    # edges, so max_ele_m can't come from edge attrs the way the non-trivial branch derives it -
+    # it must fall back to the vertex's own elevation, not a hardcoded sea-level 0.0.
+    subgraph = _one_edge_subgraph(u=0, v=1, ascent_m=100.0, descent_m=50.0)
+    subgraph.local_node_ele[:] = [1800.0, 2200.0]
+
+    result = _route(subgraph, src_vertex=1, tgt_vertex=1)
+
+    assert result.distance_m == 0.0
+    assert result.max_ele_m == 2200.0
+
+
 def test_interior_direction_when_local_u_is_already_the_smaller_index():
     # local u=0 < local v=1: igraph's canonical (source, target) already matches insertion order
     # here, so this is the case that was never broken - kept as a control alongside the swapped

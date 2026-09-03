@@ -120,9 +120,6 @@ Probably in form of a static web page, either as part of the existing frontend o
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
 
 At baseline (no regression):
-  - range_cap_hut_edges: 25/25
-  - range_cap_start_edges: 100,592/100,592
-  - vertex_gap_hut_edges: 700/700
   - scalar_sanity_hut_edges: 24/24
   - scalar_sanity_tour_edges: 0/0
   - tour_ingestion_gaps: 4/4 (this baseline is trivially self-matching by construction)
