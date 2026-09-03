@@ -47,3 +47,36 @@ def test_smoothing_kernel_is_metres_not_points():
     dense = cep.smooth_profile(np.array([0.0, 20.0, 0.0]), np.array([5.0, 5.0]), kernel_m=30.0)
     sparse = cep.smooth_profile(np.array([0.0, 20.0, 0.0]), np.array([200.0, 200.0]), kernel_m=30.0)
     assert dense.max() < sparse.max()
+
+
+def test_merge_segments_combines_short_runs_up_to_the_window():
+    # 4 segments of 10 m each, window 30 m -> merges into [30, 10] (a 20 m staircase digitized as
+    # short segments becomes one slope computation over 30 m, plus a kept 10 m remainder)
+    seg_len = np.array([10.0, 10.0, 10.0, 10.0])
+    dz = np.array([-1.0, -30.0, -2.0, -1.0])
+    merged_len, merged_dz = cep.merge_segments(seg_len, dz, min_segment_m=30.0)
+    assert merged_len.tolist() == pytest.approx([30.0, 10.0])
+    assert merged_dz.tolist() == pytest.approx([-33.0, -1.0])
+
+
+def test_merge_segments_keeps_a_final_under_window_remainder():
+    # single 5 m segment, window 30 m -> nothing to merge with, kept as-is rather than dropped
+    seg_len = np.array([5.0])
+    dz = np.array([-2.0])
+    merged_len, merged_dz = cep.merge_segments(seg_len, dz, min_segment_m=30.0)
+    assert merged_len.tolist() == pytest.approx([5.0])
+    assert merged_dz.tolist() == pytest.approx([-2.0])
+
+
+def test_merge_segments_handles_empty_input():
+    merged_len, merged_dz = cep.merge_segments(np.array([]), np.array([]), min_segment_m=30.0)
+    assert len(merged_len) == 0
+    assert len(merged_dz) == 0
+
+
+def test_merge_segments_leaves_already_wide_segments_alone():
+    seg_len = np.array([40.0, 50.0])
+    dz = np.array([-5.0, 3.0])
+    merged_len, merged_dz = cep.merge_segments(seg_len, dz, min_segment_m=30.0)
+    assert merged_len.tolist() == pytest.approx([40.0, 50.0])
+    assert merged_dz.tolist() == pytest.approx([-5.0, 3.0])
