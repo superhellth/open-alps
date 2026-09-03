@@ -178,13 +178,23 @@ def main(argv=None):
                         help="Tobler-shaped speed model k constant (see pipeline.config.json's graph.speedModel)")
     parser.add_argument("--speed-s0", type=float, default=speed_model["s0"],
                         help="Tobler-shaped speed model s0 constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--min-slope-segment-m", type=float,
+                        default=config["dem"]["minSlopeSegmentM"],
+                        help="minimum horizontal run (m) a merged segment must reach before slope is computed for time_s (see pipeline.config.json's dem.minSlopeSegmentM)")
+    parser.add_argument("--technical-pace-ms", type=float,
+                        default=speed_model["technicalPaceMs"],
+                        help="constant pace (m/s over 3D distance) used for via_ferrata/sac_rank>=5 segments instead of the Tobler model (see pipeline.config.json's graph.speedModel.technicalPaceMs)")
+    parser.add_argument("--min-speed-ms", type=float,
+                        default=speed_model["minSpeedMs"],
+                        help="floor on implied walking speed (m/s); any edge's time_s is clamped so it never implies a slower speed (see pipeline.config.json's graph.speedModel.minSpeedMs)")
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)
     resolved_speed_model = {"v0": args.speed_v0, "k": args.speed_k, "s0": args.speed_s0}
     timer = StepTimer()
     with phase(SCRIPT_NAME, "compute_edge_profiles", smoothing_kernel_m=args.smoothing_kernel_m,
-               **resolved_speed_model) as meta:
+               min_slope_segment_m=args.min_slope_segment_m, technical_pace_ms=args.technical_pace_ms,
+               min_speed_ms=args.min_speed_ms, **resolved_speed_model) as meta:
         with timer.step("load_arrays"):
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
@@ -196,6 +206,9 @@ def main(argv=None):
         time_s, ascent_m, descent_m = _fill_edge_time_and_elevation(
             edges, nodes, interior, node_ele, interior_ele, args.smoothing_kernel_m,
             resolved_speed_model, timer,
+            min_slope_segment_m=args.min_slope_segment_m,
+            technical_pace_ms=args.technical_pace_ms,
+            min_speed_ms=args.min_speed_ms,
         )
         edges["time_s"] = time_s
         edges["ascent_m"] = ascent_m

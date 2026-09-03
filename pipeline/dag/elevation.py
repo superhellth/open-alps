@@ -43,12 +43,16 @@ def task_compute_edge_profiles():
         params=[
             cli_param("smoothing_kernel_m", "smoothing-kernel-m", float,
                       CONFIG["dem"]["smoothingKernelM"]),
+            cli_param("min_slope_segment_m", "min-slope-segment-m", float,
+                      CONFIG["dem"]["minSlopeSegmentM"]),
             # every value compute_edge_profiles.py's time_s computation reads from speedModel must
             # be its own tracked param, or a routing_probe.py recalibration that touches only
             # speedModel would leave TaskOptionsChanged() reporting "up to date".
             cli_param("speed_v0", "speed-v0", float, speed["v0"]),
             cli_param("speed_k", "speed-k", float, speed["k"]),
             cli_param("speed_s0", "speed-s0", float, speed["s0"]),
+            cli_param("technical_pace_ms", "technical-pace-ms", float, speed["technicalPaceMs"]),
+            cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
         ],
         task_dep=["sample_base_elevation"],
         file_dep=[OSM_DIR / "base_graph" / "node_ele.npy", OSM_DIR / "base_graph" / "interior_ele.npy"],
