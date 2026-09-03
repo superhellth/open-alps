@@ -24,6 +24,12 @@ unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlappin
 
 ## Medium
 
+### [Approach selection doesn't penalize long walks through urban/street terrain](backlog/approach-urban-walk-unpenalized.md)
+
+`select_approaches` ranks purely by DIN duration — a bus-station approach with 2h of city-street
+walking before the real trailhead ranks identically to a true trailhead of the same duration. No
+layer (pipeline or frontend) carries any surface/highway/urban signal today.
+
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
