@@ -9,7 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
 from postprocessing.build_approach_table import (  # noqa: E402
-    build_tables, bucket_index, gather_candidates, select_approaches,
+    build_tables, bucket_index, gather_candidates, parse_duration_buckets,
+    parse_variant_names, select_approaches,
 )
 
 
@@ -240,3 +241,21 @@ def test_hut_needing_two_missing_types_no_longer_loses_one_to_overwrite():
     )
     types = {r["source_type"] for r in rows}
     assert types == {binfmt.TYPE_PARKING, binfmt.TYPE_STATION, binfmt.TYPE_PARTNER}
+
+
+def test_parse_duration_buckets_splits_and_orders_floats():
+    assert parse_duration_buckets("4,6") == [4.0, 6.0]
+    assert parse_duration_buckets("4.5") == [4.5]
+
+
+def test_parse_variant_names_resolves_to_ids():
+    assert parse_variant_names("FAST_ANY") == {binfmt.VARIANT_FAST_ANY}
+    assert parse_variant_names("FAST_ANY,FAST_T2") == {
+        binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T2,
+    }
+
+
+def test_parse_variant_names_rejects_unknown_name():
+    import pytest
+    with pytest.raises(ValueError, match="NOT_A_REAL_VARIANT"):
+        parse_variant_names("NOT_A_REAL_VARIANT")

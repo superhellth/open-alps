@@ -133,28 +133,56 @@ def build_tables(records: np.ndarray, id_table: dict, duration_buckets: list,
     return approaches, index
 
 
+_VARIANT_ID_BY_NAME = {name: vid for vid, name in binfmt.VARIANT_NAMES.items()}
+
+
+def parse_duration_buckets(csv: str) -> list:
+    return [float(x) for x in csv.split(",")]
+
+
+def parse_variant_names(csv: str) -> set:
+    names = [n.strip() for n in csv.split(",")]
+    unknown = [n for n in names if n not in _VARIANT_ID_BY_NAME]
+    if unknown:
+        raise ValueError(f"unknown variant name(s): {', '.join(unknown)}")
+    return {_VARIANT_ID_BY_NAME[n] for n in names}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--edges-dir", default=str(OSM_DIR / "start_edges"),
                         help="directory holding start_edges/ records (build_hub_edges.py's output)")
     parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"),
                         help="path to the start-point id table (build_edge_ids.py's output)")
-    parser.add_argument("--k", type=int, default=config["approach"]["k"],
-                        help="best approach edges retained per hut (see pipeline.config.json's approach.k)")
+    parser.add_argument(
+        "--duration-buckets-h", type=str,
+        default=",".join(str(b) for b in config["approach"]["durationBucketsH"]),
+        help="comma-separated sorted bucket-boundary hours (see pipeline.config.json's "
+             "approach.durationBucketsH)",
+    )
+    parser.add_argument(
+        "--variants", type=str, default=",".join(config["approach"]["variants"]),
+        help="comma-separated binfmt.VARIANT_NAMES values eligible as approach candidates "
+             "(see pipeline.config.json's approach.variants)",
+    )
     parser.add_argument("--out-bin", default=str(OSM_DIR / "approaches.bin"),
                         help="path to write the packed approach-table binary")
     parser.add_argument("--out-manifest", default=str(OSM_DIR / "approaches.json"),
                         help="path to write the approach-table manifest")
     args = parser.parse_args()
 
+    duration_buckets = parse_duration_buckets(args.duration_buckets_h)
+    variant_ids = parse_variant_names(args.variants)
+
     with phase("build_approach_table.py", "build_approach_table"):
         records = binfmt.load_array(Path(args.edges_dir) / "records.npy", mmap=False)
         with open(args.id_table, encoding="utf-8") as f:
             id_table = json.load(f)
 
-        approaches, index = build_tables(records, id_table, args.k)
+        approaches, index = build_tables(records, id_table, duration_buckets, variant_ids)
         print(f"start_edges records: {len(records):,}", flush=True)
-        print(f"approach rows (k={args.k}): {len(approaches):,}", flush=True)
+        print(f"approach rows (buckets={duration_buckets}, variants={sorted(variant_ids)}): "
+              f"{len(approaches):,}", flush=True)
         print(f"reverse index: {len(index['hut_to_starts']):,} huts, "
               f"{len(index['start_to_huts']):,} start points, "
               f"{sum(len(v) for v in index['start_to_huts'].values()):,} rows", flush=True)
