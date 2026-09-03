@@ -327,3 +327,25 @@ def test_check_postprocessing_is_not_a_file_dep_of_copy_public_data():
     copy_task = dodo.task_copy_public_data()
     postprocessing_targets = set(dodo.task_check_postprocessing()["targets"])
     assert not (postprocessing_targets & set(copy_task["file_dep"]))
+
+
+def test_quality_summary_depends_on_all_four_check_reports():
+    task = dodo.task_quality_summary()
+    for phase_name in ["check_preprocessing", "check_elevation", "check_graph_building",
+                       "check_postprocessing"]:
+        assert phase_name in task["task_dep"]
+    assert any(t.endswith("data/quality/summary.json") for t in task["targets"])
+
+
+def test_quality_summary_is_not_a_file_dep_of_copy_public_data():
+    copy_task = dodo.task_copy_public_data()
+    assert not any("quality" in d for d in copy_task["file_dep"])
+
+
+def test_default_tasks_ends_with_quality_summary():
+    assert dodo.DOIT_CONFIG["default_tasks"][-1] == "quality_summary"
+
+
+def test_no_quality_task_is_hardcoded_into_copy_public_data_public_files():
+    # data/quality/ reports are internal diagnostics, never shipped to the client.
+    assert not any("quality" in name for name in dodo.PUBLIC_FILES)

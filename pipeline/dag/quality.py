@@ -104,3 +104,19 @@ def task_check_postprocessing():
         ],
         targets=[QUALITY_DIR / "postprocessing.json"],
     )
+
+
+def task_quality_summary():
+    return pipeline_task(
+        "phases/quality/summarize.py",
+        args=[f"--quality-dir {QUALITY_DIR}", f"--out {QUALITY_DIR / 'summary.json'}"],
+        task_dep=[
+            "check_preprocessing", "check_elevation", "check_graph_building",
+            "check_postprocessing",
+        ],
+        file_dep=[
+            QUALITY_DIR / "preprocessing.json", QUALITY_DIR / "elevation.json",
+            QUALITY_DIR / "graph_building.json", QUALITY_DIR / "postprocessing.json",
+        ],
+        targets=[QUALITY_DIR / "summary.json"],
+    )
