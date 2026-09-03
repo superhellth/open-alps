@@ -7,15 +7,18 @@ import './App.css'
 import AppShell from '../AppShell.js'
 import { hutClassBadge, hutClassLabel, OPERATOR_COLOR, OPERATOR_LABEL, PARTNER_COLOR, PARTNER_LABEL, type HutClass, type HutOperator } from '../hutClass.js'
 import { decodeEdgeGeometry } from './decodeEdgeGeometry.js'
+import { decodeEdgeElevation } from './decodeEdgeElevation.js'
 import { TrailTilesLayer, HutEdgeTilesLayer } from './TrailLayers.js'
 import HoverInspector from './HoverInspector.js'
 import EdgeHoverPanel from './EdgeHoverPanel.js'
-import type { Edge, EdgeGeometryManifest, EdgeStatsEntry, Hover, Hut, PartnerPoint } from './types.js'
+import type { Edge, EdgeGeometryManifest, EdgeStatsEntry, ElevationManifest, Hover, Hut, PartnerPoint } from './types.js'
 
 const EDGE_STATS_URL = '/data/hut-edge-stats.json'
 const HUTS_URL = '/data/huts.geojson'
 const EDGE_GEOMETRY_MANIFEST_URL = '/data/hut-edge-geometry.json'
 const EDGE_GEOMETRY_BIN_URL = '/data/hut-edge-geometry.bin'
+const EDGE_ELEVATION_MANIFEST_URL = '/data/hut-edge-elevation.json'
+const EDGE_ELEVATION_BIN_URL = '/data/hut-edge-elevation.bin'
 const PARTNER_URL = '/data/partner_betriebe.geojson'
 
 /**
@@ -40,15 +43,18 @@ function AdminPage() {
       fetch(EDGE_STATS_URL).then((r) => r.json()) as Promise<EdgeStatsEntry[]>,
       fetch(EDGE_GEOMETRY_MANIFEST_URL).then((r) => r.json()) as Promise<EdgeGeometryManifest>,
       fetch(EDGE_GEOMETRY_BIN_URL).then((r) => r.arrayBuffer()),
+      fetch(EDGE_ELEVATION_MANIFEST_URL).then((r) => r.json()) as Promise<ElevationManifest>,
+      fetch(EDGE_ELEVATION_BIN_URL).then((r) => r.arrayBuffer()),
       fetch(HUTS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
       fetch(PARTNER_URL)
         .then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
         .catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection),
     ])
-      .then(([edgeStats, geometryManifest, geometryBuffer, hutsFc, partnerFc]) => {
-        // Geometry and stats are built from the same records.npy pass, in the same edge_id
-        // order (build_edge_tiles.py's build_stats loop) - zip by index, no id lookup needed.
+      .then(([edgeStats, geometryManifest, geometryBuffer, elevationManifest, elevationBuffer, hutsFc, partnerFc]) => {
+        // Geometry, elevation and stats are built from the same records.npy pass, in the same
+        // edge_id order (build_edge_tiles.py's build_stats loop) - zip by index, no id lookup needed.
         const perEdgePositions = decodeEdgeGeometry(geometryManifest, geometryBuffer)
+        const perEdgeElevation = decodeEdgeElevation(elevationManifest, elevationBuffer)
         setEdges(
           edgeStats.map((s, i) => {
             const positions = perEdgePositions[i]
@@ -59,7 +65,7 @@ function AdminPage() {
               roadM: s.road_m,
               ascentM: s.ascent_m,
               descentM: s.descent_m,
-              elevationProfile: s.elevation_profile,
+              elevationProfile: perEdgeElevation[i],
               sacScale: s.sac_scale,
               viaFerrata: s.via_ferrata,
               positions,
