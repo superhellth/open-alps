@@ -39,11 +39,6 @@ unnecessary hut-to-hut edge retracing. Why doesnt alg find better non-overlappin
 82,017 rows (17%) carry `max_ele_m == 0`; all are sub-166 m snap-coincident legs whose unset
 maximum elevation is written as sea level into the column the client's altitude cap reads.
 
-### [Base-graph time_s has a nonsense tail](backlog/base-graph-time-s-outliers.md)
-
-1,011 edges imply under 0.05 m/s, 20 exceed a year, worst 2.95e12 s for a flat 118 m edge — silent
-barriers that also poison the key `select_approach_pairs.py` ranks on.
-
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
@@ -89,6 +84,12 @@ resume data-orga
 Atm code is quite unstructured not skill-checked with improve codebase architecture
 
 ## Low
+
+### [Frontend disclaimer for via_ferrata / high-SAC-grade legs](backlog/steep-terrain-time-disclaimer.md)
+
+Once the steep-terrain time model spec lands, legs touching via_ferrata/T5-T6 terrain should warn
+that the time estimate is approximate — no pipeline change needed, `sac_rank`/`via_ferrata` are
+already in the edge payload.
 
 ### [Exact approach selection via a scalars-only path walk](backlog/exact-approach-selection-scalars-only-path-walk.md)
 
