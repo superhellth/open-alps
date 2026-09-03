@@ -226,7 +226,7 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
                 float(e["dist"]), float(e["road_m"]), float(e["ungraded_m"]),
                 float(e["inferred_m"]), seg_idx, frac,
             )
-            best_edge = (d, ei, split, e["u"], e["v"])
+            best_edge = (d, ei, split, e["u"], e["v"], seg_idx, frac)
 
     best_edge_d = best_edge[0] if best_edge is not None else float("inf")
     node_in_range = best_node_d <= max_snap_m
@@ -256,17 +256,26 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
             return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
         return SnapResult(node_index=best_node_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
 
-    d, edge_local_index, split, u_idx, v_idx = best_edge
+    d, edge_local_index, split, u_idx, v_idx, seg_idx, frac = best_edge
     gap_dz_m = 0.0
     if hub_ele_m is not None:
-        # Snap-point elevation: the same distance-ratio blend split_edge_at_point already uses to
-        # apportion ungraded_m/inferred_m across the two synthetic halves - not either endpoint's
-        # raw value, since the split point usually sits strictly between them.
-        u_ele = float(subgraph.local_node_ele[u_idx])
-        v_ele = float(subgraph.local_node_ele[v_idx])
-        total = split.dist_to_u + split.dist_to_v
-        ratio = split.dist_to_u / total if total > 0 else 0.0
-        snap_ele = u_ele + (v_ele - u_ele) * ratio
+        # Snap-point elevation: interpolated between the two REAL sampled points the split point
+        # actually falls between (same seg_idx/frac nearest_point_on_polyline used for its
+        # position) - not a blend across the whole edge's u/v endpoints. A chain-contracted edge
+        # can run hundreds of interior points and climb/descend well beyond the u-v straight-line
+        # difference, so a distance-ratio blend against only the two far endpoints can be off by
+        # hundreds of metres from the real terrain at the split point (spec E3 regression: median
+        # disagreement under 5m once measured against the actual interior_ele samples).
+        e = subgraph.local_edges[edge_local_index]
+        interior_ele = subgraph.interior_ele[
+            e["interior_offset"]:e["interior_offset"] + e["interior_count"]
+        ]
+        full_ele = np.concatenate((
+            [float(subgraph.local_node_ele[u_idx])],
+            interior_ele.astype(np.float64),
+            [float(subgraph.local_node_ele[v_idx])],
+        ))
+        snap_ele = float(full_ele[seg_idx] + frac * (full_ele[seg_idx + 1] - full_ele[seg_idx]))
         gap_dz_m = float(hub_ele_m) - snap_ele
     if (max_snap_ascent_m is not None and hub_ele_m is not None
             and abs(gap_dz_m) > max_snap_ascent_m):

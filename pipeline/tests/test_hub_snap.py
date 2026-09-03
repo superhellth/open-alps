@@ -32,6 +32,35 @@ def _line_subgraph(global_node_ids, edge_id):
     )
 
 
+def test_edge_snap_dz_uses_the_real_interior_elevation_not_an_endpoint_blend():
+    # Both endpoints sit at 0m, but the trail climbs to 1000m at its midpoint (a real ridge the
+    # chain-contracted edge crosses) - a distance-ratio blend of the two endpoints would predict
+    # ~0m at the midpoint and wrongly report a huge gap_dz_m for a hub that actually sits right at
+    # the ridge's real elevation.
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.009, 0.0, 0)
+    interior = np.zeros(1, dtype=binfmt.COORD_DTYPE)
+    interior[0] = (0.0045, 0.0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 1, 7)
+    subgraph = LocalSubgraph(
+        global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.zeros(2, dtype=np.float32),
+        interior_ele=np.array([1000.0], dtype=np.float32),
+    )
+
+    result = hub_snap.snap_hub_to_subgraph(
+        subgraph, hub_lon=0.0045, hub_lat=0.0002, max_snap_m=50.0,
+        hub_ele_m=998.0, max_snap_ascent_m=25.0,
+    )
+
+    assert isinstance(result, hub_snap.SnapResult)
+    assert result.gap_dz_m == pytest.approx(-2.0, abs=0.5)
+
+
 def test_node_snap_round_trips_through_pack_and_load(tmp_path):
     # Coincides exactly with node 0 (also edge0's own u endpoint), so the node and mid-edge
     # candidates tie on distance - snap_hub_to_subgraph has no node preference, only a tie-break

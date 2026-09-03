@@ -9,12 +9,6 @@ under `docs/superpowers/`.
 
 ## Medium
 
-### [Approach selection doesn't penalize long walks through urban/street terrain](backlog/approach-urban-walk-unpenalized.md)
-
-`select_approaches` ranks purely by DIN duration — a bus-station approach with 2h of city-street
-walking before the real trailhead ranks identically to a true trailhead of the same duration. No
-layer (pipeline or frontend) carries any surface/highway/urban signal today.
-
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
@@ -101,9 +95,11 @@ igraph vertex-scrambling fix (`9eb5b90`), the elevation-sentinel fix (`88b08aa`)
 fixed by this run: `range_cap_hut_edges`/`range_cap_start_edges` (both 0) and
 `scalar_sanity_hut_edges`/`scalar_sanity_start_edges` (both 0) — both now-removed backlog items,
 resolved. `vertex_gap_hut_edges`/`self_retrace_hut_edges`/`vertex_gap_start_edges`/`self_retrace_start_edges`
-dropped sharply but did not reach 0 — see
-[hut-edge-geometry-drops-trail-detail](backlog/hut-edge-geometry-drops-trail-detail.md) for the
-residual. `snap_health` and `connectivity` are untouched by either fix, as expected.
+dropped sharply but did not reach 0 — the residual is confirmed sparse OSM way geometry, see
+`docs/known-data-issues.md`'s "Sparse OSM way geometry" entry, not actionable in `pipeline/`.
+`vertex_gap_base_graph` (3,389 flagged) is the same confirmed non-actionable issue one layer
+earlier, also covered by that entry — dropped from the table below. `snap_health` and
+`connectivity` are untouched by either fix, as expected.
 
   Over baseline — worth attention:
 
@@ -113,8 +109,6 @@ residual. `snap_health` and `connectivity` are untouched by either fix, as expec
   │ vertex_gap_start_edges     │ 5,719   │ 0        │ down from 122,794 pre-rebuild; baseline=0 for start_edges is a never-calibrated placeholder, not a real prior measurement                │
   ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
   │ self_retrace_start_edges   │ 219     │ 0        │ down from 15,477 pre-rebuild; same baseline caveat                                                                                        │
-  ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
-  │ vertex_gap_base_graph      │ 3,389   │ 0        │ unchanged — base_graph also defaults to baseline 0 in code, untouched by either fix                                                       │
   ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
   │ snap_health                │ 609     │ 225      │ unchanged, real regression +384. All sampled flags are hut snap issues with reason vertical_offset                                        │
   ├────────────────────────────┼─────────┼──────────┼─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┤
