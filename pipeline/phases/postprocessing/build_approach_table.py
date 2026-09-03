@@ -191,6 +191,7 @@ if __name__ == "__main__":
             "hut_id": ("u2", np.array([r["hut_id"] for r in approaches], dtype="u2")),
             "start_id": ("u8", np.array([r["start_id"] for r in approaches], dtype="u8")),
             "source_type": ("u1", np.array([r["source_type"] for r in approaches], dtype="u1")),
+            "variant": ("u1", np.array([r["variant"] for r in approaches], dtype="u1")),
             "edge_id": ("u4", np.array([r["edge_id"] for r in approaches], dtype="u4")),
             "access_unknown": (
                 "u1", np.array([r["access_unknown"] for r in approaches], dtype="u1")
