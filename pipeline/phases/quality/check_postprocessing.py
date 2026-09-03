@@ -22,7 +22,7 @@ from lib.geo import haversine_m  # noqa: E402
 from lib.pipeline import OSM_DIR, PUBLIC_DATA_DIR, QUALITY_DIR, load_config  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
-from postprocessing.build_approach_table import gather_candidates  # noqa: E402
+from postprocessing.build_approach_table import gather_candidates, parse_variant_names  # noqa: E402
 
 SCRIPT_NAME = "check_postprocessing.py"
 
@@ -186,7 +186,8 @@ def main(argv=None):
         start_records = binfmt.load_array(osm_dir / "start_edges" / "records.npy", mmap=False)
         with open(osm_dir / "start_points_id_table.json", encoding="utf-8") as f:
             id_table = json.load(f)
-        candidates_by_hut = gather_candidates(start_records, id_table)
+        variant_ids = parse_variant_names(",".join(config["approach"]["variants"]))
+        candidates_by_hut = gather_candidates(start_records, id_table, variant_ids)
 
         with open(osm_dir / "approaches.json", encoding="utf-8") as f:
             approach_manifest = json.load(f)

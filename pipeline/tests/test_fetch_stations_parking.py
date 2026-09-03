@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from downloads.fetch_stations_parking import LAYERS  # noqa: E402
+from downloads.fetch_stations_parking import LAYERS, _area_to_point  # noqa: E402
 
 
 def _layer(name):
@@ -33,3 +33,45 @@ def test_parking_layer_is_unchanged():
     parking = _layer("parking")
     assert parking["tag_filter_pipelines"] == [["nwr/amenity=parking"]]
     assert parking["keep_fields"] == ["name", "capacity", "fee", "access", "motor_vehicle", "barrier"]
+
+
+def test_parking_layer_requests_polygon_geometry_too():
+    # Most real parking lots are mapped as a closed way, not a node - point-only silently drops
+    # them (verified against a live OSM extract: real amenity=parking ways near two official-tour
+    # trailheads never reached parking.geojson). _area_to_point below converts them back.
+    assert _layer("parking")["geometry_types"] == "point,polygon"
+
+
+def test_area_to_point_leaves_real_nodes_untouched():
+    feat = {"id": "n123", "geometry": {"type": "Point", "coordinates": [12.0, 47.0]}}
+    assert _area_to_point(feat) is feat
+    assert feat["geometry"] == {"type": "Point", "coordinates": [12.0, 47.0]}
+
+
+def test_area_to_point_converts_way_polygon_to_centroid_with_decoded_id():
+    # osmium's area-id convention: a way-sourced area's id is way_id * 2 (even).
+    square = {
+        "id": "a53069508",
+        "geometry": {
+            "type": "Polygon",
+            "coordinates": [[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]],
+        },
+    }
+    result = _area_to_point(square)
+    assert result["id"] == "w26534754"
+    assert result["geometry"]["type"] == "Point"
+    assert result["geometry"]["coordinates"] == [1.0, 1.0]
+
+
+def test_area_to_point_converts_relation_multipolygon_with_decoded_id():
+    # Odd area id -> relation-sourced multipolygon: relation_id * 2 + 1.
+    feat = {
+        "id": "a41",
+        "geometry": {
+            "type": "MultiPolygon",
+            "coordinates": [[[[0.0, 0.0], [2.0, 0.0], [2.0, 2.0], [0.0, 2.0], [0.0, 0.0]]]],
+        },
+    }
+    result = _area_to_point(feat)
+    assert result["id"] == "r20"
+    assert result["geometry"] == {"type": "Point", "coordinates": [1.0, 1.0]}
