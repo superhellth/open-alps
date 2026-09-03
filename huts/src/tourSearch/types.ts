@@ -8,6 +8,7 @@ export interface ApproachRecord {
   hutIndex: number
   startId: number
   sourceType: SourceType
+  variant: number
   accessUnknown: boolean
   distanceM: number
   ascentM: number
