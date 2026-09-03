@@ -23,3 +23,23 @@ def test_tour_match_config_has_expected_keys():
     assert tm["hmmMaxDistM"] == 150.0
     assert tm["hmmDistNoiseM"] == 25.0
     assert tm["endpointBridgeMaxM"] == 250.0
+
+
+def test_quality_section_has_expected_defaults():
+    config = load_config()
+    q = config["quality"]
+    assert q["maxFlaggedRows"] == 500
+    assert q["elevation"]["plausibleRangeM"] == [-50, 4300]
+    assert q["elevation"]["minSpeedMs"] == 0.05
+    assert q["graphBuilding"]["maxVertexGapM"] == 500
+    assert q["graphBuilding"]["snapToleranceM"] == 5
+    assert q["graphBuilding"]["minRetraceSeparationM"] == 200
+    assert q["graphBuilding"]["ascentCapM"] == 5000
+    assert q["postprocessing"]["minLengthM"] == 300
+    assert q["postprocessing"]["straightnessThreshold"] == 0.97
+    assert q["postprocessing"]["maxPointsForStraightnessFlag"] == 4
+
+
+def test_quality_dir_constant_exists():
+    from lib.pipeline import DATA_DIR, QUALITY_DIR
+    assert QUALITY_DIR == DATA_DIR / "quality"
