@@ -51,7 +51,8 @@ from dag.preprocessing import (  # noqa: E402,F401
     task_verify_trails,
 )
 from dag.quality import (  # noqa: E402,F401
-    task_check_elevation, task_check_graph_building, task_check_preprocessing,
+    task_check_elevation, task_check_graph_building, task_check_postprocessing,
+    task_check_preprocessing,
 )
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
@@ -92,6 +93,7 @@ DOIT_CONFIG = {
         "build_approach_table", "build_edge_payload", "build_edge_ids", "build_tour_edge_payload",
         "check_preprocessing", "check_elevation", "check_graph_building",
         "copy_public_data",
+        "check_postprocessing",
     ],
 }
 

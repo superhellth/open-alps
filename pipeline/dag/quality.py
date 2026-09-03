@@ -76,3 +76,31 @@ def task_check_graph_building():
         ],
         targets=[QUALITY_DIR / "graph_building.json"],
     )
+
+
+def task_check_postprocessing():
+    return pipeline_task(
+        "phases/quality/check_postprocessing.py",
+        args=[f"--osm-dir {OSM_DIR}", f"--out {QUALITY_DIR / 'postprocessing.json'}"],
+        params=[_max_flagged_param()],
+        # check_postprocessing.py reads huts/public/data/ for the freshness check (§4.4.4), so it
+        # must run AFTER copy_public_data even though it's never a file_dep OF it (spec §3's
+        # non-blocking rule is about the reverse direction only - copy_public_data must not wait
+        # on quality output, but quality output reading the copy is fine and in fact the point).
+        task_dep=[
+            "build_approach_table", "build_edge_payload", "build_tour_edge_payload",
+            "build_hut_edge_tiles", "build_start_edge_tiles", "build_tour_edge_tiles",
+            "copy_public_data",
+        ],
+        file_dep=[
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_edges" / "records.npy",
+            OSM_DIR / "start_points_id_table.json",
+            OSM_DIR / "approaches.bin", OSM_DIR / "approaches.json",
+            OSM_DIR / "hut-edge-payload.json", OSM_DIR / "hut-edge-geometry.json",
+            OSM_DIR / "hut-edge-geometry.bin",
+            OSM_DIR / "start-edge-geometry.json", OSM_DIR / "start-edge-geometry.bin",
+            OSM_DIR / "tour-edge-payload.json", OSM_DIR / "tour-edge-geometry.json",
+            OSM_DIR / "tour-edge-geometry.bin",
+        ],
+        targets=[QUALITY_DIR / "postprocessing.json"],
+    )

@@ -310,3 +310,20 @@ def test_quality_check_tasks_exit_zero_scripts_are_wired_not_hardcoded():
     assert "check_preprocessing.py" in dodo.task_check_preprocessing()["actions"][0]
     assert "check_elevation.py" in dodo.task_check_elevation()["actions"][0]
     assert "check_graph_building.py" in dodo.task_check_graph_building()["actions"][0]
+
+
+def test_check_postprocessing_depends_on_approach_table_and_edge_payloads():
+    task = dodo.task_check_postprocessing()
+    assert "build_approach_table" in task["task_dep"]
+    assert "build_edge_payload" in task["task_dep"]
+    assert "build_hut_edge_tiles" in task["task_dep"]
+    # freshness (§4.4.4) reads huts/public/data/, so this task must run AFTER copy_public_data -
+    # not circular, since copy_public_data has no dependency back on this task.
+    assert "copy_public_data" in task["task_dep"]
+    assert any(t.endswith("data/quality/postprocessing.json") for t in task["targets"])
+
+
+def test_check_postprocessing_is_not_a_file_dep_of_copy_public_data():
+    copy_task = dodo.task_copy_public_data()
+    postprocessing_targets = set(dodo.task_check_postprocessing()["targets"])
+    assert not (postprocessing_targets & set(copy_task["file_dep"]))
