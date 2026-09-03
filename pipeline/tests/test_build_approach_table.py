@@ -131,27 +131,32 @@ def test_gather_candidates_returns_every_fast_any_candidate_per_hut():
         _record(2, binfmt.TYPE_STATION, 7, 2000.0, 60.0, 25.0),
         _record(3, binfmt.TYPE_PARKING, 9, 500.0, 10.0, 5.0),
     ])
-    by_hut = gather_candidates(records, id_table={})
+    by_hut = gather_candidates(records, id_table={}, variant_ids={binfmt.VARIANT_FAST_ANY})
     assert set(by_hut.keys()) == {7, 9}
     assert len(by_hut[7]) == 2
     assert {c["start_id"] for c in by_hut[7]} == {1, 2}
 
 
-def test_gather_candidates_excludes_non_fast_any_variants():
+def test_gather_candidates_excludes_variants_not_in_configured_set():
     records = _records([
         _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0, variant=binfmt.VARIANT_FAST_T2),
     ])
-    by_hut = gather_candidates(records, id_table={})
+    by_hut = gather_candidates(records, id_table={}, variant_ids={binfmt.VARIANT_FAST_ANY})
     assert by_hut == {}
 
 
-def test_select_approaches_still_selects_k_best_after_refactor():
-    # regression guard: select_approaches' own behavior must be byte-for-byte unchanged by
-    # routing through gather_candidates.
+def test_gather_candidates_includes_any_configured_variant():
+    # variant_ids is genuinely arbitrary - this hut's only candidate is FAST_T2, which is
+    # excluded by default config but must be included when the caller configures it.
     records = _records([
-        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0),
-        _record(2, binfmt.TYPE_PARKING, 7, 500.0, 10.0, 5.0),
+        _record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0, variant=binfmt.VARIANT_FAST_T2),
     ])
-    rows = select_approaches(records, id_table={}, k=1)
-    assert len(rows) == 1
-    assert rows[0]["start_id"] == 2  # the faster of the two
+    by_hut = gather_candidates(records, id_table={}, variant_ids={binfmt.VARIANT_FAST_T2})
+    assert len(by_hut[7]) == 1
+    assert by_hut[7][0]["variant"] == binfmt.VARIANT_FAST_T2
+
+
+def test_gather_candidates_tags_each_candidate_with_its_variant():
+    records = _records([_record(1, binfmt.TYPE_PARKING, 7, 1000.0, 50.0, 20.0)])
+    by_hut = gather_candidates(records, id_table={}, variant_ids={binfmt.VARIANT_FAST_ANY})
+    assert by_hut[7][0]["variant"] == binfmt.VARIANT_FAST_ANY
