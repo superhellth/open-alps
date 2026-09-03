@@ -85,8 +85,13 @@ def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
         local_node_ele=np.zeros(2, dtype=np.float32),
         interior_ele=np.zeros(0, dtype=np.float32),
     )
-    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
-    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    # hub coincides exactly with node 0, not just "near" it - snap_hub_to_subgraph has no node
+    # preference, so anywhere off that exact point on this straight edge is genuinely closer to
+    # the edge's interior than to the node and would snap mid-chain instead, losing this edge's
+    # ascent_m/descent_m to the (documented, spec C9) split-edge elevation-apportionment gap this
+    # test isn't exercising.
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.009, "lat": 0.0}
     snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
 
     records, _ = route_selected_pairs_for_cell(

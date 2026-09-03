@@ -194,20 +194,16 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
     comes back as a SnapRejection instead, so it's counted rather than silently vanishing."""
     no_trail_data = len(subgraph.local_nodes) == 0 and len(subgraph.local_edges) == 0
     best_node_i, best_node_d = None, float("inf")
-    # An existing graph node within range always wins over a mid-chain split, even if some
-    # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
-    # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
-    # right next to it.
+    # Both a node candidate and a mid-edge candidate are always found (when in range) and
+    # compared on distance alone - a hut can sit right next to a through-trail while its nearest
+    # actual graph node is a much farther dead-end spur (real case: hub_snap picking a 57m spur
+    # over a 0.7m-away through-trail forced every route out of that hut to detour to the spur and
+    # back, showing up as a spurious self-retrace in the routed geometry). Preferring the node
+    # unconditionally traded that off against only avoiding a near-duplicate virtual vertex a few
+    # metres from an existing one - not worth it once the gap between the two candidates can be
+    # tens of metres.
     if len(subgraph.local_nodes) > 0:
         best_node_i, best_node_d = _nearest_node(subgraph, hub_lon, hub_lat)
-        if best_node_d <= max_snap_m:
-            gap_m = best_node_d
-            gap_dz_m = (0.0 if hub_ele_m is None
-                        else float(hub_ele_m) - float(subgraph.local_node_ele[best_node_i]))
-            if (max_snap_ascent_m is not None and hub_ele_m is not None
-                    and abs(gap_dz_m) > max_snap_ascent_m):
-                return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
-            return SnapResult(node_index=best_node_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
 
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
@@ -232,12 +228,34 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
             )
             best_edge = (d, ei, split, e["u"], e["v"])
 
-    if best_edge is None:
-        # A node within max_snap_m (if any nodes exist at all) is the most informative distance
-        # to report even though it lost - it tells the report how far away the nearest trail data
-        # actually was, not just that nothing qualified.
+    best_edge_d = best_edge[0] if best_edge is not None else float("inf")
+    node_in_range = best_node_d <= max_snap_m
+    edge_in_range = best_edge_d <= max_snap_m
+
+    if not node_in_range and not edge_in_range:
+        # The nearer of the two misses (if any candidates exist at all) is the most informative
+        # distance to report even though neither qualified - it tells the report how far away the
+        # nearest trail data actually was, not just that nothing qualified.
         reason = "no_trail_data" if no_trail_data else "gap_too_far"
-        return SnapRejection(gap_m=best_node_d, dz_m=0.0, reason=reason)
+        return SnapRejection(gap_m=min(best_node_d, best_edge_d), dz_m=0.0, reason=reason)
+
+    # best_node_d comes from _nearest_node's projected-equirectangular cKDTree query, best_edge_d
+    # from exact haversine - two different approximations of the same real-world distance, which
+    # can disagree by well under a metre even when the node and the edge's nearest point are the
+    # SAME physical location (e.g. the node sits exactly at that edge's own endpoint). Without
+    # slack, that measurement noise alone could flip the pick and spawn a redundant virtual vertex
+    # a hair from an existing node - tiny next to the tens-of-metres gaps this comparison exists
+    # to catch.
+    _TIE_EPSILON_M = 1.0
+    if node_in_range and (not edge_in_range or best_node_d <= best_edge_d + _TIE_EPSILON_M):
+        gap_m = best_node_d
+        gap_dz_m = (0.0 if hub_ele_m is None
+                    else float(hub_ele_m) - float(subgraph.local_node_ele[best_node_i]))
+        if (max_snap_ascent_m is not None and hub_ele_m is not None
+                and abs(gap_dz_m) > max_snap_ascent_m):
+            return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
+        return SnapResult(node_index=best_node_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
+
     d, edge_local_index, split, u_idx, v_idx = best_edge
     gap_dz_m = 0.0
     if hub_ele_m is not None:

@@ -51,8 +51,11 @@ def _line_subgraph():
 
 
 def test_snap_hub_to_existing_node():
+    # Coincides exactly with node 0 (also edge0's own u endpoint) - snap_hub_to_subgraph has no
+    # node preference, only a tie-break toward the node so an exact coincidence doesn't spawn a
+    # redundant virtual vertex.
     subgraph = _line_subgraph()
-    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0001, hub_lat=0.0, max_snap_m=50.0)
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0, hub_lat=0.0, max_snap_m=50.0)
     assert result is not None
     assert result.node_index == 0
 

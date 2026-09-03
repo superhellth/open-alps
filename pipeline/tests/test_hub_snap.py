@@ -33,8 +33,11 @@ def _line_subgraph(global_node_ids, edge_id):
 
 
 def test_node_snap_round_trips_through_pack_and_load(tmp_path):
+    # Coincides exactly with node 0 (also edge0's own u endpoint), so the node and mid-edge
+    # candidates tie on distance - snap_hub_to_subgraph has no node preference, only a tie-break
+    # toward the node so an exact coincidence doesn't spawn a redundant virtual vertex.
     subgraph = _line_subgraph([100, 101], edge_id=7)
-    result = hub_snap.snap_hub_to_subgraph(subgraph, hub_lon=0.0001, hub_lat=0.0, max_snap_m=50.0)
+    result = hub_snap.snap_hub_to_subgraph(subgraph, hub_lon=0.0, hub_lat=0.0, max_snap_m=50.0)
     assert result.node_index == 0
 
     persisted = hub_snap.to_persisted(subgraph, result)
@@ -73,7 +76,7 @@ def test_reconstruct_local_snaps_survives_a_different_subgraph_ordering():
     # different gather (large buffer) where the same GLOBAL node sits at a different local index
     # (here: index 1, with an extra unrelated node inserted before it).
     small_subgraph = _line_subgraph([100, 101], edge_id=7)
-    result = hub_snap.snap_hub_to_subgraph(small_subgraph, hub_lon=0.0001, hub_lat=0.0, max_snap_m=50.0)
+    result = hub_snap.snap_hub_to_subgraph(small_subgraph, hub_lon=0.0, hub_lat=0.0, max_snap_m=50.0)
     assert result.node_index == 0
     persisted = {(TYPE_HUT, 1): hub_snap.to_persisted(small_subgraph, result)}
 
