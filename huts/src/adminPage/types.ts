@@ -43,11 +43,14 @@ export interface EdgeStatsEntry {
   road_m: number
   ascent_m: number | null
   descent_m: number | null
-  elevation_profile: number[] | null
   sac_scale: string | null
   via_ferrata: boolean
 }
 
 export interface EdgeGeometryManifest {
   point_counts: number[]
+}
+
+export interface ElevationManifest {
+  profile_counts: number[]
 }
