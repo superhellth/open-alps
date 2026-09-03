@@ -273,3 +273,40 @@ def test_compute_edge_profiles_is_gated_only_by_the_stamp_build_base_graph_delet
     task = dodo.task_compute_edge_profiles()
     assert any(str(t).endswith("edge_profiles.stamp") for t in task["targets"])
     assert not any(str(d).endswith("edges.npy") for d in task["file_dep"])
+
+
+def test_check_preprocessing_depends_on_filter_start_points_output():
+    task = dodo.task_check_preprocessing()
+    assert "filter_start_points" in task["task_dep"]
+    assert any(d.endswith("start_points.npy") for d in task["file_dep"])
+    assert any(d.endswith("start_points_id_table.json") for d in task["file_dep"])
+    assert any(t.endswith("data/quality/preprocessing.json") for t in task["targets"])
+
+
+def test_check_elevation_depends_on_compute_edge_profiles_and_build_profiles():
+    task = dodo.task_check_elevation()
+    assert "compute_edge_profiles" in task["task_dep"]
+    assert "build_profiles" in task["task_dep"]
+    assert any(t.endswith("data/quality/elevation.json") for t in task["targets"])
+
+
+def test_check_graph_building_depends_on_match_tour_edges_and_build_hub_edges():
+    task = dodo.task_check_graph_building()
+    assert "match_tour_edges" in task["task_dep"]
+    assert "build_hub_edges" in task["task_dep"]
+    assert "build_access_edges" in task["task_dep"]
+    assert any(t.endswith("data/quality/graph_building.json") for t in task["targets"])
+
+
+def test_quality_tasks_are_not_file_deps_of_copy_public_data():
+    # spec §3: non-blocking - nothing in copy_public_data's file_dep may come from data/quality/.
+    copy_task = dodo.task_copy_public_data()
+    assert not any("quality" in d for d in copy_task["file_dep"])
+
+
+def test_quality_check_tasks_exit_zero_scripts_are_wired_not_hardcoded():
+    # every quality task's action must invoke its own phases/quality/check_*.py script, not a
+    # hand-copied inline command.
+    assert "check_preprocessing.py" in dodo.task_check_preprocessing()["actions"][0]
+    assert "check_elevation.py" in dodo.task_check_elevation()["actions"][0]
+    assert "check_graph_building.py" in dodo.task_check_graph_building()["actions"][0]
