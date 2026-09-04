@@ -108,6 +108,28 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
           if (mode === 'car' && exitLeg.startId !== s.startId) continue
           if (gateSourceType != null && exitLeg.sourceType !== gateSourceType) continue
           if (!legPasses(exitLeg, constraints, killCounters)) continue
+
+          const exitLegForLookup = { edgeId: exitLeg.edgeId, reversed: exitLeg.reversed, kind: 'start' as const }
+          let exempt: Set<number> = EMPTY_EDGE_IDS
+          if (s.prevLeg) {
+            // Same shared-hut trim as the expansion loop, at the chain's LAST hut h - s.prevLeg is
+            // either the last hut-hut leg, or (a zero-nights chain) the approach leg itself.
+            const prevNear = nearHubIds(edgeIdTables, s.prevLeg, 'arriving')
+            const newNear = nearHubIds(edgeIdTables, exitLegForLookup, 'departing')
+            exempt = new Set(trimSharedHubIds(prevNear, newNear))
+          }
+          if (exitLeg.startId === s.startId) {
+            // Loop closure (car mode, or a coincidental match on any other mode): the trail out of
+            // the shared start point is unavoidably shared too, same reasoning as the shared-hut
+            // case - "near start" is always the record's prefix (access is always stored as
+            // from_id), regardless of either leg's reversed flag.
+            const approachNearStart = graphData.startEdgeIds.getPrefixIds(s.approachEdgeId)
+            const exitNearStart = graphData.startEdgeIds.getPrefixIds(exitLeg.edgeId)
+            for (const id of trimSharedHubIds(approachNearStart, exitNearStart)) exempt.add(id)
+          }
+          const exitSortedIds = graphData.startEdgeIds.getSortedIds(exitLeg.edgeId)
+          if (hasOverlap(exitSortedIds, exempt, s.usedEdgeIds)) { killCounters.trackOverlap++; continue }
+
           finished.push({
             huts: [...s.path], startId: s.startId, exitStartId: exitLeg.startId,
             totalDurationH: s.totalDurationH + exitLeg.durationH,
