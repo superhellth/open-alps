@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography,
+  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import { loadTourSearchData, findTours } from '../tourSearch/index.js'
@@ -9,15 +9,21 @@ import type { GraphData, SearchResult, TourMode } from '../tourSearch/types.js'
 import { fetchAvailabilityByOffset } from '../availability/fetchAvailability.js'
 import type { FreeByOffset } from '../availability/types.js'
 import AppShell from '../AppShell.js'
-import type { StartPoint } from './types.js'
+import type { Route, StartPoint } from './types.js'
 import type { HutClass, HutOperator } from '../hutClass.js'
 import { OPERATOR_LABEL } from '../hutClass.js'
 import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, type FormState } from './formState.js'
-import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, type SortKey } from './helpers.js'
+import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, chainToRoute, officialTourToRoute, type SortKey } from './helpers.js'
 import LegCountSlider from './LegCountSlider.js'
 import LegTimeSlider from './LegTimeSlider.js'
 import ResultsMap from './ResultsMap.js'
 import TourList from './TourList.js'
+import OfficialTourList from './OfficialTourList.js'
+import { loadOfficialTours } from '../tourSearch/loadOfficialTours.js'
+import { loadTourEdgesData } from '../tourSearch/loadTourEdges.js'
+import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
+import type { RawTour } from '../tourSearch/loadOfficialTours.js'
+import type { TourEdgeRecord } from '../tourSearch/loadTourEdges.js'
 
 const HUTS_URL = '/data/huts.geojson'
 const PARKING_URL = '/data/parking.geojson'
@@ -39,6 +45,10 @@ function TourSearchPage() {
   const [sortKey, setSortKey] = useState<SortKey>('duration')
   const [page, setPage] = useState(1)
   const [expandedChain, setExpandedChain] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState<'search' | 'official'>('search')
+  const [officialTours, setOfficialTours] = useState<RawTour[] | null>(null)
+  const [tourEdgeRecords, setTourEdgeRecords] = useState<Map<string, TourEdgeRecord> | null>(null)
+  const [selectedOfficialTourId, setSelectedOfficialTourId] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -49,9 +59,13 @@ function TourSearchPage() {
       fetch(PARTNER_URL)
         .then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
         .catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection),
+      loadOfficialTours(),
+      loadTourEdgesData(),
     ])
-      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc]) => {
+      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc, tours, tourEdges]) => {
         setGraphData(tourSearchData)
+        setOfficialTours(tours)
+        setTourEdgeRecords(tourEdges)
 
         const hutFeatureByGuid = new Map(
           hutsFc.features.map((f) => [(f.properties as { id: string }).id, f]),
@@ -153,6 +167,7 @@ function TourSearchPage() {
     [hutsByIndex],
   )
   const excludedHutIndices = useMemo(() => {
+    if (viewMode === 'official') return new Set<number>()
     const allowed = graphData ? buildQuery(form, hutsByIndex).allowedHutIndices : undefined
     if (!allowed) return new Set<number>()
     const excluded = new Set<number>()
@@ -160,7 +175,14 @@ function TourSearchPage() {
       if (!allowed.has(i)) excluded.add(i)
     })
     return excluded
-  }, [form, hutsByIndex, hutClassByIndex, graphData])
+  }, [form, hutsByIndex, hutClassByIndex, graphData, viewMode])
+
+  const officialTourViews = useMemo(
+    () => (officialTours && tourEdgeRecords ? buildOfficialTourViews(officialTours, tourEdgeRecords) : null),
+    [officialTours, tourEdgeRecords],
+  )
+
+  const selectedOfficialTour = officialTourViews?.find((v) => v.tourId === selectedOfficialTourId) ?? null
 
   const pageCount = Math.max(1, Math.ceil(displayedChains.length / PAGE_SIZE))
   const pageChains = useMemo(
@@ -169,6 +191,11 @@ function TourSearchPage() {
   )
 
   const selectedChain = expandedChain !== null ? (displayedChains[expandedChain] ?? null) : null
+
+  const route: Route | null = useMemo(() => {
+    if (viewMode === 'search') return selectedChain ? chainToRoute(selectedChain, hutCoordsById, startById) : null
+    return selectedOfficialTour ? officialTourToRoute(selectedOfficialTour, hutCoordsById, startById) : null
+  }, [viewMode, selectedChain, selectedOfficialTour, hutCoordsById, startById])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -203,12 +230,31 @@ function TourSearchPage() {
     setFreeByOffset(null)
   }
 
+  function handleViewModeChange(_e: React.MouseEvent<HTMLElement>, next: 'search' | 'official' | null) {
+    if (!next) return
+    setViewMode(next)
+    setExpandedChain(null)
+    setSelectedOfficialTourId(null)
+  }
+
   return (
     <AppShell
       title="Tourensuche"
       status={error ? `Fehler: ${error}` : graphData ? 'Daten geladen' : 'Lade Daten…'}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={handleViewModeChange}
+          size="small"
+          sx={{ m: 2, mb: 0, alignSelf: 'flex-start' }}
+        >
+          <ToggleButton value="search">Freie Suche</ToggleButton>
+          <ToggleButton value="official">Offizielle Touren</ToggleButton>
+        </ToggleButtonGroup>
+
+        {viewMode === 'search' && (
         <Box
           component="form"
           onSubmit={handleSubmit}
@@ -375,9 +421,10 @@ function TourSearchPage() {
             </Button>
           </Box>
         </Box>
+        )}
 
         <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          {result && (
+          {viewMode === 'search' && result && (
             <TourList
               result={result}
               displayedChains={displayedChains}
@@ -400,9 +447,19 @@ function TourSearchPage() {
               numOfPeople={form.numOfPeople}
             />
           )}
+          {viewMode === 'official' && officialTourViews && (
+            <OfficialTourList
+              tours={officialTourViews}
+              hutNameById={hutNameById}
+              hutClassByIndex={hutClassByIndex}
+              startLabel={startLabel}
+              selectedTourId={selectedOfficialTourId}
+              setSelectedTourId={setSelectedOfficialTourId}
+            />
+          )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <ResultsMap
-              selectedChain={selectedChain}
+              route={route}
               hutNameById={hutNameById}
               hutCoordsById={hutCoordsById}
               startById={startById}

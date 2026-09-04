@@ -7,6 +7,13 @@ import TourSearchPage from './TourSearchPage.js'
 import * as tourSearchIndex from '../tourSearch/index.js'
 import * as availability from '../availability/fetchAvailability.js'
 import type { GraphData, SearchResult } from '../tourSearch/types.js'
+import { packColumns } from '../tourSearch/binaryColumns.js'
+
+const emptyTourEdgePayload = packColumns(
+  { tour_id: 'u1', leg_index: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4', max_ele_m: 'f4', sac_rank: 'i1', via_ferrata: 'u1' },
+  { tour_id: [], leg_index: [], distance_m: [], ascent_m: [], descent_m: [], max_ele_m: [], sac_rank: [], via_ferrata: [] },
+  0,
+)
 
 // vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
 // afterEach(cleanup) never registers - without this, each test's render() stacks onto the
@@ -71,6 +78,11 @@ beforeEach(() => {
       if (url.includes('partner_betriebe.geojson')) {
         return fetchJsonMock({ type: 'FeatureCollection', features: [] })
       }
+      if (url.includes('tours.json')) return fetchJsonMock([])
+      if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
+      if (url === '/data/tour-edge-payload.bin') {
+        return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
+      }
       throw new Error(`unexpected fetch ${url}`)
     }),
   )
@@ -126,6 +138,11 @@ describe('TourSearchPage', () => {
         }
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('partner_betriebe.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('tours.json')) return fetchJsonMock([])
+        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
+        if (url === '/data/tour-edge-payload.bin') {
+          return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
+        }
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
@@ -151,6 +168,11 @@ describe('TourSearchPage', () => {
         if (url.includes('parking.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('partner_betriebe.geojson')) return Promise.reject(new Error('404'))
+        if (url.includes('tours.json')) return fetchJsonMock([])
+        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
+        if (url === '/data/tour-edge-payload.bin') {
+          return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
+        }
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
@@ -199,5 +221,58 @@ describe('TourSearchPage', () => {
 
     await userEvent.type(screen.getByLabelText(/Startdatum/), '2026-08-20')
     expect(screen.getByLabelText(/nur Touren mit Verfügbarkeit/)).toBeInTheDocument()
+  })
+
+  it('toggling to "Offizielle Touren" hides the filter form and shows an official-tour card, preserving search results underneath', async () => {
+    const officialTour = {
+      tourId: 1, name: 'Welser Höhenweg',
+      legs: [{ legIndex: 0, from: { type: 'hut', id: 0 }, to: { type: 'parking', id: 100 } }],
+    }
+    const tourEdgePayload = packColumns(
+      { tour_id: 'u1', leg_index: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4', max_ele_m: 'f4', sac_rank: 'i1', via_ferrata: 'u1' },
+      { tour_id: [1], leg_index: [0], distance_m: [5000], ascent_m: [400], descent_m: [100], max_ele_m: [1800], sac_rank: [2], via_ferrata: [0] },
+      1,
+    )
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('huts.geojson')) {
+          return fetchJsonMock({
+            type: 'FeatureCollection',
+            features: [{ properties: { id: 'HutA', name: 'HutA', hutType: 'av', serviced: true }, geometry: { type: 'Point', coordinates: [11.0, 47.0] } }],
+          })
+        }
+        if (url.includes('parking.geojson')) {
+          return fetchJsonMock({ type: 'FeatureCollection', features: [{ id: 'n100', properties: { name: 'Parkplatz Test' }, geometry: { type: 'Point', coordinates: [11.1, 47.1] } }] })
+        }
+        if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('partner_betriebe.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
+        if (url.includes('tours.json')) return fetchJsonMock([officialTour])
+        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(tourEdgePayload.manifest)
+        if (url === '/data/tour-edge-payload.bin') return Promise.resolve({ arrayBuffer: () => Promise.resolve(tourEdgePayload.buffer) } as Response)
+        throw new Error(`unexpected fetch ${url}`)
+      }),
+    )
+
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Touren suchen' }))
+    await waitFor(() => expect(screen.getByText(/1 Tour gefunden/)).toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Offizielle Touren' }))
+
+    expect(screen.queryByText('Modus')).not.toBeInTheDocument()
+    expect(screen.getByText('Welser Höhenweg')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Freie Suche' }))
+    expect(screen.getByText(/1 Tour gefunden/)).toBeInTheDocument()
+  })
+
+  it('shows the official-tours empty-state message (no spinner wording) when the list is empty', async () => {
+    render(<TourSearchPage />)
+    await waitFor(() => expect(screen.getByText('Daten geladen')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Offizielle Touren' }))
+    await waitFor(() => expect(screen.getByText(/keine durchgehend berechneten Routen/)).toBeInTheDocument())
   })
 })
