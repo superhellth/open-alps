@@ -26,6 +26,7 @@ const graphDataFixture: GraphData = {
   hutEdges: { hutIds: ['HutA'], variantNames: { 0: 'FAST_ANY' }, records: [] },
   approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
   hutEdgeIds: emptyHutEdgeIdsStub,
+  startEdgeIds: emptyHutEdgeIdsStub,
 }
 
 const searchResultFixture: SearchResult = {
@@ -95,6 +96,7 @@ describe('TourSearchPage', () => {
       hutEdges: { hutIds: ['{GUID-A}'], variantNames: { 0: 'FAST_ANY' }, records: [] },
       approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
       hutEdgeIds: emptyHutEdgeIdsStub,
+      startEdgeIds: emptyHutEdgeIdsStub,
     })
     vi.spyOn(tourSearchIndex, 'findTours').mockReturnValue({
       chains: [{

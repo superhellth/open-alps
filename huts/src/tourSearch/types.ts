@@ -171,6 +171,7 @@ export interface GraphData {
   hutEdges: HutEdgesData
   approaches: ApproachesData
   hutEdgeIds: HutEdgeIdsData
+  startEdgeIds: HutEdgeIdsData
 }
 
 export interface SearchResult {

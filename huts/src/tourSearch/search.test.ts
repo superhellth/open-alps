@@ -25,6 +25,7 @@ function emptyHutEdgeIdsStub(): GraphData['hutEdgeIds'] {
 // SOURCE_TYPE_PARKING (2) on its own graph copies where mode-gating requires it.
 const graphData: GraphData = {
   hutEdgeIds: emptyHutEdgeIdsStub(),
+  startEdgeIds: emptyHutEdgeIdsStub(),
   hutEdges: {
     hutIds: ['A', 'B', 'C'],
     variantNames: { 0: 'FAST_ANY' },
@@ -167,6 +168,7 @@ describe('searchChains (overlap avoidance)', () => {
       getPrefixIds: (edgeId) => Int32Array.from(PREFIX[edgeId] ?? []),
       getSuffixIds: (edgeId) => Int32Array.from(SUFFIX[edgeId] ?? []),
     },
+    startEdgeIds: emptyHutEdgeIdsStub(),
   }
 
   it('excludes a chain whose non-adjacent legs share a base-edge id', () => {
@@ -344,6 +346,7 @@ describe('dominance pruning (Section B) is exact', () => {
   }
   const diamondGraph: GraphData = {
     hutEdgeIds: emptyHutEdgeIdsStub(),
+    startEdgeIds: emptyHutEdgeIdsStub(),
     hutEdges: {
       hutIds: ['A', 'B', 'C', 'D'],
       variantNames: { 0: 'FAST_ANY' },
