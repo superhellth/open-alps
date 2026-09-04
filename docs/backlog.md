@@ -9,16 +9,14 @@ under `docs/superpowers/`.
 
 ## Medium
 
-### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
+### [Search-result tour legs render as straight lines (stale stations/parking data)](backlog/straight-line-legs-stale-start-points.md)
 
-Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
-Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
+`stations.geojson`/`parking.geojson` in `huts/public/data/` were regenerated separately from and
+older than `approaches.bin`/`hut-edge-payload.bin`, so ~1/3 of sampled start-point ids the routing
+graph references don't resolve — silently degrading every leg of the affected chain to a straight
+line. Also flags a related frontend robustness gap in `chainToRoute`.
 
-### How to avoid road in hut-to-hut and access legs in a consistent and solid way
-
-### Make legs of selected tour hoverable
-
-Atm the legs of the selected tour in the frontend are displayed but are not hoverable. Height profile should be displayed somewhere, making it more interactive
+### Diagnose and improve performance of slow phases
 
 ### Stable hut ids
 
@@ -29,7 +27,25 @@ At the moment hut ids are sequential, not stable
 At the moment the data/ folder is quite a mess. Lets enforce more structure onto it.
 resume data-orga
 
+### Does AV/sonstige split make sense?
+
+Albert Appel Haus classified as sonstige
+
+### Surface data-quality signals to the frontend
+
+Trip Planner Reenvision design (`docs/superpowers/specs/2026-09-04-trip-planner-reenvision-design.md`)
+raised low trust in route suggestions as a driver, but that's a pipeline-layer concern, not a UI
+feature — the real fix is in the pipeline/data-quality-monitoring work. Once that work produces
+per-leg/per-route quality signals, revisit whether/how the frontend should surface them.
+
 ## Low
+
+### How to avoid road in hut-to-hut and access legs in a consistent and solid way
+
+### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
+
+Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
+Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
 ### [Frontend disclaimer for via_ferrata / high-SAC-grade legs](backlog/steep-terrain-time-disclaimer.md)
 
@@ -64,3 +80,5 @@ Probably in form of a static web page, either as part of the existing frontend o
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
 
 ### Check: Does check_graph_building always run?
+
+### Claude skill to auto link huts with their website / find booking times
