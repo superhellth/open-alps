@@ -64,7 +64,10 @@ def task_check_graph_building():
             _max_flagged_param(),
             cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"]),
         ],
-        task_dep=["build_hub_edges", "build_access_edges", "match_tour_edges"],
+        # build_profiles rewrites each edge set's records.npy profile_offset/profile_count in
+        # place, which isn't a declared target of that task (see task_check_elevation's identical
+        # comment) - file_dep on records.npy alone can't guarantee this check runs after it.
+        task_dep=["build_hub_edges", "build_access_edges", "match_tour_edges", "build_profiles"],
         file_dep=[
             OSM_DIR / "unsnapped_huts.json", OSM_DIR / "huts.geojson",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "hut_edges" / "geometry.npy",
