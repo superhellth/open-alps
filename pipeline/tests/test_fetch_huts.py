@@ -4,7 +4,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from downloads.fetch_huts import classify_hut, split_features  # noqa: E402
+from shapely.geometry import box  # noqa: E402
+from shapely.prepared import prep  # noqa: E402
+
+from downloads.fetch_huts import classify_hut, filter_to_boundary, split_features  # noqa: E402
 
 
 def test_biwak_under_oeav_is_av_and_unserviced():
@@ -118,3 +121,25 @@ def test_split_features_preserves_input_order_within_each_list():
 
     assert [h["properties"]["name"] for h in huts] == ["Hut A", "Hut C"]
     assert [p["properties"]["name"] for p in partners] == ["Partner B"]
+
+
+def test_filter_to_boundary_drops_features_outside_a_bbox_shaped_boundary_but_inside_bbox():
+    # A hut just past the boundary edge (e.g. across the AT/Italy border) must be dropped even
+    # though a coarse rectangular bbox around the boundary would have kept it - the bug this
+    # filter replaces (docs/backlog/hut-catalog-bbox-includes-foreign-huts.md).
+    boundary = prep(box(8.9, 46.3, 17.2, 50.6))
+    features = [
+        {"attributes": {"id": "a", "name": "Inside Hut"}, "geometry": {"x": 11.0, "y": 47.0}},
+        {"attributes": {"id": "b", "name": "Outside Hut"}, "geometry": {"x": 20.0, "y": 47.0}},
+    ]
+
+    filtered = filter_to_boundary(features, boundary)
+
+    assert [f["attributes"]["name"] for f in filtered] == ["Inside Hut"]
+
+
+def test_filter_to_boundary_drops_features_with_no_geometry():
+    boundary = prep(box(8.9, 46.3, 17.2, 50.6))
+    features = [{"attributes": {"id": "a", "name": "No Geometry"}, "geometry": None}]
+
+    assert filter_to_boundary(features, boundary) == []

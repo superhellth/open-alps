@@ -36,10 +36,13 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 (`dem.providerConfig.regions` elided above for brevity — see the `dem` bullet below and the real
 `pipeline.config.json` for the full shape.)
 
-- `bbox` — filters the ArcGIS hut pull (`fetch_huts.py`) to the pipeline's current scope.
-- `regions` — one Geofabrik extract per entry; `download_extracts.py`/`filter_trails.py`/
-  `merge_trails.py` loop over this list, so adding a region (e.g. Switzerland) is just adding
-  `{ "name": "switzerland", "url": "..." }` here.
+- `bbox` — coarse scope used by DEM provider config and `lib/geo.py`'s hut-point pre-filter; not
+  what filters the ArcGIS hut pull (see `regions`' `polyUrl` below).
+- `regions` — one Geofabrik extract per entry (`url` + `polyUrl`, its `.poly` admin-boundary file);
+  `download_extracts.py`/`filter_trails.py`/`merge_trails.py` loop over this list, and
+  `fetch_huts.py` filters the AV hut catalog to the union of every `polyUrl` boundary (`lib/poly.py`)
+  instead of `bbox`, so adding a region (e.g. Switzerland) is adding
+  `{ "name": "switzerland", "url": "...", "polyUrl": "..." }` here.
 - `trailTagFilter` — the `osmium tags-filter` expression `filter_trails.py` applies.
 - `graph.maxEdgeKm` / `graph.maxSnapM` / `graph.maxSnapAscentM` — defaults for
   `build_hub_edges.py`'s `--max-edge-km` / `--max-snap-m` / `--max-snap-ascent-m`; still

@@ -12,22 +12,25 @@ REGION_NAMES = [r["name"] for r in CONFIG["regions"]]
 def task_download_extracts():
     return pipeline_task(
         "phases/downloads/download_extracts.py",
-        # download_extracts.py reads config["regions"] directly (a list of {name, url}, not a
-        # sensible CLI flag) - tracked so an edited/added region still triggers a re-download.
+        # download_extracts.py reads config["regions"] directly (a list of {name, url, polyUrl},
+        # not a sensible CLI flag) - tracked so an edited/added region still triggers a re-download.
         tracking_params=[
             tracking_param("regions_json", str, json.dumps(CONFIG["regions"], sort_keys=True)),
         ],
-        targets=[OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES],
+        targets=(
+            [OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
+            + [OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES]
+        ),
     )
 
 
 def task_fetch_huts():
     return pipeline_task(
         "phases/downloads/fetch_huts.py",
-        # fetch_huts.py reads config["bbox"] directly (a dict, not a sensible CLI flag).
-        tracking_params=[
-            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
-        ],
+        # Depends on download_extracts.py's .poly outputs (same downloads/ phase, not the usual
+        # downloads->preprocessing direction) because the AT+Bavaria coverage filter needs the
+        # real admin-boundary polygon Geofabrik ships alongside each extract - see lib/poly.py.
+        file_dep=[OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES],
         targets=[OSM_DIR / "huts.geojson", OSM_DIR / "partner_betriebe.geojson"],
     )
 

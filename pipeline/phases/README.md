@@ -107,6 +107,9 @@ Not a phase — code imported across phases:
   geometry shared by `preprocessing/compute_hub_range.py` and
   `downloads/dem_providers/composite.py` (both must derive the same radius from
   `HUB_RANGE_SAFETY_MARGIN` or their coverage shapes silently drift apart).
+- **`poly.py`** — `parse_poly_file()`/`region_boundary()`, parses Geofabrik's `.poly`
+  admin-boundary files into shapely (Multi)Polygons; `downloads/fetch_huts.py` filters the AV hut
+  catalog to the union of every configured region's boundary instead of a bbox.
 - **`edge_output.py`** — `write_edge_records()`/`fold_endpoint_snaps()`, the record-packing shape
   (`binfmt.RECORD_DTYPE` + `geometry.npy`) shared by `build_hub_edges.py` and
   `match_tour_edges.py` so both emit identical on-disk edge records.
