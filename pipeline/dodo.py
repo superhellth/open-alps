@@ -43,8 +43,9 @@ from dag.graph_building import (  # noqa: E402,F401
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
-    task_build_hut_edge_tiles, task_build_start_edge_tiles, task_build_tour_edge_payload,
-    task_build_tour_edge_tiles, task_build_trail_tiles, task_select_approach_pairs,
+    task_build_hut_edge_tiles, task_build_start_edge_ids, task_build_start_edge_tiles,
+    task_build_tour_edge_payload, task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,
@@ -93,7 +94,8 @@ DOIT_CONFIG = {
         "check_elevation",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "build_tour_edge_tiles",
-        "build_approach_table", "build_edge_payload", "build_edge_ids", "build_tour_edge_payload",
+        "build_approach_table", "build_edge_payload", "build_edge_ids", "build_start_edge_ids",
+        "build_tour_edge_payload",
         "copy_public_data",
         "check_postprocessing",
         "quality_summary",
@@ -123,6 +125,8 @@ PUBLIC_FILES = [
     "hut-edge-payload.json",
     "hut-edge-ids.bin",
     "hut-edge-ids.json",
+    "start-edge-ids.bin",
+    "start-edge-ids.json",
     "partner_betriebe.geojson",
     "tours.json",
     "tour-edges.pmtiles",

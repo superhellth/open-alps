@@ -175,6 +175,26 @@ def test_public_files_includes_hut_edge_ids():
     assert "hut-edge-ids.json" in dodo.PUBLIC_FILES
 
 
+def test_build_start_edge_ids_task_depends_on_start_edges_records_and_ids():
+    task = dodo.task_build_start_edge_ids()
+    file_deps = set(task["file_dep"])
+    assert any("start_edges/records.npy" in p for p in file_deps)
+    assert any("start_edges/edge_ids.npy" in p for p in file_deps)
+    targets = set(task["targets"])
+    assert any(p.endswith("start-edge-ids.bin") for p in targets)
+    assert any(p.endswith("start-edge-ids.json") for p in targets)
+
+
+def test_public_files_includes_start_edge_ids():
+    assert "start-edge-ids.bin" in dodo.PUBLIC_FILES
+    assert "start-edge-ids.json" in dodo.PUBLIC_FILES
+
+
+def test_build_start_edge_ids_sits_after_build_access_edges():
+    ordered = dodo.DOIT_CONFIG["default_tasks"]
+    assert ordered.index("build_access_edges") < ordered.index("build_start_edge_ids")
+
+
 def test_fetch_huts_targets_include_partner_betriebe():
     targets = dodo.task_fetch_huts()["targets"]
     assert any(t.endswith("partner_betriebe.geojson") for t in targets)

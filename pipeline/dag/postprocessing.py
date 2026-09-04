@@ -194,3 +194,20 @@ def task_build_edge_ids():
         file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "hut_edges" / "edge_ids.npy"],
         targets=[OSM_DIR / "hut-edge-ids.bin", OSM_DIR / "hut-edge-ids.json"],
     )
+
+
+def task_build_start_edge_ids():
+    # Sibling of task_build_edge_ids, pointed at start_edges/ - build_edge_ids.py is already
+    # generic over --edges-dir, no script change needed (docs/superpowers/specs/
+    # 2026-09-04-approach-exit-overlap-avoidance-design.md §2).
+    return pipeline_task(
+        "phases/postprocessing/build_edge_ids.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'start_edges'}",
+            f"--out-bin {OSM_DIR / 'start-edge-ids.bin'}",
+            f"--out-manifest {OSM_DIR / 'start-edge-ids.json'}",
+        ],
+        task_dep=["build_access_edges"],
+        file_dep=[OSM_DIR / "start_edges" / "records.npy", OSM_DIR / "start_edges" / "edge_ids.npy"],
+        targets=[OSM_DIR / "start-edge-ids.bin", OSM_DIR / "start-edge-ids.json"],
+    )
