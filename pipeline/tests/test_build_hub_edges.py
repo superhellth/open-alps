@@ -17,10 +17,12 @@ from lib.grid import Grid  # noqa: E402
 from lib.subgraph import LocalSubgraph  # noqa: E402
 from lib.timing import StepTimer  # noqa: E402
 from lib import variants  # noqa: E402
+from lib.hub_snap import SnapResult  # noqa: E402
+from lib.edge_split import SplitResult  # noqa: E402
 from graph_building.build_hub_edges import (  # noqa: E402
-    SnapRejection, SnapResult, _cell_workload_score, _write_edge_output,
-    compute_hub_edges_for_cell, merge_and_dedup, snap_hub_to_subgraph, snap_hubs_for_cell,
-    write_unsnapped_report,
+    SnapRejection, SnapResult, _cell_workload_score,
+    compute_hub_edges_for_cell, merge_access_rows, merge_and_dedup, snap_hub_to_subgraph,
+    snap_hubs_for_cell, write_unsnapped_report,
 )
 from graph_building.gather_route_subgraphs import cell_dir_for  # noqa: E402
 
@@ -49,8 +51,11 @@ def _line_subgraph():
 
 
 def test_snap_hub_to_existing_node():
+    # Coincides exactly with node 0 (also edge0's own u endpoint) - snap_hub_to_subgraph has no
+    # node preference, only a tie-break toward the node so an exact coincidence doesn't spawn a
+    # redundant virtual vertex.
     subgraph = _line_subgraph()
-    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0001, hub_lat=0.0, max_snap_m=50.0)
+    result = snap_hub_to_subgraph(subgraph, hub_lon=0.0, hub_lat=0.0, max_snap_m=50.0)
     assert result is not None
     assert result.node_index == 0
 
@@ -224,27 +229,28 @@ def test_compute_hub_edges_for_cell_connects_two_huts_on_the_line():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, access_rows = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
-    assert len(records) == 1
-    assert records[0]["distance_m"] < 5000
+    assert len(hut_records) == 1
+    assert access_rows == []
+    assert hut_records[0]["distance_m"] < 5000
 
 
-def test_compute_hub_edges_for_cell_returns_full_path_geometry():
+def test_compute_hub_edges_for_cell_returns_full_path_geometry_for_hut_hut():
     subgraph = _line_subgraph()
     core_hubs = [
         {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, _ = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
-    assert len(records) == 1
-    geometry = records[0]["geometry"]
+    assert len(hut_records) == 1
+    geometry = hut_records[0]["geometry"]
     assert len(geometry) >= 2
     assert geometry[0] == (core_hubs[0]["lon"], core_hubs[0]["lat"])
     assert geometry[-1] == (core_hubs[1]["lon"], core_hubs[1]["lat"])
@@ -260,12 +266,12 @@ def test_record_distance_includes_both_snap_gaps():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, _ = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
-    assert len(records) == 1
-    r = records[0]
+    assert len(hut_records) == 1
+    r = hut_records[0]
     assert r["snap_m"] > 0
     assert r["distance_m"] == pytest.approx(1000.0 + r["snap_m"], rel=1e-3)
 
@@ -290,12 +296,112 @@ def test_snap_gap_climb_lands_in_ascent_not_only_distance():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003, "ele": 1000.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, _ = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
-    assert len(records) == 1
-    assert records[0]["ascent_m"] >= 40.0
+    assert len(hut_records) == 1
+    assert hut_records[0]["ascent_m"] >= 40.0
+
+
+def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
+    # A station and a parking lot, no hut anywhere: with only huts as sources (A1), neither is
+    # ever a Dijkstra source, so nothing routes at all.
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_STATION, "lon": 0.0001, "lat": 0.0},
+        {"id": 2, "type": binfmt.TYPE_PARKING, "lon": 0.0089, "lat": 0.0},
+    ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
+    hut_records, access_rows = compute_hub_edges_for_cell(
+        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert hut_records == []
+    assert access_rows == []
+
+
+def test_hut_source_routes_to_an_access_point_target():
+    # A1: the hut is the ONLY core hub of this cell; the station is a candidate TARGET
+    # (all_hubs), not a core hub - this is the inverted shape every real cell has (spec A5: huts
+    # are core hubs of their own cell, access points almost never are, of the two).
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    core_hubs = [hut]
+    all_hubs = [hut, station]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, all_hubs, max_snap_m=50.0)
+    hut_records, access_rows = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs, max_edge_km=5.0, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert hut_records == []
+    assert len(access_rows) == 1
+    row = access_rows[0]
+    assert row["hut_id"] == 1
+    assert row["start_id"] == 2
+    assert row["start_type"] == binfmt.TYPE_STATION
+    assert row["distance_m"] < 5000
+    assert row["time_s"] > 0
+
+
+def test_access_row_distance_includes_the_snap_gap():
+    # Same snap-gap invariant as hut-hut (test_record_distance_includes_both_snap_gaps), but for
+    # an access row, which folds the gap WITHOUT a path walk (SnapResult.gap_m is direction-free).
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.009, "lat": 0.0003}
+    core_hubs = [hut]
+    all_hubs = [hut, station]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, all_hubs, max_snap_m=50.0)
+    _, access_rows = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs, max_edge_km=5.0, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert len(access_rows) == 1
+    assert access_rows[0]["distance_m"] > 1000.0  # trail leg (1000.0) plus both snap gaps
+
+
+def test_access_row_has_no_geometry_or_ascent_fields():
+    # B3: access rows are scalars-only by construction - asserting the dict shape guards against
+    # a future edit accidentally reintroducing a path walk / geometry field here.
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    core_hubs = [hut]
+    all_hubs = [hut, station]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, all_hubs, max_snap_m=50.0)
+    _, access_rows = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs, max_edge_km=5.0, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert set(access_rows[0]) == {"hut_id", "start_id", "start_type", "variant", "distance_m", "time_s"}
+
+
+def test_only_hut_core_hubs_are_dijkstra_sources():
+    # A1: a station/parking core hub of a cell must never itself become a routing source, even
+    # when a hut also shares that cell.
+    subgraph = _line_subgraph()
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0}
+    core_hubs = [hut, station]  # both core hubs of this cell
+    all_hubs = [hut, station]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, all_hubs, max_snap_m=50.0)
+    hut_records, access_rows = compute_hub_edges_for_cell(
+        subgraph, core_hubs, all_hubs, max_edge_km=5.0, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert hut_records == []
+    assert len(access_rows) == 1  # only the hut->station direction, never station->anything
+
+
+def test_merge_access_rows_concatenates_without_dedup():
+    shard_a = [{"hut_id": 1, "start_id": 100, "start_type": binfmt.TYPE_STATION, "variant": 0,
+                "distance_m": 1000.0, "time_s": 900.0}]
+    shard_b = [{"hut_id": 2, "start_id": 200, "start_type": binfmt.TYPE_PARKING, "variant": 0,
+                "distance_m": 500.0, "time_s": 400.0}]
+    merged = merge_access_rows([shard_a, shard_b])
+    assert len(merged) == 2
 
 
 def test_merge_and_dedup_drops_duplicate_hut_pairs():
@@ -316,40 +422,6 @@ def test_merge_and_dedup_keeps_directional_start_edges():
     ]
     merged = merge_and_dedup([shard])
     assert len(merged) == 2
-
-
-def test_compute_hub_edges_for_cell_skips_access_to_access_pairs():
-    # A station and a parking lot on the same trail line, no hut anywhere: nothing downstream
-    # consumes a station<->parking edge, so no record should be routed at all.
-    subgraph = _line_subgraph()
-    core_hubs = [
-        {"id": 1, "type": binfmt.TYPE_STATION, "lon": 0.0001, "lat": 0.0},
-        {"id": 2, "type": binfmt.TYPE_PARKING, "lon": 0.0089, "lat": 0.0},
-    ]
-    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
-        variants=FAST_ANY_ONLY,
-    )
-    assert records == []
-
-
-def test_compute_hub_edges_for_cell_emits_access_to_hut_only_once():
-    # Hut and station both core hubs of this cell: only the access->hut direction is emitted,
-    # since __main__ drops hut->access records anyway.
-    subgraph = _line_subgraph()
-    core_hubs = [
-        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0},
-        {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0089, "lat": 0.0},
-    ]
-    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
-        subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
-        variants=FAST_ANY_ONLY,
-    )
-    assert len(records) == 1
-    assert records[0]["from_type"] == binfmt.TYPE_STATION
-    assert records[0]["to_type"] == binfmt.TYPE_HUT
 
 
 def _two_edge_subgraph():
@@ -402,8 +474,9 @@ def test_compute_hub_edges_for_cell_fills_the_step_timer():
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=FAST_ANY_ONLY, timer=timer,
     )
-    assert set(timer.seconds) == {"snap", "build_igraph", "distances", "paths"}
+    assert set(timer.seconds) == {"snap", "build_base_arrays", "build_igraph", "distances", "paths"}
     assert timer.calls["snap"] == 1          # one timed pass over the whole snap loop
+    assert timer.calls["build_base_arrays"] == 1   # built ONCE per cell, not once per variant
     assert timer.calls["snap_hubs"] == 2     # both huts snapped onto the line
     assert timer.calls["distances"] == 2     # one distance query per core hub
 
@@ -434,12 +507,12 @@ def test_variant_rows_are_not_collapsed_into_one_record():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, _ = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=[variants.VARIANTS[binfmt.VARIANT_FAST_ANY],
                   variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
     )
-    assert {r["variant"] for r in records} == {binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T3}
+    assert {r["variant"] for r in hut_records} == {binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T3}
 
 
 def test_merge_and_dedup_keys_on_pair_and_variant():
@@ -447,41 +520,6 @@ def test_merge_and_dedup_keys_on_pair_and_variant():
     b = {"from_type": 0, "from_id": 2, "to_type": 0, "to_id": 1, "variant": 0}  # same pair reversed
     c = {"from_type": 0, "from_id": 1, "to_type": 0, "to_id": 2, "variant": 2}  # same pair, other row
     assert len(merge_and_dedup([[a], [b], [c]])) == 2
-
-
-def _rec(variant, from_id=1, to_id=2, distance_m=100.0, geometry=None):
-    return {
-        "from_id": from_id, "to_id": to_id, "from_type": binfmt.TYPE_HUT, "to_type": binfmt.TYPE_HUT,
-        "variant": variant, "distance_m": distance_m, "road_m": 0.0,
-        "ascent_m": 0.0, "descent_m": 0.0, "max_ele_m": 0.0,
-        "ungraded_m": 0.0, "inferred_m": 0.0, "snap_m": 0.0,
-        "sac_rank": -1, "via_ferrata": False,
-        "geometry": geometry if geometry is not None else [(0.0, 0.0), (0.01, 0.0)],
-    }
-
-
-def test_write_edge_output_preserves_each_record_variant(tmp_path):
-    _write_edge_output([_rec(variant=0), _rec(variant=2)], tmp_path)
-    arr = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    assert sorted(arr["variant"].tolist()) == [0, 2]
-
-
-def test_identical_variant_geometries_share_one_offset(tmp_path):
-    geom = [(0.0, 0.0), (0.001, 0.0)]
-    _write_edge_output([_rec(variant=0, geometry=geom), _rec(variant=2, geometry=geom)], tmp_path)
-    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    geometry = binfmt.load_array(tmp_path / "geometry.npy", mmap=False)
-    assert records["geom_offset"][0] == records["geom_offset"][1]
-    assert len(geometry) == 2   # one shared run, not two copies
-
-
-def test_differing_geometries_do_not_share(tmp_path):
-    _write_edge_output([
-        _rec(variant=0, geometry=[(0.0, 0.0), (0.001, 0.0)]),
-        _rec(variant=2, geometry=[(0.0, 0.0), (0.001, 0.001)]),
-    ], tmp_path)
-    records = binfmt.load_array(tmp_path / "records.npy", mmap=False)
-    assert records["geom_offset"][0] != records["geom_offset"][1]
 
 
 def test_route_exceeding_max_edge_km_is_dropped():
@@ -492,11 +530,29 @@ def test_route_exceeding_max_edge_km_is_dropped():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, _ = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=0.5, snaps=snaps,
         variants=FAST_ANY_ONLY,
     )
-    assert all(r["distance_m"] <= 500.0 for r in records)
+    assert all(r["distance_m"] <= 500.0 for r in hut_records)
+
+
+def test_route_exceeding_cap_only_once_the_snap_gap_is_added_is_dropped():
+    # the routed trail leg alone (1000.0m) is under a 1005m cap, but both hubs sit off the trail
+    # line - once their snap gaps are folded in, the shipped distance_m exceeds the cap and the
+    # record must be dropped, not shipped over-cap (the cap check must run on the final
+    # snap-inclusive distance_m, not on path.distance_m alone).
+    subgraph = _line_subgraph()
+    core_hubs = [
+        {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0, "lat": 0.0004},
+        {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0003},
+    ]
+    snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
+    hut_records, _ = compute_hub_edges_for_cell(
+        subgraph, core_hubs, core_hubs, max_edge_km=1.005, snaps=snaps,
+        variants=FAST_ANY_ONLY,
+    )
+    assert hut_records == []
 
 
 def test_a_variant_with_no_obeying_path_emits_no_record():
@@ -521,11 +577,12 @@ def test_a_variant_with_no_obeying_path_emits_no_record():
         {"id": 2, "type": binfmt.TYPE_HUT, "lon": 0.0089, "lat": 0.0},
     ]
     snaps = snap_hubs_for_cell(subgraph, core_hubs, core_hubs, max_snap_m=50.0)
-    records = compute_hub_edges_for_cell(
+    hut_records, access_rows = compute_hub_edges_for_cell(
         subgraph, core_hubs, core_hubs, max_edge_km=5.0, snaps=snaps,
         variants=[variants.VARIANTS[binfmt.VARIANT_FAST_T3]],
     )
-    assert records == []
+    assert hut_records == []
+    assert access_rows == []
 
 
 def _col_subgraph():
@@ -652,20 +709,123 @@ def test_cell_workload_score_scales_with_cached_subgraph_size(tmp_path):
     small_dir.mkdir(parents=True)
     (big_dir / "local_edges.npy").write_bytes(b"\x00" * 1000)
     (small_dir / "local_edges.npy").write_bytes(b"\x00" * 10)
-    assert (_cell_workload_score(tmp_path, 1, n_hubs=1)
-            > _cell_workload_score(tmp_path, 2, n_hubs=1))
+    assert (_cell_workload_score(tmp_path, 1, n_huts=1)
+            > _cell_workload_score(tmp_path, 2, n_huts=1))
 
 
 def test_cell_workload_score_scales_with_hub_count(tmp_path):
     cell_dir = cell_dir_for(tmp_path, 1)
     cell_dir.mkdir(parents=True)
     (cell_dir / "local_edges.npy").write_bytes(b"\x00" * 1000)
-    assert (_cell_workload_score(tmp_path, 1, n_hubs=5)
-            > _cell_workload_score(tmp_path, 1, n_hubs=1))
+    assert (_cell_workload_score(tmp_path, 1, n_huts=5)
+            > _cell_workload_score(tmp_path, 1, n_huts=1))
 
 
 def test_cell_workload_score_is_zero_for_an_uncached_cell(tmp_path):
     # Defensive only - every hub-bearing cell is guaranteed a cached local_edges.npy by
     # gather_route_subgraphs.py (build_hub_edges.py's task_dep), so this path shouldn't be hit in
     # practice, but a missing file must not crash the sort.
-    assert _cell_workload_score(tmp_path, 999, n_hubs=3) == 0
+    assert _cell_workload_score(tmp_path, 999, n_huts=3) == 0
+
+
+def _one_edge_subgraph_for_split():
+    """Two local nodes joined by one base edge (global edge_id=7), long enough to mid-chain-split."""
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes["lon"] = [11.0, 11.01]
+    nodes["lat"] = [47.0, 47.0]
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 700.0, 0.0, 0.0, 0.0, 700.0, 50.0, 20.0, 1, False, True, 0, 0, 7)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101]),
+        local_nodes=nodes,
+        local_edges=edges,
+        interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(2, dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+
+
+def test_synthetic_split_halves_get_distinct_base_edge_ids():
+    subgraph = _one_edge_subgraph_for_split()
+    split = SplitResult(
+        split_coord=(11.005, 47.0),
+        dist_to_u=350.0, dist_to_v=350.0,
+        road_m_to_u=0.0, road_m_to_v=0.0,
+        ungraded_m_to_u=0.0, ungraded_m_to_v=0.0,
+        inferred_m_to_u=0.0, inferred_m_to_v=0.0,
+        interior_to_u=[], interior_to_v=[],
+    )
+    hub_snaps = {("hut", 1): SnapResult(edge_local_index=0, split=split)}
+
+    base = build_base_igraph_arrays(subgraph, hub_snaps)
+
+    # index 0 = original edge (edge_id=7 -> 21), index 1 = the u-side synthetic half (-> 22),
+    # index 2 = the v-side synthetic half (-> 23). This is the false-overlap bug §1 guards against:
+    # a naive mapping would report the SAME id for both halves.
+    assert base.base_edge_ids == [21, 22, 23]
+    assert base.base_edge_ids[1] != base.base_edge_ids[2]
+
+    graph, hub_vertex, _ = build_igraph_from_base(base)
+    # original edge (index 0) was removed by the split; only the two synthetic halves survive.
+    assert graph.ecount() == 2
+    assert set(graph.es["base_edge_id"]) == {22, 23}
+
+
+def test_accumulate_path_reports_traversed_base_edge_ids_in_order():
+    subgraph = _one_edge_subgraph_for_split()
+    split = SplitResult(
+        split_coord=(11.005, 47.0),
+        dist_to_u=350.0, dist_to_v=350.0,
+        road_m_to_u=0.0, road_m_to_v=0.0,
+        ungraded_m_to_u=0.0, ungraded_m_to_v=0.0,
+        inferred_m_to_u=0.0, inferred_m_to_v=0.0,
+        interior_to_u=[], interior_to_v=[],
+    )
+    hub_snaps = {("hut", 1): SnapResult(edge_local_index=0, split=split)}
+    base = build_base_igraph_arrays(subgraph, hub_snaps)
+    graph, hub_vertex, vertex_coords = build_igraph_from_base(base)
+
+    result = path_for(graph, vertex_coords, 0, 1)
+
+    assert result.base_edge_ids == [22, 23]
+
+
+def test_accumulate_path_same_source_and_target_has_empty_base_edge_ids():
+    subgraph = _one_edge_subgraph_for_split()
+    base = build_base_igraph_arrays(subgraph, {})
+    graph, _, vertex_coords = build_igraph_from_base(base)
+
+    result = path_for(graph, vertex_coords, 0, 0)
+
+    assert result.base_edge_ids == []
+
+
+
+
+def _unelevated_line_subgraph():
+    # _line_subgraph with time_s left at binfmt.UNSET - exactly what build_base_graph.py writes
+    # before compute_edge_profiles.py fills it in.
+    subgraph = _line_subgraph()
+    subgraph.local_edges["time_s"] = binfmt.UNSET
+    return subgraph
+
+
+def test_build_base_igraph_arrays_rejects_unset_time_s():
+    # UNSET (-1.0) becomes the igraph "weight" attribute, and igraph answers negative weights by
+    # switching from Dijkstra to Bellman-Ford; on an undirected graph every negative edge is a
+    # negative cycle, which igraph only reports after re-queueing a vertex more than |V| times.
+    # On a real 117k-vertex cell that is hours of 100%-CPU spinning per call instead of an error,
+    # so the sentinel has to be caught here, before any of it is handed to igraph.
+    with pytest.raises(ValueError, match="time_s"):
+        build_base_igraph_arrays(_unelevated_line_subgraph(), {})
+
+
+def test_compute_hub_edges_for_cell_rejects_unset_time_s():
+    subgraph = _unelevated_line_subgraph()
+    hubs = [{"type": binfmt.TYPE_HUT, "id": 1, "lon": 0.0, "lat": 0.0, "name": "a"},
+            {"type": binfmt.TYPE_HUT, "id": 2, "lon": 0.009, "lat": 0.0, "name": "b"}]
+    snaps = snap_hubs_for_cell(_line_subgraph(), hubs, hubs, max_snap_m=50.0)
+
+    with pytest.raises(ValueError, match="time_s"):
+        compute_hub_edges_for_cell(subgraph, hubs, hubs, max_edge_km=30.0, snaps=snaps,
+                                   variants=FAST_ANY_ONLY)

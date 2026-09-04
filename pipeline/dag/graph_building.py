@@ -11,13 +11,20 @@ import json
 
 from lib import binfmt
 from lib.doit_support import cli_param, pipeline_task, tracking_param
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config
+from lib.pipeline import DEM_DIR, OSM_DIR, TOURS_DIR, load_config
 
 CONFIG = load_config()
 
-# tracking-only, no CLI flag: a code-only EDGE_DTYPE/RECORD_DTYPE change (no config edit at all)
-# must still force these tasks' multi-hour rebuilds - see binfmt.SCHEMA_VERSION's docstring.
-_SCHEMA_VERSION_PARAM = tracking_param("schema_version", int, binfmt.SCHEMA_VERSION)
+# Split so bumping RECORD_DTYPE (this change) doesn't force-rerun task_build_base_graph's ~4h
+# EDGE_DTYPE build - see root CLAUDE.md's warning on that task and lib/binfmt.py's dtype table.
+_EDGE_SCHEMA_VERSION_PARAM = tracking_param("edge_schema_version", int, binfmt.EDGE_SCHEMA_VERSION)
+_SNAP_SCHEMA_VERSION_PARAM = tracking_param("snap_schema_version", int, binfmt.SNAP_SCHEMA_VERSION)
+_RECORD_SCHEMA_VERSION_PARAM = tracking_param(
+    "record_schema_version", int, binfmt.RECORD_SCHEMA_VERSION
+)
+_ACCESS_DISTANCE_SCHEMA_VERSION_PARAM = tracking_param(
+    "access_distance_schema_version", int, binfmt.ACCESS_DISTANCE_SCHEMA_VERSION
+)
 
 
 def task_build_base_graph():
@@ -32,7 +39,7 @@ def task_build_base_graph():
             tracking_param("road_highway_tags_json", str,
                             json.dumps(CONFIG["graph"]["roadHighwayTags"])),
             tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
-            _SCHEMA_VERSION_PARAM,
+            _EDGE_SCHEMA_VERSION_PARAM,
         ],
         file_dep=[OSM_DIR / "trails.osm.pbf"],
         targets=[OSM_DIR / "base_graph" / "manifest.json"],
@@ -50,7 +57,7 @@ def task_snap_hubs():
             cli_param("max_snap_ascent_m", "max-snap-ascent-m", float,
                       CONFIG["graph"]["maxSnapAscentM"]),
         ],
-        tracking_params=[_SCHEMA_VERSION_PARAM],
+        tracking_params=[_SNAP_SCHEMA_VERSION_PARAM],
         # compute_edge_profiles rewrites base_graph/edges.npy's time_s/ascent_m/descent_m in place
         # but doesn't declare it as a target (build_base_graph already owns it), so this needs the
         # explicit task_dep - node_ele.npy alone wouldn't prove that in-place rewrite happened.
@@ -76,7 +83,7 @@ def task_gather_route_subgraphs():
     return pipeline_task(
         "phases/graph_building/gather_route_subgraphs.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
-        tracking_params=[_SCHEMA_VERSION_PARAM],
+        tracking_params=[_EDGE_SCHEMA_VERSION_PARAM],
         task_dep=["compute_edge_profiles"],  # same in-place-edit reasoning as snap_hubs above
         file_dep=[
             OSM_DIR / "base_graph" / "manifest.json", OSM_DIR / "base_graph" / "node_ele.npy",
@@ -87,6 +94,10 @@ def task_gather_route_subgraphs():
 
 
 def task_build_hub_edges():
+    # B1/B3 of spec 2026-09-02-hub-edge-scaling-design.md: this task now writes hut_edges/ (full
+    # geometry, unchanged) and access_distances.npy (distance/time scalars only, no geometry) -
+    # start_edges/ is now build_access_edges' target, materialized only for the pairs
+    # select_approach_pairs.py selects out of access_distances.npy.
     return pipeline_task(
         "phases/graph_building/build_hub_edges.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
@@ -95,7 +106,8 @@ def task_build_hub_edges():
             # (variants_lib.enabled_variants) - without this, a variant-grid edit would report
             # "up to date" and silently skip the rebuild.
             tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
-            _SCHEMA_VERSION_PARAM,
+            _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,
+            _ACCESS_DISTANCE_SCHEMA_VERSION_PARAM,
         ],
         task_dep=["snap_hubs", "gather_route_subgraphs"],
         file_dep=[
@@ -104,5 +116,62 @@ def task_build_hub_edges():
             OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
             OSM_DIR / "route_subgraphs" / "manifest.json",
         ],
-        targets=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy"],
+        targets=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "access_distances.npy"],
+    )
+
+
+def task_build_access_edges():
+    # B5/B6: the second and final igraph pass, restricted to select_approach_pairs.py's survivor
+    # list - this is what writes the actual start_edges/ every downstream consumer reads.
+    return pipeline_task(
+        "phases/graph_building/build_access_edges.py",
+        params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
+        tracking_params=[
+            tracking_param("variants_json", str, json.dumps(CONFIG["graph"]["variants"], sort_keys=True)),
+            _EDGE_SCHEMA_VERSION_PARAM, _SNAP_SCHEMA_VERSION_PARAM, _RECORD_SCHEMA_VERSION_PARAM,
+        ],
+        task_dep=["select_approach_pairs", "snap_hubs", "gather_route_subgraphs"],
+        file_dep=[
+            OSM_DIR / "base_graph" / "manifest.json",
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
+            OSM_DIR / "route_subgraphs" / "manifest.json",
+            OSM_DIR / "selected_access_pairs.npy",
+        ],
+        targets=[OSM_DIR / "start_edges" / "records.npy"],
+    )
+
+
+def task_match_tour_edges():
+    # Corridor-constrained routing of tour folders (pipeline/tours/) onto the base graph (spec
+    # docs/superpowers/specs/2026-08-30-tour-folder-ingestion-design.md). task_dep, not file_dep,
+    # on compute_edge_profiles/snap_hubs: both rewrite their outputs in place without declaring
+    # them as targets - same reasoning as task_snap_hubs/task_gather_route_subgraphs above. Never
+    # a variants_json tracking param: a tour leg is not a member of graph.variants (spec §5 of the
+    # 2026-08-29 official-tours-integration design).
+    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # flat per spec §1; computed at DAG-build time
+    return pipeline_task(
+        "phases/graph_building/match_tour_edges.py",
+        params=[
+            cli_param("corridor_buffer_m", "corridor-buffer-m", float, CONFIG["tourMatch"]["corridorBufferM"]),
+            cli_param("length_divergence_ratio", "length-divergence-ratio", float,
+                      CONFIG["tourMatch"]["lengthDivergenceRatio"]),
+            cli_param("hmm_resample_m", "hmm-resample-m", float, CONFIG["tourMatch"]["hmmResampleM"]),
+            cli_param("hmm_obs_noise_m", "hmm-obs-noise-m", float, CONFIG["tourMatch"]["hmmObsNoiseM"]),
+            cli_param("hmm_max_dist_m", "hmm-max-dist-m", float, CONFIG["tourMatch"]["hmmMaxDistM"]),
+            cli_param("hmm_dist_noise_m", "hmm-dist-noise-m", float, CONFIG["tourMatch"]["hmmDistNoiseM"]),
+            cli_param("endpoint_bridge_max_m", "endpoint-bridge-max-m", float,
+                      CONFIG["tourMatch"]["endpointBridgeMaxM"]),
+        ],
+        task_dep=["compute_edge_profiles", "snap_hubs"],
+        file_dep=[
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
+            *tour_files,
+        ],
+        targets=[
+            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",
+            OSM_DIR / "tour_edges" / "edge_ids.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
+            OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json",
+        ],
     )

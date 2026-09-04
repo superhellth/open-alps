@@ -19,11 +19,16 @@ psutil = "*"
 shapely = "*"
 tippecanoe = "*"
 pip = "*"
+rtree = ">=1.4.1,<2"
+rich = "*"
 
 [pypi-dependencies]
 pmtiles = "*"
 doit = "*"
 pytest = "*"
+leuvenmapmatching = "*"
 
 [tasks]
 doit = "doit"
+test = "pytest"
+status = "python status.py"

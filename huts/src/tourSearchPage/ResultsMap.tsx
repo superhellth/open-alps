@@ -2,9 +2,11 @@ import { memo, useEffect, useMemo, useState } from 'react'
 import { Box, Typography } from '@mui/material'
 import { MapContainer, TileLayer, CircleMarker, Tooltip, Polyline, useMap } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import { loadLegGeometry, type GeometryLayer } from '../tourSearch/loadLegGeometry.js'
-import type { TourResult } from '../tourSearch/types.js'
+import { loadLegGeometry } from '../tourSearch/loadLegGeometry.js'
+import { SOURCE_TYPE_PARTNER } from '../tourSearch/types.js'
+import type { Route } from './types.js'
 import type { StartPoint } from './types.js'
+import { OPERATOR_COLOR, OPERATOR_LABEL, PARTNER_COLOR, PARTNER_LABEL, hutClassLabel, type HutClass } from '../hutClass.js'
 
 const TILE_LAYER = (
   <TileLayer
@@ -13,66 +15,42 @@ const TILE_LAYER = (
   />
 )
 
-function chainPositions(
-  chain: TourResult,
-  hutCoordsById: Map<number, { lat: number; lng: number }>,
-  startById: Map<number, StartPoint>,
-): [number, number][] {
-  const startPoint = startById.get(chain.startId)
-  const endPoint = startById.get(chain.exitStartId)
-  const hutPoints = chain.huts.map((h) => hutCoordsById.get(h)).filter((p): p is { lat: number; lng: number } => !!p)
-  return [
-    ...(startPoint ? [[startPoint.lat, startPoint.lng] as [number, number]] : []),
-    ...hutPoints.map((p): [number, number] => [p.lat, p.lng]),
-    ...(endPoint ? [[endPoint.lat, endPoint.lng] as [number, number]] : []),
-  ]
+function routePositions(route: Route): [number, number][] {
+  return route.waypoints.map((w): [number, number] => [w.lat, w.lng])
 }
 
-// Recenters the map when a tour is selected (or a different one replaces it), but deliberately
-// does nothing when selectedChain goes back to null - deselecting/minimizing a tour must leave
-// the user's current pan/zoom untouched rather than snapping back to the overview view.
-function RecenterOnSelect({
-  selectedChain, hutCoordsById, startById,
-}: {
-  selectedChain: TourResult | null
-  hutCoordsById: Map<number, { lat: number; lng: number }>
-  startById: Map<number, StartPoint>
-}) {
+// Recenters/refits the map when a route is selected (or a different one replaces it), but
+// deliberately does nothing when route goes back to null - deselecting/minimizing a route must
+// leave the user's current pan/zoom untouched. fitBounds (not a fixed zoom) because official
+// tours run 4-8 legs over much longer distances than the 2-4-leg search chains this was originally
+// tuned for - a fixed zoom tuned for the latter runs an official tour off both edges of the view.
+function RecenterOnSelect({ route }: { route: Route | null }) {
   const map = useMap()
   useEffect(() => {
-    if (!selectedChain) return
-    const positions = chainPositions(selectedChain, hutCoordsById, startById)
+    if (!route) return
+    const positions = routePositions(route)
     if (positions.length < 2) return
-    map.setView(positions[Math.floor(positions.length / 2)], 11)
-    // Only re-run when the selected chain itself changes - hutCoordsById/startById are loaded
-    // once and stable, and including them would refire this on unrelated parent re-renders.
-  }, [map, selectedChain])
+    map.fitBounds(positions, { padding: [24, 24] })
+  }, [map, route])
   return null
 }
 
-function legLayer(legIndex: number, legCount: number): GeometryLayer {
-  return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
-}
-
-/** Resolves each leg's real trail geometry for the selected chain (spec F). While a leg's fetch
- *  is in flight, or if it rejects, its entry stays null so the caller falls back to a straight
- *  segment between that leg's own endpoints - the tour is never blank while loading. */
-function useLegGeometries(
-  selectedChain: TourResult | null,
-  positions: [number, number][],
-): ([number, number][] | null)[] {
+/** Resolves each leg's real trail geometry for the selected route (spec F, generalized). While a
+ *  leg's fetch is in flight, or if it rejects, its entry stays null so the caller falls back to a
+ *  straight segment between that leg's own endpoints - the route is never blank while loading. */
+function useLegGeometries(route: Route | null): ([number, number][] | null)[] {
   const [geometries, setGeometries] = useState<([number, number][] | null)[]>([])
 
   useEffect(() => {
-    if (!selectedChain || positions.length !== selectedChain.legs.length + 1) {
+    if (!route || route.waypoints.length !== route.legs.length + 1) {
       setGeometries([])
       return
     }
-    const legs = selectedChain.legs
+    const legs = route.legs
     setGeometries(new Array(legs.length).fill(null))
     let cancelled = false
     legs.forEach((leg, i) => {
-      loadLegGeometry(legLayer(i, legs.length), leg.edgeId, leg.reversed).then(
+      loadLegGeometry(leg.layer, leg.edgeId, leg.reversed).then(
         (points) => {
           if (cancelled) return
           setGeometries((prev) => {
@@ -89,7 +67,7 @@ function useLegGeometries(
     return () => {
       cancelled = true
     }
-  }, [selectedChain, positions])
+  }, [route])
 
   return geometries
 }
@@ -110,47 +88,73 @@ function chainSegments(
   })
 }
 
-// Persistent map pane next to the results list: shows every hut when no tour is selected, and
-// the selected tour's route once a result card is expanded - real routed trail geometry per leg
-// once it resolves, a straight dashed fallback for legs still loading or that failed to resolve
-// - so the map is never replaced by the list. A single MapContainer stays mounted across
-// selection changes so the current pan/zoom survives deselecting a tour.
+// Persistent map pane next to the results list: shows every hut when no route is selected, and
+// the selected route (a search chain or an official tour, generalized to Route) once one is
+// picked - real routed trail geometry per leg once it resolves, a straight dashed fallback for
+// legs still loading or that failed to resolve - so the map is never replaced by the list. A
+// single MapContainer stays mounted across selection changes so the current pan/zoom survives
+// deselecting a route.
 const ResultsMap = memo(function ResultsMap({
-  selectedChain, hutNameById, hutCoordsById, startById,
+  route, hutNameById, hutCoordsById, startById, hutClassByIndex, excludedHutIndices,
 }: {
-  selectedChain: TourResult | null
+  route: Route | null
   hutNameById: Map<number, string>
   hutCoordsById: Map<number, { lat: number; lng: number }>
   startById: Map<number, StartPoint>
+  hutClassByIndex: Map<number, HutClass>
+  excludedHutIndices: Set<number>
 }) {
-  const positions = useMemo(
-    () => (selectedChain ? chainPositions(selectedChain, hutCoordsById, startById) : []),
-    [selectedChain, hutCoordsById, startById],
-  )
-  const showChain = selectedChain !== null && positions.length >= 2
-  const legGeometries = useLegGeometries(selectedChain, positions)
-  const segments = showChain ? chainSegments(positions, legGeometries) : []
+  const positions = useMemo(() => (route ? routePositions(route) : []), [route])
+  const showRoute = route !== null && positions.length >= 2
+  const legGeometries = useLegGeometries(route)
+  const segments = showRoute ? chainSegments(positions, legGeometries) : []
   const anyFallback = segments.some((s) => s.isFallback)
 
   return (
     <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
       <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>
         {TILE_LAYER}
-        <RecenterOnSelect selectedChain={selectedChain} hutCoordsById={hutCoordsById} startById={startById} />
-        {!showChain &&
-          [...hutCoordsById.entries()].map(([id, { lat, lng }]) => (
-            <CircleMarker
-              key={id}
-              center={[lat, lng]}
-              radius={4}
-              pathOptions={{ color: '#1b5e20', fillColor: '#43a047', fillOpacity: 0.9, weight: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -6]}>
-                {hutNameById.get(id) ?? id}
-              </Tooltip>
-            </CircleMarker>
-          ))}
-        {showChain && (
+        <RecenterOnSelect route={route} />
+        {!showRoute &&
+          [...hutCoordsById.entries()].map(([id, { lat, lng }]) => {
+            const cls = hutClassByIndex.get(id)
+            const excluded = excludedHutIndices.has(id)
+            const color = cls ? OPERATOR_COLOR[cls.operator] : '#1b5e20'
+            return (
+              <CircleMarker
+                key={id}
+                center={[lat, lng]}
+                radius={4}
+                pathOptions={{
+                  color,
+                  fillColor: color,
+                  fillOpacity: excluded ? 0.25 : cls?.serviced === false ? 0.15 : 0.9,
+                  weight: excluded ? 1 : cls?.serviced === false ? 2 : 1,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {hutNameById.get(id) ?? id}
+                  {cls ? ` — ${hutClassLabel(cls)}` : ''}
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
+        {!showRoute &&
+          [...startById.entries()]
+            .filter(([, s]) => s.sourceType === SOURCE_TYPE_PARTNER)
+            .map(([id, s]) => (
+              <CircleMarker
+                key={`partner-${id}`}
+                center={[s.lat, s.lng]}
+                radius={5}
+                pathOptions={{ color: PARTNER_COLOR, fillColor: PARTNER_COLOR, fillOpacity: 0.9, weight: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {s.name ?? PARTNER_LABEL} ({PARTNER_LABEL})
+                </Tooltip>
+              </CircleMarker>
+            ))}
+        {showRoute && (
           <>
             {segments.map((seg, i) => (
               <Polyline
@@ -163,18 +167,41 @@ const ResultsMap = memo(function ResultsMap({
                 }
               />
             ))}
-            {positions.map((pos, i) => (
-              <CircleMarker
-                key={i}
-                center={pos}
-                radius={i === 0 || i === positions.length - 1 ? 6 : 5}
-                pathOptions={{ color: '#1b5e20', fillColor: '#43a047', fillOpacity: 1 }}
-              />
-            ))}
+            {/* Route waypoints don't carry hut identity (Route is generic over search chains and
+                official tours alike), so unlike the overview markers above these render in one
+                fixed style rather than colored by operator - the endpoints are just drawn larger. */}
+            {positions.map((pos, i) => {
+              const isEndpoint = i === 0 || i === positions.length - 1
+              return (
+                <CircleMarker
+                  key={i}
+                  center={pos}
+                  radius={isEndpoint ? 6 : 5}
+                  pathOptions={{ color: '#1b5e20', fillColor: '#1b5e20', fillOpacity: 1 }}
+                />
+              )
+            })}
           </>
         )}
       </MapContainer>
-      {showChain && anyFallback && (
+      <Box
+        sx={{
+          position: 'absolute', top: 8, right: 8, zIndex: 1000, bgcolor: 'background.paper',
+          p: 1, borderRadius: 1, fontSize: '0.75rem', display: 'flex', flexDirection: 'column', gap: 0.5,
+        }}
+      >
+        {(Object.keys(OPERATOR_LABEL) as (keyof typeof OPERATOR_LABEL)[]).map((op) => (
+          <Box key={op} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: OPERATOR_COLOR[op] }} />
+            {OPERATOR_LABEL[op]}
+          </Box>
+        ))}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: PARTNER_COLOR }} />
+          {PARTNER_LABEL}
+        </Box>
+      </Box>
+      {showRoute && anyFallback && (
         <Typography
           variant="caption"
           color="text.secondary"

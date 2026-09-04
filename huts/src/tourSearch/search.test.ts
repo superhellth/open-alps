@@ -12,10 +12,20 @@ function edge(fromIndex: number, toIndex: number, distanceM: number) {
   return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
 }
 
+function emptyHutEdgeIdsStub(): GraphData['hutEdgeIds'] {
+  return {
+    getSortedIds: () => new Int32Array(0),
+    getPrefixIds: () => new Int32Array(0),
+    getSuffixIds: () => new Int32Array(0),
+  }
+}
+
 // This fixture's approach/exit are station-type (SOURCE_TYPE_STATION = 1), matching the
 // "(transit)" describe block below; the "(car)" describe block overrides source types to
 // SOURCE_TYPE_PARKING (2) on its own graph copies where mode-gating requires it.
 const graphData: GraphData = {
+  hutEdgeIds: emptyHutEdgeIdsStub(),
+  startEdgeIds: emptyHutEdgeIdsStub(),
   hutEdges: {
     hutIds: ['A', 'B', 'C'],
     variantNames: { 0: 'FAST_ANY' },
@@ -23,7 +33,7 @@ const graphData: GraphData = {
   },
   approaches: {
     records: [
-      { hutIndex: 0, startId: 100, sourceType: 1, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
+      { hutIndex: 0, startId: 100, sourceType: 1, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
     ],
     reverseIndex: {
       hut_to_starts: {
@@ -118,6 +128,215 @@ describe('searchChains (car)', () => {
     expect(full).toBeDefined()
     expect(full!.startId).toBe(100)
     expect(full!.exitStartId).toBe(100)
+  })
+})
+
+describe('searchChains (overlap avoidance)', () => {
+  const overlapEdge = (fromIndex: number, toIndex: number, edgeId: number) => ({
+    fromIndex, toIndex, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000,
+    sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId,
+  })
+
+  // Chain 0 -[e01]-> 1 -[e12]-> 2 -[e23]-> 3. e01 and e12 share base-edge id 100, but ONLY in the
+  // run leaving their common hut 1 - spec §4's exemption should keep a chain using just those two.
+  // e01 and e23 independently share id 200, with NO common hut between them - spec §4's hard rule
+  // should exclude any chain using both.
+  const SORTED: Record<number, number[]> = { 1: [100, 200], 2: [100, 300], 3: [200, 400] }
+  const PREFIX: Record<number, number[]> = { 1: [200], 2: [100], 3: [400] }  // near from_id
+  const SUFFIX: Record<number, number[]> = { 1: [100], 2: [300], 3: [200] }  // near to_id
+
+  const overlapGraphData: GraphData = {
+    hutEdges: {
+      hutIds: ['A', 'B', 'C', 'D'],
+      variantNames: { 0: 'FAST_ANY' },
+      records: [overlapEdge(0, 1, 1), overlapEdge(1, 2, 2), overlapEdge(2, 3, 3)],
+    },
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 100, sourceType: 1, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 9000 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          2: [{ hut_id: 2, start_id: 300, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 9002 }],
+          3: [{ hut_id: 3, start_id: 200, source_type: 1, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 9001 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED[edgeId] ?? []),
+      getPrefixIds: (edgeId) => Int32Array.from(PREFIX[edgeId] ?? []),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX[edgeId] ?? []),
+    },
+    startEdgeIds: emptyHutEdgeIdsStub(),
+  }
+
+  it('excludes a chain whose non-adjacent legs share a base-edge id', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      overlapGraphData,
+    )
+    expect(chains.some((c) => c.huts.length === 4)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+
+  it('keeps a chain whose adjacent legs only share the run out of their common hut', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      overlapGraphData,
+    )
+    const kept = chains.find((c) => c.huts.length === 3 && c.exitStartId === 300)
+    expect(kept).toBeDefined()
+    expect(kept!.huts).toEqual([0, 1, 2])
+  })
+})
+
+describe('searchChains (approach-leg overlap avoidance)', () => {
+  // Chain A -[e01]-> B -[e12]-> C. Approach (start 500 -> A, edgeId 700) shares base-edge id 200
+  // with e01 ONLY in the run leaving their common hut A - should be exempted, same rule as two
+  // adjacent hut-hut legs. Approach also carries id 999, which e12 independently carries too, with
+  // NO hut in common with the approach (e12 connects B and C, the approach touches only A) - a
+  // genuine overlap that must exclude any chain using both.
+  const approachOverlapEdge = (fromIndex: number, toIndex: number, edgeId: number) => ({
+    fromIndex, toIndex, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000,
+    sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId,
+  })
+
+  const SORTED_HUT: Record<number, number[]> = { 1: [100, 200], 2: [100, 300, 999] }
+  const PREFIX_HUT: Record<number, number[]> = { 1: [200], 2: [100] } // near from_id
+  const SUFFIX_HUT: Record<number, number[]> = { 1: [100], 2: [300] } // near to_id
+  const SORTED_START: Record<number, number[]> = { 700: [200, 999] }
+  const SUFFIX_START: Record<number, number[]> = { 700: [200] } // near hut A (the approach's arrival end)
+
+  const approachOverlapGraphData: GraphData = {
+    hutEdges: {
+      hutIds: ['A', 'B', 'C'],
+      variantNames: { 0: 'FAST_ANY' },
+      records: [approachOverlapEdge(0, 1, 1), approachOverlapEdge(1, 2, 2)],
+    },
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 500, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 700 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          1: [{ hut_id: 1, start_id: 601, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 800 }],
+          2: [{ hut_id: 2, start_id: 602, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 801 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED_HUT[edgeId] ?? []),
+      getPrefixIds: (edgeId) => Int32Array.from(PREFIX_HUT[edgeId] ?? []),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX_HUT[edgeId] ?? []),
+    },
+    startEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED_START[edgeId] ?? []),
+      getPrefixIds: () => new Int32Array(0),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX_START[edgeId] ?? []),
+    },
+  }
+
+  it('excludes a chain whose approach leg overlaps a later, non-adjacent hut-hut leg', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      approachOverlapGraphData,
+    )
+    expect(chains.some((c) => c.huts.length >= 3)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+
+  it('keeps a chain whose approach and first hut-hut leg only share the run out of their common hut', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      approachOverlapGraphData,
+    )
+    const kept = chains.find((c) => c.huts.length === 2)
+    expect(kept).toBeDefined()
+    expect(kept!.huts).toEqual([0, 1])
+  })
+})
+
+describe('searchChains (car-loop shared-start overlap avoidance)', () => {
+  const loopEdge = { fromIndex: 0, toIndex: 1, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: 1 }
+  const PREFIX_START: Record<number, number[]> = { 900: [555], 901: [555] } // near the shared start point, both directions
+
+  function buildLoopGraphData(exitSharesNonExemptId: boolean): GraphData {
+    const SORTED_START: Record<number, number[]> = {
+      900: [555, 111],
+      901: exitSharesNonExemptId ? [555, 111] : [555, 222],
+    }
+    return {
+      hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [loopEdge] },
+      approaches: {
+        records: [{ hutIndex: 0, startId: 999, sourceType: SOURCE_TYPE_PARKING, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 900 }],
+        reverseIndex: {
+          hut_to_starts: {
+            1: [{ hut_id: 1, start_id: 999, source_type: SOURCE_TYPE_PARKING, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 901 }],
+          },
+          start_to_huts: {},
+        },
+      },
+      hutEdgeIds: { getSortedIds: () => new Int32Array(0), getPrefixIds: () => new Int32Array(0), getSuffixIds: () => new Int32Array(0) },
+      startEdgeIds: {
+        getSortedIds: (edgeId) => Int32Array.from(SORTED_START[edgeId] ?? []),
+        getPrefixIds: (edgeId) => Int32Array.from(PREFIX_START[edgeId] ?? []),
+        getSuffixIds: () => new Int32Array(0),
+      },
+    }
+  }
+
+  it('keeps a car-mode loop that only shares the run near the common start point', () => {
+    const { chains } = searchChains(
+      { mode: 'car', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      buildLoopGraphData(false),
+    )
+    const kept = chains.find((c) => c.huts.length === 2)
+    expect(kept).toBeDefined()
+    expect(kept!.startId).toBe(999)
+    expect(kept!.exitStartId).toBe(999)
+  })
+
+  it('excludes a car-mode loop with a genuine overlap away from the shared start point', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'car', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      buildLoopGraphData(true),
+    )
+    expect(chains.some((c) => c.huts.length === 2)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+})
+
+describe('searchChains (single-hut approach/exit trim)', () => {
+  const graphDataSingleHutTrim: GraphData = {
+    hutEdges: { hutIds: ['A'], variantNames: { 0: 'FAST_ANY' }, records: [] },
+    approaches: {
+      records: [{ hutIndex: 0, startId: 300, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 950 }],
+      reverseIndex: {
+        hut_to_starts: {
+          0: [{ hut_id: 0, start_id: 301, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 951 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: { getSortedIds: () => new Int32Array(0), getPrefixIds: () => new Int32Array(0), getSuffixIds: () => new Int32Array(0) },
+    startEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(({ 950: [321, 111], 951: [321, 222] } as Record<number, number[]>)[edgeId] ?? []),
+      getPrefixIds: () => new Int32Array(0),
+      getSuffixIds: (edgeId) => Int32Array.from(({ 950: [321], 951: [321] } as Record<number, number[]>)[edgeId] ?? []),
+    },
+  }
+
+  it('trims the run shared out of a single hut between the approach and exit legs', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 2, ...generousConstraints },
+      graphDataSingleHutTrim,
+    )
+    const kept = chains.find((c) => c.huts.length === 1)
+    expect(kept).toBeDefined()
+    expect(kept!.startId).toBe(300)
+    expect(kept!.exitStartId).toBe(301)
   })
 })
 
@@ -275,13 +494,15 @@ describe('dominance pruning (Section B) is exact', () => {
     return { fromIndex, toIndex, variant: 0, distanceM, ascentM: 100, descentM: 100, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: fromIndex * 100 + toIndex }
   }
   const diamondGraph: GraphData = {
+    hutEdgeIds: emptyHutEdgeIdsStub(),
+    startEdgeIds: emptyHutEdgeIdsStub(),
     hutEdges: {
       hutIds: ['A', 'B', 'C', 'D'],
       variantNames: { 0: 'FAST_ANY' },
       records: [edge(0, 1, 3000), edge(0, 2, 4000), edge(1, 2, 2000), edge(1, 3, 3500), edge(2, 3, 3000)],
     },
     approaches: {
-      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null, edgeId: 8000 }],
+      records: [{ hutIndex: 0, startId: 100, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 1000, ascentM: 50, descentM: 20, access: null, edgeId: 8000 }],
       reverseIndex: {
         hut_to_starts: {
           3: [{ hut_id: 3, start_id: 200, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 1000, ascent_m: 20, descent_m: 50, edge_id: 8001 }],
@@ -296,5 +517,140 @@ describe('dominance pruning (Section B) is exact', () => {
     const pruned = searchChains(query, diamondGraph)
     const unpruned = bruteForceSearchChains(query, diamondGraph)
     expect(normalizeForComparison(pruned.chains)).toEqual(normalizeForComparison(unpruned.chains))
+  })
+})
+
+describe('searchChains hut filtering', () => {
+  it('excludes a hut from every position in a chain, including mid-route, when its index is not allowed', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, allowedHutIndices: new Set([0, 2]) },
+      graphData,
+    )
+    for (const chain of chains) {
+      expect(chain.huts).not.toContain(1)
+    }
+  })
+
+  it('increments hutFiltered when the allow-set prunes a hut', () => {
+    const { killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, allowedHutIndices: new Set([0, 2]) },
+      graphData,
+    )
+    expect(killCounters.hutFiltered).toBeGreaterThan(0)
+  })
+
+  it('an undefined allowedHutIndices allows every hut, unchanged from before this feature', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it('every returned chain has at least one hut night (huts.length >= 1), including at legCountMin = 1', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 1, legCountMax: 4, ...generousConstraints },
+      graphData,
+    )
+    for (const chain of chains) {
+      expect(chain.huts.length).toBeGreaterThanOrEqual(1)
+    }
+  })
+})
+
+describe('searchChains village mode', () => {
+  const villageGraphData: GraphData = {
+    ...graphData,
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 300, sourceType: 3, variant: 0, accessUnknown: false, distanceM: 1500, ascentM: 80, descentM: 40, access: null, edgeId: 9100 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          2: [{ hut_id: 2, start_id: 400, source_type: 3, variant: 0, distance_m: 1500, ascent_m: 40, descent_m: 80, edge_id: 9101 }],
+        },
+        start_to_huts: {},
+      },
+    },
+  }
+
+  it('gates approach/exit legs to SOURCE_TYPE_PARTNER, like transit gates to stations', () => {
+    const { chains } = searchChains(
+      { mode: 'village', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      villageGraphData,
+    )
+    const full = chains.find((c) => c.huts.length === 3)
+    expect(full).toBeDefined()
+    expect(full!.startId).toBe(300)
+    expect(full!.exitStartId).toBe(400)
+  })
+
+  it('behaves like transit (open point-to-point), not like car (no same-start round-trip check)', () => {
+    const { chains } = searchChains(
+      { mode: 'village', legCountMin: 3, legCountMax: 4, ...generousConstraints },
+      villageGraphData,
+    )
+    expect(chains.some((c) => c.startId !== c.exitStartId)).toBe(true)
+  })
+})
+
+describe('searchChains availability pruning', () => {
+  const availability = (ohrsIdByHutIndex: Map<number, string | null>, freeByOffset: Map<number, Set<string> | 'unknown'>) =>
+    ({ ohrsIdByHutIndex, freeByOffset })
+
+  it('rejects the whole chain when the seed hut has no free beds on night 1', () => {
+    const { chains, killCounters } = searchChains(
+      {
+        mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, 'ohrsA']]), new Map([[1, new Set<string>()]])),
+      },
+      graphData,
+    )
+    expect(chains).toHaveLength(0)
+    expect(killCounters.availability).toBeGreaterThan(0)
+  })
+
+  it('a hut with ohrsHutId null (direct-booking-only) always passes, regardless of freeByOffset', () => {
+    const { chains } = searchChains(
+      {
+        mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, null]]), new Map([[1, new Set<string>()]])),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it("an 'unknown' offset always passes", () => {
+    const { chains } = searchChains(
+      {
+        mode: 'transit', legCountMin: 3, legCountMax: 4, ...generousConstraints,
+        availability: availability(new Map([[0, 'ohrsA']]), new Map<number, Set<string> | 'unknown'>([[1, 'unknown']])),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.length === 3)).toBe(true)
+  })
+
+  it('rejects an expansion hut with no free beds on its own night, without killing earlier huts', () => {
+    const { chains, killCounters } = searchChains(
+      {
+        mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints,
+        availability: availability(
+          new Map([[0, 'ohrsA'], [1, 'ohrsB']]),
+          new Map<number, Set<string> | 'unknown'>([[1, new Set(['ohrsA'])], [2, new Set<string>()]]),
+        ),
+      },
+      graphData,
+    )
+    expect(chains.some((c) => c.huts.includes(1))).toBe(false)
+    expect(chains.some((c) => c.huts.length === 3)).toBe(false)
+    expect(killCounters.availability).toBeGreaterThan(0)
+  })
+
+  it('is byte-for-byte identical to an unconstrained search when availability is absent', () => {
+    const withoutAvailability = searchChains({ mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints }, graphData)
+    const withUndefinedAvailability = searchChains({ mode: 'transit', legCountMin: 2, legCountMax: 4, ...generousConstraints, availability: undefined }, graphData)
+    expect(withUndefinedAvailability.chains).toEqual(withoutAvailability.chains)
   })
 })

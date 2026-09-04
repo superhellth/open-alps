@@ -8,11 +8,14 @@ data/
 huts/public/data/
 
 # Reference network capture, not build input
-caa.alpenverein.at.har
+docs/archives/
 
 # Python
 __pycache__/
 *.pyc
+.pytest_cache/
+
+.pixi/
 
 # OS/editor
 .DS_Store
@@ -21,5 +24,27 @@ __pycache__/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 
-# Subagent-driven-development scratch workspace (ledgers, briefs, review packages)
-.superpowers/
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

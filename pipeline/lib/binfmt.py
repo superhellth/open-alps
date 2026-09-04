@@ -34,6 +34,27 @@ RECORD_DTYPE = np.dtype([
     ("sac_rank", "i1"), ("via_ferrata", "bool"),
     ("geom_offset", "i8"), ("geom_count", "i4"),
     ("profile_offset", "i8"), ("profile_count", "i4"),
+    # Trail-segment identity for the "avoid overlapping tracks" check (docs/superpowers/specs/
+    # 2026-08-29-avoid-overlapping-tracks-design.md). edge_id_offset/count index a per-record
+    # ascending-sorted slice of hut_edges/edge_ids.npy (the FULL base-edge-id set, for the
+    # non-adjacent-leg overlap check). prefix_ids/suffix_ids are the first/last K_TRAVERSAL ids in
+    # TRAVERSAL order (prefix: outward from from_id: suffix: outward from to_id, i.e. the last-K
+    # run reversed) - needed because the shared-hub exemption (spec §4) has to walk inward from a
+    # specific endpoint, which the sorted set can't do. -1-padded past *_count when a record has
+    # fewer than K_TRAVERSAL base edges. Only ever populated for hut_edges records - start_edges
+    # keeps these zeroed (spec §1: gated on a parameter, hut-edges-only).
+    ("edge_id_offset", "i8"), ("edge_id_count", "i4"),
+    ("prefix_ids", "i4", (8,)), ("prefix_count", "u1"),
+    ("suffix_ids", "i4", (8,)), ("suffix_count", "u1"),
+])
+
+# build_hub_edges.py's B3 output (spec 2026-09-02-hub-edge-scaling-design.md): hut -> access-point
+# distance/time ONLY, no geometry, no path walk - one row per (hut, start, variant). The cheap,
+# complete "which trailheads can reach which hut" answer select_approach_pairs.py ranks/selects
+# over before build_access_edges.py pays for a path walk on the survivors only.
+ACCESS_DISTANCE_DTYPE = np.dtype([
+    ("hut_id", "u2"), ("start_id", "i8"), ("start_type", "u1"), ("variant", "u1"),
+    ("distance_m", "f4"), ("time_s", "f4"),
 ])
 PROFILE_DTYPE = np.dtype("f4")
 
@@ -59,6 +80,11 @@ HUB_SNAP_DTYPE = np.dtype([
     ("gap_m", "f8"), ("gap_dz_m", "f8"),
 ])
 
+# tour_edges/tour_meta.npy - row-aligned 1:1 with tour_edges/records.npy (NOT folded into
+# RECORD_DTYPE itself, spec §2.6: avoids touching the shared dtype every other consumer depends
+# on). 25 tours x <=9 legs each fits u1 comfortably.
+TOUR_META_DTYPE = np.dtype([("tour_id", "u1"), ("leg_index", "u1")])
+
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
@@ -80,18 +106,23 @@ VARIANT_FAST_T3 = 2
 # huts losing their last T2/T3 connection under the strict ungraded_m==0 rule, both far over the
 # 5% threshold that would have kept the grid at three rows.
 VARIANT_FAST_T3_UNGRADED = 3
+# A tour leg is not a member of the graph.variants search grid (spec 2026-08-29-official-tours-
+# integration-design.md §5) - it is the ONE route the AV publishes, nothing to search among - so
+# it gets its own sentinel rather than reusing a FAST_* row.
+VARIANT_OFFICIAL = 4
 VARIANT_NAMES = {
     VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
-    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED",
+    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED", VARIANT_OFFICIAL: "OFFICIAL",
 }
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
 
-# Bump on any EDGE_DTYPE/RECORD_DTYPE change. Tracked as a dodo.py task param (see
-# task_build_base_graph/task_build_hub_edges) purely so TaskOptionsChanged sees a code-only dtype
-# change and forces a rebuild - there is no CLI flag for it, the same "tracking-only param" pattern
-# already used for regions_json/bbox_json.
-SCHEMA_VERSION = 2
+# Split into three independent tracking params (one per dtype each cares about) so bumping one
+# doesn't force-rerun tasks that don't touch that dtype - see pipeline/dag/graph_building.py.
+EDGE_SCHEMA_VERSION = 2
+SNAP_SCHEMA_VERSION = 2
+RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
+ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

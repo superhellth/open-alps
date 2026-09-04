@@ -5,36 +5,31 @@ edge's dist/road_m/ungraded_m/inferred_m proportionally by real (haversine) dist
 polyline - not by vertex count or naive endpoint interpolation, since interior vertices are real,
 unevenly spaced trail points."""
 
-import math
 from dataclasses import dataclass
 
-
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
+from lib.geo import haversine_m as _haversine_m
 
 
-def nearest_point_on_polyline(polyline: list, point: tuple) -> tuple:
+def nearest_point_on_polyline(polyline: list, point: tuple, lng_scale: float = 1.0) -> tuple:
     """polyline: [(lon, lat), ...], >=2 points. Returns (segment_index, fraction in [0,1])
-    identifying the closest point to `point` using planar projection - fine at the scale of a
-    single chain edge (at most a few km), where lon/lat behaves near-linearly."""
+    identifying the closest point to `point`, using a locally-flat projection where longitude
+    distances are scaled by `lng_scale` (pass cos(radians(reference_latitude)) so degrees of
+    longitude and latitude compare in real-world proportion - see hub_snap.py's _project_m for
+    the same correction applied elsewhere in the snapping path). Defaults to 1.0 (no correction)
+    for callers that intentionally want raw degree-space comparison."""
     best = (0, 0.0, float("inf"))
     for i in range(len(polyline) - 1):
         ax, ay = polyline[i]
         bx, by = polyline[i + 1]
-        dx, dy = bx - ax, by - ay
+        dx, dy = (bx - ax) * lng_scale, by - ay
         seg_len_sq = dx * dx + dy * dy
         if seg_len_sq == 0:
             t = 0.0
         else:
-            t = ((point[0] - ax) * dx + (point[1] - ay) * dy) / seg_len_sq
+            t = ((point[0] - ax) * lng_scale * dx + (point[1] - ay) * dy) / seg_len_sq
             t = min(max(t, 0.0), 1.0)
-        px, py = ax + t * dx, ay + t * dy
-        d = (point[0] - px) ** 2 + (point[1] - py) ** 2
+        px, py = ax + t * (bx - ax), ay + t * dy
+        d = ((point[0] - px) * lng_scale) ** 2 + (point[1] - py) ** 2
         if d < best[2]:
             best = (i, t, d)
     return best[0], best[1]

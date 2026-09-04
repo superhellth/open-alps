@@ -30,8 +30,10 @@ SCRIPT_NAME = "compute_hub_range.py"
 config = load_config()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
-parser.add_argument("--osm-dir", type=Path, default=OSM_DIR)
+parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                    help="longest hut-to-hut trail distance kept as an edge, used to size the hub-range radius (see pipeline.config.json's graph.maxEdgeKm)")
+parser.add_argument("--osm-dir", type=Path, default=OSM_DIR,
+                    help="directory holding huts.geojson and to write hub_range.geojson into")
 args = parser.parse_args()
 
 radius_km = args.max_edge_km * HUB_RANGE_SAFETY_MARGIN

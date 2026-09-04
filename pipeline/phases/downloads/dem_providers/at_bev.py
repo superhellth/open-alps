@@ -13,9 +13,13 @@ finds the same single flat file glob would.
 """
 
 import subprocess
+import sys
 import urllib.request
 import zipfile
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
+from lib.pipeline import safe_extractall  # noqa: E402
 
 
 def download_url(provider_config: dict) -> str:
@@ -35,7 +39,7 @@ def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
         extract_dir = raw_dir / dst.stem
         if not extract_dir.exists():
             with zipfile.ZipFile(dst) as zf:
-                zf.extractall(extract_dir)
+                safe_extractall(zf, extract_dir)
         return sorted(extract_dir.rglob("*.tif"))
 
     return [dst]

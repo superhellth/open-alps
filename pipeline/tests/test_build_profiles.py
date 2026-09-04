@@ -7,6 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases" / "elevation"))
 
 import build_profiles as bp  # noqa: E402
+from lib import binfmt  # noqa: E402
 
 
 def test_lookup_matches_exact_coordinates():
@@ -48,3 +49,56 @@ def test_elevation_profile_interpolates_onto_n_points():
     assert len(profile) == 5
     assert profile[0] == 1000.0
     assert profile[-1] == 1020.0
+
+
+def test_process_edge_set_handles_a_tour_edges_shaped_directory(tmp_path):
+    # tour_edges/ has the exact same records.npy/geometry.npy shape as hut_edges/ - this is a
+    # regression guard that _process_edge_set (used for all three directory names) doesn't assume
+    # anything hut_edges/start_edges-specific.
+    edge_dir = tmp_path / "tour_edges"
+    edge_dir.mkdir()
+    records = np.zeros(1, dtype=binfmt.RECORD_DTYPE)
+    records[0] = (
+        0, 1, binfmt.TYPE_HUT, binfmt.TYPE_HUT, binfmt.VARIANT_OFFICIAL,
+        1000.0, 0.0, 50.0, 20.0, 1500.0, 0.0, 0.0, 5.0, 1, False,
+        0, 2, 0, 0, 0, 0, [-1] * 8, 0, [-1] * 8, 0,
+    )
+    geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"] = [10.0, 10.01]
+    geometry["lat"] = [47.0, 47.0]
+    binfmt.save_array(edge_dir / "records.npy", records)
+    binfmt.save_array(edge_dir / "geometry.npy", geometry)
+
+    nodes = np.zeros(2, dtype=[("lon", "f8"), ("lat", "f8")])
+    nodes["lon"], nodes["lat"] = [10.0, 10.01], [47.0, 47.0]
+    interior = np.zeros(0, dtype=[("lon", "f8"), ("lat", "f8")])
+    node_ele = np.array([1000.0, 1010.0], dtype=np.float32)
+    interior_ele = np.zeros(0, dtype=np.float32)
+    lookup_keys, lookup_values = bp.build_elevation_lookup(nodes, interior, node_ele, interior_ele)
+
+    bp._process_edge_set(edge_dir, lookup_keys, lookup_values, profile_points=5)
+
+    profiles = binfmt.load_array(edge_dir / "profiles.npy", mmap=False)
+    assert len(profiles) == 5
+
+
+def test_main_processes_tour_edges_when_present(tmp_path, monkeypatch):
+    # Regression guard for the hardcoded tuple at build_profiles.py:173 - once tour_edges/ exists,
+    # main() must process it too, not just hut_edges/start_edges.
+    import build_profiles as bp_module
+
+    processed = []
+    monkeypatch.setattr(bp_module, "_process_edge_set", lambda edge_dir, *a, **kw: processed.append(edge_dir.name))
+    monkeypatch.setattr(bp_module, "OSM_DIR", tmp_path)
+    for name in ("hut_edges", "start_edges", "tour_edges"):
+        (tmp_path / name).mkdir()
+        binfmt.save_array(tmp_path / name / "records.npy", np.zeros(0, dtype=binfmt.RECORD_DTYPE))
+    (tmp_path / "base_graph").mkdir()
+    for arr_name in ("nodes.npy", "interior.npy"):
+        binfmt.save_array(tmp_path / "base_graph" / arr_name, np.zeros(0, dtype=binfmt.COORD_DTYPE))
+    for arr_name in ("node_ele.npy", "interior_ele.npy"):
+        binfmt.save_array(tmp_path / "base_graph" / arr_name, np.zeros(0, dtype=binfmt.PROFILE_DTYPE))
+
+    bp_module.main(["--base-graph-dir", str(tmp_path / "base_graph")])
+
+    assert set(processed) == {"hut_edges", "start_edges", "tour_edges"}

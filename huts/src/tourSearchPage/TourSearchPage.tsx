@@ -1,29 +1,43 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, Typography,
+  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, CircularProgress, FormControlLabel, MenuItem, Select, TextField, ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import { loadTourSearchData, findTours } from '../tourSearch/index.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { GraphData, SearchResult, TourMode } from '../tourSearch/types.js'
+import { fetchAvailabilityByOffset } from '../availability/fetchAvailability.js'
+import type { FreeByOffset } from '../availability/types.js'
 import AppShell from '../AppShell.js'
-import type { StartPoint } from './types.js'
-import { DEFAULT_FORM, OVERLAP_THRESHOLD_BY_VARIETY, buildQuery, type FormState } from './formState.js'
-import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, type SortKey } from './helpers.js'
+import type { Route, StartPoint } from './types.js'
+import type { HutClass, HutOperator } from '../hutClass.js'
+import { OPERATOR_LABEL } from '../hutClass.js'
+import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, type FormState } from './formState.js'
+import { PAGE_SIZE, SOURCE_TYPE_LABEL, idFromOsmFeatureId, SORT_COMPARATORS, chainToRoute, officialTourToRoute, type SortKey } from './helpers.js'
 import LegCountSlider from './LegCountSlider.js'
 import LegTimeSlider from './LegTimeSlider.js'
 import ResultsMap from './ResultsMap.js'
 import TourList from './TourList.js'
+import OfficialTourList from './OfficialTourList.js'
+import { loadOfficialTours } from '../tourSearch/loadOfficialTours.js'
+import { loadTourEdgesData } from '../tourSearch/loadTourEdges.js'
+import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
+import type { RawTour } from '../tourSearch/loadOfficialTours.js'
+import type { TourEdgeRecord } from '../tourSearch/loadTourEdges.js'
 
 const HUTS_URL = '/data/huts.geojson'
 const PARKING_URL = '/data/parking.geojson'
 const STATIONS_URL = '/data/stations.geojson'
+const PARTNER_URL = '/data/partner_betriebe.geojson'
 
 function TourSearchPage() {
   const [graphData, setGraphData] = useState<GraphData | null>(null)
   const [hutNameById, setHutNameById] = useState<Map<number, string>>(new Map())
   const [hutCoordsById, setHutCoordsById] = useState<Map<number, { lat: number; lng: number }>>(new Map())
   const [startById, setStartById] = useState<Map<number, StartPoint>>(new Map())
+  const [hutsByIndex, setHutsByIndex] = useState<(HutClass | null)[]>([])
+  const [hutOhrsByIndex, setHutOhrsByIndex] = useState<Map<number, { ohrsHutId: string | null; tenantCode: number | null }>>(new Map())
+  const [freeByOffset, setFreeByOffset] = useState<FreeByOffset | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [result, setResult] = useState<SearchResult | null>(null)
@@ -31,6 +45,10 @@ function TourSearchPage() {
   const [sortKey, setSortKey] = useState<SortKey>('duration')
   const [page, setPage] = useState(1)
   const [expandedChain, setExpandedChain] = useState<number | null>(null)
+  const [viewMode, setViewMode] = useState<'search' | 'official'>('search')
+  const [officialTours, setOfficialTours] = useState<RawTour[] | null>(null)
+  const [tourEdgeRecords, setTourEdgeRecords] = useState<Map<string, TourEdgeRecord> | null>(null)
+  const [selectedOfficialTourId, setSelectedOfficialTourId] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -38,23 +56,57 @@ function TourSearchPage() {
       fetch(HUTS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
       fetch(PARKING_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
       fetch(STATIONS_URL).then((r) => r.json()) as Promise<GeoJSON.FeatureCollection>,
+      fetch(PARTNER_URL)
+        .then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
+        .catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection),
+      loadOfficialTours(),
+      loadTourEdgesData(),
     ])
-      .then(([tourSearchData, hutsFc, parkingFc, stationsFc]) => {
+      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc, tours, tourEdges]) => {
         setGraphData(tourSearchData)
+        setOfficialTours(tours)
+        setTourEdgeRecords(tourEdges)
+
+        const hutFeatureByGuid = new Map(
+          hutsFc.features.map((f) => [(f.properties as { id: string }).id, f]),
+        )
+        const hutsByIdx = tourSearchData.hutEdges.hutIds.map((guid) => hutFeatureByGuid.get(guid) ?? null)
+
         setHutNameById(
           new Map(
-            hutsFc.features.map((f) => [
-              (f.properties as { id: number }).id,
-              (f.properties as { name: string }).name,
-            ]),
+            hutsByIdx
+              .map((f, i) => (f ? ([i, (f.properties as { name: string }).name] as const) : null))
+              .filter((entry): entry is readonly [number, string] => entry != null),
           ),
         )
         setHutCoordsById(
           new Map(
-            hutsFc.features.map((f) => {
-              const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
-              return [(f.properties as { id: number }).id, { lat, lng }]
-            }),
+            hutsByIdx
+              .map((f, i) => {
+                if (!f) return null
+                const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+                return [i, { lat, lng }] as const
+              })
+              .filter((entry): entry is readonly [number, { lat: number; lng: number }] => entry != null),
+          ),
+        )
+        setHutsByIndex(
+          hutsByIdx.map((f) => {
+            if (!f) return null
+            const props = f.properties as { hutType?: string; serviced?: boolean }
+            if (props.hutType !== 'av' && props.hutType !== 'sonstige') return null
+            return { operator: props.hutType, serviced: props.serviced ?? true }
+          }),
+        )
+        setHutOhrsByIndex(
+          new Map(
+            hutsByIdx
+              .map((f, i) => {
+                if (!f) return null
+                const props = f.properties as { ohrsHutId?: string | null; tenantCode?: number | null }
+                return [i, { ohrsHutId: props.ohrsHutId ?? null, tenantCode: props.tenantCode ?? null }] as const
+              })
+              .filter((entry): entry is readonly [number, { ohrsHutId: string | null; tenantCode: number | null }] => entry != null),
           ),
         )
 
@@ -71,6 +123,15 @@ function TourSearchPage() {
           const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
           if (id != null) {
             starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_PARKING, lat, lng })
+          }
+        }
+        // Partner points carry no top-level f.id (ArcGIS OBJECTID lives in properties.id) - do NOT
+        // use idFromOsmFeatureId here, it would reduce Number("") to 0 and collapse every point.
+        for (const f of partnerFc.features) {
+          const id = (f.properties as { id?: number })?.id
+          const [lng, lat] = (f.geometry as GeoJSON.Point).coordinates
+          if (id != null) {
+            starts.set(id, { name: (f.properties as { name?: string })?.name ?? null, sourceType: SOURCE_TYPE_PARTNER, lat, lng })
           }
         }
         setStartById(starts)
@@ -96,6 +157,33 @@ function TourSearchPage() {
     return chains
   }, [result, sortKey])
 
+  const ohrsIdByHutIndex = useMemo(
+    () => new Map([...hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const)),
+    [hutOhrsByIndex],
+  )
+
+  const hutClassByIndex = useMemo(
+    () => new Map(hutsByIndex.map((c, i) => [i, c]).filter((entry): entry is [number, HutClass] => entry[1] != null)),
+    [hutsByIndex],
+  )
+  const excludedHutIndices = useMemo(() => {
+    if (viewMode === 'official') return new Set<number>()
+    const allowed = graphData ? buildQuery(form, hutsByIndex).allowedHutIndices : undefined
+    if (!allowed) return new Set<number>()
+    const excluded = new Set<number>()
+    hutClassByIndex.forEach((_c, i) => {
+      if (!allowed.has(i)) excluded.add(i)
+    })
+    return excluded
+  }, [form, hutsByIndex, hutClassByIndex, graphData, viewMode])
+
+  const officialTourViews = useMemo(
+    () => (officialTours && tourEdgeRecords ? buildOfficialTourViews(officialTours, tourEdgeRecords) : null),
+    [officialTours, tourEdgeRecords],
+  )
+
+  const selectedOfficialTour = officialTourViews?.find((v) => v.tourId === selectedOfficialTourId) ?? null
+
   const pageCount = Math.max(1, Math.ceil(displayedChains.length / PAGE_SIZE))
   const pageChains = useMemo(
     () => displayedChains.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
@@ -104,18 +192,32 @@ function TourSearchPage() {
 
   const selectedChain = expandedChain !== null ? (displayedChains[expandedChain] ?? null) : null
 
-  function handleSubmit(e: React.FormEvent) {
+  const route: Route | null = useMemo(() => {
+    if (viewMode === 'search') return selectedChain ? chainToRoute(selectedChain, hutCoordsById, startById) : null
+    return selectedOfficialTour ? officialTourToRoute(selectedOfficialTour, hutCoordsById, startById) : null
+  }, [viewMode, selectedChain, selectedOfficialTour, hutCoordsById, startById])
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!graphData) return
     setSearching(true)
     setResult(null)
     setExpandedChain(null)
+
+    let fetchedAvailability: FreeByOffset | null = null
+    if (form.startDate) {
+      fetchedAvailability = await fetchAvailabilityByOffset(new Date(form.startDate), form.numOfPeople, form.legCountRange[1] - 1)
+    }
+    setFreeByOffset(fetchedAvailability)
+
     // Defer the heavy synchronous findTours call a tick so React can paint the spinner first
     // (spec D: no Web Worker in this spec's scope).
     setTimeout(() => {
-      const query = buildQuery(form)
-      const overlapThreshold = OVERLAP_THRESHOLD_BY_VARIETY[form.overlapVariety]
-      setResult(findTours(query, graphData, { overlapThreshold }))
+      const query = buildQuery(
+        form, hutsByIndex,
+        fetchedAvailability ? { ohrsIdByHutIndex, freeByOffset: fetchedAvailability } : undefined,
+      )
+      setResult(findTours(query, graphData))
       setPage(1)
       setSearching(false)
     }, 0)
@@ -125,6 +227,14 @@ function TourSearchPage() {
     setForm(DEFAULT_FORM)
     setResult(null)
     setExpandedChain(null)
+    setFreeByOffset(null)
+  }
+
+  function handleViewModeChange(_e: React.MouseEvent<HTMLElement>, next: 'search' | 'official' | null) {
+    if (!next) return
+    setViewMode(next)
+    setExpandedChain(null)
+    setSelectedOfficialTourId(null)
   }
 
   return (
@@ -133,6 +243,18 @@ function TourSearchPage() {
       status={error ? `Fehler: ${error}` : graphData ? 'Daten geladen' : 'Lade Daten…'}
     >
       <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
+        <ToggleButtonGroup
+          value={viewMode}
+          exclusive
+          onChange={handleViewModeChange}
+          size="small"
+          sx={{ m: 2, mb: 0, alignSelf: 'flex-start' }}
+        >
+          <ToggleButton value="search">Freie Suche</ToggleButton>
+          <ToggleButton value="official">Offizielle Touren</ToggleButton>
+        </ToggleButtonGroup>
+
+        {viewMode === 'search' && (
         <Box
           component="form"
           onSubmit={handleSubmit}
@@ -148,6 +270,7 @@ function TourSearchPage() {
             >
               <MenuItem value="car">Auto (Rundtour zum Ausgangspunkt)</MenuItem>
               <MenuItem value="transit">ÖPNV (offene Strecke)</MenuItem>
+              <MenuItem value="village">Start im Bergsteigerdorf (offene Strecke)</MenuItem>
             </Select>
           </Box>
 
@@ -192,6 +315,45 @@ function TourSearchPage() {
             />
           </Box>
 
+          <Box sx={{ width: 260 }}>
+            <Typography variant="subtitle2">Hüttenarten</Typography>
+            {(Object.keys(OPERATOR_LABEL) as HutOperator[]).map((op) => (
+              <FormControlLabel
+                key={op}
+                sx={{ display: 'block' }}
+                control={
+                  <Checkbox
+                    checked={form.allowedOperators.has(op)}
+                    onChange={(e) =>
+                      setForm((f) => {
+                        const next = new Set(f.allowedOperators)
+                        if (e.target.checked) next.add(op)
+                        else next.delete(op)
+                        return { ...f, allowedOperators: next }
+                      })
+                    }
+                  />
+                }
+                label={OPERATOR_LABEL[op]}
+              />
+            ))}
+            <FormControlLabel
+              sx={{ display: 'block' }}
+              control={<Checkbox checked={form.allowServiced} onChange={(e) => setForm((f) => ({ ...f, allowServiced: e.target.checked }))} />}
+              label="Bewirtschaftete Hütten"
+            />
+            <FormControlLabel
+              sx={{ display: 'block' }}
+              control={<Checkbox checked={form.allowSelfService} onChange={(e) => setForm((f) => ({ ...f, allowSelfService: e.target.checked }))} />}
+              label="Selbstversorgerhütten (unbewirtschaftet, ggf. Schlüssel nötig)"
+            />
+            {!isFilterSelectionValid(form) && (
+              <Typography variant="caption" color="error">
+                Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.
+              </Typography>
+            )}
+          </Box>
+
           <Box sx={{ width: 280 }}>
             <Accordion disableGutters elevation={0} sx={{ border: '1px solid #e0e0e0', '&:before': { display: 'none' } }}>
               <AccordionSummary sx={{ minHeight: 0, '& .MuiAccordionSummary-content': { my: 1 } }}>
@@ -214,26 +376,44 @@ function TourSearchPage() {
                   value={form.maxEleM}
                   onChange={(e) => setForm((f) => ({ ...f, maxEleM: e.target.value }))}
                 />
-
-                <Box>
-                  <Typography variant="subtitle2">Variantenvielfalt</Typography>
-                  <Select
-                    fullWidth
-                    size="small"
-                    value={form.overlapVariety}
-                    onChange={(e: SelectChangeEvent) => setForm((f) => ({ ...f, overlapVariety: e.target.value as FormState['overlapVariety'] }))}
-                  >
-                    <MenuItem value="wenig">wenig (ähnliche Touren zusammenfassen)</MenuItem>
-                    <MenuItem value="mittel">mittel</MenuItem>
-                    <MenuItem value="viel">viel (auch ähnliche Touren zeigen)</MenuItem>
-                  </Select>
-                </Box>
               </AccordionDetails>
             </Accordion>
           </Box>
 
+          <Box sx={{ width: 220 }}>
+            <Typography variant="subtitle2">Startdatum (optional)</Typography>
+            <TextField
+              fullWidth
+              size="small"
+              type="date"
+              label="Startdatum"
+              slotProps={{ inputLabel: { shrink: true } }}
+              value={form.startDate}
+              onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
+            />
+            {form.startDate && (
+              <>
+                <TextField
+                  fullWidth
+                  size="small"
+                  type="number"
+                  label="Personenzahl"
+                  sx={{ mt: 1 }}
+                  slotProps={{ htmlInput: { min: 1, max: 9 } }}
+                  value={form.numOfPeople}
+                  onChange={(e) => setForm((f) => ({ ...f, numOfPeople: Number(e.target.value) || 1 }))}
+                />
+                <FormControlLabel
+                  sx={{ display: 'block' }}
+                  control={<Checkbox checked={form.onlyAvailable} onChange={(e) => setForm((f) => ({ ...f, onlyAvailable: e.target.checked }))} />}
+                  label="nur Touren mit Verfügbarkeit"
+                />
+              </>
+            )}
+          </Box>
+
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 'auto' }}>
-            <Button type="submit" variant="contained" disabled={!graphData || searching} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
+            <Button type="submit" variant="contained" disabled={!graphData || searching || !isFilterSelectionValid(form)} startIcon={searching ? <CircularProgress size={16} color="inherit" /> : undefined}>
               Touren suchen
             </Button>
             <Button type="button" variant="outlined" onClick={handleReset}>
@@ -241,9 +421,10 @@ function TourSearchPage() {
             </Button>
           </Box>
         </Box>
+        )}
 
         <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-          {result && (
+          {viewMode === 'search' && result && (
             <TourList
               result={result}
               displayedChains={displayedChains}
@@ -254,13 +435,37 @@ function TourSearchPage() {
               sortKey={sortKey}
               setSortKey={setSortKey}
               hutNameById={hutNameById}
+              hutClassByIndex={hutClassByIndex}
               startLabel={startLabel}
               expandedChain={expandedChain}
               setExpandedChain={setExpandedChain}
+              mode={form.mode}
+              freeByOffset={freeByOffset}
+              ohrsIdByHutIndex={ohrsIdByHutIndex}
+              hutOhrsByIndex={hutOhrsByIndex}
+              startDate={form.startDate ? new Date(form.startDate) : null}
+              numOfPeople={form.numOfPeople}
+            />
+          )}
+          {viewMode === 'official' && officialTourViews && (
+            <OfficialTourList
+              tours={officialTourViews}
+              hutNameById={hutNameById}
+              hutClassByIndex={hutClassByIndex}
+              startLabel={startLabel}
+              selectedTourId={selectedOfficialTourId}
+              setSelectedTourId={setSelectedOfficialTourId}
             />
           )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <ResultsMap selectedChain={selectedChain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} />
+            <ResultsMap
+              route={route}
+              hutNameById={hutNameById}
+              hutCoordsById={hutCoordsById}
+              startById={startById}
+              hutClassByIndex={hutClassByIndex}
+              excludedHutIndices={excludedHutIndices}
+            />
           </Box>
         </Box>
       </Box>

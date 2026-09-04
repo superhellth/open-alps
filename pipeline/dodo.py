@@ -38,15 +38,22 @@ from dag.elevation import (  # noqa: E402,F401
     task_build_dem_vrt, task_build_profiles, task_compute_edge_profiles, task_sample_base_elevation,
 )
 from dag.graph_building import (  # noqa: E402,F401
-    task_build_base_graph, task_build_hub_edges, task_gather_route_subgraphs, task_snap_hubs,
+    task_build_access_edges, task_build_base_graph, task_build_hub_edges,
+    task_gather_route_subgraphs, task_match_tour_edges, task_snap_hubs,
 )
 from dag.postprocessing import (  # noqa: E402,F401
-    task_build_approach_table, task_build_edge_payload, task_build_hut_edge_tiles,
-    task_build_start_edge_tiles, task_build_trail_tiles,
+    task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
+    task_build_hut_edge_tiles, task_build_start_edge_ids, task_build_start_edge_tiles,
+    task_build_tour_edge_payload, task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
     task_compute_hub_range, task_filter_start_points, task_filter_trails, task_merge_trails,
     task_verify_trails,
+)
+from dag.quality import (  # noqa: E402,F401
+    task_check_elevation, task_check_graph_building, task_check_postprocessing,
+    task_check_preprocessing, task_quality_summary,
 )
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
@@ -73,15 +80,25 @@ DOIT_CONFIG = {
     "backend": "json",
     "reporter": FlushingReporter,
     "default_tasks": [
-        "download_extracts", "fetch_huts", "compute_hub_range", "filter_trails",
+        "download_extracts", "fetch_huts",
+        "compute_hub_range", "filter_trails",
         "merge_trails", "verify_trails",
         "fetch_stations_parking", "filter_start_points",
+        "check_preprocessing",
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
+        "select_approach_pairs", "build_access_edges",
+        "match_tour_edges",
+        "check_graph_building",
         "build_profiles",
+        "check_elevation",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
-        "build_approach_table", "build_edge_payload",
+        "build_tour_edge_tiles",
+        "build_approach_table", "build_edge_payload", "build_edge_ids", "build_start_edge_ids",
+        "build_tour_edge_payload",
         "copy_public_data",
+        "check_postprocessing",
+        "quality_summary",
     ],
 }
 
@@ -91,9 +108,13 @@ PUBLIC_FILES = [
     "hut-edge-stats.json",
     "hut-edge-geometry.bin",
     "hut-edge-geometry.json",
+    "hut-edge-elevation.bin",
+    "hut-edge-elevation.json",
     "start-edges.pmtiles",
     "start-edge-geometry.bin",
     "start-edge-geometry.json",
+    "start-edge-elevation.bin",
+    "start-edge-elevation.json",
     "trails.pmtiles",
     "stations.geojson",
     "parking.geojson",
@@ -102,6 +123,21 @@ PUBLIC_FILES = [
     "approaches.json",
     "hut-edge-payload.bin",
     "hut-edge-payload.json",
+    "hut-edge-ids.bin",
+    "hut-edge-ids.json",
+    "start-edge-ids.bin",
+    "start-edge-ids.json",
+    "partner_betriebe.geojson",
+    "tours.json",
+    "tour-edges.pmtiles",
+    "tour-edge-stats.json",
+    "tour-edge-geometry.bin",
+    "tour-edge-geometry.json",
+    "tour-edge-elevation.bin",
+    "tour-edge-elevation.json",
+    "tour-edge-payload.bin",
+    "tour-edge-payload.json",
+    "tour-match-gaps.json",
 ]
 
 

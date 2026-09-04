@@ -87,13 +87,19 @@ def _run_cell(args):
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR))
-    parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"])
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                         help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--out-dir", default=str(OSM_DIR),
+                         help="directory to write the persisted hub-snap cache into")
+    parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"],
+                         help="max distance (m) a hub may be from the nearest trail node to count as on-network (see pipeline.config.json's graph.maxSnapM)")
     parser.add_argument("--max-snap-ascent-m", type=float,
-                         default=config["graph"]["maxSnapAscentM"])
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"))
-    parser.add_argument("--workers", type=int, default=None)
+                         default=config["graph"]["maxSnapAscentM"],
+                         help="max vertical distance (m) a candidate snap point may sit from the hub's own DEM elevation (see pipeline.config.json's graph.maxSnapAscentM)")
+    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"),
+                         help="path to the materialized DEM GeoTIFF (build_dem_vrt.py's output)")
+    parser.add_argument("--workers", type=int, default=None,
+                         help="number of worker processes for the snap pass (default: os.cpu_count())")
     args = parser.parse_args()
 
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")

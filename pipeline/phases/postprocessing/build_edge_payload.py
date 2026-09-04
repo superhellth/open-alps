@@ -41,8 +41,16 @@ COLUMNS = [
 ]
 
 
-def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
+def pack_edges(records: np.ndarray, hut_ids: list, tour_meta: np.ndarray = None) -> tuple:
+    """tour_meta: optional TOUR_META_DTYPE array, row-aligned 1:1 with `records` - when given,
+    folds tour_id/leg_index in as two extra payload columns (additive) so the client can
+    reconstruct "which tour is this leg part of" (spec §3). None (the hut_edges/start_edges
+    default, neither of which has a tour_meta.npy) leaves the .bin byte-identical to before this
+    parameter existed."""
     columns = {name: (dtype, records[name]) for name, dtype in COLUMNS}
+    if tour_meta is not None:
+        columns["tour_id"] = ("u1", tour_meta["tour_id"])
+        columns["leg_index"] = ("u1", tour_meta["leg_index"])
     payload, column_manifest = binfmt.pack_columns(columns)
     manifest = {
         "rows": len(records),
@@ -55,10 +63,16 @@ def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"))
-    parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"))
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-payload.bin"))
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-payload.json"))
+    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"),
+                        help="directory holding hut_edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"),
+                        help="path to the hut master-data GeoJSON")
+    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-payload.bin"),
+                        help="path to write the packed hut-edge-payload binary")
+    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-payload.json"),
+                        help="path to write the hut-edge-payload manifest")
+    parser.add_argument("--tour-meta", default=None,
+                        help="optional path to a row-aligned tour_meta.npy (tour_id/leg_index) to fold into the payload; omit for the no-tour-meta default shape")
     args = parser.parse_args()
 
     with phase("build_edge_payload.py", "build_edge_payload"):
@@ -72,7 +86,11 @@ if __name__ == "__main__":
                 for i, feat in enumerate(json.load(f)["features"])
             ]
 
-        payload, manifest = pack_edges(records, hut_ids)
+        tour_meta = None
+        if args.tour_meta and Path(args.tour_meta).exists():
+            tour_meta = binfmt.load_array(Path(args.tour_meta), mmap=False)
+
+        payload, manifest = pack_edges(records, hut_ids, tour_meta=tour_meta)
 
         import gzip
         gz_size = len(gzip.compress(payload, compresslevel=9))

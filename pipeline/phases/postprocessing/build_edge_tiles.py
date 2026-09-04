@@ -82,6 +82,8 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
     stats = []
     point_counts = []
     all_points = []
+    profile_counts = []
+    all_profiles = []
     for edge_id in range(len(records)):
         r = records[edge_id]
         g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
@@ -92,7 +94,9 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
         all_points.append(simplified)
 
         p_off, p_count = int(r["profile_offset"]), int(r["profile_count"])
-        profile = profiles[p_off:p_off + p_count].tolist() if p_count else []
+        profile_counts.append(p_count)
+        if p_count:
+            all_profiles.append(profiles[p_off:p_off + p_count])
 
         stats.append({
             "edge_id": edge_id,
@@ -102,14 +106,16 @@ def build_stats(records: np.ndarray, geometry: np.ndarray, profiles: np.ndarray,
             "road_m": float(r["road_m"]),
             "ascent_m": float(r["ascent_m"]) if r["ascent_m"] != binfmt.UNSET else None,
             "descent_m": float(r["descent_m"]) if r["descent_m"] != binfmt.UNSET else None,
-            "elevation_profile": profile,
             "sac_scale": int(r["sac_rank"]) if r["sac_rank"] >= 0 else None,
             "via_ferrata": bool(r["via_ferrata"]),
         })
     geometry_points = (
         np.concatenate(all_points, axis=0).astype("f4") if all_points else np.zeros((0, 2), dtype="f4")
     )
-    return stats, point_counts, geometry_points
+    elevation_values = (
+        np.concatenate(all_profiles, axis=0).astype("f4") if all_profiles else np.zeros(0, dtype="f4")
+    )
+    return stats, point_counts, geometry_points, profile_counts, elevation_values
 
 
 if __name__ == "__main__":
@@ -117,17 +123,31 @@ if __name__ == "__main__":
     tiles_config = config.get("hutEdgeTiles", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", required=True)
-    parser.add_argument("--id-table", required=True)
-    parser.add_argument("--layer-name", required=True)
-    parser.add_argument("--out-tiles", required=True)
-    parser.add_argument("--out-stats", required=True)
-    parser.add_argument("--out-geometry-bin", required=True)
-    parser.add_argument("--out-geometry-json", required=True)
-    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
-    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
+    parser.add_argument("--edges-dir", required=True,
+                         help="directory holding the edge records to tile (hut_edges/ or start_edges/)")
+    parser.add_argument("--id-table", required=True,
+                         help="path to the id table for the edge set being tiled (build_edge_ids.py's output)")
+    parser.add_argument("--layer-name", required=True,
+                         help="vector-tile layer name to write the edges into")
+    parser.add_argument("--out-tiles", required=True,
+                         help="path to write the output PMTiles archive")
+    parser.add_argument("--out-stats", required=True,
+                         help="path to write the per-edge stats JSON")
+    parser.add_argument("--out-geometry-bin", required=True,
+                         help="path to write the packed edge-geometry binary")
+    parser.add_argument("--out-geometry-json", required=True,
+                         help="path to write the edge-geometry manifest")
+    parser.add_argument("--out-elevation-bin", required=True,
+                         help="path to write the packed edge-elevation binary")
+    parser.add_argument("--out-elevation-json", required=True,
+                         help="path to write the edge-elevation manifest")
+    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6),
+                         help="lowest zoom level tippecanoe builds tiles for")
+    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14),
+                         help="highest zoom level tippecanoe builds tiles for")
     parser.add_argument("--simplify-tolerance-deg", type=float,
-                         default=tiles_config.get("simplifyToleranceDeg", 0.0003))
+                         default=tiles_config.get("simplifyToleranceDeg", 0.0003),
+                         help="geometry simplification tolerance (degrees) applied before tiling")
     args = parser.parse_args()
 
     edges_dir = Path(args.edges_dir)
@@ -135,53 +155,59 @@ if __name__ == "__main__":
     # external tippecanoe run, and the mbtiles->pmtiles conversion. Splitting them is the only
     # way to tell "our code got slower" from "there are simply more edges to tile".
     timer = StepTimer()
-    with timer.step("load_arrays"):
-        records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
-        geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
-        profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
-        with open(args.id_table, encoding="utf-8") as f:
-            id_table = json.load(f)
+    with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name,
+               min_zoom=args.min_zoom, max_zoom=args.max_zoom) as meta:
+        with timer.step("load_arrays"):
+            records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
+            geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
+            profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
+            with open(args.id_table, encoding="utf-8") as f:
+                id_table = json.load(f)
 
-    print(f"streaming {len(records):,} edges -> tiling input + stats ...", flush=True)
-    tiling_input = edges_dir / "tiling_input.geojsonseq"
-    lons, lats = geometry["lon"], geometry["lat"]
-    with timer.step("write_tiling_input"), open(tiling_input, "wb") as tf:
-        for edge_id in range(len(records)):
-            r = records[edge_id]
-            g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
-            coords = np.column_stack(
-                [lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]]
-            ).tolist()
-            tf.write(orjson.dumps({
-                "type": "Feature",
-                "properties": {"edge_id": edge_id},
-                "geometry": {"type": "LineString", "coordinates": coords},
-            }))
-            tf.write(b"\n")
+        print(f"streaming {len(records):,} edges -> tiling input + stats ...", flush=True)
+        tiling_input = edges_dir / "tiling_input.geojsonseq"
+        lons, lats = geometry["lon"], geometry["lat"]
+        with timer.step("write_tiling_input"), open(tiling_input, "wb") as tf:
+            for edge_id in range(len(records)):
+                r = records[edge_id]
+                g_off, g_count = int(r["geom_offset"]), int(r["geom_count"])
+                coords = np.column_stack(
+                    [lons[g_off:g_off + g_count], lats[g_off:g_off + g_count]]
+                ).tolist()
+                tf.write(orjson.dumps({
+                    "type": "Feature",
+                    "properties": {"edge_id": edge_id},
+                    "geometry": {"type": "LineString", "coordinates": coords},
+                }))
+                tf.write(b"\n")
 
-    with timer.step("build_stats"):
-        stats, point_counts, geometry_points = build_stats(
-            records, geometry, profiles, id_table, args.simplify_tolerance_deg
-        )
-    print(f"writing {args.out_stats} ...", flush=True)
-    with timer.step("write_stats"), open(args.out_stats, "wb") as f:
-        f.write(orjson.dumps(stats))
+        with timer.step("build_stats"):
+            stats, point_counts, geometry_points, profile_counts, elevation_values = build_stats(
+                records, geometry, profiles, id_table, args.simplify_tolerance_deg
+            )
+        print(f"writing {args.out_stats} ...", flush=True)
+        with timer.step("write_stats"), open(args.out_stats, "wb") as f:
+            f.write(orjson.dumps(stats))
 
-    print(f"writing {args.out_geometry_bin} and {args.out_geometry_json} ...", flush=True)
-    with timer.step("write_geometry"):
-        Path(args.out_geometry_bin).write_bytes(geometry_points.tobytes())
-        with open(args.out_geometry_json, "wb") as f:
-            f.write(orjson.dumps({"point_counts": point_counts}))
+        print(f"writing {args.out_geometry_bin} and {args.out_geometry_json} ...", flush=True)
+        with timer.step("write_geometry"):
+            Path(args.out_geometry_bin).write_bytes(geometry_points.tobytes())
+            with open(args.out_geometry_json, "wb") as f:
+                f.write(orjson.dumps({"point_counts": point_counts}))
 
-    mbtiles = edges_dir / "tiling_input.mbtiles"
-    print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
-          f"-> {args.out_tiles} ...", flush=True)
-    build_pmtiles(timer, tiling_input, mbtiles, args.out_tiles, args.layer_name,
-                  args.min_zoom, args.max_zoom)
-    # Nothing left to time - phase() here exists only to land the split in timings.jsonl next to
-    # every other phase, keyed by layer so hut_edges and start_edges stay distinguishable.
-    with phase(SCRIPT_NAME, "build_edge_tiles", layer=args.layer_name, n_edges=len(records),
-               min_zoom=args.min_zoom, max_zoom=args.max_zoom, **timer.as_meta()):
-        pass
+        print(f"writing {args.out_elevation_bin} and {args.out_elevation_json} ...", flush=True)
+        with timer.step("write_elevation"):
+            Path(args.out_elevation_bin).write_bytes(elevation_values.tobytes())
+            with open(args.out_elevation_json, "wb") as f:
+                f.write(orjson.dumps({"profile_counts": profile_counts}))
+
+        mbtiles = edges_dir / "tiling_input.mbtiles"
+        print(f"building vector tiles (z{args.min_zoom}-{args.max_zoom}) -> {mbtiles} "
+              f"-> {args.out_tiles} ...", flush=True)
+        build_pmtiles(timer, tiling_input, mbtiles, args.out_tiles, args.layer_name,
+                      args.min_zoom, args.max_zoom)
+        meta["n_edges"] = len(records)
+        meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
-    print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin} and {args.out_geometry_json}")
+    print(f"written {args.out_tiles}, {args.out_stats}, {args.out_geometry_bin}, "
+          f"{args.out_geometry_json}, {args.out_elevation_bin} and {args.out_elevation_json}")

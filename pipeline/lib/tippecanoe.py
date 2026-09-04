@@ -1,7 +1,7 @@
 """Shells out to tippecanoe for the two postprocessing tiling scripts (build_edge_tiles.py,
 build_trail_tiles.py), natively if it's on PATH (Linux/macOS) or via WSL otherwise - tippecanoe
-has no Windows build on conda-forge (linux-64/osx-64 only). See pipeline/README.md's "Displaying
-the raw OSM trails" section for how the WSL-side micromamba env was created.
+has no Windows build on conda-forge (linux-64/osx-64 only). See pipeline/README.md's "Setup: the
+`alpen-osm` pixi env" section for how the WSL-side micromamba env was created.
 
 Also owns build_pmtiles(), the geojsonseq -> mbtiles -> pmtiles conversion shared by both of
 those scripts, so the tippecanoe flags and cleanup step live in one place instead of two."""

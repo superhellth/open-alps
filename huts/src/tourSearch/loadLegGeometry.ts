@@ -4,7 +4,7 @@
  * edge_id order, each point an f4 pair (8 bytes, no framing) - <layer>-geometry.json's
  * point_counts gives each edge's point count, from which a byte range is a prefix sum.
  */
-export type GeometryLayer = 'hut_edges' | 'start_edges'
+export type GeometryLayer = 'hut_edges' | 'start_edges' | 'tour_edges'
 
 interface GeometryManifest {
   point_counts: number[]
@@ -22,6 +22,7 @@ const POINT_BYTES = 8 // f4 lon + f4 lat
 const LAYER_FILES: Record<GeometryLayer, { json: string; bin: string }> = {
   hut_edges: { json: 'hut-edge-geometry.json', bin: 'hut-edge-geometry.bin' },
   start_edges: { json: 'start-edge-geometry.json', bin: 'start-edge-geometry.bin' },
+  tour_edges: { json: 'tour-edge-geometry.json', bin: 'tour-edge-geometry.bin' },
 }
 
 let manifestCache = new Map<GeometryLayer, Promise<LayerState>>()

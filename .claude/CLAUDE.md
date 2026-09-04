@@ -4,17 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A React map that plots all Austrian/German Alpine Club huts (`huts/`), built on data endpoints
-reverse-engineered from the Alpenverein "Bettencheck" tool. There is no backend of our own — the
-app fetches public third-party APIs directly from the browser.
-
-`caa.alpenverein.at.har` (29 MB) is the source network capture the endpoints were derived from.
-It is reference material, not build input.
-
-`huts/` has a vitest test suite (`npm test`, `npm run typecheck`, `npm run lint` from `huts/`) —
-engine tests run under the default `node` environment, UI tests opt into `jsdom` per-file via a
-`// @vitest-environment jsdom` docblock (see `huts/src/TourSearchPage.test.tsx`). No CI pipeline
-runs these automatically yet.
+A React map that plots all Austrian/German Alpine Club huts (`huts/`) and allow multi-leg tour planning.
+All data processing that allows easy route planning lives in `pipeline/`.
 
 ## Data sources
 
@@ -36,24 +27,36 @@ not be called in a loop over the whole hut list.
 
 ## App structure
 
-`huts/src/main.jsx` is a hash-based router with no library: `#graph` renders `GraphPage.jsx`,
-anything else renders `App.jsx`.
+`huts/src/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
+(`theme.ts`)/`CssBaseline`: the default route (no hash) renders `tourSearchPage/TourSearchPage.tsx`,
+`#admin` renders `adminPage/AdminPage.tsx`. Both pages are wrapped in the shared `AppShell.tsx` (top
+app bar + tab nav between the two routes).
 
-`huts/src/App.jsx` is the main hut map: fetches the ArcGIS hut layer plus
-`/data/stations.geojson` and `/data/parking.geojson` (outputs of `data/`'s pipeline, copied into
-`huts/public/data/`), mapped into flat `{id, name, elevation, category, club, lat, lng}` objects,
-rendered as react-leaflet `CircleMarker` + hover `Tooltip` over OSM raster tiles. Requesting
-`outSR=4326` is what makes `geometry.x/y` directly usable as lng/lat by Leaflet.
+`huts/src/tourSearchPage/TourSearchPage.tsx` is the main page: a form
+(`formState.ts` builds the `Query` from user input) over the client-side tour search engine in
+`huts/src/tourSearch/`, plus a results list (`TourList.tsx`) and map (`ResultsMap.tsx`). It fetches
+`/data/huts.geojson`, `/data/parking.geojson`, `/data/stations.geojson` and
+`/data/partner_betriebe.geojson` (the last fetched best-effort — 404 degrades to no partner
+businesses) to label/render search results, and loads the routing graph itself via
+`tourSearch/index.ts`'s `loadTourSearchData()`. `hutClass.ts` classifies each hut as AV-run vs.
+other, serviced vs. unserviced, for filtering/badging.
 
-`huts/src/GraphPage.jsx` (the `#graph` route) is the opt-in raw-network view for the hut-to-hut
-routing graph described below: renders `/data/trails.pmtiles` and `/data/hut-edges.pmtiles` via
-`protomaps-leaflet`, plus `/data/huts.geojson` and `/data/hut-edge-stats.json`.
+`huts/src/tourSearch/` is the client-side tour search engine: `loadHutEdges.ts`/
+`loadApproaches.ts`/`loadHutEdgeIds.ts` fetch and parse the pipeline's binary edge-payload/approach
+outputs (`hut-edge-payload.bin`+`.json`, `approaches.bin`+`.json`, contract documented in
+`docs/tour-suggestion-payload.md`) into an in-memory `GraphData`; `search.ts` searches hut-chains
+against a `Query` (leg count/time bounds, mode, start point); `diversity.ts` dedupes
+reversed-direction duplicates and suppresses near-identical routes; `adjacency.ts`,
+`legFilters.ts`, `dinDuration.ts`, `overlap.ts`, `resolveVariant.ts`, `reverseLeg.ts` are the
+supporting graph/filtering primitives. (`pipeline/CLAUDE.md`'s "Deferred" note still describes this
+client as not-yet-built — that note is stale.)
 
-## Re-inspecting the HAR
-
-Response bodies in the HAR are base64 (`content.encoding`), so plain grep over the file misses
-almost everything. Decode first — the app bundle `static/js/index-BR4qdKga.js` is where the
-endpoint config (`ohrsApi`, `toursearchApi`, layer URLs, field names) lives.
+`huts/src/adminPage/AdminPage.tsx` (the `#admin` route) is the internal-only, not user-facing
+debugging/sanity-check view of the raw hut-to-hut routing graph: renders `/data/trails.pmtiles` and
+`/data/hut-edges.pmtiles` via `protomaps-leaflet`, plus `/data/huts.geojson` and
+`/data/hut-edge-stats.json`. Its Leaflet layer components (`TrailLayers.tsx`, `HoverInspector.tsx`,
+`EdgeHoverPanel.tsx`) and binary-geometry decoder (`decodeEdgeGeometry.ts`) live alongside it in
+`adminPage/`, mirroring how `tourSearchPage/` decomposes `TourSearchPage.tsx`.
 
 ## Hut-to-hut routing graph
 
@@ -63,15 +66,19 @@ raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, 
 `hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `stations.geojson`,
 `parking.geojson`, `unsnapped_huts.json`, `approaches.bin`, `approaches.json`,
 `hut-edge-payload.bin`, `hut-edge-payload.json`) are copied into `huts/public/data/` by the
-pipeline's own `copy_public_data` task. The first group (`huts.geojson`, `trails.pmtiles`,
-`hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson`) is rendered by
-`GraphPage.jsx`/`App.jsx` above today; `start-edges.pmtiles`/`start-edge-stats.json`,
-`unsnapped_huts.json`, `approaches.*` and `hut-edge-payload.*` are the tour-suggestion backend's
-static outputs — built and shipped, but not yet fetched by any client code (the client-side tour
-search that would consume them is out of scope for this pipeline work, see "Deferred" in
-`docs/superpowers/plans/2026-08-22-tour-suggestion-backend.md`). The hut-edge payload contract
-(columns, dtypes, what's deliberately not shipped) is documented in
-`docs/tour-suggestion-payload.md` — see `pipeline/CLAUDE.md` for pipeline details.
+pipeline's own `copy_public_data` task. `huts.geojson`, `trails.pmtiles`,
+`hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
+`GraphPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
+(`huts/src/tourSearch/`, see "App structure" above) that runs entirely in the browser off these
+static files — no query-time backend. The hut-edge payload contract (columns, dtypes, what's
+deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` — see
+`pipeline/CLAUDE.md` for pipeline details.
+
+`pipeline/tours/` holds hand-curated official-tour reference data (one directory per tour, e.g.
+`Kaisertour/`, `Welser Höhenweg/`, each a set of per-leg `.gpx` tracks) — raw input to the
+official-tours-integration work, tracked in git (unlike `data/`), see
+`docs/superpowers/specs/2026-08-30-tour-folder-ingestion-design.md` and
+`docs/superpowers/specs/2026-08-29-official-tours-integration-design.md`.
 
 **Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
 first asking the user and getting explicit confirmation.** `build_base_graph` alone has measured at
@@ -104,3 +111,21 @@ Work directly on branches in the main checkout instead.
 **Never use `superpowers:subagent-driven-development` or any other approach that spins up
 worktrees/subagents to execute plan tasks in this repo, even if a skill recommends it.** Execute
 plan tasks directly, in-session, on the current checkout.
+
+## All documentation and plans live in docs/
+
+Especially skill invocations should honor to put the docs they produce in the according docs/ directory.
+After completing a backlog task, remove it from `backlog.md` and remove the corresponding `.md`-file
+if it existed.
+
+`docs/superpowers/STATUS.md` indexes every spec under `docs/superpowers/specs/` with its current
+status (`done` / `in progress` / `superseded by X`). Specs are permanent history and are never
+deleted. Implementation plans under `docs/superpowers/plans/` are disposable — once a plan's work
+has actually shipped, delete the plan file; the spec plus git history remains the record. Keep
+STATUS.md current: add a row for every new spec, delete a plan file and flip its spec's row to
+`done` once the work lands, and mark a spec `superseded by X` rather than deleting it when a later
+spec replaces it.
+
+## No historical comments
+
+When writing comments dont cite historic reasons for the change. State what the current version does concisely.

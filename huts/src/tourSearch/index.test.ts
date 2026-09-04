@@ -13,16 +13,28 @@ describe('loadTourSearchData', () => {
       1,
     )
     const approachesFixture = packColumns(
-      { hut_id: 'u2', start_id: 'u8', source_type: 'u1', edge_id: 'u4', access_unknown: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4' },
-      { hut_id: [0], start_id: [1], source_type: [2], edge_id: [0], access_unknown: [0], distance_m: [500], ascent_m: [50], descent_m: [10] },
+      { hut_id: 'u2', start_id: 'u8', source_type: 'u1', variant: 'u1', edge_id: 'u4', access_unknown: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4' },
+      { hut_id: [0], start_id: [1], source_type: [2], variant: [0], edge_id: [0], access_unknown: [0], distance_m: [500], ascent_m: [50], descent_m: [10] },
       1,
     )
+    const hutEdgeIdsManifest = {
+      rows: 1, k: 8,
+      edge_id_count: [0], prefix_count: [0], suffix_count: [0],
+      sorted_bytes: 0, prefix_bytes: 32, suffix_bytes: 32,
+    }
+    const hutEdgeIdsBuffer = new ArrayBuffer(64)
+    new Int32Array(hutEdgeIdsBuffer).fill(-1)
+
     const fetchMock = vi.fn()
       .mockImplementation((url: string) => {
         if (url.endsWith('hut-edge-payload.json')) return Promise.resolve({ json: () => Promise.resolve({ ...hutEdgesFixture.manifest, variants: { 0: 'FAST_ANY' }, hut_ids: ['A', 'B'] }) })
         if (url.endsWith('hut-edge-payload.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgesFixture.buffer) })
         if (url.endsWith('approaches.json')) return Promise.resolve({ json: () => Promise.resolve({ ...approachesFixture.manifest, access_values: [null], reverse_index: { hut_to_starts: {}, start_to_huts: {} } }) })
         if (url.endsWith('approaches.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(approachesFixture.buffer) })
+        if (url.endsWith('hut-edge-ids.json')) return Promise.resolve({ json: () => Promise.resolve(hutEdgeIdsManifest) })
+        if (url.endsWith('hut-edge-ids.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgeIdsBuffer) })
+        if (url.endsWith('start-edge-ids.json')) return Promise.resolve({ json: () => Promise.resolve(hutEdgeIdsManifest) })
+        if (url.endsWith('start-edge-ids.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgeIdsBuffer) })
         throw new Error(`unexpected fetch ${url}`)
       })
     vi.stubGlobal('fetch', fetchMock)
@@ -42,6 +54,16 @@ describe('findTours', () => {
     const graphData: GraphData = {
       hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [] },
       approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+      hutEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+      startEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
     }
     const query: Query = { mode: 'transit', legCountMin: 2, legCountMax: 2, maxLegTimeH: 5 }
     const { chains, killCounters } = findTours(query, graphData)

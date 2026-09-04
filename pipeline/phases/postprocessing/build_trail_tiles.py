@@ -94,10 +94,14 @@ if __name__ == "__main__":
     tiles_config = config.get("trailTiles", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
-    parser.add_argument("--out", default=str(OSM_DIR / "trails.pmtiles"))
-    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
-    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
+    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+                        help="merged trails.osm.pbf to render as the raw-trail vector-tile layer")
+    parser.add_argument("--out", default=str(OSM_DIR / "trails.pmtiles"),
+                        help="path to write the output PMTiles archive")
+    parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6),
+                        help="lowest zoom level tippecanoe builds tiles for (see pipeline.config.json's trailTiles.minZoom)")
+    parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14),
+                        help="highest zoom level tippecanoe builds tiles for (see pipeline.config.json's trailTiles.maxZoom)")
     args = parser.parse_args()
 
     trails_pbf = Path(args.trails)

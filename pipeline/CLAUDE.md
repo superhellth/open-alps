@@ -66,8 +66,8 @@ retuning, and station/parking routing edges (filtered to hub range by
 first-class alongside hut-hut edges — both live in the same `records.npy`/`geometry.npy` binary
 format (`hut_edges/`, `start_edges/`), tiled by the same generalized `phases/postprocessing/build_edge_tiles.py`.
 
-Current status: outputs rendered by the app (`GraphPage.jsx`'s `#graph` route for the raw network +
-hut/start edges, `App.jsx` for stations/parking markers) — see the root `CLAUDE.md`'s "App
+Current status: outputs rendered by the app (`AdminPage.tsx`'s `#admin` route for the raw network +
+hut/start edges, `TourSearchPage.tsx` for stations/parking markers) — see the root `CLAUDE.md`'s "App
 structure" section. The graph now routes on a time cost (`lib/speed.py`'s pointwise Tobler model,
 calibrated against DIN 33466 by `analysis/routing_probe.py`) rather than a road-penalized distance,
 and the diverse-paths hook (`RECORD_DTYPE`'s `variant` field) is in active use: `build_hub_edges.py`

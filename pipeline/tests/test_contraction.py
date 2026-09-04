@@ -93,3 +93,33 @@ def test_contract_sums_grading_metres_along_a_chain():
     assert contracted.edges_inferred_m[0] == 150.0
     # one ungraded segment poisons the whole contracted edge for every constrained row
     assert bool(contracted.edges_constrained_ok[0]) is False
+
+
+def test_isolated_cycle_with_no_junction_is_not_silently_dropped():
+    # A closed triangle: 0 -- 1 -- 2 -- 0. Every node has degree 2 (two incident edges each), so
+    # there is no keep-node (degree != 2) anywhere on this ring - the case CORRECT-01 describes.
+    coords = np.array([(0.0, 0.0), (1.0, 0.0), (0.5, 1.0)])
+    edges_i = np.array([0, 1, 2])
+    edges_j = np.array([1, 2, 0])
+    edges_dist = np.array([100.0, 100.0, 100.0])
+    edges_road = np.array([False, False, False])
+    edges_ungraded = np.array([0.0, 0.0, 0.0])
+    edges_inferred = np.array([0.0, 0.0, 0.0])
+    edges_sac_rank = np.array([1, 1, 1], dtype=np.int8)
+    edges_via_ferrata = np.array([False, False, False])
+    edges_constrained_ok = np.array([True, True, True])
+
+    result = contract_structural(
+        coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred,
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
+    )
+
+    # Today (before the fix): result.coords has 0 rows, result.edges_u has 0 entries - the whole
+    # triangle vanished with no signal. After the fix, exactly one self-loop edge should be
+    # emitted (one node kept as the loop's anchor, u == v, distance = 300.0, interior holding the
+    # other two nodes' coordinates in ring order) - see contraction.py's isolated-cycle handling.
+    assert len(result.coords) == 1
+    assert len(result.edges_u) == 1
+    assert result.edges_u[0] == result.edges_v[0]  # self-loop
+    assert abs(result.edges_dist[0] - 300.0) < 1e-6
+    assert len(result.interior_coords[0]) == 2  # the other two ring nodes
