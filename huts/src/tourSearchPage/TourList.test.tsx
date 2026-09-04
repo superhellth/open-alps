@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { it, expect, afterEach } from 'vitest'
-import { render, screen, cleanup } from '@testing-library/react'
+import { it, expect, afterEach, vi } from 'vitest'
+import { render, screen, cleanup, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import TourList from './TourList.js'
 import type { SearchResult, TourResult } from '../tourSearch/types.js'
@@ -32,6 +32,7 @@ it('shows the hut class badge next to the hut name in the expanded chain sentenc
       hutClassByIndex={hutClassByIndex} startLabel={() => 'Start'}
       expandedChain={0} setExpandedChain={() => {}} mode="transit"
       freeByOffset={null} ohrsIdByHutIndex={new Map()} hutOhrsByIndex={new Map()} startDate={null} numOfPeople={1}
+      hoveredLegIndex={null} setHoveredLegIndex={() => {}}
     />,
   )
   expect(screen.getByText('AV·SV')).toBeInTheDocument()
@@ -49,9 +50,33 @@ it('shows an availability badge next to the hut name when freeByOffset data is p
       expandedChain={0} setExpandedChain={() => {}} mode="transit"
       freeByOffset={freeByOffset} ohrsIdByHutIndex={ohrsIdByHutIndex}
       hutOhrsByIndex={new Map()} startDate={null} numOfPeople={1}
+      hoveredLegIndex={null} setHoveredLegIndex={() => {}}
     />,
   )
   expect(screen.getByText('frei')).toBeInTheDocument()
+})
+
+it('hovering a leg row reports its index and shows its elevation profile', async () => {
+  vi.spyOn(await import('../tourSearch/loadLegElevation.js'), 'loadLegElevation').mockResolvedValue([1500, 1600, 1550])
+  const setHoveredLegIndex = vi.fn()
+  const { container } = render(
+    <TourList
+      result={result} displayedChains={[chain]} pageChains={[chain]} page={1} pageCount={1}
+      setPage={() => {}} sortKey="duration" setSortKey={() => {}} hutNameById={hutNameById}
+      hutClassByIndex={hutClassByIndex} startLabel={() => 'Start'}
+      expandedChain={0} setExpandedChain={() => {}} mode="transit"
+      freeByOffset={null} ohrsIdByHutIndex={new Map()} hutOhrsByIndex={new Map()} startDate={null} numOfPeople={1}
+      hoveredLegIndex={1} setHoveredLegIndex={setHoveredLegIndex}
+    />,
+  )
+  await vi.waitFor(() => expect(container.querySelector('svg.elevation-sparkline')).not.toBeNull())
+
+  const rows = screen.getAllByRole('row')
+  // rows[0] is the header row; the hovered leg is legIndex 1, so its own row is rows[2].
+  fireEvent.mouseEnter(rows[2])
+  expect(setHoveredLegIndex).toHaveBeenCalledWith(1)
+  fireEvent.mouseLeave(rows[2])
+  expect(setHoveredLegIndex).toHaveBeenCalledWith(null)
 })
 
 it('shows no availability badge when freeByOffset is null (badges-off state)', () => {
@@ -63,6 +88,7 @@ it('shows no availability badge when freeByOffset is null (badges-off state)', (
       expandedChain={0} setExpandedChain={() => {}} mode="transit"
       freeByOffset={null} ohrsIdByHutIndex={ohrsIdByHutIndex}
       hutOhrsByIndex={new Map()} startDate={null} numOfPeople={1}
+      hoveredLegIndex={null} setHoveredLegIndex={() => {}}
     />,
   )
   expect(screen.queryByText('frei')).not.toBeInTheDocument()

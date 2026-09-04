@@ -49,7 +49,7 @@ describe('ResultsMap real geometry integration', () => {
       .mockImplementationOnce(() => d0.promise)
       .mockImplementationOnce(() => d1.promise)
 
-    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
+    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} hoveredLegIndex={null} setHoveredLegIndex={vi.fn()} />)
 
     expect(screen.getByText(CAPTION)).toBeInTheDocument()
     expect(spy).toHaveBeenNthCalledWith(1, 'start_edges', 5, false)
@@ -65,7 +65,7 @@ describe('ResultsMap real geometry integration', () => {
   it('a leg whose fetch rejects keeps its straight-line fallback instead of crashing', async () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockRejectedValue(new Error('range not supported'))
 
-    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
+    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} hoveredLegIndex={null} setHoveredLegIndex={vi.fn()} />)
 
     await waitFor(() => expect(screen.getByText(CAPTION)).toBeInTheDocument())
   })
@@ -74,7 +74,7 @@ describe('ResultsMap real geometry integration', () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockReturnValue(new Promise(() => {}))
 
     const { container } = render(
-      <ResultsMap route={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
+      <ResultsMap route={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} hoveredLegIndex={null} setHoveredLegIndex={vi.fn()} />,
     )
 
     expect(screen.queryByText(CAPTION)).not.toBeInTheDocument()
@@ -91,11 +91,37 @@ describe('ResultsMap real geometry integration', () => {
       ],
     }
     const { container } = render(
-      <ResultsMap route={tourRoute} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
+      <ResultsMap route={tourRoute} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} hoveredLegIndex={null} setHoveredLegIndex={vi.fn()} />,
     )
     await waitFor(() => expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(5)) // 2 polylines + 3 waypoint markers; loose upper-bound, the pinning checks are below
     expect(loadLegGeometryModule.loadLegGeometry).toHaveBeenCalledWith('tour_edges', 0, false)
     expect(loadLegGeometryModule.loadLegGeometry).toHaveBeenCalledWith('tour_edges', 1, false)
+  })
+})
+
+describe('ResultsMap leg hover', () => {
+  it('hovering a leg segment reports its index, and the hovered segment renders thicker', async () => {
+    vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockResolvedValue([[47.0, 11.0], [47.1, 11.1]])
+    const setHoveredLegIndex = vi.fn()
+    const { container } = render(
+      <ResultsMap
+        route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById}
+        hutClassByIndex={new Map()} excludedHutIndices={new Set()}
+        hoveredLegIndex={1} setHoveredLegIndex={setHoveredLegIndex}
+      />,
+    )
+    await waitFor(() => expect(container.querySelectorAll('path.leaflet-interactive').length).toBeGreaterThan(0))
+
+    const paths = [...container.querySelectorAll('path.leaflet-interactive')]
+    const weights = paths.map((p) => p.getAttribute('stroke-width'))
+    expect(weights).toContain('6')
+
+    const hovered = paths.find((p) => p.getAttribute('stroke-width') === '6')!
+    hovered.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+    expect(setHoveredLegIndex).toHaveBeenCalledWith(1)
+
+    hovered.dispatchEvent(new MouseEvent('mouseout', { bubbles: true }))
+    expect(setHoveredLegIndex).toHaveBeenCalledWith(null)
   })
 })
 
@@ -107,6 +133,7 @@ describe('ResultsMap hut-class styling', () => {
         route={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById}
         startById={startById} hutClassByIndex={hutClassByIndex}
         excludedHutIndices={new Set([0])}
+        hoveredLegIndex={null} setHoveredLegIndex={vi.fn()}
       />,
     )
     const marker = container.querySelector('path.leaflet-interactive')
