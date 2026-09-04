@@ -258,6 +258,88 @@ describe('searchChains (approach-leg overlap avoidance)', () => {
   })
 })
 
+describe('searchChains (car-loop shared-start overlap avoidance)', () => {
+  const loopEdge = { fromIndex: 0, toIndex: 1, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000, sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId: 1 }
+  const PREFIX_START: Record<number, number[]> = { 900: [555], 901: [555] } // near the shared start point, both directions
+
+  function buildLoopGraphData(exitSharesNonExemptId: boolean): GraphData {
+    const SORTED_START: Record<number, number[]> = {
+      900: [555, 111],
+      901: exitSharesNonExemptId ? [555, 111] : [555, 222],
+    }
+    return {
+      hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [loopEdge] },
+      approaches: {
+        records: [{ hutIndex: 0, startId: 999, sourceType: SOURCE_TYPE_PARKING, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 900 }],
+        reverseIndex: {
+          hut_to_starts: {
+            1: [{ hut_id: 1, start_id: 999, source_type: SOURCE_TYPE_PARKING, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 901 }],
+          },
+          start_to_huts: {},
+        },
+      },
+      hutEdgeIds: { getSortedIds: () => new Int32Array(0), getPrefixIds: () => new Int32Array(0), getSuffixIds: () => new Int32Array(0) },
+      startEdgeIds: {
+        getSortedIds: (edgeId) => Int32Array.from(SORTED_START[edgeId] ?? []),
+        getPrefixIds: (edgeId) => Int32Array.from(PREFIX_START[edgeId] ?? []),
+        getSuffixIds: () => new Int32Array(0),
+      },
+    }
+  }
+
+  it('keeps a car-mode loop that only shares the run near the common start point', () => {
+    const { chains } = searchChains(
+      { mode: 'car', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      buildLoopGraphData(false),
+    )
+    const kept = chains.find((c) => c.huts.length === 2)
+    expect(kept).toBeDefined()
+    expect(kept!.startId).toBe(999)
+    expect(kept!.exitStartId).toBe(999)
+  })
+
+  it('excludes a car-mode loop with a genuine overlap away from the shared start point', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'car', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      buildLoopGraphData(true),
+    )
+    expect(chains.some((c) => c.huts.length === 2)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+})
+
+describe('searchChains (single-hut approach/exit trim)', () => {
+  const graphDataSingleHutTrim: GraphData = {
+    hutEdges: { hutIds: ['A'], variantNames: { 0: 'FAST_ANY' }, records: [] },
+    approaches: {
+      records: [{ hutIndex: 0, startId: 300, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 950 }],
+      reverseIndex: {
+        hut_to_starts: {
+          0: [{ hut_id: 0, start_id: 301, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 951 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: { getSortedIds: () => new Int32Array(0), getPrefixIds: () => new Int32Array(0), getSuffixIds: () => new Int32Array(0) },
+    startEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(({ 950: [321, 111], 951: [321, 222] } as Record<number, number[]>)[edgeId] ?? []),
+      getPrefixIds: () => new Int32Array(0),
+      getSuffixIds: (edgeId) => Int32Array.from(({ 950: [321], 951: [321] } as Record<number, number[]>)[edgeId] ?? []),
+    },
+  }
+
+  it('trims the run shared out of a single hut between the approach and exit legs', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 2, ...generousConstraints },
+      graphDataSingleHutTrim,
+    )
+    const kept = chains.find((c) => c.huts.length === 1)
+    expect(kept).toBeDefined()
+    expect(kept!.startId).toBe(300)
+    expect(kept!.exitStartId).toBe(301)
+  })
+})
+
 describe('mode-gated source types (Section A fixes)', () => {
   // graphData's approach/exit are already station-type (see fixture comment above); this
   // parking-only variant is the negative case for the transit-seeding test below.
