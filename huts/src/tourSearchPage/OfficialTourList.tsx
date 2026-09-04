@@ -4,6 +4,7 @@ import {
 } from '@mui/material'
 import type { OfficialTourLeg, OfficialTourView } from '../tourSearch/officialTours.js'
 import { hutClassBadge, OPERATOR_COLOR, type HutClass } from '../hutClass.js'
+import LegElevationSparkline from './LegElevationSparkline.js'
 
 function waypointLabel(
   endpoint: OfficialTourLeg['from'],
@@ -15,6 +16,7 @@ function waypointLabel(
 
 const OfficialTourList = memo(function OfficialTourList({
   tours, hutNameById, hutClassByIndex, startLabel, selectedTourId, setSelectedTourId,
+  hoveredLegIndex, setHoveredLegIndex,
 }: {
   tours: OfficialTourView[]
   hutNameById: Map<number, string>
@@ -22,6 +24,8 @@ const OfficialTourList = memo(function OfficialTourList({
   startLabel: (startId: number) => string
   selectedTourId: number | null
   setSelectedTourId: (id: number | null) => void
+  hoveredLegIndex: number | null
+  setHoveredLegIndex: (i: number | null) => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -104,17 +108,31 @@ const OfficialTourList = memo(function OfficialTourList({
                       </TableRow>
                     </TableHead>
                     <TableBody>
-                      {tour.legs.map((leg) => (
-                        <TableRow key={leg.legIndex}>
-                          <TableCell>
-                            Etappe {leg.legIndex + 1}: {waypointLabel(leg.from, hutNameById, startLabel)} → {waypointLabel(leg.to, hutNameById, startLabel)}
-                          </TableCell>
-                          <TableCell align="right">{leg.durationH.toFixed(1)} h</TableCell>
-                          <TableCell align="right">{Math.round(leg.ascentM)}m</TableCell>
-                          <TableCell align="right">{Math.round(leg.descentM)}m</TableCell>
-                          <TableCell align="right">{(leg.distanceM / 1000).toFixed(1)} km</TableCell>
-                        </TableRow>
-                      ))}
+                      {tour.legs.map((leg) => {
+                        const isHovered = isExpanded && hoveredLegIndex === leg.legIndex
+                        return (
+                          <TableRow
+                            key={leg.legIndex}
+                            hover
+                            selected={isHovered}
+                            onMouseEnter={() => setHoveredLegIndex(leg.legIndex)}
+                            onMouseLeave={() => setHoveredLegIndex(null)}
+                          >
+                            <TableCell>
+                              Etappe {leg.legIndex + 1}: {waypointLabel(leg.from, hutNameById, startLabel)} → {waypointLabel(leg.to, hutNameById, startLabel)}
+                              {isHovered && (
+                                <Box sx={{ mt: 0.5 }}>
+                                  <LegElevationSparkline layer="tour_edges" edgeId={leg.edgeId} reversed={leg.reversed} />
+                                </Box>
+                              )}
+                            </TableCell>
+                            <TableCell align="right">{leg.durationH.toFixed(1)} h</TableCell>
+                            <TableCell align="right">{Math.round(leg.ascentM)}m</TableCell>
+                            <TableCell align="right">{Math.round(leg.descentM)}m</TableCell>
+                            <TableCell align="right">{(leg.distanceM / 1000).toFixed(1)} km</TableCell>
+                          </TableRow>
+                        )
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>

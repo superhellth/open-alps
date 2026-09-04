@@ -5,10 +5,11 @@ import {
 } from '@mui/material'
 import type { SelectChangeEvent } from '@mui/material'
 import type { SearchResult, TourMode, TourResult } from '../tourSearch/types.js'
-import { hutAvailabilityBadge, AVAILABILITY_BADGE_LABEL, AVAILABILITY_BADGE_COLOR, PAGE_SIZE, SORT_LABEL, VILLAGE_EMPTY_STATE_HINT, killCounterGuidance, legWaypointLabels, type SortKey } from './helpers.js'
+import { hutAvailabilityBadge, AVAILABILITY_BADGE_LABEL, AVAILABILITY_BADGE_COLOR, PAGE_SIZE, SORT_LABEL, VILLAGE_EMPTY_STATE_HINT, killCounterGuidance, legWaypointLabels, legLayer, type SortKey } from './helpers.js'
 import { hutClassBadge, OPERATOR_COLOR, type HutClass } from '../hutClass.js'
 import type { FreeByOffset } from '../availability/types.js'
 import AvailabilityDetailPanel from './AvailabilityDetailPanel.js'
+import LegElevationSparkline from './LegElevationSparkline.js'
 
 // Memoized so the (up to PAGE_SIZE) result cards and tables are only reconciled when the search
 // results/sort/paging actually change — not on every keystroke in the sibling filter bar (every
@@ -18,7 +19,7 @@ import AvailabilityDetailPanel from './AvailabilityDetailPanel.js'
 const TourList = memo(function TourList({
   result, displayedChains, pageChains, page, pageCount, setPage,
   sortKey, setSortKey, hutNameById, hutClassByIndex, startLabel, expandedChain, setExpandedChain, mode,
-  freeByOffset, ohrsIdByHutIndex, hutOhrsByIndex, startDate, numOfPeople,
+  freeByOffset, ohrsIdByHutIndex, hutOhrsByIndex, startDate, numOfPeople, hoveredLegIndex, setHoveredLegIndex,
 }: {
   result: SearchResult
   displayedChains: TourResult[]
@@ -39,6 +40,8 @@ const TourList = memo(function TourList({
   hutOhrsByIndex: Map<number, { ohrsHutId: string | null; tenantCode: number | null }>
   startDate: Date | null
   numOfPeople: number
+  hoveredLegIndex: number | null
+  setHoveredLegIndex: (i: number | null) => void
 }) {
   const [collapsed, setCollapsed] = useState(false)
 
@@ -155,9 +158,27 @@ const TourList = memo(function TourList({
                     <TableBody>
                       {legWaypointLabels(chain, startLabel, hutNameById).map((label, legIndex) => {
                         const leg = chain.legs[legIndex]
+                        const isHovered = isExpanded && hoveredLegIndex === legIndex
                         return (
-                          <TableRow key={legIndex}>
-                            <TableCell>{label}</TableCell>
+                          <TableRow
+                            key={legIndex}
+                            hover
+                            selected={isHovered}
+                            onMouseEnter={() => setHoveredLegIndex(legIndex)}
+                            onMouseLeave={() => setHoveredLegIndex(null)}
+                          >
+                            <TableCell>
+                              {label}
+                              {isHovered && (
+                                <Box sx={{ mt: 0.5 }}>
+                                  <LegElevationSparkline
+                                    layer={legLayer(legIndex, chain.legs.length)}
+                                    edgeId={leg.edgeId}
+                                    reversed={leg.reversed}
+                                  />
+                                </Box>
+                              )}
+                            </TableCell>
                             <TableCell align="right">{leg.durationH.toFixed(1)} h</TableCell>
                             <TableCell align="right">{Math.round(leg.ascentM)}m</TableCell>
                             <TableCell align="right">{Math.round(leg.descentM)}m</TableCell>

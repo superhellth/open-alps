@@ -49,6 +49,7 @@ function TourSearchPage() {
   const [officialTours, setOfficialTours] = useState<RawTour[] | null>(null)
   const [tourEdgeRecords, setTourEdgeRecords] = useState<Map<string, TourEdgeRecord> | null>(null)
   const [selectedOfficialTourId, setSelectedOfficialTourId] = useState<number | null>(null)
+  const [hoveredLegIndex, setHoveredLegIndex] = useState<number | null>(null)
 
   useEffect(() => {
     Promise.all([
@@ -196,6 +197,10 @@ function TourSearchPage() {
     if (viewMode === 'search') return selectedChain ? chainToRoute(selectedChain, hutCoordsById, startById) : null
     return selectedOfficialTour ? officialTourToRoute(selectedOfficialTour, hutCoordsById, startById) : null
   }, [viewMode, selectedChain, selectedOfficialTour, hutCoordsById, startById])
+
+  // A leg index is only meaningful relative to the currently selected route - stale hover state
+  // pointing at another route's leg would highlight the wrong segment.
+  useEffect(() => setHoveredLegIndex(null), [route])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -445,6 +450,8 @@ function TourSearchPage() {
               hutOhrsByIndex={hutOhrsByIndex}
               startDate={form.startDate ? new Date(form.startDate) : null}
               numOfPeople={form.numOfPeople}
+              hoveredLegIndex={hoveredLegIndex}
+              setHoveredLegIndex={setHoveredLegIndex}
             />
           )}
           {viewMode === 'official' && officialTourViews && (
@@ -455,6 +462,8 @@ function TourSearchPage() {
               startLabel={startLabel}
               selectedTourId={selectedOfficialTourId}
               setSelectedTourId={setSelectedOfficialTourId}
+              hoveredLegIndex={hoveredLegIndex}
+              setHoveredLegIndex={setHoveredLegIndex}
             />
           )}
           <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -465,6 +474,8 @@ function TourSearchPage() {
               startById={startById}
               hutClassByIndex={hutClassByIndex}
               excludedHutIndices={excludedHutIndices}
+              hoveredLegIndex={hoveredLegIndex}
+              setHoveredLegIndex={setHoveredLegIndex}
             />
           </Box>
         </Box>

@@ -96,6 +96,7 @@ function chainSegments(
 // deselecting a route.
 const ResultsMap = memo(function ResultsMap({
   route, hutNameById, hutCoordsById, startById, hutClassByIndex, excludedHutIndices,
+  hoveredLegIndex, setHoveredLegIndex,
 }: {
   route: Route | null
   hutNameById: Map<number, string>
@@ -103,6 +104,8 @@ const ResultsMap = memo(function ResultsMap({
   startById: Map<number, StartPoint>
   hutClassByIndex: Map<number, HutClass>
   excludedHutIndices: Set<number>
+  hoveredLegIndex: number | null
+  setHoveredLegIndex: (i: number | null) => void
 }) {
   const positions = useMemo(() => (route ? routePositions(route) : []), [route])
   const showRoute = route !== null && positions.length >= 2
@@ -156,17 +159,24 @@ const ResultsMap = memo(function ResultsMap({
             ))}
         {showRoute && (
           <>
-            {segments.map((seg, i) => (
-              <Polyline
-                key={i}
-                positions={seg.positions}
-                pathOptions={
-                  seg.isFallback
-                    ? { color: '#e65100', weight: 3, dashArray: '6 8' }
-                    : { color: '#e65100', weight: 3 }
-                }
-              />
-            ))}
+            {segments.map((seg, i) => {
+              const isHovered = hoveredLegIndex === i
+              return (
+                <Polyline
+                  key={i}
+                  positions={seg.positions}
+                  pathOptions={
+                    seg.isFallback
+                      ? { color: isHovered ? '#ffb300' : '#e65100', weight: isHovered ? 6 : 3, dashArray: '6 8' }
+                      : { color: isHovered ? '#ffb300' : '#e65100', weight: isHovered ? 6 : 3 }
+                  }
+                  eventHandlers={{
+                    mouseover: () => setHoveredLegIndex(i),
+                    mouseout: () => setHoveredLegIndex(null),
+                  }}
+                />
+              )
+            })}
             {/* Route waypoints don't carry hut identity (Route is generic over search chains and
                 official tours alike), so unlike the overview markers above these render in one
                 fixed style rather than colored by operator - the endpoints are just drawn larger. */}
