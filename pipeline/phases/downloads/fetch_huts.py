@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """
-Fetches hut point locations from the Alpenverein ArcGIS layer, filtered to the bbox in
-pipeline.config.json (Austria + Bavaria by default), classifies each record, and writes two
-GeoJSON FeatureCollections: huts.geojson (real huts, AV-run or not) and partner_betriebe.geojson
+Fetches hut point locations from the Alpenverein ArcGIS layer, filtered to the real AT+Bavaria
+boundary (the union of download_extracts.py's per-region .poly files, see lib/poly.py) - not a
+rectangular bbox, which would also catch huts in neighboring countries that have zero trail data
+anywhere near them (docs/backlog/hut-catalog-bbox-includes-foreign-huts.md) - classifies each
+record, and writes two GeoJSON FeatureCollections: huts.geojson (real huts, AV-run or not) and
+partner_betriebe.geojson
 (Bergsteigerdörfer partner businesses / ÖAV Vertragshaus - private lodging, not Alpine Club huts;
 routed as a separate access-point hub type by filter_start_points.py, see that module's docstring).
 
@@ -32,8 +35,12 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from shapely.geometry import Point
+from shapely.prepared import prep
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.poly import region_boundary  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_huts.py"
@@ -99,9 +106,21 @@ def _write_feature_collection(path, features):
         json.dump({"type": "FeatureCollection", "features": features}, fh)
 
 
+def filter_to_boundary(features, prepared_boundary):
+    """Keeps only ArcGIS features with a geometry falling inside prepared_boundary (a
+    shapely.prepared.prep()-wrapped (Multi)Polygon) - drops records with no geometry at all, and
+    records outside the real AT+Bavaria coverage area (see module docstring)."""
+    return [
+        f for f in features
+        if f.get("geometry")
+        and prepared_boundary.contains(Point(f["geometry"]["x"], f["geometry"]["y"]))
+    ]
+
+
 if __name__ == "__main__":
     config = load_config()
-    bbox = config["bbox"]
+    raw_dir = OSM_DIR / "raw"
+    poly_paths = [raw_dir / f"{r['name']}.poly" for r in config["regions"]]
     huts_out_path = OSM_DIR / "huts.geojson"
     partner_out_path = OSM_DIR / "partner_betriebe.geojson"
 
@@ -116,14 +135,9 @@ if __name__ == "__main__":
         with urllib.request.urlopen(url) as res:
             data = json.load(res)
 
-    features = [
-        f
-        for f in data["features"]
-        if f.get("geometry")
-        and bbox["minLng"] <= f["geometry"]["x"] <= bbox["maxLng"]
-        and bbox["minLat"] <= f["geometry"]["y"] <= bbox["maxLat"]
-    ]
-    print(f"records in bbox: {len(features)}")
+    boundary = prep(region_boundary(poly_paths))
+    features = filter_to_boundary(data["features"], boundary)
+    print(f"records inside AT+Bavaria boundary: {len(features)}")
 
     hut_features, partner_features = split_features(features)
     print(f"huts: {len(hut_features)}, partner betriebe: {len(partner_features)}")

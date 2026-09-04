@@ -1,8 +1,10 @@
 {
   "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 },
   "regions": [
-    { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
-    { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
+    { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf",
+      "polyUrl": "https://download.geofabrik.de/europe/austria.poly" },
+    { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf",
+      "polyUrl": "https://download.geofabrik.de/europe/germany/bayern.poly" }
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary,via_ferrata",
   "graph": {
