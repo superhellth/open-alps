@@ -11,15 +11,17 @@ interface HutEdgeIdsManifest {
   suffix_bytes: number
 }
 
-/** Loads hut-edge-ids.bin/.json (pipeline/phases/postprocessing/build_edge_ids.py) - the
- *  trail-segment identity behind the "avoid overlapping tracks" check. Fetched wholesale like
- *  hut-edge-payload.bin, not lazily per-leg like geometry: the overlap check runs during search,
- *  before any tour is chosen (spec §2 of docs/superpowers/specs/
- *  2026-08-29-avoid-overlapping-tracks-design.md). edgeId indexes into this exactly like it
- *  indexes into hut-edge-payload.bin (same row order, HutEdgeRecord.edgeId). */
-export async function loadHutEdgeIdsData(baseUrl = '/data'): Promise<HutEdgeIdsData> {
-  const manifest: HutEdgeIdsManifest = await (await fetch(`${baseUrl}/hut-edge-ids.json`)).json()
-  const buffer = await (await fetch(`${baseUrl}/hut-edge-ids.bin`)).arrayBuffer()
+/** Loads a <basename>.bin/.json pair built by pipeline/phases/postprocessing/build_edge_ids.py -
+ *  the trail-segment identity the "avoid overlapping tracks" search-time check needs (spec §2 of
+ *  docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md, extended to start_edges
+ *  by docs/superpowers/specs/2026-09-04-approach-exit-overlap-avoidance-design.md §2). Fetched
+ *  wholesale, not lazily per-leg like geometry: the overlap check runs during search, before any
+ *  tour is chosen. edgeId indexes into this exactly like it indexes into hut-edge-payload.bin /
+ *  approaches.bin (same row order). build_edge_ids.py is generic over its --edges-dir, so the same
+ *  manifest/binary shape serves both hut_edges and start_edges - hence one implementation here. */
+async function loadEdgeIdsData(baseUrl: string, binName: string, jsonName: string): Promise<HutEdgeIdsData> {
+  const manifest: HutEdgeIdsManifest = await (await fetch(`${baseUrl}/${jsonName}`)).json()
+  const buffer = await (await fetch(`${baseUrl}/${binName}`)).arrayBuffer()
 
   const sortedOffsets = new Array<number>(manifest.rows + 1)
   sortedOffsets[0] = 0
@@ -47,4 +49,12 @@ export async function loadHutEdgeIdsData(baseUrl = '/data'): Promise<HutEdgeIdsD
       return suffixView.subarray(edgeId * k, edgeId * k + manifest.suffix_count[edgeId])
     },
   }
+}
+
+export function loadHutEdgeIdsData(baseUrl = '/data'): Promise<HutEdgeIdsData> {
+  return loadEdgeIdsData(baseUrl, 'hut-edge-ids.bin', 'hut-edge-ids.json')
+}
+
+export function loadStartEdgeIdsData(baseUrl = '/data'): Promise<HutEdgeIdsData> {
+  return loadEdgeIdsData(baseUrl, 'start-edge-ids.bin', 'start-edge-ids.json')
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { loadHutEdgeIdsData } from './loadHutEdgeIds.js'
+import { loadHutEdgeIdsData, loadStartEdgeIdsData } from './loadHutEdgeIds.js'
 
 function buildFixtureBuffer() {
   // 2 records: record 0 sorted=[10,20,30] prefix=[30,10,20,...-1] suffix=[20,10,30,...-1],
@@ -49,5 +49,33 @@ describe('loadHutEdgeIdsData', () => {
     expect(Array.from(data.getSuffixIds(0))).toEqual([20, 10, 30])
     expect(Array.from(data.getPrefixIds(1))).toEqual([40])
     expect(Array.from(data.getSuffixIds(1))).toEqual([50])
+  })
+})
+
+describe('loadStartEdgeIdsData', () => {
+  const { buffer, manifest } = buildFixtureBuffer()
+  let requestedUrls: string[] = []
+
+  beforeEach(() => {
+    requestedUrls = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
+      requestedUrls.push(url)
+      if (url.endsWith('.json')) return { json: async () => manifest } as Response
+      return { arrayBuffer: async () => buffer } as Response
+    }))
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('fetches start-edge-ids.bin/.json, not the hut-edge-ids files', async () => {
+    await loadStartEdgeIdsData('/data')
+    expect(requestedUrls).toContain('/data/start-edge-ids.json')
+    expect(requestedUrls).toContain('/data/start-edge-ids.bin')
+    expect(requestedUrls.some((u) => u.includes('hut-edge-ids'))).toBe(false)
+  })
+
+  it('parses the same manifest/binary shape as loadHutEdgeIdsData', async () => {
+    const data = await loadStartEdgeIdsData('/data')
+    expect(Array.from(data.getSortedIds(0))).toEqual([10, 20, 30])
+    expect(Array.from(data.getPrefixIds(1))).toEqual([40])
   })
 })

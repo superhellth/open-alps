@@ -1,17 +1,18 @@
 import { loadHutEdgesData } from './loadHutEdges.js'
 import { loadApproachesData } from './loadApproaches.js'
-import { loadHutEdgeIdsData } from './loadHutEdgeIds.js'
+import { loadHutEdgeIdsData, loadStartEdgeIdsData } from './loadHutEdgeIds.js'
 import { searchChains } from './search.js'
 import { dedupeReversePairs, suppressSimilar } from './diversity.js'
 import type { GraphData, Query, SearchResult } from './types.js'
 
 export async function loadTourSearchData(baseUrl = '/data'): Promise<GraphData> {
-  const [hutEdges, approaches, hutEdgeIds] = await Promise.all([
+  const [hutEdges, approaches, hutEdgeIds, startEdgeIds] = await Promise.all([
     loadHutEdgesData(baseUrl),
     loadApproachesData(baseUrl),
     loadHutEdgeIdsData(baseUrl),
+    loadStartEdgeIdsData(baseUrl),
   ])
-  return { hutEdges, approaches, hutEdgeIds }
+  return { hutEdges, approaches, hutEdgeIds, startEdgeIds }
 }
 
 export function findTours(query: Query, graphData: GraphData): SearchResult {

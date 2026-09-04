@@ -33,6 +33,8 @@ describe('loadTourSearchData', () => {
         if (url.endsWith('approaches.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(approachesFixture.buffer) })
         if (url.endsWith('hut-edge-ids.json')) return Promise.resolve({ json: () => Promise.resolve(hutEdgeIdsManifest) })
         if (url.endsWith('hut-edge-ids.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgeIdsBuffer) })
+        if (url.endsWith('start-edge-ids.json')) return Promise.resolve({ json: () => Promise.resolve(hutEdgeIdsManifest) })
+        if (url.endsWith('start-edge-ids.bin')) return Promise.resolve({ arrayBuffer: () => Promise.resolve(hutEdgeIdsBuffer) })
         throw new Error(`unexpected fetch ${url}`)
       })
     vi.stubGlobal('fetch', fetchMock)
@@ -53,6 +55,11 @@ describe('findTours', () => {
       hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [] },
       approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
       hutEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+      startEdgeIds: {
         getSortedIds: () => new Int32Array(0),
         getPrefixIds: () => new Int32Array(0),
         getSuffixIds: () => new Int32Array(0),
