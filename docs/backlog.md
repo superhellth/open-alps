@@ -14,14 +14,7 @@ under `docs/superpowers/`.
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
 Bergsteigerdörfer partner businesses, so they're absent from every hub layer.
 
-### Extend overlap avoidance to approach/exit legs
-
-The 2026-08-29 overlap-avoidance work (`docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md`)
-only covers hut-to-hut legs. Approach legs (start point → first hut) and exit legs (last hut →
-start point) carry their own `base_edge_id`s but are never checked against `usedEdgeIds` in
-`search.ts`, so a suggested tour can still walk in or out over a trail segment another leg in the
-chain already used. Needs the same edge-id treatment threaded through the start-edges data (flagged
-as a 147 MB-class sidecar problem to solve first in the original design's "Out of scope" section).
+### How to avoid road in hut-to-hut and access legs in a consistent and solid way
 
 ### Make legs of selected tour hoverable
 
@@ -69,3 +62,5 @@ Probably in form of a static web page, either as part of the existing frontend o
 ### Pipeline config file restructure
 
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
+
+### Check: Does check_graph_building always run?
