@@ -4,25 +4,20 @@ import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import ResultsMap from './ResultsMap.js'
 import * as loadLegGeometryModule from '../tourSearch/loadLegGeometry.js'
-import type { TourResult } from '../tourSearch/types.js'
+import type { Route } from './types.js'
 import type { StartPoint } from './types.js'
 import type { HutClass } from '../hutClass.js'
 
-// vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
-// afterEach(cleanup) never registers - without this, each test's render() stacks onto the
-// previous test's un-unmounted DOM, which is invisible until an assertion checks for something's
-// *absence* (queryByText(...).not.toBeInTheDocument()), as the third test below does.
 afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
 })
 
-const chain: TourResult = {
-  huts: [0], startId: 100, exitStartId: 200,
-  totalDurationH: 3, totalAscentM: 300, totalDescentM: 300, totalDistanceM: 6000,
+const route: Route = {
+  waypoints: [{ lat: 47.0, lng: 11.0 }, { lat: 47.1, lng: 11.1 }, { lat: 47.2, lng: 11.2 }],
   legs: [
-    { durationH: 1.5, ascentM: 150, descentM: 150, distanceM: 3000, edgeId: 5, reversed: false },
-    { durationH: 1.5, ascentM: 150, descentM: 150, distanceM: 3000, edgeId: 6, reversed: true },
+    { edgeId: 5, reversed: false, layer: 'start_edges' },
+    { edgeId: 6, reversed: true, layer: 'start_edges' },
   ],
 }
 
@@ -54,7 +49,7 @@ describe('ResultsMap real geometry integration', () => {
       .mockImplementationOnce(() => d0.promise)
       .mockImplementationOnce(() => d1.promise)
 
-    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
+    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
 
     expect(screen.getByText(CAPTION)).toBeInTheDocument()
     expect(spy).toHaveBeenNthCalledWith(1, 'start_edges', 5, false)
@@ -70,7 +65,7 @@ describe('ResultsMap real geometry integration', () => {
   it('a leg whose fetch rejects keeps its straight-line fallback instead of crashing', async () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockRejectedValue(new Error('range not supported'))
 
-    render(<ResultsMap selectedChain={chain} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
+    render(<ResultsMap route={route} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />)
 
     await waitFor(() => expect(screen.getByText(CAPTION)).toBeInTheDocument())
   })
@@ -79,14 +74,28 @@ describe('ResultsMap real geometry integration', () => {
     vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockReturnValue(new Promise(() => {}))
 
     const { container } = render(
-      <ResultsMap selectedChain={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
+      <ResultsMap route={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
     )
 
     expect(screen.queryByText(CAPTION)).not.toBeInTheDocument()
-    // react-leaflet's Tooltip only mounts its text into the DOM on hover, so the hut name isn't
-    // queryable at rest - the hut circle marker itself is the observable proxy for "the full hut
-    // list is shown" instead.
     expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(1)
+  })
+
+  it('renders one Polyline per leg for a tour_edges-layer route', async () => {
+    vi.spyOn(loadLegGeometryModule, 'loadLegGeometry').mockResolvedValue([[47.0, 11.0], [47.1, 11.1]])
+    const tourRoute: Route = {
+      waypoints: [{ lat: 47.0, lng: 11.0 }, { lat: 47.05, lng: 11.05 }, { lat: 47.1, lng: 11.1 }],
+      legs: [
+        { edgeId: 0, reversed: false, layer: 'tour_edges' },
+        { edgeId: 1, reversed: false, layer: 'tour_edges' },
+      ],
+    }
+    const { container } = render(
+      <ResultsMap route={tourRoute} hutNameById={hutNameById} hutCoordsById={hutCoordsById} startById={startById} hutClassByIndex={new Map()} excludedHutIndices={new Set()} />,
+    )
+    await waitFor(() => expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(5)) // 2 polylines + 3 waypoint markers; loose upper-bound, the pinning checks are below
+    expect(loadLegGeometryModule.loadLegGeometry).toHaveBeenCalledWith('tour_edges', 0, false)
+    expect(loadLegGeometryModule.loadLegGeometry).toHaveBeenCalledWith('tour_edges', 1, false)
   })
 })
 
@@ -95,14 +104,13 @@ describe('ResultsMap hut-class styling', () => {
     const hutClassByIndex = new Map<number, HutClass>([[0, { operator: 'av', serviced: true }]])
     const { container } = render(
       <ResultsMap
-        selectedChain={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById}
+        route={null} hutNameById={hutNameById} hutCoordsById={hutCoordsById}
         startById={startById} hutClassByIndex={hutClassByIndex}
         excludedHutIndices={new Set([0])}
       />,
     )
     const marker = container.querySelector('path.leaflet-interactive')
     expect(marker).not.toBeNull()
-    // Dimmed excluded huts render with reduced fill-opacity rather than being removed.
     expect(marker?.getAttribute('fill-opacity')).not.toBe('0.9')
   })
 })
