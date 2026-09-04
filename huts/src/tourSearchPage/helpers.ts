@@ -1,6 +1,9 @@
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { SearchResult, TourResult } from '../tourSearch/types.js'
 import type { FreeByOffset } from '../availability/types.js'
+import type { GeometryLayer } from '../tourSearch/loadLegGeometry.js'
+import type { OfficialTourView } from '../tourSearch/officialTours.js'
+import type { Route, RouteWaypoint, StartPoint } from './types.js'
 
 export const PAGE_SIZE = 25
 
@@ -115,4 +118,58 @@ export const AVAILABILITY_BADGE_COLOR: Record<Exclude<AvailabilityBadge, null>, 
   unavailable: '#c62828',
   direct: '#616161',
   unknown: '#9e9e9e',
+}
+
+export function legLayer(legIndex: number, legCount: number): GeometryLayer {
+  return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
+}
+
+export function chainToRoute(
+  chain: TourResult,
+  hutCoordsById: Map<number, { lat: number; lng: number }>,
+  startById: Map<number, StartPoint>,
+): Route {
+  const startPoint = startById.get(chain.startId)
+  const endPoint = startById.get(chain.exitStartId)
+  const hutPoints = chain.huts.map((h) => hutCoordsById.get(h)).filter((p): p is { lat: number; lng: number } => !!p)
+  const waypoints: RouteWaypoint[] = [
+    ...(startPoint ? [{ lat: startPoint.lat, lng: startPoint.lng }] : []),
+    ...hutPoints,
+    ...(endPoint ? [{ lat: endPoint.lat, lng: endPoint.lng }] : []),
+  ]
+  return {
+    waypoints,
+    legs: chain.legs.map((leg, i) => ({
+      edgeId: leg.edgeId, reversed: leg.reversed, layer: legLayer(i, chain.legs.length),
+    })),
+  }
+}
+
+function officialTourEndpointCoords(
+  endpoint: { type: string; id: number },
+  hutCoordsById: Map<number, { lat: number; lng: number }>,
+  startById: Map<number, StartPoint>,
+): RouteWaypoint | null {
+  const p = endpoint.type === 'hut' ? hutCoordsById.get(endpoint.id) : startById.get(endpoint.id)
+  return p ? { lat: p.lat, lng: p.lng } : null
+}
+
+export function officialTourToRoute(
+  tour: OfficialTourView,
+  hutCoordsById: Map<number, { lat: number; lng: number }>,
+  startById: Map<number, StartPoint>,
+): Route | null {
+  if (tour.legs.length === 0) return null
+  const first = officialTourEndpointCoords(tour.legs[0].from, hutCoordsById, startById)
+  if (!first) return null
+  const waypoints: RouteWaypoint[] = [first]
+  for (const leg of tour.legs) {
+    const to = officialTourEndpointCoords(leg.to, hutCoordsById, startById)
+    if (!to) return null
+    waypoints.push(to)
+  }
+  return {
+    waypoints,
+    legs: tour.legs.map((leg) => ({ edgeId: leg.edgeId, reversed: leg.reversed, layer: 'tour_edges' as const })),
+  }
 }
