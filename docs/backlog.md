@@ -7,6 +7,19 @@ under `docs/superpowers/`.
 
 ## High
 
+### Stable hut ids
+
+Hut and edge ids are array positions in the emitted payloads, not stable identities — `hut_ids` is
+indexed by array order and `edge_id` indexes the geometry payload the same way, so any pipeline
+rerun that reorders either one silently remaps every reference to it.
+
+This blocks trip persistence in the Trip Planner Reenvision design
+(`docs/superpowers/specs/2026-09-04-trip-planner-reenvision-design.md`): a saved trip stored in
+`localStorage` references huts and edges by those ids, so after a rerun it would render as a
+*different but plausible-looking* trip with nothing visibly broken. The fix is emitting ids that are
+stable across runs, not client-side staleness heuristics — the spec deliberately designs no UI
+mitigation.
+
 ## Medium
 
 ### [Search-result tour legs render as straight lines (stale stations/parking data)](backlog/straight-line-legs-stale-start-points.md)
@@ -17,10 +30,6 @@ graph references don't resolve — silently degrading every leg of the affected 
 line. Also flags a related frontend robustness gap in `chainToRoute`.
 
 ### Diagnose and improve performance of slow phases
-
-### Stable hut ids
-
-At the moment hut ids are sequential, not stable
 
 ### Strucute data/ folder
 
@@ -82,3 +91,5 @@ There are some hard to understand entries in the current config file. Maybe we c
 ### Check: Does check_graph_building always run?
 
 ### Claude skill to auto link huts with their website / find booking times
+
+### doit dag visualization in official repo
