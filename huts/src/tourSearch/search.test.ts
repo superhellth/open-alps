@@ -191,6 +191,73 @@ describe('searchChains (overlap avoidance)', () => {
   })
 })
 
+describe('searchChains (approach-leg overlap avoidance)', () => {
+  // Chain A -[e01]-> B -[e12]-> C. Approach (start 500 -> A, edgeId 700) shares base-edge id 200
+  // with e01 ONLY in the run leaving their common hut A - should be exempted, same rule as two
+  // adjacent hut-hut legs. Approach also carries id 999, which e12 independently carries too, with
+  // NO hut in common with the approach (e12 connects B and C, the approach touches only A) - a
+  // genuine overlap that must exclude any chain using both.
+  const approachOverlapEdge = (fromIndex: number, toIndex: number, edgeId: number) => ({
+    fromIndex, toIndex, variant: 0, distanceM: 5000, ascentM: 200, descentM: 200, maxEleM: 2000,
+    sacRank: 1, viaFerrata: false, roadM: 0, ungradedM: 0, inferredM: 0, snapM: 0, edgeId,
+  })
+
+  const SORTED_HUT: Record<number, number[]> = { 1: [100, 200], 2: [100, 300, 999] }
+  const PREFIX_HUT: Record<number, number[]> = { 1: [200], 2: [100] } // near from_id
+  const SUFFIX_HUT: Record<number, number[]> = { 1: [100], 2: [300] } // near to_id
+  const SORTED_START: Record<number, number[]> = { 700: [200, 999] }
+  const SUFFIX_START: Record<number, number[]> = { 700: [200] } // near hut A (the approach's arrival end)
+
+  const approachOverlapGraphData: GraphData = {
+    hutEdges: {
+      hutIds: ['A', 'B', 'C'],
+      variantNames: { 0: 'FAST_ANY' },
+      records: [approachOverlapEdge(0, 1, 1), approachOverlapEdge(1, 2, 2)],
+    },
+    approaches: {
+      records: [
+        { hutIndex: 0, startId: 500, sourceType: SOURCE_TYPE_STATION, variant: 0, accessUnknown: false, distanceM: 2000, ascentM: 100, descentM: 50, access: null, edgeId: 700 },
+      ],
+      reverseIndex: {
+        hut_to_starts: {
+          1: [{ hut_id: 1, start_id: 601, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 800 }],
+          2: [{ hut_id: 2, start_id: 602, source_type: SOURCE_TYPE_STATION, variant: 0, distance_m: 2000, ascent_m: 50, descent_m: 100, edge_id: 801 }],
+        },
+        start_to_huts: {},
+      },
+    },
+    hutEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED_HUT[edgeId] ?? []),
+      getPrefixIds: (edgeId) => Int32Array.from(PREFIX_HUT[edgeId] ?? []),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX_HUT[edgeId] ?? []),
+    },
+    startEdgeIds: {
+      getSortedIds: (edgeId) => Int32Array.from(SORTED_START[edgeId] ?? []),
+      getPrefixIds: () => new Int32Array(0),
+      getSuffixIds: (edgeId) => Int32Array.from(SUFFIX_START[edgeId] ?? []),
+    },
+  }
+
+  it('excludes a chain whose approach leg overlaps a later, non-adjacent hut-hut leg', () => {
+    const { chains, killCounters } = searchChains(
+      { mode: 'transit', legCountMin: 2, legCountMax: 6, ...generousConstraints },
+      approachOverlapGraphData,
+    )
+    expect(chains.some((c) => c.huts.length >= 3)).toBe(false)
+    expect(killCounters.trackOverlap).toBeGreaterThan(0)
+  })
+
+  it('keeps a chain whose approach and first hut-hut leg only share the run out of their common hut', () => {
+    const { chains } = searchChains(
+      { mode: 'transit', legCountMin: 3, legCountMax: 3, ...generousConstraints },
+      approachOverlapGraphData,
+    )
+    const kept = chains.find((c) => c.huts.length === 2)
+    expect(kept).toBeDefined()
+    expect(kept!.huts).toEqual([0, 1])
+  })
+})
+
 describe('mode-gated source types (Section A fixes)', () => {
   // graphData's approach/exit are already station-type (see fixture comment above); this
   // parking-only variant is the negative case for the transit-seeding test below.
