@@ -32,6 +32,52 @@ def _line_subgraph():
     )
 
 
+def _two_edge_line_subgraph():
+    nodes = np.zeros(3, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.0045, 0.0, 0)
+    nodes[2] = (0.009, 0.0, 0)
+    edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
+    edges[0] = (0, 1, 500.0, 0.0, 0.0, 0.0, 500.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 0)
+    edges[1] = (1, 2, 500.0, 0.0, 0.0, 0.0, 500.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
+                0, 0, 1)
+    interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
+    return LocalSubgraph(
+        global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=np.zeros(len(nodes), dtype=np.float32),
+        interior_ele=np.zeros(len(interior), dtype=np.float32),
+    )
+
+
+def test_base_edge_ids_are_reversed_into_access_to_hut_traversal_order():
+    subgraph = _two_edge_line_subgraph()
+    # Hut/station coincide exactly with nodes 2/0 (same reasoning as
+    # test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk above): snap_hub_to_subgraph
+    # has no node preference, so anything off-node snaps mid-edge instead, which would pull in
+    # cell_igraph.py's *3/*3+1/*3+2 split-edge id disambiguation and obscure the plain edge ids this
+    # test wants to assert on.
+    hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.009, "lat": 0.0}
+    station = {"id": 2, "type": binfmt.TYPE_STATION, "lon": 0.0, "lat": 0.0}
+    snaps = snap_hubs_for_cell(subgraph, [hut], [hut, station], max_snap_m=50.0)
+    selected_targets_by_hut = {1: [station]}
+
+    records, unreachable_skipped = route_selected_pairs_for_cell(
+        subgraph, [hut], selected_targets_by_hut, snaps, variants=FAST_ANY_ONLY, max_edge_km=5.0,
+    )
+
+    assert unreachable_skipped == 0
+    assert len(records) == 1
+    # The router walks hut -> access (edge_id 1, near the hut at node 2, then edge_id 0, near the
+    # access point at node 0). A3 (2026-09-02 spec) reverses this into the access -> hut storage
+    # order every start_edges consumer expects - access-nearest edge first, hut-nearest edge last -
+    # which is what makes turning write_edge_ids on for start_edges safe. (base_edge_id values are
+    # each raw edge id * 3 - cell_igraph.py's disambiguation scheme for unsplit edges, see its
+    # build_base_igraph_arrays docstring - so edge_id 0 -> 0 and edge_id 1 -> 3.)
+    assert records[0]["base_edge_ids"] == [0, 3]
+
+
 def test_materializes_geometry_only_for_selected_targets():
     subgraph = _line_subgraph()
     hut = {"id": 1, "type": binfmt.TYPE_HUT, "lon": 0.0001, "lat": 0.0}

@@ -260,5 +260,5 @@ if __name__ == "__main__":
           f"({total_unreachable_skipped} unreachable pairs skipped)", flush=True)
 
     out_dir = Path(args.out_dir)
-    write_edge_records(access_records, out_dir / "start_edges", write_edge_ids=False)
+    write_edge_records(access_records, out_dir / "start_edges", write_edge_ids=True)
     print(f"written {out_dir / 'start_edges'}")

@@ -121,7 +121,7 @@ UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profi
 # doesn't force-rerun tasks that don't touch that dtype - see pipeline/dag/graph_building.py.
 EDGE_SCHEMA_VERSION = 2
 SNAP_SCHEMA_VERSION = 2
-RECORD_SCHEMA_VERSION = 3  # bumped: RECORD_DTYPE gained edge_id_offset/count + prefix/suffix ids
+RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
 ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
 
 
