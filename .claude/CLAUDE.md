@@ -100,6 +100,12 @@ When reviewing or planning, classify each issue by its root layer first, and rou
 scope boundary ("that's not this spec") is a reason to file it against the right layer, not a
 reason to fix it in the wrong one.
 
+## Never work directly on main
+
+Always create and switch to a feature branch before making changes — never commit to `main`
+directly. If you find yourself with uncommitted work on `main`, create a branch first (`git
+checkout -b <branch>` carries uncommitted changes over) rather than committing to `main`.
+
 ## No git worktrees, no subagent-driven development
 
 **Never create or remove a git worktree in this repo, for any reason.** `git worktree remove`
