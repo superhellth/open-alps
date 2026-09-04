@@ -34,3 +34,4 @@ new row when a new spec is written.
 | 2026-09-03 | [Approach table: duration/source-type/variant matrix](specs/2026-09-03-approach-table-duration-matrix-design.md) | done |
 | 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | done |
 | 2026-09-04 | [Extend overlap avoidance to approach/exit legs](specs/2026-09-04-approach-exit-overlap-avoidance-design.md) | done |
+| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | **in progress** |
