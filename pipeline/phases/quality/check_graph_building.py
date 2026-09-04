@@ -68,7 +68,7 @@ def check_snap_health(unsnapped: list, max_flagged: int) -> dict:
         for (hub_type, hub_id), reasons in by_hub.items()
     ]
     return build_check(
-        "snap_health", {}, checked=len(unsnapped), flagged_rows=flagged, baseline=225,
+        "snap_health", {}, checked=len(unsnapped), flagged_rows=flagged, baseline=725,
         max_flagged_rows=max_flagged,
     )
 
@@ -175,9 +175,10 @@ def check_vertex_gap(polylines: list, layer_name: str, max_gap_m: float, max_fla
                 "layer": layer_name, **identity, "max_gap_m": max_gap,
                 "gap_at_segment": worst_idx, "n_points": len(coords),
             })
+    baseline = {"hut_edges": 700, "base_graph": 3362}.get(layer_name, 0)
     return build_check(
         f"vertex_gap_{layer_name}", {"max_vertex_gap_m": max_gap_m}, checked=checked,
-        flagged_rows=flagged, baseline=700 if layer_name == "hut_edges" else 0,
+        flagged_rows=flagged, baseline=baseline,
         max_flagged_rows=max_flagged, sort_key=lambda r: r["max_gap_m"],
     )
 

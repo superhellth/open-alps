@@ -9,6 +9,12 @@ under `docs/superpowers/`.
 
 ## Medium
 
+### [Hut catalog uses a rectangular bbox, pulling in huts outside AT+Bavaria trail coverage](backlog/hut-catalog-bbox-includes-foreign-huts.md)
+
+`fetch_huts.py` filters to a rectangular bbox, not real borders — 205 South Tyrol/Slovenia/Swiss
+huts land in `huts.geojson` with zero trail data anywhere near them, showing up as unexplained
+`snap_health` `gap_too_far` failures (205 of the 725 flagged in the 2026-09-03 rebuild).
+
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor
