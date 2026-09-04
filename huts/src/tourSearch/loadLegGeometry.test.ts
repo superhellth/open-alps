@@ -99,4 +99,21 @@ describe('loadLegGeometry', () => {
 
     expect(binFetchCount).toBe(1)
   })
+
+  it('supports the tour_edges layer via tour-edge-geometry.bin/.json', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url === '/data/tour-edge-geometry.json') {
+        return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      }
+      if (url === '/data/tour-edge-geometry.bin') {
+        return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+      }
+      throw new Error(`unexpected fetch ${url}`)
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const points = await loadLegGeometry('tour_edges', 0, false)
+
+    expect(points).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
 })

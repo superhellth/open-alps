@@ -34,6 +34,7 @@ function loadApproachesFromDisk(): ApproachesData {
   for (let i = 0; i < manifest.rows; i++) {
     records[i] = {
       hutIndex: c.hut_id[i], startId: c.start_id[i], sourceType: c.source_type[i] as ApproachRecord['sourceType'],
+      variant: c.variant[i],
       accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
       ascentM: c.ascent_m[i], descentM: c.descent_m[i],
       access: manifest.access_values ? manifest.access_values[i] : null,
@@ -49,7 +50,23 @@ describe('real shipped payload (huts/public/data)', () => {
   let graphData: GraphData
 
   beforeAll(() => {
-    graphData = { hutEdges: loadHutEdgesFromDisk(), approaches: loadApproachesFromDisk() }
+    graphData = {
+      hutEdges: loadHutEdgesFromDisk(), approaches: loadApproachesFromDisk(),
+      // hutEdgeIds/startEdgeIds are stubs until a confirmed pipeline run regenerates
+      // huts/public/data/{hut,start}-edge-ids.* (docs/superpowers/plans/
+      // 2026-09-04-approach-exit-overlap-avoidance.md) and this wires real
+      // loadHutEdgeIdsFromDisk()/loadStartEdgeIdsFromDisk() readers here.
+      hutEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+      startEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+    }
   })
 
   it('resolves every difficulty ceiling to a variant the payload actually has', () => {

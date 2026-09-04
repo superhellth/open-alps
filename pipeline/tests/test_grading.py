@@ -53,3 +53,17 @@ def test_explicit_grade_still_excluded_by_a_downgrade_tag():
     assert grading.excluded_from_constrained(
         {"highway": "path", "sac_scale": "hiking", "trail_visibility": "no"}
     )
+
+
+def test_access_no_is_impassable():
+    assert grading.is_impassable({"highway": "service", "access": "no"})
+
+
+def test_access_no_with_foot_override_is_passable():
+    assert not grading.is_impassable({"highway": "service", "access": "no", "foot": "yes"})
+
+
+def test_access_private_is_not_impassable():
+    # unlike excluded_from_constrained, private tracks stay in the graph - see is_impassable's
+    # docstring
+    assert not grading.is_impassable({"highway": "track", "access": "private"})

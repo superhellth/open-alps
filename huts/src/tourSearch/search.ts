@@ -8,12 +8,24 @@ import { resolveVariant } from './resolveVariant.js'
 import { buildAdjacency } from './adjacency.js'
 import { getApproachLegs, getExitLegs } from './approaches.js'
 import { legPasses, createKillCounters } from './legFilters.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_STATION } from './types.js'
+import { trimSharedHubIds, hasOverlap, nearHubIds } from './overlap.js'
+import type { EdgeKind } from './overlap.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from './types.js'
 import type { GraphData, LegSummary, Query, SearchResult, SourceType, TourResult } from './types.js'
+
+function hutAvailable(h: number, offsetDays: number, availability: Query['availability']): boolean {
+  if (!availability) return true
+  const ohrsId = availability.ohrsIdByHutIndex.get(h)
+  if (ohrsId == null) return true // no OHRS id (direct-booking-only) or huts.geojson lacked it: pass/unknown
+  const free = availability.freeByOffset.get(offsetDays)
+  if (free === 'unknown' || free === undefined) return true // fetch failed for this night: pass/unknown
+  return free.has(ohrsId)
+}
 
 function requiredSourceType(mode: Query['mode']): SourceType | null {
   if (mode === 'transit') return SOURCE_TYPE_STATION
   if (mode === 'car') return SOURCE_TYPE_PARKING
+  if (mode === 'village') return SOURCE_TYPE_PARTNER
   return null
 }
 
@@ -21,6 +33,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   const {
     mode, legCountMin, legCountMax, sacCeiling, allowUngraded = false,
     maxLegTimeH, minLegTimeH = 0, legAscentCapM = Infinity, maxEleM = null, allowViaFerrata = true,
+    allowedHutIndices, availability,
   } = query
   const constraints = { maxLegTimeH, minLegTimeH, legAscentCapM, maxEleM, allowViaFerrata }
   const killCounters = createKillCounters()
@@ -28,6 +41,7 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
 
   const variant = resolveVariant({ sacCeiling, allowUngraded }, graphData.hutEdges.variantNames)
   const adjacency = buildAdjacency(graphData.hutEdges, variant)
+  const edgeIdTables = { hut: graphData.hutEdgeIds, start: graphData.startEdgeIds }
 
   const nightsMin = legCountMin - 1
   const nightsMax = legCountMax - 1
@@ -41,7 +55,12 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
     totalDistanceM: number
     legs: LegSummary[]
     visitedKey: bigint
+    usedEdgeIds: Set<number>
+    prevLeg: { edgeId: number; reversed: boolean; kind: EdgeKind } | null
+    approachEdgeId: number
   }
+  const EMPTY_EDGE_IDS: Set<number> = new Set()
+
   function legSummary(leg: { durationH: number; ascentM: number; descentM: number; distanceM: number; edgeId: number; reversed: boolean }): LegSummary {
     return { durationH: leg.durationH, ascentM: leg.ascentM, descentM: leg.descentM, distanceM: leg.distanceM, edgeId: leg.edgeId, reversed: leg.reversed }
   }
@@ -57,16 +76,22 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
   // getExitLegs/adjacency.get(h) are still looked up once per hut, not once per state.
   let layer = new Map<number, Map<string, State>>()
   for (let h = 0; h < graphData.hutEdges.hutIds.length; h++) {
+    if (allowedHutIndices && !allowedHutIndices.has(h)) { killCounters.hutFiltered++; continue }
+    if (!hutAvailable(h, 1, availability)) { killCounters.availability++; continue }
     for (const approachLeg of getApproachLegs(h, graphData.approaches)) {
       if (gateSourceType != null && approachLeg.sourceType !== gateSourceType) continue
       if (!legPasses(approachLeg, constraints, killCounters)) continue
       const visitedKey = 1n << BigInt(h)
+      const approachSortedIds = graphData.startEdgeIds.getSortedIds(approachLeg.edgeId)
       const state: State = {
         path: [h], startId: approachLeg.startId,
         totalDurationH: approachLeg.durationH, totalAscentM: approachLeg.ascentM,
         totalDescentM: approachLeg.descentM, totalDistanceM: approachLeg.distanceM,
         legs: [legSummary(approachLeg)],
         visitedKey,
+        usedEdgeIds: new Set(approachSortedIds),
+        prevLeg: { edgeId: approachLeg.edgeId, reversed: approachLeg.reversed, kind: 'start' },
+        approachEdgeId: approachLeg.edgeId,
       }
       if (!layer.has(h)) layer.set(h, new Map())
       insertDominant(layer.get(h)!, `${state.startId}|${visitedKey}`, state)
@@ -83,6 +108,28 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
           if (mode === 'car' && exitLeg.startId !== s.startId) continue
           if (gateSourceType != null && exitLeg.sourceType !== gateSourceType) continue
           if (!legPasses(exitLeg, constraints, killCounters)) continue
+
+          const exitLegForLookup = { edgeId: exitLeg.edgeId, reversed: exitLeg.reversed, kind: 'start' as const }
+          let exempt: Set<number> = EMPTY_EDGE_IDS
+          if (s.prevLeg) {
+            // Same shared-hut trim as the expansion loop, at the chain's LAST hut h - s.prevLeg is
+            // either the last hut-hut leg, or (a zero-nights chain) the approach leg itself.
+            const prevNear = nearHubIds(edgeIdTables, s.prevLeg, 'arriving')
+            const newNear = nearHubIds(edgeIdTables, exitLegForLookup, 'departing')
+            exempt = new Set(trimSharedHubIds(prevNear, newNear))
+          }
+          if (exitLeg.startId === s.startId) {
+            // Loop closure (car mode, or a coincidental match on any other mode): the trail out of
+            // the shared start point is unavoidably shared too, same reasoning as the shared-hut
+            // case - "near start" is always the record's prefix (access is always stored as
+            // from_id), regardless of either leg's reversed flag.
+            const approachNearStart = graphData.startEdgeIds.getPrefixIds(s.approachEdgeId)
+            const exitNearStart = graphData.startEdgeIds.getPrefixIds(exitLeg.edgeId)
+            for (const id of trimSharedHubIds(approachNearStart, exitNearStart)) exempt.add(id)
+          }
+          const exitSortedIds = graphData.startEdgeIds.getSortedIds(exitLeg.edgeId)
+          if (hasOverlap(exitSortedIds, exempt, s.usedEdgeIds)) { killCounters.trackOverlap++; continue }
+
           finished.push({
             huts: [...s.path], startId: s.startId, exitStartId: exitLeg.startId,
             totalDurationH: s.totalDurationH + exitLeg.durationH,
@@ -104,8 +151,27 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
       for (const s of states.values()) {
         for (const leg of legs) {
           const h2 = leg.toIndex
+          if (allowedHutIndices && !allowedHutIndices.has(h2)) { killCounters.hutFiltered++; continue }
           if (s.path.includes(h2)) { killCounters.revisit++; continue }
+          if (!hutAvailable(h2, s.path.length + 1, availability)) { killCounters.availability++; continue }
           if (!legPasses(leg, constraints, killCounters)) continue
+
+          const sortedIdsNew = graphData.hutEdgeIds.getSortedIds(leg.edgeId)
+          let exempt: Set<number> = EMPTY_EDGE_IDS
+          if (s.prevLeg) {
+            // leg.fromIndex === h always (adjacency.ts's invariant: legs is adjacency.get(h)) - the
+            // shared hut is h. s.prevLeg is whatever leg most recently arrived at h (a hut-hut leg,
+            // or - for the very first hop - the approach leg itself, kind 'start'); nearHubIds
+            // dispatches to the right id table by kind, so this works unchanged for both.
+            const prevNear = nearHubIds(edgeIdTables, s.prevLeg, 'arriving')
+            const newNear = nearHubIds(edgeIdTables, { edgeId: leg.edgeId, reversed: leg.reversed, kind: 'hut' }, 'departing')
+            exempt = trimSharedHubIds(prevNear, newNear)
+          }
+          if (hasOverlap(sortedIdsNew, exempt, s.usedEdgeIds)) { killCounters.trackOverlap++; continue }
+
+          const nextUsedEdgeIds = new Set(s.usedEdgeIds)
+          for (let i = 0; i < sortedIdsNew.length; i++) nextUsedEdgeIds.add(sortedIdsNew[i])
+
           const nextVisitedKey = s.visitedKey | (1n << BigInt(h2))
           const next: State = {
             path: [...s.path, h2], startId: s.startId,
@@ -115,6 +181,9 @@ export function searchChains(query: Query, graphData: GraphData): SearchResult {
             totalDistanceM: s.totalDistanceM + leg.distanceM,
             legs: [...s.legs, legSummary(leg)],
             visitedKey: nextVisitedKey,
+            usedEdgeIds: nextUsedEdgeIds,
+            prevLeg: { edgeId: leg.edgeId, reversed: leg.reversed, kind: 'hut' },
+            approachEdgeId: s.approachEdgeId,
           }
           if (!nextLayer.has(h2)) nextLayer.set(h2, new Map())
           insertDominant(nextLayer.get(h2)!, `${next.startId}|${nextVisitedKey}`, next)

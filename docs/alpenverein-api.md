@@ -156,6 +156,15 @@ https://www.hut-reservation.org/reservation/book-hut/{ohrs_hut_id}/wizard?dateFr
 | `TOOL_CABINTICKET_CURRENTDATENOTAVAILABLE` → "ausgebucht" | full on that date |
 | `TOOL_CABINTICKET_OHRS_TECHNICALERROR` → "dzt. nicht möglich" | OHRS call failed |
 
+These three cover what the app's own language file names, but the per-hut response (2b) carries a
+`reservationMode`/`status` pair not represented above, confirmed 2026-09-01 by live-probing a hut
+outside its season (`{"reservationMode":"CLOSED","status":"HUT_CLOSED_TO_PUBLIC","bedCategoriesData":[]}`,
+e.g. hut 520 "Würgauer Haus", `tenantCode:5`, 15.01.2027) — distinct from `RESERVATION_POSSIBLE`/
+`RESERVATION_NOT_POSSIBLE` (`SERVICED` mode) seen elsewhere in this doc. The map-wide `collectAll`
+call (2a) does **not** expose this distinction — it returns only a flat "has some free bed" id
+list, so a season-closed hut and a fully-booked hut are indistinguishable there; only the per-hut
+call (2b) can tell them apart.
+
 ---
 
 ## 3. Other endpoints seen in the capture (unused here)

@@ -19,6 +19,7 @@ import osmium
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt, grading  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
+from lib.geo import haversine_m_vec_pairs as haversine_m_vec  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
@@ -27,14 +28,6 @@ from lib.timing import StepTimer, phase  # noqa: E402
 SCRIPT_NAME = "build_base_graph.py"
 
 config = load_config()
-
-def haversine_m_vec(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 class WayGraphHandler(osmium.SimpleHandler):
@@ -62,6 +55,9 @@ class WayGraphHandler(osmium.SimpleHandler):
         return idx
 
     def way(self, w):
+        tags = dict(w.tags)
+        if grading.is_impassable(tags):
+            return
         nodes = [n for n in w.nodes if n.location.valid()]
         if len(nodes) < 2:
             return
@@ -73,7 +69,6 @@ class WayGraphHandler(osmium.SimpleHandler):
             idxs[k] = self._idx_for(n.ref, lon, lat)
             lons[k], lats[k] = lon, lat
         dists = haversine_m_vec(lons[:-1], lats[:-1], lons[1:], lats[1:])
-        tags = dict(w.tags)
         highway = tags.get("highway", "")
         is_road = highway in self.road_tags
         grade = grading.classify_way(tags)
@@ -140,6 +135,7 @@ def contract(*raw_args, progress_every: int = 20_000):
         with rss_sampler() as sample:
             contracted = contract_structural(*raw_args, progress_every=progress_every)
         meta.update(sample.as_meta())  # outside rss_sampler: its finally fills the peak
+        meta["n_isolated_cycles"] = contracted.n_isolated_cycles
     print(f"contracted to {len(contracted.coords):,} nodes / "
           f"{len(contracted.edges_u):,} edges", flush=True)
     return contracted
@@ -208,6 +204,13 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
     out_dir = Path(out_dir)
     with timer.step("write_arrays"):
+        # edges_arr's time_s/ascent_m/descent_m are binfmt.UNSET above, so any edge_profiles.stamp
+        # from a previous base graph is about to become a lie - and that stamp is the only thing
+        # dodo's compute_edge_profiles keys "already done" off (dag/elevation.py's targets; it
+        # can't take edges.npy as a file_dep, since it rewrites that file in place). Dropped BEFORE
+        # edges.npy is written, so a crash mid-write still leaves the stamp gone rather than
+        # vouching for sentinel weights.
+        (out_dir / "edge_profiles.stamp").unlink(missing_ok=True)
         binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
         binfmt.save_array(out_dir / "cell_index.npy", cell_index)
         binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
@@ -227,9 +230,12 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"])
+    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+                        help="merged trails.osm.pbf to stream and contract into the base graph")
+    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory to write the persisted base graph arrays into")
+    parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"],
+                        help="grid cell size (km) each node is assigned to, for later per-cell lookup by build_hub_edges.py (see pipeline.config.json's graph.tileSizeKm)")
     args = parser.parse_args(argv)
 
     # stream_osm and contract keep their own phase() records (with rss_sampler meta) - they are

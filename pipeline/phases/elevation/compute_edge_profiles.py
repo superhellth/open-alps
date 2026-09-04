@@ -46,6 +46,29 @@ def smooth_profile(elevations, seg_len_m, kernel_m: float) -> np.ndarray:
     return (weight @ elevations) / weight.sum(axis=1)
 
 
+def merge_segments(seg_len, dz, min_segment_m: float) -> tuple:
+    """Merges consecutive (seg_len, dz) pairs from the smoothed profile until each merged
+    segment's horizontal run is at least min_segment_m, so slope is computed over a wider run than
+    the raw per-point digitization (spec 2026-09-03-steep-terrain-time-model-design.md §1). A
+    trailing remainder shorter than min_segment_m is kept as its own final segment, never dropped
+    or force-merged - dropping it would silently discard real distance/elevation."""
+    seg_len = np.asarray(seg_len, dtype=np.float64)
+    dz = np.asarray(dz, dtype=np.float64)
+    merged_len, merged_dz = [], []
+    run_len, run_dz = 0.0, 0.0
+    for length, delta in zip(seg_len, dz):
+        run_len += length
+        run_dz += delta
+        if run_len >= min_segment_m:
+            merged_len.append(run_len)
+            merged_dz.append(run_dz)
+            run_len, run_dz = 0.0, 0.0
+    if run_len > 0:
+        merged_len.append(run_len)
+        merged_dz.append(run_dz)
+    return np.array(merged_len, dtype=np.float64), np.array(merged_dz, dtype=np.float64)
+
+
 def edge_ascent_descent(smoothed, edge_starts, edge_counts) -> tuple:
     """Plain signed-delta sums along each edge's smoothed profile - no threshold, no hysteresis.
     `smoothed` is the tight concatenation of every edge's own point sequence in edge order
@@ -73,15 +96,19 @@ def edge_ascent_descent(smoothed, edge_starts, edge_counts) -> tuple:
 
 
 def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele, kernel_m,
-                                  speed_model, timer: StepTimer):
+                                  speed_model, timer: StepTimer, *, min_slope_segment_m: float,
+                                  technical_pace_ms: float, min_speed_ms: float):
     """Per base-graph edge: reconstructs its point sequence (u -> interior[offset:offset+count]
-    -> v), smooths the elevation profile (kernel_m), computes time_s from the smoothed profile
-    (lib.speed.edge_time_s), and appends the smoothed profile to a flat buffer. The per-edge
-    reconstruction is a Python loop (same pattern as build_base_graph.py's pack_and_write
-    pack_interior loop) - smoothing is an inherently per-edge local operation, a global vectorised
-    pass would leak across edge boundaries the same way un-masked ascent/descent would.
-    ascent_m/descent_m are filled afterwards in ONE vectorised batch call to edge_ascent_descent
-    over every edge's smoothed profile at once."""
+    -> v), smooths the elevation profile (kernel_m), merges segments up to min_slope_segment_m
+    before computing slope (spec §1), picks technical_time_s over edge_time_s for via_ferrata/
+    sac_rank>=5 edges (spec §2), clamps the result to min_speed_ms (spec §3), and appends the
+    smoothed profile to a flat buffer. The per-edge reconstruction is a Python loop (same pattern
+    as build_base_graph.py's pack_and_write pack_interior loop) - smoothing/merging is an
+    inherently per-edge local operation, a global vectorised pass would leak across edge
+    boundaries the same way un-masked ascent/descent would. ascent_m/descent_m are filled
+    afterwards in ONE vectorised batch call to edge_ascent_descent over every edge's smoothed
+    profile at once - they stay on the fine-grained (unmerged) profile, since merging would
+    understate real elevation gain/loss on a genuine staircase."""
     n_edges = len(edges)
     time_s = np.zeros(n_edges, dtype=np.float64)
     edge_point_counts = np.empty(n_edges, dtype=np.int64)
@@ -90,6 +117,7 @@ def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele
     node_lon, node_lat = nodes["lon"], nodes["lat"]
     interior_lon, interior_lat = interior["lon"], interior["lat"]
     interior_offset, interior_count = edges["interior_offset"], edges["interior_count"]
+    edge_sac_rank, edge_via_ferrata = edges["sac_rank"], edges["via_ferrata"]
 
     with timer.step("smooth"):
         for i in range(n_edges):
@@ -106,7 +134,19 @@ def _fill_edge_time_and_elevation(edges, nodes, interior, node_ele, interior_ele
                 else np.zeros(0)
             smoothed = smooth_profile(elev, seg_len, kernel_m)
             all_smoothed.append(smoothed)
-            time_s[i] = float(speed.edge_time_s(seg_len, np.diff(smoothed), **speed_model).sum())
+
+            merged_len, merged_dz = merge_segments(seg_len, np.diff(smoothed), min_slope_segment_m)
+            is_technical = bool(edge_via_ferrata[i]) or int(edge_sac_rank[i]) >= 5
+            if is_technical:
+                edge_time = float(speed.technical_time_s(merged_len, merged_dz,
+                                                          pace_ms=technical_pace_ms).sum())
+            else:
+                edge_time = float(speed.edge_time_s(merged_len, merged_dz, **speed_model).sum())
+
+            dist_total = float(seg_len.sum())
+            if dist_total > 0:
+                edge_time = min(edge_time, dist_total / min_speed_ms)
+            time_s[i] = edge_time
 
             if (i + 1) % 200_000 == 0 or i + 1 == n_edges:
                 print(f"  smooth/time_s: {i + 1:,}/{n_edges:,} edges", flush=True)
@@ -124,22 +164,37 @@ def main(argv=None):
     config = load_config()
     speed_model = config["graph"]["speedModel"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--smoothing-kernel-m", type=float,
-                        default=config["dem"]["smoothingKernelM"])
+                        default=config["dem"]["smoothingKernelM"],
+                        help="width (m) of the distance-weighted triangular smoothing kernel applied before summing ascent/descent (see pipeline.config.json's dem.smoothingKernelM)")
     # Declared as CLI args (not read from config directly) so dodo.py's TaskOptionsChanged can
     # track them - see task_compute_edge_profiles's comment for why a speedModel-only config edit
     # must invalidate this task's cache.
-    parser.add_argument("--speed-v0", type=float, default=speed_model["v0"])
-    parser.add_argument("--speed-k", type=float, default=speed_model["k"])
-    parser.add_argument("--speed-s0", type=float, default=speed_model["s0"])
+    parser.add_argument("--speed-v0", type=float, default=speed_model["v0"],
+                        help="Tobler-shaped speed model v0 constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--speed-k", type=float, default=speed_model["k"],
+                        help="Tobler-shaped speed model k constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--speed-s0", type=float, default=speed_model["s0"],
+                        help="Tobler-shaped speed model s0 constant (see pipeline.config.json's graph.speedModel)")
+    parser.add_argument("--min-slope-segment-m", type=float,
+                        default=config["dem"]["minSlopeSegmentM"],
+                        help="minimum horizontal run (m) a merged segment must reach before slope is computed for time_s (see pipeline.config.json's dem.minSlopeSegmentM)")
+    parser.add_argument("--technical-pace-ms", type=float,
+                        default=speed_model["technicalPaceMs"],
+                        help="constant pace (m/s over 3D distance) used for via_ferrata/sac_rank>=5 segments instead of the Tobler model (see pipeline.config.json's graph.speedModel.technicalPaceMs)")
+    parser.add_argument("--min-speed-ms", type=float,
+                        default=speed_model["minSpeedMs"],
+                        help="floor on implied walking speed (m/s); any edge's time_s is clamped so it never implies a slower speed (see pipeline.config.json's graph.speedModel.minSpeedMs)")
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)
     resolved_speed_model = {"v0": args.speed_v0, "k": args.speed_k, "s0": args.speed_s0}
     timer = StepTimer()
     with phase(SCRIPT_NAME, "compute_edge_profiles", smoothing_kernel_m=args.smoothing_kernel_m,
-               **resolved_speed_model) as meta:
+               min_slope_segment_m=args.min_slope_segment_m, technical_pace_ms=args.technical_pace_ms,
+               min_speed_ms=args.min_speed_ms, **resolved_speed_model) as meta:
         with timer.step("load_arrays"):
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
@@ -151,6 +206,9 @@ def main(argv=None):
         time_s, ascent_m, descent_m = _fill_edge_time_and_elevation(
             edges, nodes, interior, node_ele, interior_ele, args.smoothing_kernel_m,
             resolved_speed_model, timer,
+            min_slope_segment_m=args.min_slope_segment_m,
+            technical_pace_ms=args.technical_pace_ms,
+            min_speed_ms=args.min_speed_ms,
         )
         edges["time_s"] = time_s
         edges["ascent_m"] = ascent_m

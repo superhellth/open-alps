@@ -88,3 +88,17 @@ def test_record_dtype_has_no_stored_duration():
     # reads it for a leg walked backwards and is wrong by the full ascent/descent rate gap.
     assert "time_min" not in binfmt.RECORD_DTYPE.names
     assert "time_s" not in binfmt.RECORD_DTYPE.names
+
+
+def test_variant_official_does_not_collide_with_the_search_grid():
+    assert binfmt.VARIANT_OFFICIAL not in (
+        binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T2,
+        binfmt.VARIANT_FAST_T3, binfmt.VARIANT_FAST_T3_UNGRADED,
+    )
+    assert binfmt.VARIANT_NAMES[binfmt.VARIANT_OFFICIAL] == "OFFICIAL"
+
+
+def test_tour_meta_dtype_fields():
+    assert binfmt.TOUR_META_DTYPE.names == ("tour_id", "leg_index")
+    assert binfmt.TOUR_META_DTYPE["tour_id"] == np.dtype("u1")
+    assert binfmt.TOUR_META_DTYPE["leg_index"] == np.dtype("u1")

@@ -7,9 +7,9 @@ read this before writing any code against `hut-edge-payload.*`, `approaches.*` o
 (section refs below point there). Pipeline internals (how these are built): `pipeline/CLAUDE.md`,
 `pipeline/phases/postprocessing/README.md`.
 
-As of this writing the client-side tour search that would consume these files does not exist yet —
-`GraphPage.jsx`/`App.jsx` only read the older `huts.geojson`/`trails.pmtiles`/`hut-edges.pmtiles`/
-`hut-edge-stats.json` outputs. This document describes what the pipeline produces regardless.
+The client-side tour search that consumes these files lives in `huts/src/tourSearch/` (see the
+root `CLAUDE.md`'s "App structure") — it runs entirely in the browser off these static files, no
+query-time backend.
 
 ## 1. `hut-edge-payload.bin` + `hut-edge-payload.json`
 
@@ -146,24 +146,36 @@ client-chosen ceiling in between with the same guarantee (spec C9).
 ## 6. `approaches.bin` + `approaches.json`
 
 Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start_edges/records.npy`
-(92,426 raw records over 27,261 parkings + 3,025 stations — not shippable as-is). Two things,
-because a client needs both a small per-hut table and a way to answer "does this loop close":
+(92,426 raw records over 27,261 parkings + 3,025 stations for AT+Bayern — not shippable as-is).
+Two things, because a client needs both a small per-hut table and a way to answer "does this loop
+close":
 
 **Approach table** (`approaches.bin`, columns per `approaches.json`'s `columns` manifest):
 `hut_id` (u2), `start_id` (u8 — a raw OSM node id for `TYPE_PARKING`/`TYPE_STATION` rows, or the
 Alpenverein ArcGIS layer's `OBJECTID` for `TYPE_PARTNER` rows — same field, two different id
 spaces depending on `source_type`, exceeds u4 range either way), `source_type` (u1,
-`binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER` — the last added
-`docs/superpowers/specs/2026-08-28-hut-classification-design.md`),
-`access_unknown` (u1, boolean), `distance_m`/`ascent_m`/`descent_m` (f4). The k best approaches per
-hut (k = `config.approach.k`, default 3), where "best" is **time-ranked** (DIN duration, §2), not
-distance-ranked, and restricted-access candidates (`access`/`motor_vehicle ∈ {private, no}`, gated
-forest roads) are hard-dropped before ranking — a missing access tag is kept but flagged via
-`access_unknown` rather than dropped, since "unknown" and "known open" are different claims. At
-least one parking-sourced and one station-sourced approach is kept where both exist, even if a
-different source type would otherwise fill every slot, so a client's car/transit mode split always
-has something to work with. Only `FAST_ANY` records are candidates — an approach is a fastest,
-unconstrained leg to the hub, not a difficulty-graded one.
+`binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER`), `variant` (u1, one of `binfmt.VARIANT_*` —
+today only `VARIANT_FAST_ANY` rows are ever candidates, see below), `access_unknown` (u1,
+boolean), `distance_m`/`ascent_m`/`descent_m` (f4).
+
+Row selection is a matrix, not a top-k: every gathered candidate is bucketed into a cell keyed by
+`(source_type, variant, duration_bucket)` — `duration_bucket` from `config.approach
+.durationBucketsH`'s sorted hour boundaries (default `[4, 6]`, giving three buckets: `(0, 4]`,
+`(4, 6]`, `(6, inf)`), duration computed via DIN 33466 (§2) — and the fastest candidate in each
+non-empty cell is kept as one row. An empty cell simply produces no row; there is no fallback or
+spillover into an adjacent bucket, and nothing manufactures coverage a hut's real candidate pool
+doesn't support. This replaces an earlier top-k+reserved-slot design that could silently drop an
+available source type when two or more were missing from the top-k (see git history on
+`select_approaches` for that era) — the matrix keeps at most one row per cell instead, so no
+selection can clobber another.
+
+Only variants listed in `config.approach.variants` are candidates at all (default `["FAST_ANY"]`)
+— an approach is a fastest, unconstrained leg to the hub by default, not a difficulty-graded one;
+a future street-avoidance variant would be added to this list, not hardcoded.
+
+**Row count per hut is genuinely variable**, bounded above by `types_present × len(variants) ×
+(len(durationBucketsH) + 1)` (today `≤ 3 × 1 × 3 = 9`) rather than the old near-fixed `{1, 2, 3}` —
+a client must not assume any fixed row count per hut.
 
 **There is no approach time cap** (`maxApproachTime` does not exist and must never be
 reintroduced — see the root `CLAUDE.md`'s "Global Constraints" and spec E1). An approach is a full
@@ -172,19 +184,19 @@ filtering is a client-side UI decision (e.g. a `maxLegTime` the user sets), not 
 
 `access_values` in the manifest (`approaches.json`) is a parallel array of raw OSM `access` tag
 strings (one per approach row, `None` where absent) — interned as JSON rather than packed into the
-binary, since the row count (~7k) makes that cheap and the value set is open-ended (any OSM
-`access=` value: `"customers"`, `"permit"`, ...). A client wanting to surface "toll road" or
-"permit required" reads this array by row index, not the binary payload.
+binary, since the row count makes that cheap and the value set is open-ended (any OSM `access=`
+value: `"customers"`, `"permit"`, ...). A client wanting to surface "toll road" or "permit
+required" reads this array by row index, not the binary payload.
 
 **Loop-closure reverse index** (`approaches.json`'s `reverse_index`, JSON, not in the binary): the
-client's car mode requires exit start-point == entry start-point, and the k≈3 approach tables of a
-tour's first and last hut essentially never share a start id on their own — a naive intersection
-would annihilate the result set. So every `start_edges` record whose start point appears in *any*
-hut's retained approach ships here too (all variants — closure needs whatever the client already
-has open, not just `FAST_ANY`), keyed both ways: `hut_to_starts[hut_id]` and
-`start_to_huts[start_id]`, each a list of `{hut_id, start_id, source_type, variant, distance_m,
-ascent_m, descent_m}`. Exit edges are these same records read backwards (§3) — nothing separate is
-stored for "the return leg."
+client's car mode requires exit start-point == entry start-point, and a tour's first and last hut's
+approach-table rows essentially never share a start id on their own — a naive intersection would
+annihilate the result set. So every `start_edges` record whose start point appears in *any* hut's
+retained approach ships here too (all variants — closure needs whatever the client already has
+open, not just the configured approach-candidate variants), keyed both ways:
+`hut_to_starts[hut_id]` and `start_to_huts[start_id]`, each a list of `{hut_id, start_id,
+source_type, variant, distance_m, ascent_m, descent_m, edge_id}`. Exit edges are these same records
+read backwards (§3) — nothing separate is stored for "the return leg."
 
 ## 7. `unsnapped_huts.json`
 

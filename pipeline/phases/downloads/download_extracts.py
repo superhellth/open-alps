@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """
-Downloads raw Geofabrik regional extracts listed in pipeline.config.json.
+Downloads raw Geofabrik regional extracts listed in pipeline.config.json, plus each region's
+".poly" boundary-polygon file (fetch_huts.py's real AT+Bavaria coverage filter, see
+lib/poly.py's docstring).
 Re-run to refresh to the latest Geofabrik snapshot (they regenerate daily, not pinned/versioned).
 Usage: python pipeline/phases/downloads/download_extracts.py
 """
@@ -26,6 +28,11 @@ with phase(SCRIPT_NAME, "download_extracts") as meta:
         print(f"downloading {region['url']} -> {out_path}")
         with timer.step("download"):
             urllib.request.urlretrieve(region["url"], out_path)
+
+        poly_path = raw_dir / f"{region['name']}.poly"
+        print(f"downloading {region['polyUrl']} -> {poly_path}")
+        with timer.step("download"):
+            urllib.request.urlretrieve(region["polyUrl"], poly_path)
 
     for f in sorted(raw_dir.iterdir()):
         print(f.name, f.stat().st_size)

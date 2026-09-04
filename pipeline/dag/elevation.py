@@ -43,12 +43,16 @@ def task_compute_edge_profiles():
         params=[
             cli_param("smoothing_kernel_m", "smoothing-kernel-m", float,
                       CONFIG["dem"]["smoothingKernelM"]),
+            cli_param("min_slope_segment_m", "min-slope-segment-m", float,
+                      CONFIG["dem"]["minSlopeSegmentM"]),
             # every value compute_edge_profiles.py's time_s computation reads from speedModel must
             # be its own tracked param, or a routing_probe.py recalibration that touches only
             # speedModel would leave TaskOptionsChanged() reporting "up to date".
             cli_param("speed_v0", "speed-v0", float, speed["v0"]),
             cli_param("speed_k", "speed-k", float, speed["k"]),
             cli_param("speed_s0", "speed-s0", float, speed["s0"]),
+            cli_param("technical_pace_ms", "technical-pace-ms", float, speed["technicalPaceMs"]),
+            cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
         ],
         task_dep=["sample_base_elevation"],
         file_dep=[OSM_DIR / "base_graph" / "node_ele.npy", OSM_DIR / "base_graph" / "interior_ele.npy"],
@@ -68,14 +72,22 @@ def task_build_profiles():
         "phases/elevation/build_profiles.py",
         params=[cli_param("profile_points", "profile-points", int,
                           CONFIG["dem"].get("profilePoints", 30))],
-        task_dep=["build_hub_edges"],  # same file it mutates in place, not just same mtime
+        # start_edges/ is now build_access_edges' target, not build_hub_edges' (spec
+        # 2026-09-02-hub-edge-scaling-design.md B1/B7) - same "mutates records.npy in place
+        # without declaring it as a target" reasoning as before, just against the new owner.
+        task_dep=["build_hub_edges", "build_access_edges", "match_tour_edges"],
         file_dep=[
             OSM_DIR / "base_graph" / "interior_ele.npy",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy",
+            OSM_DIR / "tour_edges" / "records.npy",
         ],
         # records.npy is rewritten in place (profile_offset/profile_count filled) but not listed as
-        # a target - build_hub_edges already owns it. profiles.npy is the only file this task alone
-        # produces; downstream tile builders declare an explicit task_dep on this task rather than
-        # relying on a shared target/file_dep link to wait for the in-place rewrite.
-        targets=[OSM_DIR / "hut_edges" / "profiles.npy", OSM_DIR / "start_edges" / "profiles.npy"],
+        # a target - build_hub_edges/match_tour_edges already own it. profiles.npy is the only
+        # file this task alone produces; downstream tile builders declare an explicit task_dep on
+        # this task rather than relying on a shared target/file_dep link to wait for the in-place
+        # rewrite.
+        targets=[
+            OSM_DIR / "hut_edges" / "profiles.npy", OSM_DIR / "start_edges" / "profiles.npy",
+            OSM_DIR / "tour_edges" / "profiles.npy",
+        ],
     )

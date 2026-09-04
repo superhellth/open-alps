@@ -10,7 +10,13 @@ import json
 from pathlib import Path
 
 from lib import binfmt
+from lib.geo import haversine_m as _haversine_m
 from lib.geo import hut_points
+
+HUB_TYPE_JSON_NAMES = {
+    binfmt.TYPE_HUT: "hut", binfmt.TYPE_STATION: "station",
+    binfmt.TYPE_PARKING: "parking", binfmt.TYPE_PARTNER: "partner_betrieb",
+}
 
 
 def load_all_hubs(osm_dir: Path) -> list:
@@ -47,3 +53,31 @@ def bucket_by_cell(hubs: list, grid) -> dict:
         cid = grid.cell_id_for_point(hub["lon"], hub["lat"])
         by_cell.setdefault(cid, []).append(hub)
     return by_cell
+
+
+def nearest_hub_to_point(hubs: list, point: tuple, max_snap_m: float) -> tuple:
+    """Nearest hub to `point` from the combined hub set (spec 2026-08-30-tour-folder-ingestion-
+    design.md §2's endpoint-snapping table) - the transpose of the deleted lib/tour_geometry.py's
+    assign_hut_position (nearest *hub* to an endpoint, not nearest *chain point* to a hut).
+    Preferring TYPE_HUT over any other type when both sit within max_snap_m, so a leg ending at a
+    hut beside a car park resolves to the hut.
+
+    Returns (chosen, nearest, nearest_dist_m). `nearest`/`nearest_dist_m` describe the single
+    closest candidate of ANY type, regardless of range or whether it was chosen - needed so a
+    leg_endpoint_unsnapped gap can report what the nearest miss was (spec §5), which
+    assign_hut_position could not (it discarded the distance on failure). `chosen` is None when
+    nothing is within max_snap_m."""
+    if not hubs:
+        return None, None, float("inf")
+
+    dists = [(_haversine_m(point[0], point[1], h["lon"], h["lat"]), h) for h in hubs]
+    nearest_dist, nearest = min(dists, key=lambda t: t[0])
+
+    in_range = [(d, h) for d, h in dists if d <= max_snap_m]
+    if not in_range:
+        return None, nearest, nearest_dist
+
+    huts_in_range = [(d, h) for d, h in in_range if h["type"] == binfmt.TYPE_HUT]
+    pool = huts_in_range if huts_in_range else in_range
+    _, chosen = min(pool, key=lambda t: t[0])
+    return chosen, nearest, nearest_dist

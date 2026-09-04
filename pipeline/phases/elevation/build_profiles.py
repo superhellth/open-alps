@@ -28,6 +28,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
+from lib.geo import haversine_m_vec_pairs as _haversine_m_vec_pairs  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
@@ -98,15 +99,6 @@ def _fill_unmatched(elevations: np.ndarray) -> np.ndarray:
     return _ffill(fwd[::-1])[::-1]
 
 
-def _haversine_m_vec_pairs(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
-
-
 def elevation_profile(lon: np.ndarray, lat: np.ndarray, samples: np.ndarray, n_points: int) -> list:
     if len(lon) < 2:
         return []
@@ -156,8 +148,10 @@ def _process_edge_set(edge_dir: Path, lookup_keys, lookup_values, profile_points
 def main(argv=None):
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--profile-points", type=int, default=config["dem"].get("profilePoints", 30))
+    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+                        help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--profile-points", type=int, default=config["dem"].get("profilePoints", 30),
+                        help="number of evenly-spaced points to interpolate each edge's display elevation profile onto (see pipeline.config.json's dem.profilePoints)")
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)
@@ -170,8 +164,11 @@ def main(argv=None):
             interior_ele = binfmt.load_array(base_graph_dir / "interior_ele.npy", mmap=False)
             lookup_keys, lookup_values = build_elevation_lookup(nodes, interior, node_ele, interior_ele)
 
-        for name in ("hut_edges", "start_edges"):
+        for name in ("hut_edges", "start_edges", "tour_edges"):
             edge_dir = OSM_DIR / name
+            if not (edge_dir / "records.npy").exists():
+                print(f"skipping {edge_dir} (not built yet)", flush=True)
+                continue
             print(f"processing {edge_dir} ...", flush=True)
             with timer.step(name):
                 _process_edge_set(edge_dir, lookup_keys, lookup_values, args.profile_points)

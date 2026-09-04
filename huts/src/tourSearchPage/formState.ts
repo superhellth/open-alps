@@ -1,4 +1,5 @@
 import type { Query, TourMode } from '../tourSearch/types.js'
+import type { HutClass, HutOperator } from '../hutClass.js'
 import { toNumberOrDefault } from './helpers.js'
 
 export interface FormState {
@@ -10,7 +11,12 @@ export interface FormState {
   legAscentCapM: string
   maxEleM: string
   allowViaFerrata: boolean
-  overlapVariety: 'wenig' | 'mittel' | 'viel'
+  allowedOperators: Set<HutOperator>
+  allowServiced: boolean
+  allowSelfService: boolean
+  startDate: string
+  numOfPeople: number
+  onlyAvailable: boolean
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -22,16 +28,38 @@ export const DEFAULT_FORM: FormState = {
   legAscentCapM: '',
   maxEleM: '',
   allowViaFerrata: true,
-  overlapVariety: 'mittel',
+  allowedOperators: new Set(['av', 'sonstige']),
+  allowServiced: true,
+  allowSelfService: false,
+  startDate: '',
+  numOfPeople: 1,
+  onlyAvailable: false,
 }
 
-export const OVERLAP_THRESHOLD_BY_VARIETY: Record<FormState['overlapVariety'], number> = {
-  wenig: 0.3,
-  mittel: 0.5,
-  viel: 0.8,
+function hutClassAllowed(c: HutClass, form: FormState): boolean {
+  if (!form.allowedOperators.has(c.operator)) return false
+  return c.serviced ? form.allowServiced : form.allowSelfService
 }
 
-export function buildQuery(form: FormState): Query {
+function allowedHutIndices(form: FormState, hutsByIndex: (HutClass | null)[]): Set<number> {
+  const allowed = new Set<number>()
+  hutsByIndex.forEach((c, i) => {
+    if (c && hutClassAllowed(c, form)) allowed.add(i)
+  })
+  return allowed
+}
+
+export function isFilterSelectionValid(form: FormState): boolean {
+  if (form.allowedOperators.size === 0) return false
+  if (!form.allowServiced && !form.allowSelfService) return false
+  return true
+}
+
+export function buildQuery(
+  form: FormState,
+  hutsByIndex: (HutClass | null)[],
+  availability?: Query['availability'],
+): Query {
   return {
     mode: form.mode,
     legCountMin: form.legCountRange[0],
@@ -43,5 +71,7 @@ export function buildQuery(form: FormState): Query {
     legAscentCapM: toNumberOrDefault(form.legAscentCapM, Infinity),
     maxEleM: form.maxEleM === '' ? null : toNumberOrDefault(form.maxEleM, Infinity),
     allowViaFerrata: form.allowViaFerrata,
+    allowedHutIndices: allowedHutIndices(form, hutsByIndex),
+    availability: form.onlyAvailable ? availability : undefined,
   }
 }

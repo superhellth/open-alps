@@ -36,10 +36,13 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 (`dem.providerConfig.regions` elided above for brevity — see the `dem` bullet below and the real
 `pipeline.config.json` for the full shape.)
 
-- `bbox` — filters the ArcGIS hut pull (`fetch_huts.py`) to the pipeline's current scope.
-- `regions` — one Geofabrik extract per entry; `download_extracts.py`/`filter_trails.py`/
-  `merge_trails.py` loop over this list, so adding a region (e.g. Switzerland) is just adding
-  `{ "name": "switzerland", "url": "..." }` here.
+- `bbox` — coarse scope used by DEM provider config and `lib/geo.py`'s hut-point pre-filter; not
+  what filters the ArcGIS hut pull (see `regions`' `polyUrl` below).
+- `regions` — one Geofabrik extract per entry (`url` + `polyUrl`, its `.poly` admin-boundary file);
+  `download_extracts.py`/`filter_trails.py`/`merge_trails.py` loop over this list, and
+  `fetch_huts.py` filters the AV hut catalog to the union of every `polyUrl` boundary (`lib/poly.py`)
+  instead of `bbox`, so adding a region (e.g. Switzerland) is adding
+  `{ "name": "switzerland", "url": "...", "polyUrl": "..." }` here.
 - `trailTagFilter` — the `osmium tags-filter` expression `filter_trails.py` applies.
 - `graph.maxEdgeKm` / `graph.maxSnapM` / `graph.maxSnapAscentM` — defaults for
   `build_hub_edges.py`'s `--max-edge-km` / `--max-snap-m` / `--max-snap-ascent-m`; still
@@ -162,6 +165,16 @@ mkdir -p mm && tar -xjf micromamba.tar.bz2 -C mm
 automatically (`lib.pipeline.run_tippecanoe()`) — see `phases/postprocessing/README.md` for how.
 If you're already working from inside WSL (as this setup is), ignore the Windows path entirely —
 `pixi install` above covers `tippecanoe` too.
+
+## Running tests
+
+```bash
+pixi run test          # equivalent to: pixi run pytest
+```
+
+Fast (a few seconds, no real `data/` outputs needed — every test uses small synthetic
+fixtures) and safe to run anytime; unlike the `doit` tasks above, no test touches `data/` or
+downloads anything.
 
 ## Reproducing from scratch
 

@@ -12,6 +12,7 @@ Usage: python pipeline/phases/preprocessing/filter_start_points.py
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ from scipy.spatial import cKDTree
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.geo import hut_points  # noqa: E402
+from lib.grid import KM_PER_DEG_LAT  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -28,18 +30,66 @@ SCRIPT_NAME = "filter_start_points.py"
 
 config = load_config()
 
+_DROP_ACCESS = {"private", "no"}
+_DROP_BARRIER = {"gate", "lift_gate"}
+
+
+def is_usable(props: dict) -> bool:
+    """Hard-drops nodes that can never be a real trailhead: private/no-access or gated points
+    (parking behind a barrier, private stations), and stations mappers tagged disused=yes/
+    abandoned=yes instead of remapping to the disused:railway=* lifecycle prefix (which
+    fetch_stations_parking.py's tag_filter already excludes on import)."""
+    if props.get("access") in _DROP_ACCESS:
+        return False
+    if props.get("motor_vehicle") in _DROP_ACCESS:
+        return False
+    if props.get("barrier") in _DROP_BARRIER:
+        return False
+    if props.get("disused") == "yes" or props.get("abandoned") == "yes":
+        return False
+    return True
+
+
+def dedupe_by_osm_id(points: list) -> list:
+    """Collapses redundant `(type, osm_id)` rows into one. The AT/Bayern region extracts overlap
+    at the border, and fetch_stations_parking.py filters+exports per region then concatenates -
+    nothing merges the result, so a station/parking node inside the overlap band is emitted twice
+    at byte-identical coordinates (see docs/backlog/duplicate-start-points-across-region-extracts.md).
+    Keeps the first occurrence, same as a stable dict-based dedup."""
+    seen = {}
+    for p in points:
+        seen.setdefault((p["type"], p["osm_id"]), p)
+    return list(seen.values())
+
 
 def filter_to_hut_range(start_points: list, hut_coords: np.ndarray, max_edge_km: float) -> list:
+    """C1/C2 of spec 2026-09-02-hub-edge-scaling-design.md: the old version built a cKDTree over
+    raw (lon, lat) degrees and thresholded at max_edge_km / KM_PER_DEG_LAT - that constant is
+    km-per-degree of LATITUDE, so at higher latitudes (a degree of longitude is shorter than a
+    degree of latitude everywhere outside the equator) the filter was an ellipse squashed
+    east-west, silently dropping valid trailheads up to max_edge_km due east/west of a hut. Fixed
+    by scaling longitude by cos(mid_lat) before building the tree - the same projection
+    lib/grid.py's Grid.km_per_deg_lng and lib/hub_snap.py's _project_m already use - so both axes
+    of the tree are in the same locally-equal-scale units before thresholding.
+
+    C2: also batches the per-point query into one vectorized cKDTree.query call over the whole
+    array (was a Python loop, one query() per point) - no measurable time saved
+    (filter_start_points runs in 3.48s end to end), done because C1 already forces the tree to be
+    rebuilt in projected coordinates anyway."""
     if not start_points or len(hut_coords) == 0:
         return []
-    hut_tree = cKDTree(hut_coords)
-    deg_per_km = 1 / 111.320
-    kept = []
-    for p in start_points:
-        dist_deg, _ = hut_tree.query((p["lon"], p["lat"]), k=1)
-        if dist_deg <= max_edge_km * deg_per_km:
-            kept.append(p)
-    return kept
+    mid_lat = float(np.mean(hut_coords[:, 1]))
+    lng_scale = math.cos(math.radians(mid_lat))
+    hut_tree = cKDTree(np.column_stack([hut_coords[:, 0] * lng_scale, hut_coords[:, 1]]))
+
+    point_lons = np.array([p["lon"] for p in start_points])
+    point_lats = np.array([p["lat"] for p in start_points])
+    query_points = np.column_stack([point_lons * lng_scale, point_lats])
+    dist_deg, _ = hut_tree.query(query_points, k=1)
+
+    deg_per_km = 1 / KM_PER_DEG_LAT
+    max_dist_deg = max_edge_km * deg_per_km
+    return [p for p, d in zip(start_points, dist_deg) if d <= max_dist_deg]
 
 
 def _points_from_features(fc: dict, point_type: str, extract_id) -> list:
@@ -102,7 +152,8 @@ def build_id_table(points: list) -> dict:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+    parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                        help="longest hut-to-hut trail distance kept as an edge, used to filter start points to hub range (see pipeline.config.json's graph.maxEdgeKm)")
     args = parser.parse_args()
 
     with phase(SCRIPT_NAME, "filter_start_points"):
@@ -114,7 +165,15 @@ if __name__ == "__main__":
         )
         print(f"start-point candidates: {len(all_points)}")
 
-        kept = filter_to_hut_range(all_points, hut_coords, args.max_edge_km)
+        deduped_points = dedupe_by_osm_id(all_points)
+        print(f"deduped (type, osm_id): {len(deduped_points)} "
+              f"({len(all_points) - len(deduped_points)} redundant rows dropped)")
+
+        usable_points = [p for p in deduped_points if is_usable(p.get("properties", {}))]
+        print(f"usable (not private/gated/disused): {len(usable_points)} "
+              f"({len(all_points) - len(usable_points)} dropped)")
+
+        kept = filter_to_hut_range(usable_points, hut_coords, args.max_edge_km)
         print(f"kept within maxEdgeKm of a hut: {len(kept)}")
 
         arr = np.zeros(len(kept), dtype=[

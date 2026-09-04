@@ -1,12 +1,14 @@
 export const SOURCE_TYPE_STATION = 1
 export const SOURCE_TYPE_PARKING = 2
+export const SOURCE_TYPE_PARTNER = 3
 
-export type SourceType = typeof SOURCE_TYPE_STATION | typeof SOURCE_TYPE_PARKING
+export type SourceType = typeof SOURCE_TYPE_STATION | typeof SOURCE_TYPE_PARKING | typeof SOURCE_TYPE_PARTNER
 
 export interface ApproachRecord {
   hutIndex: number
   startId: number
   sourceType: SourceType
+  variant: number
   accessUnknown: boolean
   distanceM: number
   ascentM: number
@@ -102,7 +104,7 @@ export interface TourResult {
   legs: LegSummary[]
 }
 
-export type TourMode = 'car' | 'transit'
+export type TourMode = 'car' | 'transit' | 'village'
 
 export interface Query {
   mode: TourMode
@@ -115,6 +117,11 @@ export interface Query {
   legAscentCapM?: number
   maxEleM?: number | null
   allowViaFerrata?: boolean
+  allowedHutIndices?: Set<number>
+  availability?: {
+    ohrsIdByHutIndex: Map<number, string | null>
+    freeByOffset: Map<number, Set<string> | 'unknown'>
+  }
 }
 
 export interface KillCounters {
@@ -124,6 +131,9 @@ export interface KillCounters {
   maxEleM: number
   viaFerrata: number
   revisit: number
+  hutFiltered: number
+  trackOverlap: number
+  availability: number
 }
 
 export interface ReverseIndexEntry {
@@ -151,9 +161,17 @@ export interface ApproachesData {
   }
 }
 
+export interface HutEdgeIdsData {
+  getSortedIds(edgeId: number): Int32Array
+  getPrefixIds(edgeId: number): Int32Array
+  getSuffixIds(edgeId: number): Int32Array
+}
+
 export interface GraphData {
   hutEdges: HutEdgesData
   approaches: ApproachesData
+  hutEdgeIds: HutEdgeIdsData
+  startEdgeIds: HutEdgeIdsData
 }
 
 export interface SearchResult {

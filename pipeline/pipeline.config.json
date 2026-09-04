@@ -1,8 +1,10 @@
 {
   "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 },
   "regions": [
-    { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
-    { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
+    { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf",
+      "polyUrl": "https://download.geofabrik.de/europe/austria.poly" },
+    { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf",
+      "polyUrl": "https://download.geofabrik.de/europe/germany/bayern.poly" }
   ],
   "trailTagFilter": "w/highway=path,footway,track,steps,residential,service,unclassified,tertiary,via_ferrata",
   "graph": {
@@ -11,7 +13,7 @@
     "maxSnapAscentM": 25,
     "roadHighwayTags": ["residential", "service", "unclassified", "tertiary"],
     "tileSizeKm": 60,
-    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05 },
+    "speedModel": { "v0": 4.013, "k": 3.5, "s0": 0.05, "technicalPaceMs": 0.2, "minSpeedMs": 0.15 },
     "variants": ["FAST_ANY", "FAST_T2", "FAST_T3", "FAST_T3_UNGRADED"]
   },
   "dem": {
@@ -34,9 +36,33 @@
       ]
     },
     "smoothingKernelM": 30,
+    "minSlopeSegmentM": 30,
     "profilePoints": 30
   },
-  "approach": { "k": 3 },
+  "approach": {
+    "durationBucketsH": [4, 6],
+    "variants": ["FAST_ANY"],
+    "selectK": 20
+  },
+  "tourMatch": {
+    "corridorBufferM": 150.0,
+    "lengthDivergenceRatio": 2.0,
+    "hmmResampleM": 25.0,
+    "hmmObsNoiseM": 25.0,
+    "hmmMaxDistM": 150.0,
+    "hmmDistNoiseM": 25.0,
+    "endpointBridgeMaxM": 250.0
+  },
   "trailTiles": { "minZoom": 6, "maxZoom": 14 },
-  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 }
+  "hutEdgeTiles": { "minZoom": 6, "maxZoom": 14, "simplifyToleranceDeg": 0.0003 },
+  "quality": {
+    "maxFlaggedRows": 500,
+    "elevation": { "plausibleRangeM": [-50, 4300], "minSpeedMs": 0.05 },
+    "graphBuilding": {
+      "maxVertexGapM": 500, "snapToleranceM": 5, "minRetraceSeparationM": 200, "ascentCapM": 5000
+    },
+    "postprocessing": {
+      "minLengthM": 300, "straightnessThreshold": 0.97, "maxPointsForStraightnessFlag": 4
+    }
+  }
 }

@@ -8,6 +8,18 @@ from lib.pipeline import OSM_DIR, load_config
 CONFIG = load_config()
 
 
+def task_select_approach_pairs():
+    # B2/B4: global selection over access_distances.npy - must run whole-table (loop-closure
+    # reverse index isn't cell-local), so it is its own task rather than in-worker selection.
+    return pipeline_task(
+        "phases/postprocessing/select_approach_pairs.py",
+        params=[cli_param("k", "k", int, CONFIG["approach"].get("selectK", 20))],
+        task_dep=["build_hub_edges"],
+        file_dep=[OSM_DIR / "access_distances.npy"],
+        targets=[OSM_DIR / "selected_access_pairs.npy"],
+    )
+
+
 def task_build_trail_tiles():
     tiles_cfg = CONFIG.get("trailTiles", {})
     return pipeline_task(
@@ -45,6 +57,8 @@ def task_build_hut_edge_tiles():
             f"--out-stats {OSM_DIR / 'hut-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'hut-edge-geometry.bin'}",
             f"--out-geometry-json {OSM_DIR / 'hut-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'hut-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'hut-edge-elevation.json'}",
         ],
         params=_hut_edge_tiles_params(),
         # records.npy's profile_offset/profile_count are rewritten in place by build_profiles but
@@ -55,6 +69,7 @@ def task_build_hut_edge_tiles():
         targets=[
             OSM_DIR / "hut-edges.pmtiles", OSM_DIR / "hut-edge-stats.json",
             OSM_DIR / "hut-edge-geometry.bin", OSM_DIR / "hut-edge-geometry.json",
+            OSM_DIR / "hut-edge-elevation.bin", OSM_DIR / "hut-edge-elevation.json",
         ],
     )
 
@@ -70,6 +85,8 @@ def task_build_start_edge_tiles():
             f"--out-stats {OSM_DIR / 'start-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'start-edge-geometry.bin'}",
             f"--out-geometry-json {OSM_DIR / 'start-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'start-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'start-edge-elevation.json'}",
         ],
         params=_hut_edge_tiles_params(),
         task_dep=["build_profiles"],  # see task_build_hut_edge_tiles's comment
@@ -77,6 +94,35 @@ def task_build_start_edge_tiles():
         targets=[
             OSM_DIR / "start-edges.pmtiles", OSM_DIR / "start-edge-stats.json",
             OSM_DIR / "start-edge-geometry.bin", OSM_DIR / "start-edge-geometry.json",
+            OSM_DIR / "start-edge-elevation.bin", OSM_DIR / "start-edge-elevation.json",
+        ],
+    )
+
+
+def task_build_tour_edge_tiles():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_tiles.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'tour_edges'}",
+            # --id-table is required=True on build_edge_tiles.py even though tour records are
+            # hut-only (spec §3) - the same id table hut/start edges already resolve display ids
+            # from.
+            f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
+            "--layer-name tour_edges",
+            f"--out-tiles {OSM_DIR / 'tour-edges.pmtiles'}",
+            f"--out-stats {OSM_DIR / 'tour-edge-stats.json'}",
+            f"--out-geometry-bin {OSM_DIR / 'tour-edge-geometry.bin'}",
+            f"--out-geometry-json {OSM_DIR / 'tour-edge-geometry.json'}",
+            f"--out-elevation-bin {OSM_DIR / 'tour-edge-elevation.bin'}",
+            f"--out-elevation-json {OSM_DIR / 'tour-edge-elevation.json'}",
+        ],
+        params=_hut_edge_tiles_params(),
+        task_dep=["build_profiles"],  # same in-place-rewrite reasoning as the other two edge-tile tasks
+        file_dep=[OSM_DIR / "tour_edges" / "records.npy"],
+        targets=[
+            OSM_DIR / "tour-edges.pmtiles", OSM_DIR / "tour-edge-stats.json",
+            OSM_DIR / "tour-edge-geometry.bin", OSM_DIR / "tour-edge-geometry.json",
+            OSM_DIR / "tour-edge-elevation.bin", OSM_DIR / "tour-edge-elevation.json",
         ],
     )
 
@@ -90,7 +136,13 @@ def task_build_approach_table():
             f"--out-bin {OSM_DIR / 'approaches.bin'}",
             f"--out-manifest {OSM_DIR / 'approaches.json'}",
         ],
-        params=[cli_param("k", "k", int, CONFIG["approach"]["k"])],
+        params=[
+            cli_param(
+                "duration_buckets_h", "duration-buckets-h", str,
+                ",".join(str(b) for b in CONFIG["approach"]["durationBucketsH"]),
+            ),
+            cli_param("variants", "variants", str, ",".join(CONFIG["approach"]["variants"])),
+        ],
         file_dep=[OSM_DIR / "start_edges" / "records.npy", OSM_DIR / "start_points_id_table.json"],
         targets=[OSM_DIR / "approaches.bin", OSM_DIR / "approaches.json"],
     )
@@ -108,4 +160,54 @@ def task_build_edge_payload():
         task_dep=["build_profiles"],  # see task_build_hut_edge_tiles's comment
         file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "huts.geojson"],
         targets=[OSM_DIR / "hut-edge-payload.bin", OSM_DIR / "hut-edge-payload.json"],
+    )
+
+
+def task_build_tour_edge_payload():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_payload.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'tour_edges'}",
+            f"--huts {OSM_DIR / 'huts.geojson'}",
+            f"--tour-meta {OSM_DIR / 'tour_edges' / 'tour_meta.npy'}",
+            f"--out-bin {OSM_DIR / 'tour-edge-payload.bin'}",
+            f"--out-manifest {OSM_DIR / 'tour-edge-payload.json'}",
+        ],
+        task_dep=["build_profiles"],
+        file_dep=[
+            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
+            OSM_DIR / "huts.geojson",
+        ],
+        targets=[OSM_DIR / "tour-edge-payload.bin", OSM_DIR / "tour-edge-payload.json"],
+    )
+
+
+def task_build_edge_ids():
+    return pipeline_task(
+        "phases/postprocessing/build_edge_ids.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'hut_edges'}",
+            f"--out-bin {OSM_DIR / 'hut-edge-ids.bin'}",
+            f"--out-manifest {OSM_DIR / 'hut-edge-ids.json'}",
+        ],
+        task_dep=["build_hub_edges"],
+        file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "hut_edges" / "edge_ids.npy"],
+        targets=[OSM_DIR / "hut-edge-ids.bin", OSM_DIR / "hut-edge-ids.json"],
+    )
+
+
+def task_build_start_edge_ids():
+    # Sibling of task_build_edge_ids, pointed at start_edges/ - build_edge_ids.py is already
+    # generic over --edges-dir, no script change needed (docs/superpowers/specs/
+    # 2026-09-04-approach-exit-overlap-avoidance-design.md §2).
+    return pipeline_task(
+        "phases/postprocessing/build_edge_ids.py",
+        args=[
+            f"--edges-dir {OSM_DIR / 'start_edges'}",
+            f"--out-bin {OSM_DIR / 'start-edge-ids.bin'}",
+            f"--out-manifest {OSM_DIR / 'start-edge-ids.json'}",
+        ],
+        task_dep=["build_access_edges"],
+        file_dep=[OSM_DIR / "start_edges" / "records.npy", OSM_DIR / "start_edges" / "edge_ids.npy"],
+        targets=[OSM_DIR / "start-edge-ids.bin", OSM_DIR / "start-edge-ids.json"],
     )

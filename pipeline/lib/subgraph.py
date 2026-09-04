@@ -35,7 +35,12 @@ class LocalSubgraph:
     interior_ele: np.ndarray
 
 
-def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: float) -> LocalSubgraph:
+def gather_subgraph_for_bounds(base_graph_dir: Path, grid, bounds: dict) -> LocalSubgraph:
+    """Gathers every base-graph node/edge whose cell overlaps `bounds`, plus the one-hop edge-
+    incidence closure (see module docstring) - the bbox-driven half of gather_padded_subgraph,
+    factored out so a caller with its own bbox (match_tour_edges.py's per-leg corridor, sized off
+    a chain slice rather than a grid cell) can reuse the exact same gather instead of re-deriving
+    it from a cell_id it doesn't have."""
     base_graph_dir = Path(base_graph_dir)
     nodes = binfmt.load_array(base_graph_dir / "nodes.npy")
     cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy")
@@ -50,8 +55,7 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
     interior_ele = (binfmt.load_array(interior_ele_path) if interior_ele_path.exists()
                      else np.zeros(len(interior), dtype=np.float32))
 
-    padded = grid.padded_bounds(cell_id, buffer_km)
-    overlapping_cells = grid.cell_ids_overlapping(padded)
+    overlapping_cells = grid.cell_ids_overlapping(bounds)
 
     if overlapping_cells:
         base_node_ids = np.unique(np.concatenate([
@@ -102,6 +106,51 @@ def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: 
         local_node_ele=np.array(node_ele[global_node_ids]),
         # same "stay a lazy view, indexed by the untouched global offsets" reasoning as interior.
         interior_ele=interior_ele,
+    )
+
+
+def gather_padded_subgraph(base_graph_dir: Path, grid, cell_id: int, buffer_km: float) -> LocalSubgraph:
+    return gather_subgraph_for_bounds(base_graph_dir, grid, grid.padded_bounds(cell_id, buffer_km))
+
+
+def clip_subgraph_to_bounds(subgraph: LocalSubgraph, bounds: dict) -> LocalSubgraph:
+    """Narrows an already-gathered subgraph down to `bounds` at node/edge granularity, plus a
+    one-hop edge-incidence closure (same reasoning as gather_subgraph_for_bounds's cell-level
+    closure) so a path can still leave through an edge whose far endpoint sits just outside the
+    box. Needed because gather_subgraph_for_bounds only filters by whole grid cell - fine for
+    build_hub_edges.py (buffer_km == maxEdgeKm, so a padded cell IS the correct extent), but a
+    no-op for match_tour_edges.py's per-leg corridor (spec section 2.3): a tour leg's chain-slice
+    bbox plus a ~150m buffer is almost always far smaller than one 60km base-graph cell, so
+    without this step every leg of a tour routes over the SAME whole cell(s) regardless of the
+    corridor buffer, degenerating into the free shortest path section 2.3 exists to prevent."""
+    lon, lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
+    in_bounds = ((lon >= bounds["minLng"]) & (lon <= bounds["maxLng"])
+                 & (lat >= bounds["minLat"]) & (lat <= bounds["maxLat"]))
+
+    if len(subgraph.local_edges):
+        edge_mask = in_bounds[subgraph.local_edges["u"]] | in_bounds[subgraph.local_edges["v"]]
+        kept_edges = subgraph.local_edges[edge_mask]
+    else:
+        kept_edges = subgraph.local_edges
+
+    core_ids = np.nonzero(in_bounds)[0]
+    if len(kept_edges):
+        keep_local_ids = np.unique(np.concatenate([core_ids, kept_edges["u"], kept_edges["v"]]))
+    else:
+        keep_local_ids = core_ids
+
+    local_edges = np.array(kept_edges, dtype=binfmt.EDGE_DTYPE)
+    if len(local_edges):
+        local_edges["u"] = np.searchsorted(keep_local_ids, local_edges["u"])
+        local_edges["v"] = np.searchsorted(keep_local_ids, local_edges["v"])
+
+    return LocalSubgraph(
+        global_node_ids=subgraph.global_node_ids[keep_local_ids],
+        local_nodes=subgraph.local_nodes[keep_local_ids],
+        local_edges=local_edges,
+        interior=subgraph.interior,
+        local_node_ele=subgraph.local_node_ele[keep_local_ids],
+        interior_ele=subgraph.interior_ele,
     )
 
 

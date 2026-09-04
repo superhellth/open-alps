@@ -21,42 +21,10 @@ from scipy.spatial import cKDTree
 
 from lib import binfmt
 from lib.edge_split import SplitResult, nearest_point_on_polyline, split_edge_at_point
+from lib.geo import haversine_m as _haversine_m
+from lib.geo import haversine_m_vec_pairs as _haversine_m_vec_pairs
 from lib.grid import KM_PER_DEG_LAT, Grid
 from lib.subgraph import LocalSubgraph
-
-
-def _haversine_m(lon1, lat1, lon2, lat2):
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dlambda / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
-def _haversine_m_vec(lon1: float, lat1: float, lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Same formula as _haversine_m, but against an array of points in one numpy call instead of
-    a Python-level loop - used in snap_hub_to_subgraph's node scan, the hot path (one call per hub
-    per cell against every candidate node)."""
-    r = 6_371_000.0
-    p1, p2 = math.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + math.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
-
-
-def _haversine_m_vec_pairs(lon1: np.ndarray, lat1: np.ndarray,
-                            lon2: np.ndarray, lat2: np.ndarray) -> np.ndarray:
-    """Fully-vectorized haversine over paired arrays (both endpoints vary per element), unlike
-    _haversine_m_vec (one fixed point vs an array) - used by _build_edge_spatial_index to compute
-    every polyline segment length in a cell in one call."""
-    r = 6_371_000.0
-    p1, p2 = np.radians(lat1), np.radians(lat2)
-    dphi = np.radians(lat2 - lat1)
-    dlambda = np.radians(lon2 - lon1)
-    a = np.sin(dphi / 2) ** 2 + np.cos(p1) * np.cos(p2) * np.sin(dlambda / 2) ** 2
-    return 2 * r * np.arcsin(np.sqrt(a))
 
 
 @dataclass
@@ -163,6 +131,39 @@ def _build_edge_spatial_index(subgraph: LocalSubgraph):
     return tree, edge_ids, max_seg_len_m, km_per_deg_lng
 
 
+def _build_node_spatial_index(subgraph: LocalSubgraph):
+    """cKDTree over every LOCAL node's projected (x, y) position, cached on the subgraph exactly
+    the way _build_edge_spatial_index's edge index already is (D3: this used to be a full
+    _haversine_m_vec scan over every node, once per hub - O(hubs x nodes) on a subgraph that can
+    hold hundreds of thousands of nodes after A widens the candidate set)."""
+    if len(subgraph.local_nodes) == 0:
+        return None
+    ref_lat = float(np.mean(subgraph.local_nodes["lat"]))
+    km_per_deg_lng = KM_PER_DEG_LAT * math.cos(math.radians(ref_lat))
+    xs, ys = _project_m(subgraph.local_nodes["lon"], subgraph.local_nodes["lat"], km_per_deg_lng)
+    tree = cKDTree(np.column_stack([xs, ys]))
+    return tree, km_per_deg_lng
+
+
+def _nearest_node(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float) -> tuple:
+    """(local_node_index, distance_m) for the nearest existing graph node to (hub_lon, hub_lat),
+    via the cached cKDTree above. distance_m is in the same local equirectangular-projected-metres
+    space _build_edge_spatial_index already uses for its own candidate search, not exact
+    haversine - close enough at cell scale (tens of km), and the tie-break between two nodes
+    equidistant to within projection error can differ from the old exact-haversine argmin (D3);
+    irrelevant to output quality. Returns (None, inf) when the subgraph has no nodes at all."""
+    index = getattr(subgraph, "_node_spatial_index", "unset")
+    if index == "unset":
+        index = _build_node_spatial_index(subgraph)
+        subgraph._node_spatial_index = index
+    if index is None:
+        return None, float("inf")
+    tree, km_per_deg_lng = index
+    x, y = _project_m(hub_lon, hub_lat, km_per_deg_lng)
+    dist, idx = tree.query([x, y], k=1)
+    return int(idx), float(dist)
+
+
 def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
                            max_snap_m: float) -> list:
     index = getattr(subgraph, "_edge_spatial_index", "unset")
@@ -192,24 +193,17 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
     Never returns bare None: a hub that cannot snap - at any distance, or past the vertical cap -
     comes back as a SnapRejection instead, so it's counted rather than silently vanishing."""
     no_trail_data = len(subgraph.local_nodes) == 0 and len(subgraph.local_edges) == 0
-    node_dists = None
-    # An existing graph node within range always wins over a mid-chain split, even if some
-    # point along an incident edge is geometrically a hair closer - a hub sitting a few meters
-    # off a real node is meant to snap to that node, not spawn a near-duplicate virtual vertex
-    # right next to it.
+    best_node_i, best_node_d = None, float("inf")
+    # Both a node candidate and a mid-edge candidate are always found (when in range) and
+    # compared on distance alone - a hut can sit right next to a through-trail while its nearest
+    # actual graph node is a much farther dead-end spur (real case: hub_snap picking a 57m spur
+    # over a 0.7m-away through-trail forced every route out of that hut to detour to the spur and
+    # back, showing up as a spurious self-retrace in the routed geometry). Preferring the node
+    # unconditionally traded that off against only avoiding a near-duplicate virtual vertex a few
+    # metres from an existing one - not worth it once the gap between the two candidates can be
+    # tens of metres.
     if len(subgraph.local_nodes) > 0:
-        node_dists = _haversine_m_vec(
-            hub_lon, hub_lat, subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
-        )
-        best_i = int(np.argmin(node_dists))
-        if node_dists[best_i] <= max_snap_m:
-            gap_m = float(node_dists[best_i])
-            gap_dz_m = (0.0 if hub_ele_m is None
-                        else float(hub_ele_m) - float(subgraph.local_node_ele[best_i]))
-            if (max_snap_ascent_m is not None and hub_ele_m is not None
-                    and abs(gap_dz_m) > max_snap_ascent_m):
-                return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
-            return SnapResult(node_index=best_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
+        best_node_i, best_node_d = _nearest_node(subgraph, hub_lon, hub_lat)
 
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
@@ -221,7 +215,8 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
         u = subgraph.local_nodes[e["u"]]
         v = subgraph.local_nodes[e["v"]]
         polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
-        seg_idx, frac = nearest_point_on_polyline(polyline, (hub_lon, hub_lat))
+        lng_scale = math.cos(math.radians(hub_lat))
+        seg_idx, frac = nearest_point_on_polyline(polyline, (hub_lon, hub_lat), lng_scale)
         px = polyline[seg_idx][0] + frac * (polyline[seg_idx + 1][0] - polyline[seg_idx][0])
         py = polyline[seg_idx][1] + frac * (polyline[seg_idx + 1][1] - polyline[seg_idx][1])
         d = _haversine_m(hub_lon, hub_lat, px, py)
@@ -231,27 +226,56 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
                 float(e["dist"]), float(e["road_m"]), float(e["ungraded_m"]),
                 float(e["inferred_m"]), seg_idx, frac,
             )
-            best_edge = (d, ei, split, e["u"], e["v"])
+            best_edge = (d, ei, split, e["u"], e["v"], seg_idx, frac)
 
-    if best_edge is None:
-        # A node within max_snap_m (if any nodes exist at all) is the most informative distance
-        # to report even though it lost - it tells the report how far away the nearest trail data
-        # actually was, not just that nothing qualified.
-        fallback_gap_m = (float(node_dists[int(np.argmin(node_dists))])
-                           if node_dists is not None and len(node_dists) else float("inf"))
+    best_edge_d = best_edge[0] if best_edge is not None else float("inf")
+    node_in_range = best_node_d <= max_snap_m
+    edge_in_range = best_edge_d <= max_snap_m
+
+    if not node_in_range and not edge_in_range:
+        # The nearer of the two misses (if any candidates exist at all) is the most informative
+        # distance to report even though neither qualified - it tells the report how far away the
+        # nearest trail data actually was, not just that nothing qualified.
         reason = "no_trail_data" if no_trail_data else "gap_too_far"
-        return SnapRejection(gap_m=fallback_gap_m, dz_m=0.0, reason=reason)
-    d, edge_local_index, split, u_idx, v_idx = best_edge
+        return SnapRejection(gap_m=min(best_node_d, best_edge_d), dz_m=0.0, reason=reason)
+
+    # best_node_d comes from _nearest_node's projected-equirectangular cKDTree query, best_edge_d
+    # from exact haversine - two different approximations of the same real-world distance, which
+    # can disagree by well under a metre even when the node and the edge's nearest point are the
+    # SAME physical location (e.g. the node sits exactly at that edge's own endpoint). Without
+    # slack, that measurement noise alone could flip the pick and spawn a redundant virtual vertex
+    # a hair from an existing node - tiny next to the tens-of-metres gaps this comparison exists
+    # to catch.
+    _TIE_EPSILON_M = 1.0
+    if node_in_range and (not edge_in_range or best_node_d <= best_edge_d + _TIE_EPSILON_M):
+        gap_m = best_node_d
+        gap_dz_m = (0.0 if hub_ele_m is None
+                    else float(hub_ele_m) - float(subgraph.local_node_ele[best_node_i]))
+        if (max_snap_ascent_m is not None and hub_ele_m is not None
+                and abs(gap_dz_m) > max_snap_ascent_m):
+            return SnapRejection(gap_m=gap_m, dz_m=gap_dz_m, reason="vertical_offset")
+        return SnapResult(node_index=best_node_i, gap_m=gap_m, gap_dz_m=gap_dz_m)
+
+    d, edge_local_index, split, u_idx, v_idx, seg_idx, frac = best_edge
     gap_dz_m = 0.0
     if hub_ele_m is not None:
-        # Snap-point elevation: the same distance-ratio blend split_edge_at_point already uses to
-        # apportion ungraded_m/inferred_m across the two synthetic halves - not either endpoint's
-        # raw value, since the split point usually sits strictly between them.
-        u_ele = float(subgraph.local_node_ele[u_idx])
-        v_ele = float(subgraph.local_node_ele[v_idx])
-        total = split.dist_to_u + split.dist_to_v
-        ratio = split.dist_to_u / total if total > 0 else 0.0
-        snap_ele = u_ele + (v_ele - u_ele) * ratio
+        # Snap-point elevation: interpolated between the two REAL sampled points the split point
+        # actually falls between (same seg_idx/frac nearest_point_on_polyline used for its
+        # position) - not a blend across the whole edge's u/v endpoints. A chain-contracted edge
+        # can run hundreds of interior points and climb/descend well beyond the u-v straight-line
+        # difference, so a distance-ratio blend against only the two far endpoints can be off by
+        # hundreds of metres from the real terrain at the split point (spec E3 regression: median
+        # disagreement under 5m once measured against the actual interior_ele samples).
+        e = subgraph.local_edges[edge_local_index]
+        interior_ele = subgraph.interior_ele[
+            e["interior_offset"]:e["interior_offset"] + e["interior_count"]
+        ]
+        full_ele = np.concatenate((
+            [float(subgraph.local_node_ele[u_idx])],
+            interior_ele.astype(np.float64),
+            [float(subgraph.local_node_ele[v_idx])],
+        ))
+        snap_ele = float(full_ele[seg_idx] + frac * (full_ele[seg_idx + 1] - full_ele[seg_idx]))
         gap_dz_m = float(hub_ele_m) - snap_ele
     if (max_snap_ascent_m is not None and hub_ele_m is not None
             and abs(gap_dz_m) > max_snap_ascent_m):

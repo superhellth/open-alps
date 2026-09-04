@@ -27,7 +27,7 @@ function LegCountSlider({
         value={draft}
         onChange={(_e, v) => setDraft(v as [number, number])}
         onChangeCommitted={(_e, v) => onCommit(v as [number, number])}
-        min={1}
+        min={2}
         max={14}
         step={1}
         marks

@@ -32,7 +32,8 @@ SCRIPT_NAME = "fetch_dem.py"
 config = load_config()
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
+parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
+                    help="longest hut-to-hut trail distance kept as an edge, used to size the DEM fetch buffer (see pipeline.config.json's graph.maxEdgeKm)")
 args = parser.parse_args()
 
 provider_config = dict(config["dem"]["providerConfig"])
