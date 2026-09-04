@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { trimSharedHubIds, hasOverlap } from './overlap.js'
+import { trimSharedHubIds, hasOverlap, nearHubIds } from './overlap.js'
 
 describe('trimSharedHubIds', () => {
   it('exempts the matching run walking outward from the shared hub', () => {
@@ -34,5 +34,40 @@ describe('hasOverlap', () => {
 
   it('is false when the id sets are genuinely disjoint', () => {
     expect(hasOverlap([100, 200], new Set(), new Set([300, 400]))).toBe(false)
+  })
+})
+
+describe('nearHubIds', () => {
+  const tables = {
+    hut: {
+      getSortedIds: () => new Int32Array(0),
+      getPrefixIds: (id: number) => Int32Array.from([100 + id]),
+      getSuffixIds: (id: number) => Int32Array.from([200 + id]),
+    },
+    start: {
+      getSortedIds: () => new Int32Array(0),
+      getPrefixIds: (id: number) => Int32Array.from([300 + id]),
+      getSuffixIds: (id: number) => Int32Array.from([400 + id]),
+    },
+  }
+
+  it('an arriving, non-reversed hut leg reads the suffix (near its arrival end)', () => {
+    expect(Array.from(nearHubIds(tables, { edgeId: 1, reversed: false, kind: 'hut' }, 'arriving'))).toEqual([201])
+  })
+
+  it('an arriving, reversed hut leg reads the prefix', () => {
+    expect(Array.from(nearHubIds(tables, { edgeId: 1, reversed: true, kind: 'hut' }, 'arriving'))).toEqual([101])
+  })
+
+  it('a departing, non-reversed hut leg reads the prefix', () => {
+    expect(Array.from(nearHubIds(tables, { edgeId: 1, reversed: false, kind: 'hut' }, 'departing'))).toEqual([101])
+  })
+
+  it('a departing, reversed hut leg reads the suffix', () => {
+    expect(Array.from(nearHubIds(tables, { edgeId: 1, reversed: true, kind: 'hut' }, 'departing'))).toEqual([201])
+  })
+
+  it('dispatches to the start table for kind "start"', () => {
+    expect(Array.from(nearHubIds(tables, { edgeId: 1, reversed: false, kind: 'start' }, 'arriving'))).toEqual([401])
   })
 })

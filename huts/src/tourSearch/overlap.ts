@@ -1,3 +1,12 @@
+import type { HutEdgeIdsData } from './types.js'
+
+export type EdgeKind = 'hut' | 'start'
+
+export interface EdgeIdTables {
+  hut: HutEdgeIdsData
+  start: HutEdgeIdsData
+}
+
 /** Given the shared hut's outward-ordered base-edge-id runs for two adjacent legs (spec §4 of
  *  docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md), returns the ids exempt
  *  from the overlap check because they're the unavoidable stretch of trail leaving the shared
@@ -29,4 +38,22 @@ export function hasOverlap(
     if (usedIds.has(id)) return true
   }
   return false
+}
+
+/** Picks the id array "near" a leg's shared endpoint, dispatching to the hut- or start-edge-ids
+ *  table by the leg's kind (hut-hut vs approach/exit both share the same from->to, prefix-near-
+ *  from/suffix-near-to storage convention - spec §4 of docs/superpowers/specs/
+ *  2026-08-29-avoid-overlapping-tracks-design.md, extended to start-legs by §4 of
+ *  docs/superpowers/specs/2026-09-04-approach-exit-overlap-avoidance-design.md). role:
+ *  'arriving' means the leg arrives at the shared point (its near-end is prefix if reversed, else
+ *  suffix); 'departing' means it departs from the shared point (near-end is suffix if reversed,
+ *  else prefix). */
+export function nearHubIds(
+  tables: EdgeIdTables,
+  leg: { edgeId: number; reversed: boolean; kind: EdgeKind },
+  role: 'arriving' | 'departing',
+): Int32Array {
+  const table = leg.kind === 'hut' ? tables.hut : tables.start
+  const wantSuffix = role === 'arriving' ? !leg.reversed : leg.reversed
+  return wantSuffix ? table.getSuffixIds(leg.edgeId) : table.getPrefixIds(leg.edgeId)
 }
