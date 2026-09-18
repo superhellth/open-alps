@@ -67,7 +67,7 @@ def test_gap_reasons_flags_every_gap():
     gaps = [
         {"tourId": 0, "tourName": "T", "legIndex": 0, "reason": "leg_endpoint_unsnapped",
          "detail": {"endpoint": "to"}},
-        {"tourId": 0, "tourName": "T", "legIndex": 1, "reason": "hmm_match_broken"},
+        {"tourId": 0, "tourName": "T", "legIndex": 1, "reason": "leg_endpoint_unsnapped"},
     ]
     check = check_gap_reasons(gaps, max_flagged=500)
     assert check["summary"]["checked"] == 2

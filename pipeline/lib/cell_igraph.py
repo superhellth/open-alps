@@ -67,7 +67,7 @@ def _check_routable(subgraph: LocalSubgraph) -> None:
     |V| times. On a real ~117k-vertex cell that is hours of 100%-CPU spinning per call with no
     output rather than an error, which is exactly how it went unnoticed for a whole run - so catch
     the sentinel here, at the one chokepoint every routing caller (build_hub_edges.py,
-    match_tour_edges.py, analysis/routing_probe.py) passes through."""
+    analysis/routing_probe.py) passes through."""
     times = subgraph.local_edges["time_s"]
     n_unset = int((times < 0).sum())
     if n_unset:

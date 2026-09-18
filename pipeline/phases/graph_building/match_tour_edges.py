@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Matches each tour folder's legs (pipeline/tours/<Name>/<N>.gpx) directly onto their own GPX
-trace + the DEM - no OSM base graph, no routing, no HMM map matching (spec docs/superpowers/specs/
+trace + the DEM - no OSM base graph, no routing, no map matching (spec docs/superpowers/specs/
 2026-09-14-gpx-hut-snap-design.md). Each leg's
 distance/ascent/descent/duration/geometry come straight from its raw trace; only its two endpoints
 are resolved onto a hub, by pure nearest-point distance (lib/hubs.py's nearest_hub_to_point).

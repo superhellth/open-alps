@@ -79,8 +79,6 @@ def check_connectivity(records: np.ndarray, n_huts: int, max_flagged: int) -> di
     at most len(binfmt.VARIANT_NAMES) of them, never capped in practice)."""
     flagged = []
     for variant, name in sorted(binfmt.VARIANT_NAMES.items()):
-        if variant == binfmt.VARIANT_OFFICIAL:
-            continue  # not a member of the search grid (spec §5 of the tour-integration design)
         mask = records["variant"] == variant
         pairs = list(zip(records["from_id"][mask].tolist(), records["to_id"][mask].tolist()))
         components = union_find_components(n_huts, pairs)
