@@ -205,12 +205,6 @@ def test_filter_start_points_depends_on_partner_betriebe():
     assert any(d.endswith("partner_betriebe.geojson") for d in deps)
 
 
-def test_match_tour_edges_depends_on_profiles_and_snaps_not_edges_npy():
-    task = dodo.task_match_tour_edges()
-    assert "compute_edge_profiles" in task["task_dep"]
-    assert "snap_hubs" in task["task_dep"]
-    assert "fetch_tour_oa_geometry" not in task["task_dep"]
-    assert not any(d.endswith("edges.npy") for d in task["file_dep"])
 
 
 def test_match_tour_edges_tracks_tour_gpx_files():
@@ -219,25 +213,49 @@ def test_match_tour_edges_tracks_tour_gpx_files():
     assert any(d.endswith(".gpx") for d in file_deps)
 
 
-def test_match_tour_edges_targets_tour_edges_directory():
-    targets = dodo.task_match_tour_edges()["targets"]
-    assert any(t.endswith("tour_edges/records.npy") for t in targets)
-    assert any(t.endswith("tour_edges/tour_meta.npy") for t in targets)
-    assert any(t.endswith("tour-match-gaps.json") for t in targets)
 
 
-def test_match_tour_edges_does_not_track_record_schema_version():
-    # spec §2.6: this task doesn't own RECORD_DTYPE, so it must never move record_schema_version
-    # and never force a build_hub_edges rerun.
-    param_names = {p["name"] for p in dodo.task_match_tour_edges().get("params", [])}
-    assert "record_schema_version" not in param_names
 
 
-def test_build_profiles_depends_on_match_tour_edges_and_tour_edges_records():
+
+GRAPH_TASKS = {"build_base_graph", "snap_hubs", "compute_edge_profiles", "sample_base_elevation",
+               "gather_route_subgraphs", "build_hub_edges", "build_access_edges", "build_profiles"}
+
+
+def test_match_tour_edges_has_no_base_graph_task_dependency():
+    task = dodo.task_match_tour_edges()
+    assert not (GRAPH_TASKS & set(task.get("task_dep", [])))
+    assert not any(str(d).endswith(("base_graph/nodes.npy", "hub_snaps.npy", "edges.npy"))
+                   for d in task["file_dep"])
+
+
+def test_match_tour_edges_declares_dem_huts_and_start_points():
+    deps = [str(d) for d in dodo.task_match_tour_edges()["file_dep"]]
+    for name in ("dem.tif", "huts.geojson", "start_points.npy"):
+        assert any(d.endswith(name) for d in deps), name
+
+
+def test_match_tour_edges_targets_include_profiles_and_hubs_json():
+    targets = [str(t) for t in dodo.task_match_tour_edges()["targets"]]
+    for name in ("tour_edges/records.npy", "tour_edges/geometry.npy", "tour_edges/profiles.npy",
+                 "tours.json", "tour-match-gaps.json", "hubs.json"):
+        assert any(t.endswith(name) for t in targets), name
+    assert not any(t.endswith(("tour_meta.npy", "edge_ids.npy")) for t in targets)
+
+
+def test_match_tour_edges_tracks_only_its_own_schema_version():
+    names = {p["name"] for p in dodo.task_match_tour_edges().get("params", [])}
+    assert "tour_leg_schema_version" in names
+    assert not names & {"record_schema_version", "edge_schema_version", "snap_schema_version"}
+    assert {"max_snap_m", "smoothing_kernel_m", "min_slope_segment_m", "profile_points",
+            "speed_v0", "speed_k", "speed_s0", "min_speed_ms"} <= names
+
+
+def test_build_profiles_no_longer_owns_tour_edges():
     task = dodo.task_build_profiles()
-    assert any(d.endswith("tour_edges/records.npy") for d in task["file_dep"])
-    assert any(t.endswith("tour_edges/profiles.npy") for t in task["targets"])
-    assert "match_tour_edges" in task["task_dep"]
+    assert "match_tour_edges" not in task["task_dep"]
+    assert not any("tour_edges" in str(x) for x in (*task["file_dep"], *task["targets"]))
+
 
 
 def test_build_tour_edge_tiles_mirrors_hut_edge_tiles_wiring():
@@ -279,9 +297,6 @@ def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
         assert name in ordered, name
     assert "fetch_tours" not in ordered
     assert "fetch_tour_oa_geometry" not in ordered
-    assert ordered.index("snap_hubs") < ordered.index("match_tour_edges")
-    assert ordered.index("compute_edge_profiles") < ordered.index("match_tour_edges")
-    assert ordered.index("match_tour_edges") < ordered.index("build_profiles")
     assert ordered.index("build_profiles") < ordered.index("build_tour_edge_tiles")
     assert ordered.index("build_profiles") < ordered.index("build_tour_edge_payload")
 
