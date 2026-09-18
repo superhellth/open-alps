@@ -7,6 +7,12 @@ export interface RawTourEndpoint {
 
 export interface RawTourLeg {
   legIndex: number
+  edgeId: number | null
+  distanceM?: number
+  ascentM?: number
+  descentM?: number
+  durationS?: number
+  maxEleM?: number
   from: RawTourEndpoint | null
   to: RawTourEndpoint | null
 }
@@ -14,6 +20,7 @@ export interface RawTourLeg {
 export interface RawTour {
   tourId: number
   name: string
+  numDays: number
   legs: RawTourLeg[]
 }
 

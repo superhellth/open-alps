@@ -20,10 +20,8 @@ import ResultsMap from './ResultsMap.js'
 import TourList from './TourList.js'
 import OfficialTourList from './OfficialTourList.js'
 import { loadOfficialTours } from '../tourSearch/loadOfficialTours.js'
-import { loadTourEdgesData } from '../tourSearch/loadTourEdges.js'
 import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
 import type { RawTour } from '../tourSearch/loadOfficialTours.js'
-import type { TourEdgeRecord } from '../tourSearch/loadTourEdges.js'
 
 const HUTS_URL = '/data/huts.geojson'
 const PARKING_URL = '/data/parking.geojson'
@@ -47,7 +45,6 @@ function TourSearchPage() {
   const [expandedChain, setExpandedChain] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<'search' | 'official'>('search')
   const [officialTours, setOfficialTours] = useState<RawTour[] | null>(null)
-  const [tourEdgeRecords, setTourEdgeRecords] = useState<Map<string, TourEdgeRecord> | null>(null)
   const [selectedOfficialTourId, setSelectedOfficialTourId] = useState<number | null>(null)
   const [hoveredLegIndex, setHoveredLegIndex] = useState<number | null>(null)
 
@@ -61,12 +58,10 @@ function TourSearchPage() {
         .then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
         .catch(() => ({ type: 'FeatureCollection', features: [] }) as GeoJSON.FeatureCollection),
       loadOfficialTours(),
-      loadTourEdgesData(),
     ])
-      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc, tours, tourEdges]) => {
+      .then(([tourSearchData, hutsFc, parkingFc, stationsFc, partnerFc, tours]) => {
         setGraphData(tourSearchData)
         setOfficialTours(tours)
-        setTourEdgeRecords(tourEdges)
 
         const hutFeatureByGuid = new Map(
           hutsFc.features.map((f) => [(f.properties as { id: string }).id, f]),
@@ -179,8 +174,8 @@ function TourSearchPage() {
   }, [form, hutsByIndex, hutClassByIndex, graphData, viewMode])
 
   const officialTourViews = useMemo(
-    () => (officialTours && tourEdgeRecords ? buildOfficialTourViews(officialTours, tourEdgeRecords) : null),
-    [officialTours, tourEdgeRecords],
+    () => (officialTours ? buildOfficialTourViews(officialTours) : null),
+    [officialTours],
   )
 
   const selectedOfficialTour = officialTourViews?.find((v) => v.tourId === selectedOfficialTourId) ?? null
