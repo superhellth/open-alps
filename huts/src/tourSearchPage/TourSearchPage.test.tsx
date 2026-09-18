@@ -7,13 +7,6 @@ import TourSearchPage from './TourSearchPage.js'
 import * as tourSearchIndex from '../tourSearch/index.js'
 import * as availability from '../availability/fetchAvailability.js'
 import type { GraphData, SearchResult } from '../tourSearch/types.js'
-import { packColumns } from '../tourSearch/binaryColumns.js'
-
-const emptyTourEdgePayload = packColumns(
-  { tour_id: 'u1', leg_index: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4', max_ele_m: 'f4', sac_rank: 'i1', via_ferrata: 'u1' },
-  { tour_id: [], leg_index: [], distance_m: [], ascent_m: [], descent_m: [], max_ele_m: [], sac_rank: [], via_ferrata: [] },
-  0,
-)
 
 // vitest.config.js doesn't set `globals: true`, so @testing-library/react's automatic
 // afterEach(cleanup) never registers - without this, each test's render() stacks onto the
@@ -79,10 +72,6 @@ beforeEach(() => {
         return fetchJsonMock({ type: 'FeatureCollection', features: [] })
       }
       if (url.includes('tours.json')) return fetchJsonMock([])
-      if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
-      if (url === '/data/tour-edge-payload.bin') {
-        return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
-      }
       throw new Error(`unexpected fetch ${url}`)
     }),
   )
@@ -139,10 +128,6 @@ describe('TourSearchPage', () => {
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('partner_betriebe.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('tours.json')) return fetchJsonMock([])
-        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
-        if (url === '/data/tour-edge-payload.bin') {
-          return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
-        }
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
@@ -169,10 +154,6 @@ describe('TourSearchPage', () => {
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('partner_betriebe.geojson')) return Promise.reject(new Error('404'))
         if (url.includes('tours.json')) return fetchJsonMock([])
-        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(emptyTourEdgePayload.manifest)
-        if (url === '/data/tour-edge-payload.bin') {
-          return Promise.resolve({ arrayBuffer: () => Promise.resolve(emptyTourEdgePayload.buffer) } as Response)
-        }
         throw new Error(`unexpected fetch ${url}`)
       }),
     )
@@ -225,14 +206,10 @@ describe('TourSearchPage', () => {
 
   it('toggling to "Offizielle Touren" hides the filter form and shows an official-tour card, preserving search results underneath', async () => {
     const officialTour = {
-      tourId: 1, name: 'Welser Höhenweg',
-      legs: [{ legIndex: 0, from: { type: 'hut', id: 0 }, to: { type: 'parking', id: 100 } }],
+      tourId: 1, name: 'Welser Höhenweg', numDays: 1,
+      legs: [{ legIndex: 0, edgeId: 0, distanceM: 5000, ascentM: 400, descentM: 100, durationS: 7200,
+               maxEleM: 1800, from: { type: 'hut', id: 0 }, to: { type: 'parking', id: 100 } }],
     }
-    const tourEdgePayload = packColumns(
-      { tour_id: 'u1', leg_index: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4', max_ele_m: 'f4', sac_rank: 'i1', via_ferrata: 'u1' },
-      { tour_id: [1], leg_index: [0], distance_m: [5000], ascent_m: [400], descent_m: [100], max_ele_m: [1800], sac_rank: [2], via_ferrata: [0] },
-      1,
-    )
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
@@ -248,8 +225,6 @@ describe('TourSearchPage', () => {
         if (url.includes('stations.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('partner_betriebe.geojson')) return fetchJsonMock({ type: 'FeatureCollection', features: [] })
         if (url.includes('tours.json')) return fetchJsonMock([officialTour])
-        if (url.includes('tour-edge-payload.json')) return fetchJsonMock(tourEdgePayload.manifest)
-        if (url === '/data/tour-edge-payload.bin') return Promise.resolve({ arrayBuffer: () => Promise.resolve(tourEdgePayload.buffer) } as Response)
         throw new Error(`unexpected fetch ${url}`)
       }),
     )

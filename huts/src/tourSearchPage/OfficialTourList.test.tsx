@@ -14,11 +14,11 @@ const tour: OfficialTourView = {
   legs: [
     {
       legIndex: 0, from: { type: 'parking', id: 1 }, to: { type: 'hut', id: 302 }, edgeId: 0,
-      reversed: false, distanceM: 6000, ascentM: 800, descentM: 100, durationH: 2, maxEleM: 1400, sacRank: 3, viaFerrata: false,
+      reversed: false, distanceM: 6000, ascentM: 800, descentM: 100, durationH: 2, maxEleM: 1400,
     },
     {
       legIndex: 1, from: { type: 'hut', id: 302 }, to: { type: 'station', id: 99 }, edgeId: 1,
-      reversed: false, distanceM: 10000, ascentM: 1000, descentM: 800, durationH: 3, maxEleM: 2000, sacRank: 3, viaFerrata: false,
+      reversed: false, distanceM: 10000, ascentM: 1000, descentM: 800, durationH: 3, maxEleM: 2000,
     },
   ],
   totalDistanceM: 16000, totalAscentM: 1800, totalDescentM: 900, totalDurationH: 5,
