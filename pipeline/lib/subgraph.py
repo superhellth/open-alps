@@ -38,9 +38,8 @@ class LocalSubgraph:
 def gather_subgraph_for_bounds(base_graph_dir: Path, grid, bounds: dict) -> LocalSubgraph:
     """Gathers every base-graph node/edge whose cell overlaps `bounds`, plus the one-hop edge-
     incidence closure (see module docstring) - the bbox-driven half of gather_padded_subgraph,
-    factored out so a caller with its own bbox (match_tour_edges.py's per-leg corridor, sized off
-    a chain slice rather than a grid cell) can reuse the exact same gather instead of re-deriving
-    it from a cell_id it doesn't have."""
+    factored out so a caller with its own bbox, rather than a grid cell, can reuse the exact same
+    gather instead of re-deriving it from a cell_id it doesn't have."""
     base_graph_dir = Path(base_graph_dir)
     nodes = binfmt.load_array(base_graph_dir / "nodes.npy")
     cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy")
@@ -119,10 +118,8 @@ def clip_subgraph_to_bounds(subgraph: LocalSubgraph, bounds: dict) -> LocalSubgr
     closure) so a path can still leave through an edge whose far endpoint sits just outside the
     box. Needed because gather_subgraph_for_bounds only filters by whole grid cell - fine for
     build_hub_edges.py (buffer_km == maxEdgeKm, so a padded cell IS the correct extent), but a
-    no-op for match_tour_edges.py's per-leg corridor (spec section 2.3): a tour leg's chain-slice
-    bbox plus a ~150m buffer is almost always far smaller than one 60km base-graph cell, so
-    without this step every leg of a tour routes over the SAME whole cell(s) regardless of the
-    corridor buffer, degenerating into the free shortest path section 2.3 exists to prevent."""
+    no-op for a caller whose bbox is far smaller than one 60km base-graph cell, so this step
+    narrows the gathered subgraph to the box itself."""
     lon, lat = subgraph.local_nodes["lon"], subgraph.local_nodes["lat"]
     in_bounds = ((lon >= bounds["minLng"]) & (lon <= bounds["maxLng"])
                  & (lat >= bounds["minLat"]) & (lat <= bounds["maxLat"]))

@@ -90,18 +90,8 @@ def test_record_dtype_has_no_stored_duration():
     assert "time_s" not in binfmt.RECORD_DTYPE.names
 
 
-def test_variant_official_does_not_collide_with_the_search_grid():
-    assert binfmt.VARIANT_OFFICIAL not in (
-        binfmt.VARIANT_FAST_ANY, binfmt.VARIANT_FAST_T2,
-        binfmt.VARIANT_FAST_T3, binfmt.VARIANT_FAST_T3_UNGRADED,
-    )
-    assert binfmt.VARIANT_NAMES[binfmt.VARIANT_OFFICIAL] == "OFFICIAL"
 
 
-def test_tour_meta_dtype_fields():
-    assert binfmt.TOUR_META_DTYPE.names == ("tour_id", "leg_index")
-    assert binfmt.TOUR_META_DTYPE["tour_id"] == np.dtype("u1")
-    assert binfmt.TOUR_META_DTYPE["leg_index"] == np.dtype("u1")
 
 
 def test_tour_leg_dtype_has_no_road_or_grading_fields():
@@ -127,3 +117,9 @@ def test_tour_leg_dtype_carries_geometry_and_profile_offsets():
 
 def test_tour_leg_schema_version_is_separate_from_record_schema_version():
     assert isinstance(binfmt.TOUR_LEG_SCHEMA_VERSION, int)
+
+
+def test_tour_meta_dtype_and_official_variant_are_gone():
+    assert not hasattr(binfmt, "TOUR_META_DTYPE")
+    assert not hasattr(binfmt, "VARIANT_OFFICIAL")
+    assert "OFFICIAL" not in binfmt.VARIANT_NAMES.values()
