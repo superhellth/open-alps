@@ -1,7 +1,6 @@
 """Packs a routed leg/edge (a plain dict with distance/ascent/descent/geometry/base_edge_ids) into
-binfmt.RECORD_DTYPE + a flat geometry.npy - the record-packing half of build_hub_edges.py's old
-_write_edge_output, extracted so match_tour_edges.py (spec 2026-08-29-official-tours-integration-
-design.md §2.6) can emit the exact same on-disk shape without duplicating this logic."""
+binfmt.RECORD_DTYPE + a flat geometry.npy - the record-packing half of build_hub_edges.py's
+edge output."""
 
 import hashlib
 from pathlib import Path
@@ -102,10 +101,8 @@ def write_access_distances(rows: list, path: Path) -> None:
 def fold_endpoint_snaps(path, src_snap, tgt_snap) -> tuple:
     """Prices the hub-to-trail gap at both ends into distance/ascent/descent (spec E3 of
     2026-08-19-pipeline-v2-design.md): a routed path only sums routed edges, so the snap gap
-    contributes zero to distance/ascent/descent unless folded in here. Shared by
-    build_hub_edges.py's compute_hub_edges_for_cell and match_tour_edges.py's per-leg accumulation
-    (spec 2026-08-29-official-tours-integration-design.md §2.6: "apply the SAME endpoint treatment
-    build_hub_edges.py applies").
+    contributes zero to distance/ascent/descent unless folded in here. Used by
+    build_hub_edges.py's compute_hub_edges_for_cell.
 
     Departure (src): climbing from the hub up to the trail (hub below its snap point, gap_dz_m < 0)
     is ascent; descending down to the trail (gap_dz_m > 0) is descent. Arrival (tgt): climbing from

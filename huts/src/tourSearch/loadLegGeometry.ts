@@ -1,6 +1,6 @@
 /**
  * Byte-range-fetchable per-edge trail geometry (docs/superpowers/specs/2026-08-27-tour-geometry-design.md
- * §A/§E): <layer>-geometry.bin is every edge's simplified [lon, lat] points, back to back in
+ * §A/§E): <layer>-geometry.bin is every edge's [lon, lat] points (simplified for hut_edges/start_edges, raw GPX for tour_edges), back to back in
  * edge_id order, each point an f4 pair (8 bytes, no framing) - <layer>-geometry.json's
  * point_counts gives each edge's point count, from which a byte range is a prefix sum.
  */

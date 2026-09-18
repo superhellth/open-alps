@@ -26,10 +26,16 @@ from pathlib import Path
 from shapely.geometry import shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from lib.geo import haversine_m  # noqa: E402
 from lib.pipeline import OSM_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_stations_parking.py"
+
+# A bus stop mapped as both a platform and a stop_position (or as one stop_position per
+# direction) yields several nodes a few metres apart; same-name nodes closer than this collapse
+# to one access point (see dedupe_stop_positions).
+STOP_DEDUPE_RADIUS_M = 40.0
 
 config = load_config()
 
@@ -48,10 +54,13 @@ LAYERS = [
         # in ~5x the prior access-point count (~15.6k -> ~84.5k, see data/timings.jsonl's
         # hub_edge_query meta), most of it unnamed poles/duplicates that inflate
         # build_hub_edges.py's per-cell routing cost roughly linearly in access-point count
-        # without adding real trailhead value.
+        # without adding real trailhead value. The bus branch accepts stop_position as well as
+        # platform: small villages often map a stop only as a stop_position node on the road
+        # (e.g. Plangeross, the Pitztaltour's last stop). The nodes that then double up with a
+        # platform are collapsed by dedupe_stop_positions.
         "tag_filter_pipelines": [
             ["n/railway=station,halt", "n/name"],
-            ["n/highway=bus_stop", "n/public_transport=platform", "n/name"],
+            ["n/highway=bus_stop", "n/public_transport=platform,stop_position", "n/name"],
         ],
         # access/motor_vehicle/barrier/disused/abandoned: same usability-filtering shape as
         # parking below, consumed by filter_start_points.py's is_usable(). network/operator
@@ -88,6 +97,34 @@ def _area_to_point(feat: dict) -> dict:
     feat["id"] = f"{prefix}{real_id}"
     feat["geometry"] = {"type": "Point", "coordinates": [centroid.x, centroid.y]}
     return feat
+
+
+def dedupe_stop_positions(features: list, radius_m: float = STOP_DEDUPE_RADIUS_M) -> list:
+    """Drops each public_transport=stop_position feature that has a same-name feature within
+    radius_m already kept. Everything that is not a stop_position (platforms, rail stations) is
+    always kept and wins over stop_positions; among stop_positions the lowest id wins, so the
+    result is deterministic. Reads `public_transport` from the raw properties, so it must run
+    before keep_fields prunes them."""
+    def is_stop_position(f):
+        return f["properties"].get("public_transport") == "stop_position"
+
+    cell_deg = 0.001  # ~111 m of latitude, always >= radius_m
+    kept_by_cell = {}
+    result = []
+    for feat in sorted(features, key=lambda f: (is_stop_position(f), f["id"])):
+        lon, lat = feat["geometry"]["coordinates"]
+        cx, cy = int(lon // cell_deg), int(lat // cell_deg)
+        name = feat["properties"].get("name")
+        if is_stop_position(feat) and any(
+            other["properties"].get("name") == name
+            and haversine_m(lon, lat, *other["geometry"]["coordinates"]) <= radius_m
+            for dx in (-1, 0, 1) for dy in (-1, 0, 1)
+            for other in kept_by_cell.get((cx + dx, cy + dy), ())
+        ):
+            continue
+        kept_by_cell.setdefault((cx, cy), []).append(feat)
+        result.append(feat)
+    return result
 
 
 def run_filter_pipeline(src: Path, pipeline: list, tmp_prefix: Path, tmp_files: list) -> Path:
@@ -151,6 +188,8 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
                 check=True, capture_output=True, text=True, encoding="utf-8",
             )
         fc = json.loads(result.stdout)
+        if layer["name"] == "stations":
+            fc["features"] = dedupe_stop_positions(fc["features"])
         for feat in fc["features"]:
             _area_to_point(feat)
             raw_props = feat["properties"]

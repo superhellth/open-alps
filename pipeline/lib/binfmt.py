@@ -80,10 +80,15 @@ HUB_SNAP_DTYPE = np.dtype([
     ("gap_m", "f8"), ("gap_dz_m", "f8"),
 ])
 
-# tour_edges/tour_meta.npy - row-aligned 1:1 with tour_edges/records.npy (NOT folded into
-# RECORD_DTYPE itself, spec §2.6: avoids touching the shared dtype every other consumer depends
-# on). 25 tours x <=9 legs each fits u1 comfortably.
-TOUR_META_DTYPE = np.dtype([("tour_id", "u1"), ("leg_index", "u1")])
+# tour_edges/records.npy - one row per matched official-tour leg. Geometry and profile are slices
+# (offset/count) of tour_edges/geometry.npy (COORD_DTYPE) and tour_edges/profiles.npy (PROFILE_DTYPE).
+TOUR_LEG_DTYPE = np.dtype([
+    ("from_id", "i8"), ("to_id", "i8"), ("from_type", "u1"), ("to_type", "u1"),
+    ("distance_m", "f4"), ("ascent_m", "f4"), ("descent_m", "f4"), ("duration_s", "f4"),
+    ("max_ele_m", "f4"),
+    ("geom_offset", "i8"), ("geom_count", "i4"),
+    ("profile_offset", "i8"), ("profile_count", "i4"),
+])
 
 TYPE_HUT = 0
 TYPE_STATION = 1
@@ -106,13 +111,9 @@ VARIANT_FAST_T3 = 2
 # huts losing their last T2/T3 connection under the strict ungraded_m==0 rule, both far over the
 # 5% threshold that would have kept the grid at three rows.
 VARIANT_FAST_T3_UNGRADED = 3
-# A tour leg is not a member of the graph.variants search grid (spec 2026-08-29-official-tours-
-# integration-design.md §5) - it is the ONE route the AV publishes, nothing to search among - so
-# it gets its own sentinel rather than reusing a FAST_* row.
-VARIANT_OFFICIAL = 4
 VARIANT_NAMES = {
     VARIANT_FAST_ANY: "FAST_ANY", VARIANT_FAST_T2: "FAST_T2", VARIANT_FAST_T3: "FAST_T3",
-    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED", VARIANT_OFFICIAL: "OFFICIAL",
+    VARIANT_FAST_T3_UNGRADED: "FAST_T3_UNGRADED",
 }
 
 UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profiles.py runs
@@ -123,6 +124,7 @@ EDGE_SCHEMA_VERSION = 2
 SNAP_SCHEMA_VERSION = 2
 RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
 ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
+TOUR_LEG_SCHEMA_VERSION = 1  # tracking param of match_tour_edges only; bump on TOUR_LEG_DTYPE changes
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

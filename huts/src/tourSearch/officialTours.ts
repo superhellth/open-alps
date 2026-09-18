@@ -1,6 +1,4 @@
-import { dinDurationH } from './dinDuration.js'
 import type { RawTour, TourEndpointType } from './loadOfficialTours.js'
-import type { TourEdgeRecord } from './loadTourEdges.js'
 
 export interface OfficialTourLeg {
   legIndex: number
@@ -13,8 +11,6 @@ export interface OfficialTourLeg {
   descentM: number
   durationH: number
   maxEleM: number
-  sacRank: number
-  viaFerrata: boolean
 }
 
 export interface OfficialTourView {
@@ -27,27 +23,27 @@ export interface OfficialTourView {
   totalDurationH: number
 }
 
-export function buildOfficialTourViews(
-  tours: RawTour[],
-  tourEdgeRecords: Map<string, TourEdgeRecord>,
-): OfficialTourView[] {
+export function buildOfficialTourViews(tours: RawTour[]): OfficialTourView[] {
   const views: OfficialTourView[] = []
 
   for (const tour of tours) {
+    if (tour.legs.length !== tour.numDays) continue
     const legs: OfficialTourLeg[] = []
     let complete = true
 
     for (const leg of tour.legs) {
-      const record = tourEdgeRecords.get(`${tour.tourId}:${leg.legIndex}`)
-      if (!leg.from || !leg.to || !record) {
+      if (
+        !leg.from || !leg.to || leg.edgeId == null ||
+        leg.distanceM == null || leg.ascentM == null || leg.descentM == null ||
+        leg.durationS == null || leg.maxEleM == null
+      ) {
         complete = false
         break
       }
       legs.push({
-        legIndex: leg.legIndex, from: leg.from, to: leg.to, edgeId: record.edgeId, reversed: false,
-        distanceM: record.distanceM, ascentM: record.ascentM, descentM: record.descentM,
-        durationH: dinDurationH(record.distanceM, record.ascentM, record.descentM),
-        maxEleM: record.maxEleM, sacRank: record.sacRank, viaFerrata: record.viaFerrata,
+        legIndex: leg.legIndex, from: leg.from, to: leg.to, edgeId: leg.edgeId, reversed: false,
+        distanceM: leg.distanceM, ascentM: leg.ascentM, descentM: leg.descentM,
+        durationH: leg.durationS / 3600, maxEleM: leg.maxEleM,
       })
     }
 

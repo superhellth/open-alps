@@ -224,3 +224,37 @@ the columns exceed wall clock — read the ratios.
   guarantee ordering) and carry the tracking-only `schema_version` param
   (`binfmt.SCHEMA_VERSION`). `uptodate` uses `TaskOptionsChanged()` over each task's own params, so
   a flag retune reruns just the task(s) that actually depend on it, without `doit forget`.
+
+## `match_tour_edges.py` — official tours from their GPX trace + DEM
+
+Independent of the base graph: reads only `huts.geojson`, `start_points.npy`, the DEM and
+`pipeline/tours/<Name>/<N>.gpx` (`lib/tour_folder.py`); no base-graph task or file is a dependency,
+so tour iteration never triggers `build_base_graph`. Spec:
+`docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md`.
+
+- **Endpoints** resolve to the nearest hub within `graph.maxSnapM` (`lib/hubs.py`'s
+  `nearest_hub_to_point`). Every interior (overnight) endpoint must be a hut; only a tour's very
+  first `from` and very last `to` may be a station/parking/partner business.
+- **Leg values** come from the raw trace: geometry is every GPX point, unmodified (no snapping to
+  OSM ways, no simplification); distance is the summed haversine length; ascent/descent/`maxEleM`
+  come from DEM samples (`lib/dem_sample.py`) smoothed by `lib/elevation_profile.py`;
+  duration uses `lib/speed.py`'s `edge_time_s` on slope-merged segments, floored at
+  `graph.speedModel.minSpeedMs`.
+- **Outputs**: `tour_edges/{records,geometry,profiles}.npy` (`binfmt.TOUR_LEG_DTYPE`, one row per
+  matched leg; the display profile is written here, `build_profiles` never touches tours),
+  `tours.json` (per tour `numDays` legs; a matched leg carries `edgeId` = its `records.npy` row plus
+  `distanceM/ascentM/descentM/durationS/maxEleM/from/to`; a leg with an unresolved endpoint carries
+  `edgeId: null` and `null` for each unresolved endpoint), `tour-match-gaps.json` (one
+  `leg_endpoint_unsnapped` entry per unresolved endpoint) and `hubs.json` (the hub set snapped
+  against, read by the dev-only GPX editor).
+- `tourId` is the index of the tour folder in sorted order (six folders: Kaisertour,
+  Lechquellenrunde, Pitztaltour, Silvretta-Runde, Tauernhöhenweg, Welser Höhenweg), so adding a
+  folder shifts later ids.
+- **doit wiring**: no `task_dep`; `file_dep=[huts.geojson, start_points.npy, dem.tif, *.gpx]`;
+  tracking param `tour_leg_schema_version` (`binfmt.TOUR_LEG_SCHEMA_VERSION`, separate from
+  `RECORD_SCHEMA_VERSION`, so a `TOUR_LEG_DTYPE` change never forces the free-routing rebuild).
+- **Tooling**: `tools/fetch_alpenvereinaktiv_tour.py` downloads a tour's per-leg GPX from
+  alpenvereinaktiv.com into `pipeline/tours/`; the GPX editor (`docs/gpx-editor.md`) fixes traces
+  whose endpoints don't snap. `phases/quality/check_tour_matching.py` reports endpoint types,
+  scalars, gap reasons, profile integrity and `tours.json`/`records.npy` agreement to
+  `data/quality/tour_matching.json`.

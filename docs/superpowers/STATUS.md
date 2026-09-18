@@ -22,8 +22,8 @@ new row when a new spec is written.
 | 2026-08-29 | [Avoid Overlapping Tracks](specs/2026-08-29-avoid-overlapping-tracks-design.md) | done |
 | 2026-08-29 | [Hut-type frontend consumption](specs/2026-08-29-hut-type-frontend-design.md) | done |
 | 2026-08-29 | [Official ÖAV/DAV Tours Integration](specs/2026-08-29-official-tours-integration-design.md) | done |
-| 2026-08-30 | [Tour Folder Ingestion](specs/2026-08-30-tour-folder-ingestion-design.md) | done |
-| 2026-09-01 | [Corridor HMM Map Matching](specs/2026-09-01-corridor-hmm-map-matching-design.md) | done |
+| 2026-08-30 | [Tour Folder Ingestion](specs/2026-08-30-tour-folder-ingestion-design.md) | done (matching superseded by 2026-09-14-gpx-hut-snap) |
+| 2026-09-01 | [Corridor HMM Map Matching](specs/2026-09-01-corridor-hmm-map-matching-design.md) | superseded by 2026-09-14-gpx-hut-snap |
 | 2026-09-01 | [doit DAG status CLI](specs/2026-09-01-doit-dag-status-cli-design.md) | done |
 | 2026-09-01 | [Hut-availability-based routing](specs/2026-09-01-hut-availability-routing-design.md) | done |
 | 2026-09-01 | [Official Tours — Frontend Integration](specs/2026-09-01-official-tours-frontend-design.md) | done |
@@ -34,3 +34,8 @@ new row when a new spec is written.
 | 2026-09-03 | [Approach table: duration/source-type/variant matrix](specs/2026-09-03-approach-table-duration-matrix-design.md) | done |
 | 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | done |
 | 2026-09-04 | [Extend overlap avoidance to approach/exit legs](specs/2026-09-04-approach-exit-overlap-avoidance-design.md) | done |
+| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | **in progress** |
+| 2026-09-04 | [Stable hut/leg references for persistence](specs/2026-09-04-stable-tour-ids-design.md) | **in progress** |
+| 2026-09-14 | [GPX-only tour matching](specs/2026-09-14-gpx-hut-snap-design.md) | done |
+| 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | done |
+| 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |

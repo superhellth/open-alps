@@ -164,7 +164,7 @@ def main(argv=None):
             interior_ele = binfmt.load_array(base_graph_dir / "interior_ele.npy", mmap=False)
             lookup_keys, lookup_values = build_elevation_lookup(nodes, interior, node_ele, interior_ele)
 
-        for name in ("hut_edges", "start_edges", "tour_edges"):
+        for name in ("hut_edges", "start_edges"):
             edge_dir = OSM_DIR / name
             if not (edge_dir / "records.npy").exists():
                 print(f"skipping {edge_dir} (not built yet)", flush=True)
