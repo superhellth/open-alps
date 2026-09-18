@@ -53,7 +53,7 @@ from dag.preprocessing import (  # noqa: E402,F401
 )
 from dag.quality import (  # noqa: E402,F401
     task_check_elevation, task_check_graph_building, task_check_postprocessing,
-    task_check_preprocessing, task_quality_summary,
+    task_check_preprocessing, task_check_tour_matching, task_quality_summary,
 )
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
@@ -88,7 +88,7 @@ DOIT_CONFIG = {
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
         "select_approach_pairs", "build_access_edges",
-        "match_tour_edges",
+        "match_tour_edges", "check_tour_matching",
         "build_profiles",
         "check_graph_building",
         "check_elevation",

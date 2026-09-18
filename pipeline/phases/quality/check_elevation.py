@@ -21,7 +21,7 @@ from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "check_elevation.py"
 
-EDGE_LAYERS = ["hut_edges", "start_edges", "tour_edges"]
+EDGE_LAYERS = ["hut_edges", "start_edges"]
 
 
 def check_elevation_range(node_ele: np.ndarray, interior_ele: np.ndarray, plausible_range: tuple,

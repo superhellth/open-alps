@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
 from quality.check_graph_building import (  # noqa: E402
-    check_connectivity, check_range_cap, check_snap_health, check_tour_gaps,
-    union_find_components,
+    check_connectivity, check_range_cap, check_snap_health,
+    check_scalar_sanity, check_self_retrace, check_vertex_gap, polyline_for_base_edge,
+    polyline_for_record, union_find_components,
 )
 
 
@@ -76,19 +77,6 @@ def test_range_cap_flags_distance_over_the_configured_max():
     assert check["flagged"][0]["distance_m"] == 31_000.0
 
 
-def test_tour_gaps_reshapes_gap_entries_into_flagged_rows():
-    gaps = [{"tourId": 0, "tourName": "Kaisertour", "legIndex": 1,
-              "reason": "leg_endpoint_unsnapped", "detail": {"endpoint": "from"}}]
-    check = check_tour_gaps(gaps, max_flagged=500)
-    assert check["summary"]["flagged"] == 1
-    assert check["flagged"][0]["tourName"] == "Kaisertour"
-    assert check["flagged"][0]["reason"] == "leg_endpoint_unsnapped"
-
-
-from quality.check_graph_building import (  # noqa: E402 (extend the existing import line)
-    check_scalar_sanity, check_self_retrace, check_vertex_gap, polyline_for_base_edge,
-    polyline_for_record,
-)
 
 
 def test_polyline_for_record_slices_geometry_by_offset_and_count():

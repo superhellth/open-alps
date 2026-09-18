@@ -50,9 +50,20 @@ def task_check_elevation():
             OSM_DIR / "base_graph" / "node_ele.npy", OSM_DIR / "base_graph" / "interior_ele.npy",
             OSM_DIR / "base_graph" / "manifest.json",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy",
-            OSM_DIR / "tour_edges" / "records.npy",
         ],
         targets=[QUALITY_DIR / "elevation.json"],
+    )
+
+
+def task_check_tour_matching():
+    return pipeline_task(
+        "phases/quality/check_tour_matching.py",
+        args=[f"--osm-dir {OSM_DIR}", f"--out {QUALITY_DIR / 'tour_matching.json'}"],
+        params=[_max_flagged_param()],
+        task_dep=["match_tour_edges"],
+        file_dep=[OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json",
+                  OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "profiles.npy"],
+        targets=[QUALITY_DIR / "tour_matching.json"],
     )
 
 
@@ -67,15 +78,13 @@ def task_check_graph_building():
         # build_profiles rewrites each edge set's records.npy profile_offset/profile_count in
         # place, which isn't a declared target of that task (see task_check_elevation's identical
         # comment) - file_dep on records.npy alone can't guarantee this check runs after it.
-        task_dep=["build_hub_edges", "build_access_edges", "match_tour_edges", "build_profiles"],
+        task_dep=["build_hub_edges", "build_access_edges", "build_profiles"],
         file_dep=[
             OSM_DIR / "unsnapped_huts.json", OSM_DIR / "huts.geojson",
             OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "hut_edges" / "geometry.npy",
             OSM_DIR / "start_edges" / "records.npy", OSM_DIR / "start_edges" / "geometry.npy",
-            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",
             OSM_DIR / "base_graph" / "nodes.npy", OSM_DIR / "base_graph" / "edges.npy",
             OSM_DIR / "base_graph" / "interior.npy", OSM_DIR / "base_graph" / "node_ele.npy",
-            OSM_DIR / "tour-match-gaps.json",
         ],
         targets=[QUALITY_DIR / "graph_building.json"],
     )
@@ -102,7 +111,7 @@ def task_check_postprocessing():
             OSM_DIR / "hut-edge-payload.json", OSM_DIR / "hut-edge-geometry.json",
             OSM_DIR / "hut-edge-geometry.bin",
             OSM_DIR / "start-edge-geometry.json", OSM_DIR / "start-edge-geometry.bin",
-            OSM_DIR / "tour-edge-payload.json", OSM_DIR / "tour-edge-geometry.json",
+            OSM_DIR / "tours.json", OSM_DIR / "tour-edge-geometry.json",
             OSM_DIR / "tour-edge-geometry.bin",
         ],
         targets=[QUALITY_DIR / "postprocessing.json"],
@@ -115,11 +124,12 @@ def task_quality_summary():
         args=[f"--quality-dir {QUALITY_DIR}", f"--out {QUALITY_DIR / 'summary.json'}"],
         task_dep=[
             "check_preprocessing", "check_elevation", "check_graph_building",
-            "check_postprocessing",
+            "check_tour_matching", "check_postprocessing",
         ],
         file_dep=[
             QUALITY_DIR / "preprocessing.json", QUALITY_DIR / "elevation.json",
-            QUALITY_DIR / "graph_building.json", QUALITY_DIR / "postprocessing.json",
+            QUALITY_DIR / "graph_building.json", QUALITY_DIR / "tour_matching.json",
+            QUALITY_DIR / "postprocessing.json",
         ],
         targets=[QUALITY_DIR / "summary.json"],
     )
