@@ -38,10 +38,10 @@ means new hosting/TLS/uptime to maintain, not just a build step. A static PMTile
 alongside the rest of the app, with zoom-dependent detail via the tile pyramid, gets the same
 effective result with zero extra infrastructure.
 
-## `build_edge_tiles.py` — hut/start/tour edges as tiles + stats
+## `build_edge_tiles.py` — hut/start edges as tiles + stats
 
-One script, invoked three times by `dodo.py` (`--edges-dir`/`--layer-name` swapped) — once over
-`hut_edges/`, once over `start_edges/`, once over `tour_edges/` — splitting each edge set's
+One script, invoked twice by `dodo.py` (`--edges-dir`/`--layer-name` swapped) — once over
+`hut_edges/`, once over `start_edges/` — splitting each edge set's
 `records.npy`/`geometry.npy`/`profiles.npy` (post-`elevation/compute_edge_profiles.py`+
 `build_profiles.py`) into three smaller app-facing assets instead of shipping the raw binary arrays
 directly.
@@ -77,10 +77,22 @@ directly.
   same tippecanoe → pmtiles-convert pipeline as `build_trail_tiles.py` above (`-l hut_edges`/`-l
   start_edges`, same `min-zoom`/`max-zoom`/`--drop-densest-as-needed`).
 - Deletes intermediate `.geojsonseq`/`.mbtiles` files.
-- **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`,
-  `tour_edges/records.npy`), `targets=[hut-edges.pmtiles, hut-edge-stats.json,
+- **doit wiring**: `file_dep=[hut_edges/records.npy]` (resp. `start_edges/records.npy`),
+  `targets=[hut-edges.pmtiles, hut-edge-stats.json,
   hut-edge-geometry.bin, hut-edge-geometry.json, hut-edge-elevation.bin, hut-edge-elevation.json]`
-  (resp. `start-edge-*`, `tour-edge-*`).
+  (resp. `start-edge-*`).
+
+## `build_tour_tiles.py` — official-tour legs as tiles + stats
+
+The tour counterpart of `build_edge_tiles.py`, over `tour_edges/` (`binfmt.TOUR_LEG_DTYPE`,
+written with its own profiles by `graph_building/match_tour_edges.py`). Geometry is every raw GPX
+point — no simplification, no `simplify-tolerance-deg` — shipped as `tour-edges.pmtiles`,
+`tour-edge-stats.json`, `tour-edge-geometry.bin/json` and `tour-edge-elevation.bin/json`. Display
+ids of non-hut endpoints (station/parking/partner at a tour's start/end) resolve through
+`start_points_id_table.json`. **doit wiring**: `task_dep=[match_tour_edges]`,
+`file_dep=[tour_edges/records.npy, start_points_id_table.json]`, params `min_zoom`/`max_zoom`.
+The frontend reads per-leg scalars from `tours.json` (`edgeId` = the leg's `edge_id`), not from a
+payload file.
 
 ## `build_approach_table.py` — approach/exit table + loop-closure reverse index
 
