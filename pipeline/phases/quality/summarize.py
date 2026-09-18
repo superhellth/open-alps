@@ -17,7 +17,7 @@ from lib.pipeline import QUALITY_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "summarize.py"
-PHASES = ["preprocessing", "elevation", "graph_building", "postprocessing"]
+PHASES = ["preprocessing", "elevation", "graph_building", "tour_matching", "postprocessing"]
 
 
 def build_summary(phase_reports: dict) -> dict:

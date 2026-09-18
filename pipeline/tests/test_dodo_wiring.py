@@ -311,9 +311,9 @@ def test_check_elevation_depends_on_compute_edge_profiles_and_build_profiles():
     assert any(t.endswith("data/quality/elevation.json") for t in task["targets"])
 
 
-def test_check_graph_building_depends_on_match_tour_edges_and_build_hub_edges():
+def test_check_graph_building_depends_on_hub_edge_tasks_not_tour_matching():
     task = dodo.task_check_graph_building()
-    assert "match_tour_edges" in task["task_dep"]
+    assert "match_tour_edges" not in task["task_dep"]
     assert "build_hub_edges" in task["task_dep"]
     assert "build_access_edges" in task["task_dep"]
     assert any(t.endswith("data/quality/graph_building.json") for t in task["targets"])
@@ -388,3 +388,23 @@ def test_no_tour_edge_payload_task_or_public_file():
     assert "tour-edge-payload.bin" not in dodo.PUBLIC_FILES
     assert "tour-edge-payload.json" not in dodo.PUBLIC_FILES
     assert "build_tour_edge_payload" not in dodo.DOIT_CONFIG["default_tasks"]
+
+
+def test_check_tour_matching_depends_only_on_tour_outputs():
+    task = dodo.task_check_tour_matching()
+    assert task["task_dep"] == ["match_tour_edges"]
+    assert not any("base_graph" in str(d) for d in task["file_dep"])
+
+
+def test_graph_and_elevation_checks_no_longer_read_tour_outputs():
+    for name in ("task_check_graph_building", "task_check_elevation"):
+        task = getattr(dodo, name)()
+        assert "match_tour_edges" not in task["task_dep"]
+        assert not any("tour" in str(d) for d in task["file_dep"]), name
+
+
+def test_check_postprocessing_reads_tours_json_not_tour_payload():
+    task = dodo.task_check_postprocessing()
+    assert "build_tour_edge_payload" not in task["task_dep"]
+    assert any(str(d).endswith("tours.json") for d in task["file_dep"])
+    assert not any("tour-edge-payload" in str(d) for d in task["file_dep"])

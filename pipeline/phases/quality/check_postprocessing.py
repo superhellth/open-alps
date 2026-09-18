@@ -34,7 +34,7 @@ _SOURCE_TYPE_NAME = {
 EDGE_PAYLOAD_LAYERS = [
     ("hut_edges", "hut-edge-payload.json", "hut-edge-geometry.json", "hut-edge-geometry.bin"),
     ("start_edges", None, "start-edge-geometry.json", "start-edge-geometry.bin"),
-    ("tour_edges", "tour-edge-payload.json", "tour-edge-geometry.json", "tour-edge-geometry.bin"),
+    ("tour_edges", None, "tour-edge-geometry.json", "tour-edge-geometry.bin"),
 ]
 
 
@@ -96,6 +96,16 @@ def check_manifest_agreement(layer_name: str, n_records: int, payload_rows: int,
         f"manifest_agreement_{layer_name}", {}, checked=n_records, flagged_rows=flagged,
         baseline=0, max_flagged_rows=max_flagged,
     )
+
+
+def check_tours_json_geometry(tours: list, point_counts: list, max_flagged: int) -> dict:
+    """tours.json's matched legs (edgeId != null) equal the tour geometry manifest's row count."""
+    matched = sum(1 for t in tours for leg in t["legs"] if leg.get("edgeId") is not None)
+    flagged = [] if matched == len(point_counts) else [{
+        "reason": "matched_legs_vs_geometry_rows", "matched_legs": matched,
+        "geometry_rows": len(point_counts)}]
+    return build_check("tours_json_geometry", {}, checked=matched, flagged_rows=flagged,
+                       baseline=0, max_flagged_rows=max_flagged)
 
 
 def check_shipped_straightness(layer_name: str, point_counts: list, geometry_points: list,
@@ -247,6 +257,14 @@ def main(argv=None):
             print(f"shipped_straightness[{layer_name}]: {c['summary']['flagged']:,} / "
                   f"{c['summary']['checked']:,} flagged", flush=True)
             checks.append(c)
+
+            if layer_name == "tour_edges" and (osm_dir / "tours.json").exists():
+                with open(osm_dir / "tours.json", encoding="utf-8") as f:
+                    tours = json.load(f)
+                c = check_tours_json_geometry(tours, point_counts, args.max_flagged_rows)
+                print(f"tours_json_geometry: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+                      flush=True)
+                checks.append(c)
 
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
         import dodo  # local import: avoids a module-load-order cycle with dag/quality.py at

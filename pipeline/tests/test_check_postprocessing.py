@@ -10,7 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 from lib import binfmt  # noqa: E402
 from quality.check_postprocessing import (  # noqa: E402
     check_approach_coverage, check_manifest_agreement, check_public_copy_freshness,
-    check_shipped_straightness,
+    check_shipped_straightness, check_tours_json_geometry,
 )
 
 
@@ -132,3 +132,14 @@ def test_public_copy_freshness_clean_case_flags_nothing(tmp_path):
     (public_dir / "huts.geojson").write_bytes(content)
     check = check_public_copy_freshness(["huts.geojson"], osm_dir, public_dir, max_flagged=500)
     assert check["summary"]["flagged"] == 0
+
+
+def test_tours_json_geometry_clean_when_matched_legs_equal_geometry_rows():
+    tours = [{"legs": [{"edgeId": 0}, {"edgeId": None}, {"edgeId": 1}]}]
+    assert check_tours_json_geometry(tours, [3, 4], max_flagged=500)["summary"]["flagged"] == 0
+
+
+def test_tours_json_geometry_flags_a_row_count_mismatch():
+    tours = [{"legs": [{"edgeId": 0}, {"edgeId": 1}]}]
+    check = check_tours_json_geometry(tours, [3], max_flagged=500)
+    assert check["flagged"][0]["reason"] == "matched_legs_vs_geometry_rows"

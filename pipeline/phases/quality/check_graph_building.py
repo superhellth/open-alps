@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Read-only checks over phases/graph_building/ output (spec docs/superpowers/specs/
 2026-09-02-data-quality-monitoring-design.md §4.3): hub snap health, per-variant hut-hut
-connectivity, range-cap violations, geometry sanity (added in a second pass over this file - see
-check_vertex_gap/check_self_retrace/check_scalar_sanity below the connectivity checks), and
-tour-ingestion gap counts. Never mutates its inputs; always exits 0 (spec §3).
+connectivity, range-cap violations and geometry sanity (check_vertex_gap/check_self_retrace/
+check_scalar_sanity). Tour matching is checked by check_tour_matching.py. Never mutates its inputs; always exits 0 (spec §3).
 
 Usage: python pipeline/phases/quality/check_graph_building.py
 """
@@ -25,7 +24,7 @@ from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "check_graph_building.py"
 
-EDGE_LAYERS = ["hut_edges", "start_edges", "tour_edges"]
+EDGE_LAYERS = ["hut_edges", "start_edges"]
 
 
 def union_find_components(n_nodes: int, edge_pairs: list) -> list:
@@ -122,22 +121,10 @@ def check_range_cap(records: np.ndarray, layer_name: str, max_edge_km: float,
     )
 
 
-def check_tour_gaps(gaps: list, max_flagged: int) -> dict:
-    """§4.3.7: reshapes match_tour_edges.py's tour-match-gaps.json entries into the envelope's
-    flagged list - no new detection logic, this only makes the existing count visible."""
-    flagged = [
-        {"tourId": g["tourId"], "tourName": g["tourName"], "legIndex": g["legIndex"],
-         "reason": g["reason"], "detail": g.get("detail")}
-        for g in gaps
-    ]
-    return build_check(
-        "tour_ingestion_gaps", {}, checked=len(gaps), flagged_rows=flagged, baseline=len(gaps),
-        max_flagged_rows=max_flagged,
-    )
 
 
 def polyline_for_record(record, geometry: np.ndarray) -> np.ndarray:
-    """Returns a (n, 2) lon/lat array for one hut_edges/start_edges/tour_edges record, sliced out
+    """Returns a (n, 2) lon/lat array for one hut_edges/start_edges record, sliced out
     of that layer's flat geometry.npy by geom_offset/geom_count."""
     offset, count = int(record["geom_offset"]), int(record["geom_count"])
     sl = geometry[offset:offset + count]
@@ -353,14 +340,6 @@ def main(argv=None):
                                      args.max_flagged_rows)
             print(f"scalar_sanity[{layer_name}]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
                   flush=True)
-            checks.append(c)
-
-        gaps_path = osm_dir / "tour-match-gaps.json"
-        if gaps_path.exists():
-            with open(gaps_path, encoding="utf-8") as f:
-                gaps = json.load(f)
-            c = check_tour_gaps(gaps, args.max_flagged_rows)
-            print(f"tour_ingestion_gaps: {c['summary']['flagged']:,} gaps", flush=True)
             checks.append(c)
 
         write_report(Path(args.out), "graph_building", checks)
