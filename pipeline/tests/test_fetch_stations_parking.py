@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from downloads.fetch_stations_parking import LAYERS, _area_to_point  # noqa: E402
+from downloads.fetch_stations_parking import LAYERS, _area_to_point, dedupe_stop_positions  # noqa: E402
 
 
 def _layer(name):
@@ -13,13 +13,13 @@ def _layer(name):
 
 def test_stations_tag_filter_includes_rail_and_narrowed_bus_stops():
     # Rail is a two-stage AND pipeline (railway=station,halt -> name); bus is a three-stage AND
-    # pipeline (bus_stop -> public_transport=platform -> name), since osmium tags-filter only ORs
+    # pipeline (bus_stop -> public_transport=platform,stop_position -> name), since osmium tags-filter only ORs
     # the tags named in one call - an AND needs sequential filter passes. Rail does NOT require
     # public_transport=platform - that tag is essentially never present on railway=station/halt
     # nodes (measured), so requiring it would drop real stations rather than filter noise.
     pipelines = _layer("stations")["tag_filter_pipelines"]
     assert ["n/railway=station,halt", "n/name"] in pipelines
-    assert ["n/highway=bus_stop", "n/public_transport=platform", "n/name"] in pipelines
+    assert ["n/highway=bus_stop", "n/public_transport=platform,stop_position", "n/name"] in pipelines
 
 
 def test_stations_keep_fields_carry_access_and_lifecycle_tags():
@@ -75,3 +75,35 @@ def test_area_to_point_converts_relation_multipolygon_with_decoded_id():
     result = _area_to_point(feat)
     assert result["id"] == "r20"
     assert result["geometry"] == {"type": "Point", "coordinates": [1.0, 1.0]}
+
+
+def _stop(fid, name, pt, lon, lat):
+    props = {"name": name}
+    if pt:
+        props["public_transport"] = pt
+    return {"id": fid, "properties": props, "geometry": {"type": "Point", "coordinates": [lon, lat]}}
+
+
+def test_dedupe_drops_stop_position_next_to_same_name_platform():
+    platform = _stop("n2", "Plangeross", "platform", 10.8683, 46.9866)
+    stop_pos = _stop("n1", "Plangeross", "stop_position", 10.86835, 46.98661)  # ~10 m away
+    assert dedupe_stop_positions([stop_pos, platform]) == [platform]
+
+
+def test_dedupe_keeps_lone_stop_position_and_different_names_and_far_ones():
+    lone = _stop("n1", "Plangeross", "stop_position", 10.8683, 46.9866)
+    other_name = _stop("n2", "Weißwald", "stop_position", 10.86831, 46.98661)
+    far = _stop("n3", "Plangeross", "stop_position", 10.8690, 46.9866)  # ~50 m away
+    assert len(dedupe_stop_positions([lone, other_name, far])) == 3
+
+
+def test_dedupe_collapses_stop_positions_lowest_id_wins():
+    a = _stop("n5", "X", "stop_position", 10.0, 47.0)
+    b = _stop("n3", "X", "stop_position", 10.00002, 47.0)
+    assert dedupe_stop_positions([a, b]) == [b]
+
+
+def test_dedupe_never_drops_rail_stations():
+    rail = _stop("n9", "Landeck", None, 10.5, 47.1)
+    stop_pos = _stop("n1", "Landeck", "stop_position", 10.50001, 47.1)
+    assert dedupe_stop_positions([stop_pos, rail]) == [rail]

@@ -36,13 +36,15 @@ new network download):
 
 - **stations** — two node-only tag-filter pipelines, unioned (and re-sorted by ID) with
   `osmium sort`: rail is `n/railway=station,halt` → `n/name` (two AND stages); bus is three AND
-  stages (`n/highway=bus_stop` → `n/public_transport=platform` → `n/name`) — each stage's output
-  feeding the next, since `osmium tags-filter` only ORs the tags named in one call. Rail does
+  stages (`n/highway=bus_stop` → `n/public_transport=platform,stop_position` → `n/name`) — each
+  stage's output feeding the next, since `osmium tags-filter` only ORs the tags named in one call. Rail does
   **not** require `public_transport=platform` — that tag is essentially never present on
   `railway=station,halt` nodes in this data and would drop real stations, not filter noise. Bare
   `highway=bus_stop` alone matches ~5x as many nodes as the narrowed bus set, most unnamed
   poles/duplicates that add routing cost in `build_hub_edges.py` without real trailhead value.
-  Both pipelines' final output is `osmium export --geometry-types point`'d, then properties pruned
+  Bus `stop_position` nodes that sit within 40 m of a same-name kept feature are dropped by
+  `dedupe_stop_positions` (platforms and rail stations always win; among stop_positions the lowest
+  id wins). Both pipelines' final output is `osmium export --geometry-types point`'d, then properties pruned
   to `{name, access, motor_vehicle, barrier, disused, abandoned}` — the same usability-tag shape
   as parking below, so both layers are filterable the same way by `filter_start_points.py`'s
   `is_usable()`.
