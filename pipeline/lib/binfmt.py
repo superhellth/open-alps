@@ -85,6 +85,16 @@ HUB_SNAP_DTYPE = np.dtype([
 # on). 25 tours x <=9 legs each fits u1 comfortably.
 TOUR_META_DTYPE = np.dtype([("tour_id", "u1"), ("leg_index", "u1")])
 
+# tour_edges/records.npy - one row per matched official-tour leg. Geometry and profile are slices
+# (offset/count) of tour_edges/geometry.npy (COORD_DTYPE) and tour_edges/profiles.npy (PROFILE_DTYPE).
+TOUR_LEG_DTYPE = np.dtype([
+    ("from_id", "i8"), ("to_id", "i8"), ("from_type", "u1"), ("to_type", "u1"),
+    ("distance_m", "f4"), ("ascent_m", "f4"), ("descent_m", "f4"), ("duration_s", "f4"),
+    ("max_ele_m", "f4"),
+    ("geom_offset", "i8"), ("geom_count", "i4"),
+    ("profile_offset", "i8"), ("profile_count", "i4"),
+])
+
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
@@ -123,6 +133,7 @@ EDGE_SCHEMA_VERSION = 2
 SNAP_SCHEMA_VERSION = 2
 RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
 ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
+TOUR_LEG_SCHEMA_VERSION = 1  # tracking param of match_tour_edges only; bump on TOUR_LEG_DTYPE changes
 
 
 def save_array(path: Path, array: np.ndarray) -> None:
