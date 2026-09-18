@@ -25,6 +25,9 @@ _RECORD_SCHEMA_VERSION_PARAM = tracking_param(
 _ACCESS_DISTANCE_SCHEMA_VERSION_PARAM = tracking_param(
     "access_distance_schema_version", int, binfmt.ACCESS_DISTANCE_SCHEMA_VERSION
 )
+_TOUR_LEG_SCHEMA_VERSION_PARAM = tracking_param(
+    "tour_leg_schema_version", int, binfmt.TOUR_LEG_SCHEMA_VERSION
+)
 
 
 def task_build_base_graph():
@@ -143,35 +146,30 @@ def task_build_access_edges():
 
 
 def task_match_tour_edges():
-    # Corridor-constrained routing of tour folders (pipeline/tours/) onto the base graph (spec
-    # docs/superpowers/specs/2026-08-30-tour-folder-ingestion-design.md). task_dep, not file_dep,
-    # on compute_edge_profiles/snap_hubs: both rewrite their outputs in place without declaring
-    # them as targets - same reasoning as task_snap_hubs/task_gather_route_subgraphs above. Never
-    # a variants_json tracking param: a tour leg is not a member of graph.variants (spec §5 of the
-    # 2026-08-29 official-tours-integration design).
-    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # flat per spec §1; computed at DAG-build time
+    # Reads only huts.geojson, start_points.npy, the DEM and the GPX files: no base-graph task or
+    # file is a dependency, so tour iteration never triggers build_base_graph.
+    speed = CONFIG["graph"]["speedModel"]
+    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # computed at DAG-build time
     return pipeline_task(
         "phases/graph_building/match_tour_edges.py",
         params=[
-            cli_param("corridor_buffer_m", "corridor-buffer-m", float, CONFIG["tourMatch"]["corridorBufferM"]),
-            cli_param("length_divergence_ratio", "length-divergence-ratio", float,
-                      CONFIG["tourMatch"]["lengthDivergenceRatio"]),
-            cli_param("hmm_resample_m", "hmm-resample-m", float, CONFIG["tourMatch"]["hmmResampleM"]),
-            cli_param("hmm_obs_noise_m", "hmm-obs-noise-m", float, CONFIG["tourMatch"]["hmmObsNoiseM"]),
-            cli_param("hmm_max_dist_m", "hmm-max-dist-m", float, CONFIG["tourMatch"]["hmmMaxDistM"]),
-            cli_param("hmm_dist_noise_m", "hmm-dist-noise-m", float, CONFIG["tourMatch"]["hmmDistNoiseM"]),
-            cli_param("endpoint_bridge_max_m", "endpoint-bridge-max-m", float,
-                      CONFIG["tourMatch"]["endpointBridgeMaxM"]),
+            cli_param("max_snap_m", "max-snap-m", float, CONFIG["graph"]["maxSnapM"]),
+            cli_param("smoothing_kernel_m", "smoothing-kernel-m", float, CONFIG["dem"]["smoothingKernelM"]),
+            cli_param("min_slope_segment_m", "min-slope-segment-m", float, CONFIG["dem"]["minSlopeSegmentM"]),
+            cli_param("profile_points", "profile-points", int, CONFIG["dem"].get("profilePoints", 30)),
+            cli_param("speed_v0", "speed-v0", float, speed["v0"]),
+            cli_param("speed_k", "speed-k", float, speed["k"]),
+            cli_param("speed_s0", "speed-s0", float, speed["s0"]),
+            cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
         ],
-        task_dep=["compute_edge_profiles", "snap_hubs"],
+        tracking_params=[_TOUR_LEG_SCHEMA_VERSION_PARAM],
         file_dep=[
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
-            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
+            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy", DEM_DIR / "dem.tif",
             *tour_files,
         ],
         targets=[
             OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",
-            OSM_DIR / "tour_edges" / "edge_ids.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
-            OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json",
+            OSM_DIR / "tour_edges" / "profiles.npy",
+            OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json", OSM_DIR / "hubs.json",
         ],
     )
