@@ -91,7 +91,7 @@ def task_check_postprocessing():
         # non-blocking rule is about the reverse direction only - copy_public_data must not wait
         # on quality output, but quality output reading the copy is fine and in fact the point).
         task_dep=[
-            "build_approach_table", "build_edge_payload", "build_tour_edge_payload",
+            "build_approach_table", "build_edge_payload",
             "build_hut_edge_tiles", "build_start_edge_tiles", "build_tour_edge_tiles",
             "copy_public_data",
         ],

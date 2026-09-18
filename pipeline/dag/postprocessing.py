@@ -100,15 +100,14 @@ def task_build_start_edge_tiles():
 
 
 def task_build_tour_edge_tiles():
+    # Tour geometry is every raw GPX point: no simplify tolerance. Tiles/stats only need
+    # match_tour_edges' outputs (profiles are written by match_tour_edges itself).
+    tiles_cfg = CONFIG.get("hutEdgeTiles", {})
     return pipeline_task(
-        "phases/postprocessing/build_edge_tiles.py",
+        "phases/postprocessing/build_tour_tiles.py",
         args=[
             f"--edges-dir {OSM_DIR / 'tour_edges'}",
-            # --id-table is required=True on build_edge_tiles.py even though tour records are
-            # hut-only (spec §3) - the same id table hut/start edges already resolve display ids
-            # from.
             f"--id-table {OSM_DIR / 'start_points_id_table.json'}",
-            "--layer-name tour_edges",
             f"--out-tiles {OSM_DIR / 'tour-edges.pmtiles'}",
             f"--out-stats {OSM_DIR / 'tour-edge-stats.json'}",
             f"--out-geometry-bin {OSM_DIR / 'tour-edge-geometry.bin'}",
@@ -116,9 +115,12 @@ def task_build_tour_edge_tiles():
             f"--out-elevation-bin {OSM_DIR / 'tour-edge-elevation.bin'}",
             f"--out-elevation-json {OSM_DIR / 'tour-edge-elevation.json'}",
         ],
-        params=_hut_edge_tiles_params(),
-        task_dep=["build_profiles"],  # same in-place-rewrite reasoning as the other two edge-tile tasks
-        file_dep=[OSM_DIR / "tour_edges" / "records.npy"],
+        params=[
+            cli_param("min_zoom", "min-zoom", int, tiles_cfg.get("minZoom", 6)),
+            cli_param("max_zoom", "max-zoom", int, tiles_cfg.get("maxZoom", 14)),
+        ],
+        task_dep=["match_tour_edges"],
+        file_dep=[OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "start_points_id_table.json"],
         targets=[
             OSM_DIR / "tour-edges.pmtiles", OSM_DIR / "tour-edge-stats.json",
             OSM_DIR / "tour-edge-geometry.bin", OSM_DIR / "tour-edge-geometry.json",
@@ -160,25 +162,6 @@ def task_build_edge_payload():
         task_dep=["build_profiles"],  # see task_build_hut_edge_tiles's comment
         file_dep=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "huts.geojson"],
         targets=[OSM_DIR / "hut-edge-payload.bin", OSM_DIR / "hut-edge-payload.json"],
-    )
-
-
-def task_build_tour_edge_payload():
-    return pipeline_task(
-        "phases/postprocessing/build_edge_payload.py",
-        args=[
-            f"--edges-dir {OSM_DIR / 'tour_edges'}",
-            f"--huts {OSM_DIR / 'huts.geojson'}",
-            f"--tour-meta {OSM_DIR / 'tour_edges' / 'tour_meta.npy'}",
-            f"--out-bin {OSM_DIR / 'tour-edge-payload.bin'}",
-            f"--out-manifest {OSM_DIR / 'tour-edge-payload.json'}",
-        ],
-        task_dep=["build_profiles"],
-        file_dep=[
-            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "tour_meta.npy",
-            OSM_DIR / "huts.geojson",
-        ],
-        targets=[OSM_DIR / "tour-edge-payload.bin", OSM_DIR / "tour-edge-payload.json"],
     )
 
 

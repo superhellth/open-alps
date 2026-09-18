@@ -258,29 +258,14 @@ def test_build_profiles_no_longer_owns_tour_edges():
 
 
 
-def test_build_tour_edge_tiles_mirrors_hut_edge_tiles_wiring():
-    task = dodo.task_build_tour_edge_tiles()
-    assert "build_profiles" in task["task_dep"]
-    assert any(d.endswith("tour_edges/records.npy") for d in task["file_dep"])
-    assert any(t.endswith("tour-edges.pmtiles") for t in task["targets"])
-    assert any(t.endswith("tour-edge-geometry.bin") for t in task["targets"])
-    assert any("--layer-name tour_edges" in a for a in task["actions"])
-    # --id-table is required=True even though tour records are hut-only (spec §3)
-    assert any("start_points_id_table.json" in a for a in task["actions"])
 
 
-def test_build_tour_edge_payload_passes_tour_meta_flag():
-    task = dodo.task_build_tour_edge_payload()
-    assert any("--tour-meta" in a and "tour_meta.npy" in a for a in task["actions"])
-    assert any(t.endswith("tour-edge-payload.bin") for t in task["targets"])
-    assert "build_profiles" in task["task_dep"]
 
 
 def test_public_files_includes_every_tour_output():
     for name in [
         "tours.json", "tour-edges.pmtiles", "tour-edge-stats.json",
         "tour-edge-geometry.bin", "tour-edge-geometry.json",
-        "tour-edge-payload.bin", "tour-edge-payload.json",
         "tour-match-gaps.json",
     ]:
         assert name in dodo.PUBLIC_FILES, name
@@ -293,12 +278,11 @@ def test_public_files_does_not_include_internal_tour_traces():
 
 def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
     ordered = dodo.DOIT_CONFIG["default_tasks"]
-    for name in ["match_tour_edges", "build_tour_edge_tiles", "build_tour_edge_payload"]:
+    for name in ["match_tour_edges", "build_tour_edge_tiles"]:
         assert name in ordered, name
     assert "fetch_tours" not in ordered
     assert "fetch_tour_oa_geometry" not in ordered
-    assert ordered.index("build_profiles") < ordered.index("build_tour_edge_tiles")
-    assert ordered.index("build_profiles") < ordered.index("build_tour_edge_payload")
+    assert ordered.index("match_tour_edges") < ordered.index("build_tour_edge_tiles")
 
 
 def test_compute_edge_profiles_is_gated_only_by_the_stamp_build_base_graph_deletes():
@@ -386,3 +370,21 @@ def test_default_tasks_ends_with_quality_summary():
 def test_no_quality_task_is_hardcoded_into_copy_public_data_public_files():
     # data/quality/ reports are internal diagnostics, never shipped to the client.
     assert not any("quality" in name for name in dodo.PUBLIC_FILES)
+
+
+def test_build_tour_edge_tiles_depends_on_match_tour_edges_only():
+    task = dodo.task_build_tour_edge_tiles()
+    assert "match_tour_edges" in task["task_dep"]
+    assert "build_profiles" not in task["task_dep"]
+    assert any(str(d).endswith("tour_edges/records.npy") for d in task["file_dep"])
+    assert any(str(d).endswith("start_points_id_table.json") for d in task["file_dep"])
+    assert any("build_tour_tiles.py" in a for a in task["actions"])
+    assert not any("simplify" in a for a in task["actions"])
+    assert not any(p["name"].startswith("simplify") for p in task.get("params", []))
+
+
+def test_no_tour_edge_payload_task_or_public_file():
+    assert not hasattr(dodo, "task_build_tour_edge_payload")
+    assert "tour-edge-payload.bin" not in dodo.PUBLIC_FILES
+    assert "tour-edge-payload.json" not in dodo.PUBLIC_FILES
+    assert "build_tour_edge_payload" not in dodo.DOIT_CONFIG["default_tasks"]

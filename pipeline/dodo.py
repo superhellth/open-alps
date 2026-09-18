@@ -44,7 +44,7 @@ from dag.graph_building import (  # noqa: E402,F401
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
     task_build_hut_edge_tiles, task_build_start_edge_ids, task_build_start_edge_tiles,
-    task_build_tour_edge_payload, task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_build_tour_edge_tiles, task_build_trail_tiles,
     task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
@@ -95,7 +95,6 @@ DOIT_CONFIG = {
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
         "build_tour_edge_tiles",
         "build_approach_table", "build_edge_payload", "build_edge_ids", "build_start_edge_ids",
-        "build_tour_edge_payload",
         "copy_public_data",
         "check_postprocessing",
         "quality_summary",
@@ -135,8 +134,6 @@ PUBLIC_FILES = [
     "tour-edge-geometry.json",
     "tour-edge-elevation.bin",
     "tour-edge-elevation.json",
-    "tour-edge-payload.bin",
-    "tour-edge-payload.json",
     "tour-match-gaps.json",
 ]
 
