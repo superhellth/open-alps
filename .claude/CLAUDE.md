@@ -65,7 +65,9 @@ Offline trail-graph precompute pipeline under `pipeline/` (code, orchestrated as
 raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, `hut-edges.pmtiles`,
 `hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `stations.geojson`,
 `parking.geojson`, `unsnapped_huts.json`, `approaches.bin`, `approaches.json`,
-`hut-edge-payload.bin`, `hut-edge-payload.json`) are copied into `huts/public/data/` by the
+`hut-edge-payload.bin`, `hut-edge-payload.json`, plus the official-tour outputs `tours.json`,
+`tour-edges.pmtiles`, `tour-edge-stats.json`, `tour-edge-geometry.*`, `tour-edge-elevation.*`,
+`tour-match-gaps.json`) are copied into `huts/public/data/` by the
 pipeline's own `copy_public_data` task. `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
 `GraphPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
@@ -75,10 +77,11 @@ deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` —
 `pipeline/CLAUDE.md` for pipeline details.
 
 `pipeline/tours/` holds hand-curated official-tour reference data (one directory per tour, e.g.
-`Kaisertour/`, `Welser Höhenweg/`, each a set of per-leg `.gpx` tracks) — raw input to the
-official-tours-integration work, tracked in git (unlike `data/`), see
-`docs/superpowers/specs/2026-08-30-tour-folder-ingestion-design.md` and
-`docs/superpowers/specs/2026-08-29-official-tours-integration-design.md`.
+`Kaisertour/`, `Welser Höhenweg/`, each a set of per-leg `.gpx` tracks), tracked in git (unlike
+`data/`). Tours are matched from their raw GPX + DEM only, independent of the OSM base graph
+(`docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md`); the client reads their per-leg scalars
+from `tours.json`. The dev-only GPX editor (`npm run dev` in `huts/`, then `/gpx-editor.html`;
+`docs/gpx-editor.md`) edits those GPX files.
 
 **Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
 first asking the user and getting explicit confirmation.** `build_base_graph` alone has measured at

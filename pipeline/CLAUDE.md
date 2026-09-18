@@ -79,6 +79,20 @@ pending run (`docs/superpowers/plans/2026-08-22-tour-suggestion-backend.md` Task
 lands, the shipped `huts/public/data/` outputs still reflect the old road-penalized single-variant
 graph.
 
+## Official tours
+
+Official tours (`pipeline/tours/<Name>/<N>.gpx`) are matched from their raw GPX trace + the DEM only
+(`phases/graph_building/match_tour_edges.py`): endpoints snap to the nearest hub within
+`graph.maxSnapM` (interior endpoints must be huts), and distance/ascent/descent/duration/`maxEleM`/
+geometry come straight from the trace — no OSM ways, no routing, no simplification. Outputs
+`tour_edges/{records,geometry,profiles}.npy`, `tours.json` (legs carry `edgeId`, `null` for a leg
+with an unresolved endpoint), `tour-match-gaps.json` and `hubs.json`. The tour tasks
+(`match_tour_edges`, `build_tour_edge_tiles`, `check_tour_matching`) have no dependency on any
+base-graph task, so they can be iterated without touching the free-routing outputs;
+`build_profiles` covers only `hut_edges`/`start_edges`. `tourId` is the sorted folder index (six
+folders). `tools/fetch_alpenvereinaktiv_tour.py` fetches a tour's GPX; the dev-only GPX editor
+(`docs/gpx-editor.md`) repairs traces. See `phases/graph_building/README.md`.
+
 ## Timing pipeline phases
 
 `pipeline/lib/timing.py`'s `phase(script, name, **meta)` context manager appends one JSON
