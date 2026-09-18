@@ -88,8 +88,6 @@ Probably in form of a static web page, either as part of the existing frontend o
 
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
 
-### Check: Does check_graph_building always run?
-
 ### Claude skill to auto link huts with their website / find booking times
 
 ### doit dag visualization in official repo
