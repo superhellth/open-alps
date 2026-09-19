@@ -102,7 +102,7 @@ describe('gpx api', () => {
   it('hubs: 404 naming the missing file, then contents once present', async () => {
     const miss = await fetch(`${base}/api/gpx/hubs`)
     expect(miss.status).toBe(404)
-    expect((await miss.json()).error).toContain('data/osm/hubs.json')
+    expect((await miss.json()).error).toContain('data/build/tour-edges/hubs.json')
     writeFileSync(path.join(root, 'hubs.json'), '[{"id":0}]')
     expect(await (await fetch(`${base}/api/gpx/hubs`)).json()).toEqual([{ id: 0 }])
   })

@@ -38,8 +38,6 @@ TOUR_EDGES_DIR = BUILD_DIR / "tour-edges"
 EDGE_LAYER_DIRNAMES = {
     "hut_edges": "hut-edges", "start_edges": "start-edges", "tour_edges": "tour-edges",
 }
-OSM_DIR = DATA_DIR / "osm"  # removed once every module uses the constants above
-DEM_DIR = DATA_DIR / "dem"
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
 PUBLIC_DATA_DIR = REPO_ROOT / "huts" / "public" / "data"
 TOURS_DIR = SCRIPTS_DIR / "tours"

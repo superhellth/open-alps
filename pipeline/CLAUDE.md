@@ -60,7 +60,7 @@ Per-script purpose, requirements and outputs, plus the rules a new script here h
 
 **V2 architecture** (`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`): a persisted,
 hub-agnostic base graph (`phases/graph_building/build_base_graph.py`, streams+contracts `trails.osm.pbf` once into
-`data/osm/base_graph/`'s plain `.npy` structured arrays, `lib/binfmt.py`) is decoupled from the
+`data/build/base-graph/`'s plain `.npy` structured arrays, `lib/binfmt.py`) is decoupled from the
 hub-edge query (`phases/graph_building/build_hub_edges.py`), which partitions the bbox into `lib/grid.py` cells and
 runs one worker process per cell (`ProcessPoolExecutor`), each mmap-slicing only its own padded
 region of the base graph (`lib/subgraph.py`) rather than sharing one big in-process graph. This
@@ -68,7 +68,7 @@ means the expensive stream+contract step is cached across hub-set changes and hy
 retuning, and station/parking routing edges (filtered to hub range by
 `phases/preprocessing/filter_start_points.py`, snapped mid-chain via `lib/edge_split.py` where needed) are now
 first-class alongside hut-hut edges — both live in the same `records.npy`/`geometry.npy` binary
-format (`hut_edges/`, `start_edges/`), tiled by the same generalized `phases/postprocessing/build_edge_tiles.py`.
+format (`hut-edges/`, `start-edges/`), tiled by the same generalized `phases/postprocessing/build_edge_tiles.py`.
 
 Current status: outputs rendered by the app (`AdminPage.tsx`'s `#admin` route for the raw network +
 hut/start edges, `TourSearchPage.tsx` for stations/parking markers) — see the root `CLAUDE.md`'s "App
@@ -83,17 +83,30 @@ pending run (`docs/superpowers/plans/2026-08-22-tour-suggestion-backend.md` Task
 lands, the shipped `huts/public/data/` outputs still reflect the old road-penalized single-variant
 graph.
 
+## Data layout
+
+`data/raw/` holds fetched inputs and keeps the names they were fetched under (`osm/`, `dem/`,
+`huts.geojson`, `partner_betriebe.geojson`, `stations.geojson`, `parking.geojson`). Everything
+computed lives in one directory per graph component under `data/build/` (`lib/pipeline.py`'s
+`TRAILS_DIR`, `HUB_RANGE_DIR`, `START_POINTS_DIR`, `BASE_GRAPH_DIR`, `SNAPPING_DIR`,
+`ROUTE_SUBGRAPHS_DIR`, `ACCESS_EDGES_DIR`, `HUT_EDGES_DIR`, `START_EDGES_DIR`, `TOUR_EDGES_DIR`).
+Naming inside `data/build/`: hyphens, not underscores; no entity prefix that repeats the directory
+name (`hut-edges/stats.json`, not `hut-edges/hut-edge-stats.json`); file extensions stay. A task
+declares its `file_dep`/`targets` with these constants, never with a hand-joined `data/...` string.
+The `layer_name` labels the quality checks and pmtiles layers use (`hut_edges`, `start_edges`,
+`tour_edges`) are identifiers; `lib/pipeline.py`'s `EDGE_LAYER_DIRNAMES` maps one to its directory.
+
 ## Official tours
 
 Official tours (`pipeline/tours/<Name>/<N>.gpx`) are matched from their raw GPX trace + the DEM only
 (`phases/graph_building/match_tour_edges.py`): endpoints snap to the nearest hub within
 `graph.maxSnapM` (interior endpoints must be huts), and distance/ascent/descent/duration/`maxEleM`/
 geometry come straight from the trace — no OSM ways, no routing, no simplification. Outputs
-`tour_edges/{records,geometry,profiles}.npy`, `tours.json` (legs carry `edgeId`, `null` for a leg
+`data/build/tour-edges/{records,geometry,profiles}.npy`, `tours.json` (legs carry `edgeId`, `null` for a leg
 with an unresolved endpoint), `tour-match-gaps.json` and `hubs.json`. The tour tasks
 (`match_tour_edges`, `build_tour_edge_tiles`, `check_tour_matching`) have no dependency on any
 base-graph task, so they can be iterated without touching the free-routing outputs;
-`build_profiles` covers only `hut_edges`/`start_edges`. `tourId` is the sorted folder index (six
+`build_profiles` covers only `hut-edges`/`start-edges`. `tourId` is the sorted folder index (six
 folders). `tools/fetch_alpenvereinaktiv_tour.py` fetches a tour's GPX; the dev-only GPX editor
 (`docs/gpx-editor.md`) repairs traces. See `phases/graph_building/README.md`.
 
@@ -114,7 +127,7 @@ phase stops scaling first, instead of guessing. It already caught one: `read_dem
 read, so a window covering AT+Bavaria re-ran that reprojection on every `add_elevation.py` run
 (the script people reran most, to retune the now-retired `--ele-noise-threshold-m`). Fixed by having
 `phases/elevation/build_dem_vrt.py` materialize the VRT into a real, tiled/compressed GeoTIFF once
-(`pipeline/lib/pipeline.py`'s `materialize_geotiff()`, `data/dem/dem.tif`) that
+(`pipeline/lib/pipeline.py`'s `materialize_geotiff()`, `data/raw/dem/dem.tif`) that
 `phases/elevation/sample_base_elevation.py` reads instead - see that function's docstring. Wrap a
 new expensive block in `with
 phase(SCRIPT_NAME, "phase_name", **any_size_metadata):` rather than ad hoc `print`/`time.time()`

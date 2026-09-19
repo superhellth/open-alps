@@ -107,7 +107,7 @@ async function handle(paths: GpxApiPaths, req: IncomingMessage, res: ServerRespo
   }
   if (head === 'hubs' && segments.length === 1 && req.method === 'GET') {
     return sendJson(res, 200, await readJsonFile(paths.hubsPath,
-      'data/osm/hubs.json not found - run `doit match_tour_edges` first'))
+      'data/build/tour-edges/hubs.json not found - run `doit match_tour_edges` first'))
   }
   if (head === 'config' && segments.length === 1 && req.method === 'GET') {
     const cfg = (await readJsonFile(paths.configPath, 'pipeline/pipeline.config.json not found')) as
@@ -143,7 +143,7 @@ export function gpxEditorPlugin(repoRoot: string): Plugin {
     configureServer(server) {
       server.middlewares.use(createGpxApi({
         toursDir: path.join(repoRoot, 'pipeline', 'tours'),
-        hubsPath: path.join(repoRoot, 'data', 'osm', 'hubs.json'),
+        hubsPath: path.join(repoRoot, 'data', 'build', 'tour-edges', 'hubs.json'),
         configPath: path.join(repoRoot, 'pipeline', 'pipeline.config.json'),
       }))
     },

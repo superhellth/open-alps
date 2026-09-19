@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only checks over phases/preprocessing/ output (spec docs/superpowers/specs/
-2026-09-02-data-quality-monitoring-design.md §4.1): start_points.npy integrity and its coverage
-in start_points_id_table.json. Never mutates its inputs; always exits 0 (spec §3).
+2026-09-02-data-quality-monitoring-design.md §4.1): start-points.npy integrity and its coverage
+in start-points-id-table.json. Never mutates its inputs; always exits 0 (spec §3).
 
 Usage: python pipeline/phases/quality/check_preprocessing.py
 """
@@ -67,7 +67,7 @@ def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagge
 
 
 def check_id_table_coverage(start_points: np.ndarray, id_table: dict, max_flagged: int) -> dict:
-    """§4.1.2: every start_points.npy row's osm_id must resolve in its layer of the id table."""
+    """§4.1.2: every start-points.npy row's osm_id must resolve in its layer of the id table."""
     flagged = []
     for i in range(len(start_points)):
         type_name = _TYPE_NAMES.get(int(start_points[i]["type"]))

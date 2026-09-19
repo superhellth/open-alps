@@ -7,7 +7,7 @@ were computed against (they're positions into that gather's own local_nodes/loca
 which differ gather to gather). To let snap_hubs.py compute a snap once (against a small,
 max_snap_m-sized buffer) and build_hub_edges.py reuse it later (against its own, much larger,
 max_edge_km-sized buffer, gathered independently), the snap is persisted keyed by GLOBAL ids that
-are stable across any gather: LocalSubgraph.global_node_ids (a row index into base_graph/nodes.npy)
+are stable across any gather: LocalSubgraph.global_node_ids (a row index into base-graph/nodes.npy)
 for a node snap, EDGE_DTYPE's own "edge_id" field (persisted on every edge, untouched by which
 subgraph happens to include it) for a mid-chain split. reconstruct_local_snaps translates those
 global ids back into whichever subgraph is asking, per docs/superpowers/plans/
@@ -300,7 +300,7 @@ def write_unsnapped_report(path, rejections: list) -> None:
 
 
 def sample_hub_elevations(dem_path, hubs: list, grid: Grid, buffer_km: float = 0.2) -> None:
-    """Fills each hub dict's "ele" key in place by sampling data/dem/dem.tif at the hub's own
+    """Fills each hub dict's "ele" key in place by sampling data/raw/dem/dem.tif at the hub's own
     coordinate (spec E3), bilinear, per grid cell - same sampler and windowing strategy as
     elevation/sample_base_elevation.py's node/interior pass, so a hub's elevation and its snap
     point's elevation (node_ele.npy/interior_ele.npy, sampled from the same raster) agree on

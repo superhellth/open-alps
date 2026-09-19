@@ -50,7 +50,7 @@ def test_absent_access_is_kept_and_marked_unknown():
 
 def test_restricted_access_start_points_are_surfaced_not_dropped():
     # private/gated/disused points are hard-dropped upstream, in filter_start_points.py's
-    # is_usable() (docs/backlog/access-node-coverage.md) - nothing reaching start_edges/
+    # is_usable() (docs/backlog/access-node-coverage.md) - nothing reaching start-edges/
     # records.npy can carry access="private" any more, but if id_table somehow did carry it,
     # this stage must not silently drop it a second time (that filtering logic lives in exactly
     # one place now).

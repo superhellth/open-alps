@@ -46,7 +46,7 @@ def check_elevation_range(node_ele: np.ndarray, interior_ele: np.ndarray, plausi
 
 
 def check_unresolved_sentinels(edges: np.ndarray, max_flagged: int) -> dict:
-    """§4.2.2: base_graph/edges.npy rows still holding binfmt.UNSET after compute_edge_profiles."""
+    """§4.2.2: base-graph/edges.npy rows still holding binfmt.UNSET after compute_edge_profiles."""
     bad = (
         (edges["time_s"] == binfmt.UNSET) | (edges["ascent_m"] == binfmt.UNSET)
         | (edges["descent_m"] == binfmt.UNSET)

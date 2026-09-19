@@ -2,7 +2,7 @@
 
 Offline precompute pipeline for the hut-to-hut trail graph. This directory (`pipeline.config.json`,
 scripts, this file) is the tracked source; its raw/generated inputs and outputs live in the
-sibling `data/` dir (`data/osm/`, `data/dem/`), which is entirely gitignored — regenerate it via
+sibling `data/` dir (`data/raw/` for fetched inputs, `data/build/<component>/` for computed outputs), which is entirely gitignored — regenerate it via
 `doit` (see "Reproducing from scratch" below) rather than expecting it to be present after a fresh
 clone. Rationale for the pipeline's design choices lives in `docs/osm-trail-pipeline.md`; this file
 is the practical "how to reproduce it" index. For what each script actually does — data structures,
@@ -57,7 +57,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     horizontal one: a candidate snap point is also rejected if it sits more than this far above or
     below the hub's own DEM elevation, since a horizontally-close trail node can still be on a
     different terrace/switchback. Every rejection is reported, not silently dropped — see
-    `unsnapped_huts.json`.
+    `data/build/snapping/unsnapped-huts.json`.
   - **`maxEdgeKm`** (kilometers, default 30) — the longest hut-to-hut trail distance (walking
     distance along the graph, not beeline) that's kept as an edge. It's a deliberate cutoff, not
     just a performance knob: a hut-to-hut edge is meant to represent one day-hike leg, so anything
@@ -104,7 +104,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
       `bboxFromHuts` below.
   - **`bboxFromHuts`** (per-region, `composite` only, default false) — a region's `bbox` is
     normally just a coarse political-boundary filter used to pick out which huts belong to that
-    region (`data/osm/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
+    region (`data/raw/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
     `bboxFromHuts: true` tightens the box actually fetched down to those huts' real extent (+
     `bufferDeg`, default 0.05°) instead of the full political box — matters for request-per-tile
     providers like `bavaria-dgm5`, whose full state bbox is ~80,000 1km tiles even though huts

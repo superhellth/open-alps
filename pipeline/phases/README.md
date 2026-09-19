@@ -16,8 +16,8 @@ together.
 ```
 downloads/       → preprocessing/  → graph_building/  → elevation/           → graph_building/ → elevation/       → postprocessing/
   raw .osm.pbf      trails.osm.pbf    build_base_graph/   sample_base_        build_hub_edges/    build_profiles.py  .pmtiles + stats
-  huts/stations/    start_points.npy  base_graph/edges.npy elevation.py+       hut_edges/,         profiles.npy       for the app
-  parking geojson                    (time_s UNSET)       compute_edge_       start_edges/
+  huts/stations/    start-points.npy  base-graph/edges.npy elevation.py+       hut-edges/,         profiles.npy       for the app
+  parking geojson                    (time_s UNSET)       compute_edge_       start-edges/
   dem tiles                                               profiles.py
                                                             (fills time_s/
                                                             ascent_m/descent_m
@@ -55,7 +55,7 @@ subgraph on the *time* cost (`lib/speed.py`'s pointwise model), never a road-pen
 
 `build_dem_vrt.py` mosaics the DEM once. `sample_base_elevation.py` samples it per base-graph
 point; `compute_edge_profiles.py` smooths those samples per base edge and fills `time_s`/
-`ascent_m`/`descent_m` on `base_graph/edges.npy` in place — both run *before*
+`ascent_m`/`descent_m` on `base-graph/edges.npy` in place — both run *before*
 `build_hub_edges.py`, since `time_s` is the routing weight a route can't be found without.
 `build_profiles.py` runs *after* `build_hub_edges.py`: it interpolates the same stored point
 elevations onto each routed record's display profile (`profile_*` fields), never reopening the
@@ -74,7 +74,8 @@ Defined inline in `pipeline/dodo.py`, not under `phases/` — copies every app-f
 (`huts.geojson`, `hut-edges.pmtiles`, `hut-edge-stats.json`, `start-edges.pmtiles`,
 `start-edge-stats.json`, `trails.pmtiles`, `stations.geojson`, `parking.geojson`,
 `unsnapped_huts.json`, `approaches.bin`, `approaches.json`, `hut-edge-payload.bin`,
-`hut-edge-payload.json` — `dodo.py`'s `PUBLIC_FILES`) from `data/osm/` into `huts/public/data/`.
+`hut-edge-payload.json` — `dodo.py`'s `PUBLIC_FILES`, a `(source under data/, public name)` table) into
+`huts/public/data/`.
 Included in the default `doit` run; run `doit copy_public_data` alone to re-sync after
 hand-running individual scripts.
 
@@ -82,8 +83,8 @@ hand-running individual scripts.
 
 Not a phase — code imported across phases:
 
-- **`pipeline.py`** — `load_config()`, path constants (`OSM_DIR`, `DEM_DIR`, `PUBLIC_DATA_DIR`,
-  ...), `materialize_geotiff()`, `normalize_colorinterp()`, `build_dem_vrt()`, `run_tippecanoe()`
+- **`pipeline.py`** — `load_config()`, path constants (`RAW_DIR`, `BUILD_DIR` and one constant per
+  `data/build/<component>/` directory, `PUBLIC_DATA_DIR`, ...), `materialize_geotiff()`, `normalize_colorinterp()`, `build_dem_vrt()`, `run_tippecanoe()`
   (native-or-WSL dispatch), `hut_points()` / `edge_points()` / `bbox_from_huts()`.
 - **`timing.py`** — `phase(script, name, **meta)` context manager, appends one JSON line to
   `data/timings.jsonl` per completed phase. Used by `graph_building/build_base_graph.py` and

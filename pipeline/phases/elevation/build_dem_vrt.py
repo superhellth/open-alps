@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Reprojects/merges the DEM tiles data/dem/fetch_manifest.json (fetch_dem.py's output) points at
-into data/dem/dem.vrt, then materializes that into data/dem/dem.tif for add_elevation.py to
+Reprojects/merges the DEM tiles data/raw/dem/fetch_manifest.json (fetch_dem.py's output) points at
+into data/raw/dem/dem.vrt, then materializes that into data/raw/dem/dem.tif for add_elevation.py to
 sample - see pipeline/lib/dem.py's build_dem_vrt()/materialize_geotiff() docstrings for what
 each step does. Split out from fetch_dem.py so retuning a provider's to_4326_vrt() (e.g.
 bavaria_dgm.py's -srcnodata fix) or the materialize step is a rerun of this script alone - no

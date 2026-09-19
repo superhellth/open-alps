@@ -27,7 +27,7 @@ def test_union_find_components_all_isolated_when_no_edges():
 
 
 def test_snap_health_counts_distinct_huts_not_entries():
-    # §4.3.1: unsnapped_huts.json has one entry per rejection reason, so 1 hub with 2 reasons must
+    # §4.3.1: unsnapped-huts.json has one entry per rejection reason, so 1 hub with 2 reasons must
     # count as 1 distinct hub, not 2.
     unsnapped = [
         {"hub_id": 5, "hub_type": binfmt.TYPE_HUT, "reason": "gap_too_far"},

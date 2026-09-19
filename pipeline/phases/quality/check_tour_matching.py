@@ -3,7 +3,7 @@
 docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md "Quality checks"): every leg endpoint
 resolves to a hub of the type its position in the tour requires, every matched leg's scalar fields
 are finite and non-negative, every tour-match-gaps.json entry is reported with its reason,
-tour_edges' profiles are well-formed, and tours.json's edgeIds agree with tour_edges/records.npy.
+tour-edges' profiles are well-formed, and tours.json's edgeIds agree with tour-edges/records.npy.
 Never mutates its inputs; always exits 0.
 
 Usage: python pipeline/phases/quality/check_tour_matching.py
@@ -92,7 +92,7 @@ def check_gap_reasons(gaps: list, max_flagged: int) -> dict:
 
 
 def check_tours_json_agreement(tours: list, n_records: int, max_flagged: int) -> dict:
-    """Every non-null edgeId indexes a row of tour_edges/records.npy, and the number of matched
+    """Every non-null edgeId indexes a row of tour-edges/records.npy, and the number of matched
     legs equals that row count."""
     flagged = []
     matched = 0

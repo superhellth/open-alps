@@ -114,7 +114,7 @@ def check_shipped_straightness(layer_name: str, point_counts: list, geometry_poi
                                 lengths_m: list, min_length_m: float, straightness_threshold: float,
                                 max_points: int, max_flagged: int) -> dict:
     """§4.4.3: over the SIMPLIFIED shipped geometry (build_edge_tiles.py's output, not the raw
-    hut_edges/geometry.npy), flag edges >= min_length_m with straightness >= straightness_threshold
+    hut-edges/geometry.npy), flag edges >= min_length_m with straightness >= straightness_threshold
     and fewer than max_points points. straightness = endpoint-to-endpoint distance / edge length."""
     flagged = []
     for i in range(len(point_counts)):

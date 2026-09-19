@@ -68,13 +68,20 @@ raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, 
 `hut-edge-payload.bin`, `hut-edge-payload.json`, plus the official-tour outputs `tours.json`,
 `tour-edges.pmtiles`, `tour-edge-stats.json`, `tour-edge-geometry.*`, `tour-edge-elevation.*`,
 `tour-match-gaps.json`) are copied into `huts/public/data/` by the
-pipeline's own `copy_public_data` task. `huts.geojson`, `trails.pmtiles`,
+pipeline's own `copy_public_data` task (a `(source, public name)` table, `PUBLIC_FILES` in `dodo.py`). `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
 `GraphPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
 (`huts/src/tourSearch/`, see "App structure" above) that runs entirely in the browser off these
 static files — no query-time backend. The hut-edge payload contract (columns, dtypes, what's
 deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` — see
 `pipeline/CLAUDE.md` for pipeline details.
+
+`data/` has two tiers: `data/raw/` (fetched: `osm/`, `dem/`, the four geojson downloads) and
+`data/build/<component>/` (computed: `trails`, `hub-range`, `start-points`, `base-graph`,
+`snapping`, `route-subgraphs`, `access-edges`, `hut-edges`, `start-edges`, `tour-edges`). Inside
+`data/build/` names use hyphens and drop the component prefix (`hut-edges/stats.json`).
+`data/analysis/`, `data/quality/`, `data/timings.jsonl` and `data/.doit.json.db` stay at the top
+level. Public file names in `huts/public/data/` are set by `dodo.py`'s `PUBLIC_FILES`.
 
 `pipeline/tours/` holds hand-curated official-tour reference data (one directory per tour, e.g.
 `Kaisertour/`, `Welser Höhenweg/`, each a set of per-leg `.gpx` tracks), tracked in git (unlike

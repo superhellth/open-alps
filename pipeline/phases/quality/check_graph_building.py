@@ -58,7 +58,7 @@ def union_find_components(n_nodes: int, edge_pairs: list) -> list:
 
 
 def check_snap_health(unsnapped: list, max_flagged: int) -> dict:
-    """§4.3.1: unsnapped_huts.json has one entry per rejection reason - count distinct
+    """§4.3.1: unsnapped-huts.json has one entry per rejection reason - count distinct
     (hub_type, hub_id) pairs, not entries."""
     by_hub = defaultdict(list)
     for entry in unsnapped:
@@ -124,7 +124,7 @@ def check_range_cap(records: np.ndarray, layer_name: str, max_edge_km: float,
 
 
 def polyline_for_record(record, geometry: np.ndarray) -> np.ndarray:
-    """Returns a (n, 2) lon/lat array for one hut_edges/start_edges record, sliced out
+    """Returns a (n, 2) lon/lat array for one hut-edges/start-edges record, sliced out
     of that layer's flat geometry.npy by geom_offset/geom_count."""
     offset, count = int(record["geom_offset"]), int(record["geom_count"])
     sl = geometry[offset:offset + count]
@@ -132,7 +132,7 @@ def polyline_for_record(record, geometry: np.ndarray) -> np.ndarray:
 
 
 def polyline_for_base_edge(edge, nodes: np.ndarray, interior: np.ndarray) -> np.ndarray:
-    """Returns a (n, 2) lon/lat array for one base_graph/edges.npy row: its u node, interior
+    """Returns a (n, 2) lon/lat array for one base-graph/edges.npy row: its u node, interior
     polyline, then its v node - the same concatenation build_base_graph.py's contraction reasons
     about, reconstructed for a check rather than for routing."""
     u, v = int(edge["u"]), int(edge["v"])

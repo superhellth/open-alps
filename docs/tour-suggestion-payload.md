@@ -13,7 +13,7 @@ query-time backend.
 
 ## 1. `hut-edge-payload.bin` + `hut-edge-payload.json`
 
-Built by `pipeline/phases/postprocessing/build_edge_payload.py` from `hut_edges/records.npy`. One
+Built by `pipeline/phases/postprocessing/build_edge_payload.py` from `hut-edges/records.npy`. One
 row per `(unordered hut pair, variant)` — see §3 "Direction" for why unordered.
 
 `hut-edge-payload.json` is the manifest: `rows` (row count), `columns` (`{name: {dtype, offset}}`,
@@ -70,8 +70,8 @@ few thousand rows) and can't go stale relative to direction.
 
 ## 3. Direction: the graph is undirected, reversal is a client-side synthesis
 
-`hut_edges/records.npy` stores **one record per unordered pair per variant** — for AT+Bayern,
-6,067 unique unordered pairs, zero cases with both `u→v` and `v→u` stored. `start_edges/` (feeding
+`hut-edges/records.npy` stores **one record per unordered pair per variant** — for AT+Bayern,
+6,067 unique unordered pairs, zero cases with both `u→v` and `v→u` stored. `start-edges/` (feeding
 the approach table, §6) is one-directional: every record is `access-point → hut`.
 
 Reversing a hut-edge record for display (B→A when the stored record is A→B) is the client's job.
@@ -82,7 +82,7 @@ The reverse-traversal contract:
 - **Swapped**: `ascent_m` ↔ `descent_m`.
 - **Recomputed**: duration (§2, from the swapped ascent/descent).
 - **Reversed for display**: geometry and elevation profile (both fetched separately, from
-  `hut-edges.pmtiles` and `hut_edges/profiles.npy` respectively — neither lives in this payload).
+  `hut-edges.pmtiles` and `hut-edges/profiles.npy` respectively — neither lives in this payload).
 
 **Known approximation, not a bug to fix here:** under the old road-penalized *distance* cost, the
 cheapest A→B path was provably the cheapest B→A path, so one stored record was lossless in both
@@ -145,7 +145,7 @@ client-chosen ceiling in between with the same guarantee (spec C9).
 
 ## 6. `approaches.bin` + `approaches.json`
 
-Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start_edges/records.npy`
+Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start-edges/records.npy`
 (92,426 raw records over 27,261 parkings + 3,025 stations for AT+Bayern — not shippable as-is).
 Two things, because a client needs both a small per-hut table and a way to answer "does this loop
 close":
@@ -191,7 +191,7 @@ required" reads this array by row index, not the binary payload.
 **Loop-closure reverse index** (`approaches.json`'s `reverse_index`, JSON, not in the binary): the
 client's car mode requires exit start-point == entry start-point, and a tour's first and last hut's
 approach-table rows essentially never share a start id on their own — a naive intersection would
-annihilate the result set. So every `start_edges` record whose start point appears in *any* hut's
+annihilate the result set. So every `start-edges` record whose start point appears in *any* hut's
 retained approach ships here too (all variants — closure needs whatever the client already has
 open, not just the configured approach-candidate variants), keyed both ways:
 `hut_to_starts[hut_id]` and `start_to_huts[start_id]`, each a list of `{hut_id, start_id,
