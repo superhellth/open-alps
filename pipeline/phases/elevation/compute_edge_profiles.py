@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fills time_s/ascent_m/descent_m on every BASE-GRAPH EDGE (spec B2 Phase B) from the per-point
-elevations sample_base_elevation.py already wrote (node_ele.npy/interior_ele.npy) - split out from
+elevations sample_base_elevation.py already wrote (node-ele.npy/interior-ele.npy) - split out from
 that script because --smoothing-kernel-m only ever affects this half: retuning it used to force a
 full DEM resample too, even though the kernel only touches the smoothing/ascent-descent math here.
 
@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from graph_building import build_base_graph as bbg  # noqa: E402
 from lib import binfmt, speed  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "compute_edge_profiles.py"
@@ -164,7 +164,7 @@ def main(argv=None):
     config = load_config()
     speed_model = config["graph"]["speedModel"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--smoothing-kernel-m", type=float,
                         default=config["dem"]["smoothingKernelM"],
@@ -199,8 +199,8 @@ def main(argv=None):
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
             edges = binfmt.load_array(base_graph_dir / "edges.npy", mmap=False)
-            node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy", mmap=False)
-            interior_ele = binfmt.load_array(base_graph_dir / "interior_ele.npy", mmap=False)
+            node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy", mmap=False)
+            interior_ele = binfmt.load_array(base_graph_dir / "interior-ele.npy", mmap=False)
 
         print(f"computing time_s/ascent_m/descent_m for {len(edges):,} edges ...", flush=True)
         time_s, ascent_m, descent_m = _fill_edge_time_and_elevation(
@@ -216,7 +216,7 @@ def main(argv=None):
 
         with timer.step("write"):
             binfmt.save_array(base_graph_dir / "edges.npy", edges)
-            (base_graph_dir / "edge_profiles.stamp").write_text(
+            (base_graph_dir / "edge-profiles.stamp").write_text(
                 f"smoothing_kernel_m={args.smoothing_kernel_m}\n", encoding="utf-8"
             )
         print(f"rewritten {base_graph_dir / 'edges.npy'} with time_s/ascent_m/descent_m", flush=True)
