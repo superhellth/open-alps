@@ -10,6 +10,7 @@ Usage: python pipeline/phases/graph_building/build_base_graph.py [--tile-size-km
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -141,8 +142,21 @@ def contract(*raw_args, progress_every: int = 20_000):
     return contracted
 
 
-def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = None):
+def grid_extent(coords) -> dict:
+    """Bounding box of coords (an (n, 2) lon/lat array) snapped outward to whole degrees. The grid
+    origin therefore only moves when the data crosses a whole-degree line, which keeps cell ids
+    stable across rebuilds."""
+    return {
+        "minLng": float(math.floor(coords[:, 0].min())),
+        "maxLng": float(math.ceil(coords[:, 0].max())),
+        "minLat": float(math.floor(coords[:, 1].min())),
+        "maxLat": float(math.ceil(coords[:, 1].max())),
+    }
+
+
+def pack_and_write(contracted, tile_size_km, out_dir, timer: StepTimer = None):
     timer = timer if timer is not None else StepTimer()
+    bbox = grid_extent(contracted.coords)
     # --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
     # Steps below never nest, so StepTimer.summary()'s percentages stay a real split of the run.
     with timer.step("pack_nodes"):
@@ -251,8 +265,7 @@ def main(argv=None):
         with timer.step("contract"):
             contracted = contract(*raw_args)
         del raw_args
-        pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir,
-                       timer=timer)
+        pack_and_write(contracted, args.tile_size_km, args.out_dir, timer=timer)
         meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
 

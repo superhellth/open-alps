@@ -51,6 +51,8 @@ per-leg/per-route quality signals, revisit whether/how the frontend should surfa
 
 ### How to avoid road in hut-to-hut and access legs in a consistent and solid way
 
+### Does colocating test in phases/ make sense?
+
 ### [Hut catalog gaps — privately-run mountain inns](backlog/hut-catalog-privately-run-inns.md)
 
 Real overnight stops on tours (e.g. the Weinbergerhaus Berggasthof) are neither Alpine Club huts nor

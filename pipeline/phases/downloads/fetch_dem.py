@@ -13,36 +13,39 @@ in particular) against data that's already downloaded. Every provider's fetch() 
 tiles that already exist on disk, but this split also skips the *tile-selection* network calls
 entirely on a build-only rerun, not just the actual downloads.
 
+The area each region must cover comes from data/build/hub-range/hub-range.geojson (the same polygon
+filter_trails.py clips trails to), clipped to a region's `boundary` .poly where configured.
+
 Usage: python pipeline/phases/downloads/fetch_dem.py
 """
 
-import argparse
 import json
 import sys
 from pathlib import Path
 
+from shapely.geometry import shape
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dem_providers.composite import fetch_regions  # noqa: E402
-from lib.pipeline import RAW_DEM_DIR, load_config  # noqa: E402
+from lib.pipeline import HUB_RANGE_DIR, RAW_DEM_DIR, RAW_OSM_DIR, load_config  # noqa: E402
+from lib.poly import parse_poly_file  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_dem.py"
 
 config = load_config()
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
-                    help="longest hut-to-hut trail distance kept as an edge, used to size the DEM fetch buffer (see pipeline.config.json's graph.maxEdgeKm)")
-args = parser.parse_args()
+provider_config = config["dem"]["providerConfig"]
 
-provider_config = dict(config["dem"]["providerConfig"])
-provider_config.setdefault("bbox", config["bbox"])
+with open(HUB_RANGE_DIR / "hub-range.geojson", encoding="utf-8") as f:
+    hub_range = shape(json.load(f))
+boundaries = {r["name"]: parse_poly_file(RAW_OSM_DIR / f"{r['name']}.poly") for r in config["regions"]}
 
 RAW_DEM_DIR.mkdir(parents=True, exist_ok=True)
 
 with phase(SCRIPT_NAME, "fetch_dem") as meta:
-    manifest = fetch_regions(provider_config, RAW_DEM_DIR, max_edge_km=args.max_edge_km)
+    manifest = fetch_regions(provider_config, RAW_DEM_DIR, hub_range, boundaries)
     meta["n_regions"] = len(manifest)
 
 manifest_path = RAW_DEM_DIR / "fetch_manifest.json"

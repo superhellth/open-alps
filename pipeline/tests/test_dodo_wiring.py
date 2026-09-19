@@ -130,13 +130,13 @@ def test_build_hub_edges_depends_on_both_split_out_tasks():
     assert "gather_route_subgraphs" in task_deps
 
 
-def test_build_base_graph_tracks_road_highway_tags_and_bbox():
+def test_build_base_graph_tracks_road_highway_tags():
     # build_base_graph.py reads config["graph"]["roadHighwayTags"] (WayGraphHandler's is_road
-    # classification) and config["bbox"] (pack_and_write's Grid, which decides every node's
-    # cell_id) directly, with no CLI flag - without a tracked param either edit would leave
+    # classification) directly, with no CLI flag - without a tracked param the edit would leave
     # TaskOptionsChanged() reporting "up to date" and silently skip the multi-hour rebuild.
     param_names = {p["name"] for p in dodo.task_build_base_graph()["params"]}
-    assert {"road_highway_tags_json", "bbox_json"} <= param_names
+    assert "road_highway_tags_json" in param_names
+    assert "bbox_json" not in param_names
     assert dodo.task_build_base_graph()["uptodate"]
 
 

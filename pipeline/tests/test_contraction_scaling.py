@@ -58,8 +58,7 @@ def test_profile_one_writes_a_prof_file_and_returns_a_table(tmp_path):
         interior_coords=[[(11.05, 47.05)], []],
     )
     graph_dir = tmp_path / "base_graph"
-    bbg.pack_and_write(contracted, {"minLng": 8.9, "maxLng": 17.2,
-                                    "minLat": 46.3, "maxLat": 50.6}, 60.0, graph_dir)
+    bbg.pack_and_write(contracted, 60.0, graph_dir)
 
     prof_path = tmp_path / "contraction.prof"
     table = profile_one(graph_dir, fraction=1.0, out_path=prof_path)

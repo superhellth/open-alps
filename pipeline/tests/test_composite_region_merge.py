@@ -3,6 +3,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
+from shapely.geometry import box
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
@@ -10,7 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 import downloads.dem_providers as dem_providers  # noqa: E402
 from downloads.dem_providers import composite  # noqa: E402
 from lib import dem as dem_lib  # noqa: E402
-from lib.geo import HUB_RANGE_SAFETY_MARGIN  # noqa: E402
+HUB_RANGE = box(0, 0, 1, 1)
 
 
 def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path, monkeypatch):
@@ -25,12 +26,12 @@ def test_fetch_regions_calls_each_region_provider_and_returns_manifest(tmp_path,
 
     provider_config = {
         "regions": [
-            {"provider": "at-bev-dgm", "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}},
-            {"provider": "bavaria-dgm5", "bbox": {"minLng": 1, "maxLng": 2, "minLat": 0, "maxLat": 1}},
+            {"provider": "at-bev-dgm"},
+            {"provider": "bavaria-dgm5"},
         ]
     }
 
-    manifest = composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
+    manifest = composite.fetch_regions(provider_config, tmp_path, HUB_RANGE, {})
 
     assert sum(1 for c in calls if c[0] == "fetch") == 2
     assert len(manifest) == 2
@@ -95,28 +96,36 @@ def test_build_dem_vrt_reprojects_each_region_and_merges(tmp_path, monkeypatch):
         assert out.is_absolute() and out.parent == tmp_path
 
 
-def test_fetch_regions_computes_bufferkm_from_max_edge_km_for_bboxfromhuts_region(
-    tmp_path, monkeypatch
-):
+def test_fetch_regions_clips_region_with_boundary_to_hub_range_intersection(tmp_path, monkeypatch):
     calls = []
     fake_provider = MagicMock()
     fake_provider.fetch.side_effect = lambda cfg, raw_dir: calls.append(cfg) or [
         raw_dir / "tile.tif"
     ]
     monkeypatch.setattr(composite, "get_provider", lambda name: fake_provider)
-    monkeypatch.setattr(composite, "_points_for_region", lambda bbox: [[11.0, 47.0]])
+    hub_range = box(0, 0, 2, 1)
+    boundaries = {"bayern": box(1, 0, 3, 1)}
 
     provider_config = {
         "regions": [
-            {"provider": "bavaria-dgm5",
-             "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1},
-             "bboxFromHuts": True},
+            {"provider": "copernicus-glo-30"},
+            {"provider": "bavaria-dgm5", "boundary": "bayern"},
         ]
     }
 
-    composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
+    composite.fetch_regions(provider_config, tmp_path, hub_range, boundaries)
 
-    assert calls[0]["bufferKm"] == pytest.approx(30.0 * HUB_RANGE_SAFETY_MARGIN)
+    assert calls[0]["area"].equals(hub_range)
+    assert calls[1]["area"].equals(box(1, 0, 2, 1))
+
+
+def test_fetch_regions_raises_on_empty_boundary_intersection(tmp_path, monkeypatch):
+    monkeypatch.setattr(composite, "get_provider", lambda name: MagicMock())
+
+    provider_config = {"regions": [{"provider": "bavaria-dgm5", "boundary": "bayern"}]}
+
+    with pytest.raises(ValueError, match="bayern"):
+        composite.fetch_regions(provider_config, tmp_path, box(0, 0, 1, 1), {"bayern": box(5, 5, 6, 6)})
 
 
 def test_fetch_regions_preserves_region_order_for_gdalbuildvrt_priority(tmp_path, monkeypatch):
@@ -126,18 +135,16 @@ def test_fetch_regions_preserves_region_order_for_gdalbuildvrt_priority(tmp_path
         raw_dir / "tile.tif"
     ]
     monkeypatch.setattr(composite, "get_provider", lambda name: fake_provider)
-    monkeypatch.setattr(composite, "_points_for_region", lambda bbox: [[11.0, 47.0]])
 
     provider_config = {
         "regions": [
-            {"provider": "copernicus-glo-30", "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}},
-            {"provider": "bavaria-dgm5",
-             "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}, "bboxFromHuts": True},
-            {"provider": "at-bev-dgm", "bbox": {"minLng": 0, "maxLng": 1, "minLat": 0, "maxLat": 1}},
+            {"provider": "copernicus-glo-30"},
+            {"provider": "bavaria-dgm5"},
+            {"provider": "at-bev-dgm"},
         ]
     }
 
-    manifest = composite.fetch_regions(provider_config, tmp_path, max_edge_km=30.0)
+    manifest = composite.fetch_regions(provider_config, tmp_path, HUB_RANGE, {})
 
     assert [m["provider"] for m in manifest] == ["copernicus-glo-30", "bavaria-dgm5", "at-bev-dgm"]
     assert calls == ["copernicus-glo-30", "bavaria-dgm5", "at-bev-dgm"]

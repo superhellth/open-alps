@@ -40,12 +40,10 @@ def task_build_base_graph():
         params=[cli_param("tile_size_km", "tile-size-km", float, CONFIG["graph"]["tileSizeKm"])],
         tracking_params=[
             # build_base_graph.py reads config["graph"]["roadHighwayTags"] (WayGraphHandler's
-            # is_road classification) and config["bbox"] (pack_and_write's Grid, which decides
-            # every node's cell_id) directly - without these, editing either would silently leave
+            # is_road classification) directly - without this, editing it would silently leave
             # the multi-hour rebuild un-triggered.
             tracking_param("road_highway_tags_json", str,
                             json.dumps(CONFIG["graph"]["roadHighwayTags"])),
-            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
             _EDGE_SCHEMA_VERSION_PARAM,
         ],
         file_dep=[TRAILS_DIR / "trails.osm.pbf"],
