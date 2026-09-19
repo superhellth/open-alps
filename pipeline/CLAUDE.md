@@ -23,6 +23,10 @@ a numbered run order), idempotently (`doit` skips a task whose targets are alrea
 `pipeline/README.md` "Setup"). The last task, `copy_public_data`, copies every output into
 `huts/public/data/` — no separate hand-copy step.
 
+**Temporary:** prefix every `doit` invocation with `PYTHONPATH=/home/superhellth/doit` (e.g.
+`PYTHONPATH=/home/superhellth/doit doit <task>`) until the user's doit `status` PR is accepted
+upstream.
+
 `dodo.py` itself only assembles the DAG (`DOIT_CONFIG`, `copy_public_data`) — the `task_*`
 functions live in `pipeline/dag/`, one module per `phases/` subdirectory (`dag/downloads.py`,
 `dag/preprocessing.py`, `dag/graph_building.py`, `dag/elevation.py`, `dag/postprocessing.py`), so a

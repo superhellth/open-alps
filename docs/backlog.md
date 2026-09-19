@@ -76,10 +76,6 @@ Explore if it would make sense to include aerial lifts in access nodes or as rou
 
 At the moment the third-party/official/folder-ingestion part of the pipeline emits a document that contains gap legs. Should be reported in the data quality layer, not shipped to frontend
 
-### GPX Tool
-
-A small webpage that helps bring GPX tours into a format the pipeline can ingest. Should support: Extending legs to a proper end (dont end on a mountain like Chiemgautour), slicing into legs, as some Tours are one big tour, not split into legs. So needs huts overlay, quality of life features.
-
 ### Idea: Introduce a pipeline explanation/visualization
 
 Probably in form of a static web page, either as part of the existing frontend or a new one. May be combined with the data quality monitoring layer.
@@ -89,5 +85,3 @@ Probably in form of a static web page, either as part of the existing frontend o
 There are some hard to understand entries in the current config file. Maybe we can simplify it or also orga by phase.
 
 ### Claude skill to auto link huts with their website / find booking times
-
-### doit dag visualization in official repo
