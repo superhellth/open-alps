@@ -25,8 +25,6 @@ heuristics — the spec deliberately designs no UI mitigation.
 
 ## Medium
 
-### Are we filtering out hubs outside at + bavaria poly? How? Included in check?
-
 ### [Search-result tour legs render as straight lines (stale stations/parking data)](backlog/straight-line-legs-stale-start-points.md)
 
 `stations.geojson`/`parking.geojson` in `huts/public/data/` were regenerated separately from and
