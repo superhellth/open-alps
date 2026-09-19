@@ -18,7 +18,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.geo import haversine_m_vec_pairs  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    BUILD_DIR, EDGE_LAYER_DIRNAMES, QUALITY_DIR, RAW_DEM_DIR, RAW_DIR, load_config,
+)  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -250,8 +252,9 @@ def main(argv=None):
     max_flagged_default = q.get("maxFlaggedRows", 500)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--osm-dir", default=str(OSM_DIR))
-    parser.add_argument("--dem-dir", default=str(DEM_DIR))
+    parser.add_argument("--raw-dir", default=str(RAW_DIR))
+    parser.add_argument("--build-dir", default=str(BUILD_DIR))
+    parser.add_argument("--dem-dir", default=str(RAW_DEM_DIR))
     parser.add_argument("--out", default=str(QUALITY_DIR / "graph_building.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"])
@@ -266,37 +269,37 @@ def main(argv=None):
                          default=graph_building_cfg.get("ascentCapM", 5000))
     args = parser.parse_args(argv)
 
-    osm_dir = Path(args.osm_dir)
+    raw_dir, build_dir = Path(args.raw_dir), Path(args.build_dir)
 
     with phase(SCRIPT_NAME, "check_graph_building"):
         checks = []
 
-        with open(osm_dir / "unsnapped_huts.json", encoding="utf-8") as f:
+        with open(build_dir / "snapping" / "unsnapped-huts.json", encoding="utf-8") as f:
             unsnapped = json.load(f)
         c = check_snap_health(unsnapped, args.max_flagged_rows)
         print(f"snap_health: {c['summary']['flagged']:,} distinct hubs unsnapped", flush=True)
         checks.append(c)
 
-        with open(osm_dir / "huts.geojson", encoding="utf-8") as f:
+        with open(raw_dir / "huts.geojson", encoding="utf-8") as f:
             n_huts = len(json.load(f)["features"])
-        hut_records = binfmt.load_array(osm_dir / "hut_edges" / "records.npy", mmap=False)
+        hut_records = binfmt.load_array(build_dir / "hut-edges" / "records.npy", mmap=False)
         c = check_connectivity(hut_records, n_huts, args.max_flagged_rows)
         print(f"connectivity: {c['summary']['checked']:,} huts checked across "
               f"{len(c['flagged'])} variants", flush=True)
         checks.append(c)
 
         for layer_name in ("hut_edges", "start_edges"):
-            records = binfmt.load_array(osm_dir / layer_name / "records.npy", mmap=False)
+            records = binfmt.load_array(build_dir / EDGE_LAYER_DIRNAMES[layer_name] / "records.npy", mmap=False)
             c = check_range_cap(records, layer_name, args.max_edge_km, args.max_flagged_rows)
             print(f"range_cap[{layer_name}]: {c['summary']['flagged']:,} / "
                   f"{c['summary']['checked']:,} flagged", flush=True)
             checks.append(c)
 
-        base_graph_dir = osm_dir / "base_graph"
+        base_graph_dir = build_dir / "base-graph"
         nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
         base_edges = binfmt.load_array(base_graph_dir / "edges.npy", mmap=False)
         interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
-        node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy", mmap=False)
+        node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy", mmap=False)
         dem_min_ele_m = float(np.min(node_ele)) if len(node_ele) else 0.0
 
         base_polylines = [
@@ -310,8 +313,9 @@ def main(argv=None):
         checks.append(c)
 
         for layer_name in EDGE_LAYERS:
-            records_path = osm_dir / layer_name / "records.npy"
-            geometry_path = osm_dir / layer_name / "geometry.npy"
+            layer_dir = build_dir / EDGE_LAYER_DIRNAMES[layer_name]
+            records_path = layer_dir / "records.npy"
+            geometry_path = layer_dir / "geometry.npy"
             if not records_path.exists() or not geometry_path.exists():
                 continue
             records = binfmt.load_array(records_path, mmap=False)

@@ -15,7 +15,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.pipeline import QUALITY_DIR, START_POINTS_DIR, load_config  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -88,8 +88,8 @@ def main(argv=None):
     max_flagged_default = config.get("quality", {}).get("maxFlaggedRows", 500)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start-points", default=str(OSM_DIR / "start_points.npy"))
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"))
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"))
+    parser.add_argument("--id-table", default=str(START_POINTS_DIR / "start-points-id-table.json"))
     parser.add_argument("--out", default=str(QUALITY_DIR / "preprocessing.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     args = parser.parse_args(argv)

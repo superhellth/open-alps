@@ -18,7 +18,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.pipeline import QUALITY_DIR, TOUR_EDGES_DIR, load_config  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 from quality.check_elevation import check_profile_integrity  # noqa: E402
@@ -118,17 +118,17 @@ def main(argv=None):
     max_flagged_default = config.get("quality", {}).get("maxFlaggedRows", 500)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--osm-dir", default=str(OSM_DIR))
+    parser.add_argument("--tour-edges-dir", default=str(TOUR_EDGES_DIR))
     parser.add_argument("--out", default=str(QUALITY_DIR / "tour_matching.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     args = parser.parse_args(argv)
 
-    osm_dir = Path(args.osm_dir)
+    tour_dir = Path(args.tour_edges_dir)
 
     with phase(SCRIPT_NAME, "check_tour_matching"):
-        with open(osm_dir / "tours.json", encoding="utf-8") as f:
+        with open(tour_dir / "tours.json", encoding="utf-8") as f:
             tours = json.load(f)
-        with open(osm_dir / "tour-match-gaps.json", encoding="utf-8") as f:
+        with open(tour_dir / "tour-match-gaps.json", encoding="utf-8") as f:
             gaps = json.load(f)
 
         checks = []
@@ -144,8 +144,8 @@ def main(argv=None):
         print(f"tour_gap_reasons: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged", flush=True)
         checks.append(c)
 
-        records_path = osm_dir / "tour_edges" / "records.npy"
-        profiles_path = osm_dir / "tour_edges" / "profiles.npy"
+        records_path = tour_dir / "records.npy"
+        profiles_path = tour_dir / "profiles.npy"
         if records_path.exists() and profiles_path.exists():
             records = binfmt.load_array(records_path, mmap=False)
             profiles = binfmt.load_array(profiles_path, mmap=False)
