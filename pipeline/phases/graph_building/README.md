@@ -243,18 +243,18 @@ so tour iteration never triggers `build_base_graph`. Spec:
 - **Outputs**: `tour-edges/{records,geometry,profiles}.npy` (`binfmt.TOUR_LEG_DTYPE`, one row per
   matched leg; the display profile is written here, `build_profiles` never touches tours),
   `tours.json` (per tour `numDays` legs; a matched leg carries `edgeId` = its `records.npy` row plus
-  `distanceM/ascentM/descentM/durationS/maxEleM/from/to`; a leg with an unresolved endpoint carries
-  `edgeId: null` and `null` for each unresolved endpoint), `tour-match-gaps.json` (one
-  `leg_endpoint_unsnapped` entry per unresolved endpoint) and `hubs.json` (the hub set snapped
+  `distanceM/ascentM/descentM/durationS/maxEleM/from/to`; a tour with any unresolved endpoint is
+  dropped entirely, so no gap leg is ever emitted), `tour-match-gaps.json` (build-only; one
+  `leg_endpoint_unsnapped` entry per unresolved endpoint, including of dropped tours) and `hubs.json` (the hub set snapped
   against, read by the dev-only GPX editor).
 - `tourId` is the index of the tour folder in sorted order (six folders: Kaisertour,
   Lechquellenrunde, Pitztaltour, Silvretta-Runde, Tauernhöhenweg, Welser Höhenweg), so adding a
-  folder shifts later ids.
+  folder shifts later ids; a dropped tour's id is simply absent.
 - **doit wiring**: no `task_dep`; `file_dep=[huts.geojson, start-points.npy, dem.tif, *.gpx]`;
   tracking param `tour_leg_schema_version` (`binfmt.TOUR_LEG_SCHEMA_VERSION`, separate from
   `RECORD_SCHEMA_VERSION`, so a `TOUR_LEG_DTYPE` change never forces the free-routing rebuild).
 - **Tooling**: `tools/fetch_alpenvereinaktiv_tour.py` downloads a tour's per-leg GPX from
   alpenvereinaktiv.com into `pipeline/tours/`; the GPX editor (`docs/gpx-editor.md`) fixes traces
   whose endpoints don't snap. `phases/quality/check_tour_matching.py` reports endpoint types,
-  scalars, gap reasons, profile integrity and `tours.json`/`records.npy` agreement to
+  scalars, no-gap-legs, gap reasons, profile integrity and `tours.json`/`records.npy` agreement to
   `data/quality/tour_matching.json`.

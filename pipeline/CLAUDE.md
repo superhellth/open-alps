@@ -102,8 +102,10 @@ Official tours (`pipeline/tours/<Name>/<N>.gpx`) are matched from their raw GPX 
 (`phases/graph_building/match_tour_edges.py`): endpoints snap to the nearest hub within
 `graph.maxSnapM` (interior endpoints must be huts), and distance/ascent/descent/duration/`maxEleM`/
 geometry come straight from the trace — no OSM ways, no routing, no simplification. Outputs
-`data/build/tour-edges/{records,geometry,profiles}.npy`, `tours.json` (legs carry `edgeId`, `null` for a leg
-with an unresolved endpoint), `tour-match-gaps.json` and `hubs.json`. The tour tasks
+`data/build/tour-edges/{records,geometry,profiles}.npy`, `tours.json` (only complete tours: a tour with any
+unresolved endpoint is dropped from every output; each leg carries `edgeId` and both endpoints),
+`tour-match-gaps.json` (build-only quality input listing the unresolved endpoints of dropped tours,
+never published) and `hubs.json`. The tour tasks
 (`match_tour_edges`, `build_tour_edge_tiles`, `check_tour_matching`) have no dependency on any
 base-graph task, so they can be iterated without touching the free-routing outputs;
 `build_profiles` covers only `hut-edges`/`start-edges`. `tourId` is the sorted folder index (six

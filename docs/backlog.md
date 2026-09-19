@@ -34,11 +34,6 @@ line. Also flags a related frontend robustness gap in `chainToRoute`.
 
 ### Diagnose and improve performance of slow phases
 
-### Strucute data/ folder
-
-At the moment the data/ folder is quite a mess. Lets enforce more structure onto it.
-resume data-orga
-
 ### Does AV/sonstige split make sense?
 
 Albert Appel Haus classified as sonstige
@@ -74,10 +69,6 @@ actionable after the hub-edge scaling spec's §A+§B land.
 ### Include Aerial lift in access nodes?
 
 Explore if it would make sense to include aerial lifts in access nodes or as routable way. Nice to have for a later point
-
-### Settle invariant: official/third-party tours - dont ship gap legs
-
-At the moment the third-party/official/folder-ingestion part of the pipeline emits a document that contains gap legs. Should be reported in the data quality layer, not shipped to frontend
 
 ### Idea: Introduce a pipeline explanation/visualization
 
