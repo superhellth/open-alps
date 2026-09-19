@@ -6,11 +6,12 @@ distance/ascent/descent/duration/geometry come straight from its raw trace; only
 are resolved onto a hub, by pure nearest-point distance (lib/hubs.py's nearest_hub_to_point).
 
 Produces data/build/tour-edges/{records.npy, geometry.npy, profiles.npy} (binfmt.TOUR_LEG_DTYPE),
-data/build/tour-edges/tours.json (per tour, `numDays` legs; a matched leg carries `edgeId` = its row in
-tour-edges/records.npy plus its scalars, a leg with an unresolved endpoint carries `edgeId: null`
-and a `null` for each unresolved endpoint), data/build/tour-edges/tour-match-gaps.json (one reason:
-"leg_endpoint_unsnapped" entry per unresolved leg endpoint) and data/build/tour-edges/hubs.json (the hub set
-snapped against).
+data/build/tour-edges/tours.json (per shipped tour, `numDays` legs; each leg carries `edgeId` = its row in
+tour-edges/records.npy plus its scalars and both endpoints). A tour with any unresolved leg endpoint is
+dropped from every output, so tours.json and records/geometry/profiles.npy never contain a gap leg;
+data/build/tour-edges/tour-match-gaps.json (one reason: "leg_endpoint_unsnapped" entry per unresolved leg
+endpoint, including those of dropped tours; build-only, reported by check_tour_matching.py) and
+data/build/tour-edges/hubs.json (the hub set snapped against).
 
 Usage: python pipeline/phases/graph_building/match_tour_edges.py
 """
@@ -166,12 +167,10 @@ def main(argv=None):
         for tour_id, (tour_name, folder) in enumerate(tour_folders):
             legs = load_tour_folder(folder)
             n_legs = len(legs)
-            tour_legs_json = []
 
+            resolved, tour_gaps = [], []
             for position, (leg_number, points) in enumerate(legs):
                 leg_index = leg_number - 1
-                gap_ctx = {"tourId": tour_id, "tourName": tour_name, "legIndex": leg_index}
-
                 from_requires_hut = position != 0
                 to_requires_hut = position != n_legs - 1
 
@@ -183,8 +182,9 @@ def main(argv=None):
                 if from_chosen is None or to_chosen is None:
                     endpoint = "from" if from_chosen is None else "to"
                     nearest, dist = (from_nearest, from_dist) if from_chosen is None else (to_nearest, to_dist)
-                    gaps.append({
-                        **gap_ctx, "reason": "leg_endpoint_unsnapped",
+                    tour_gaps.append({
+                        "tourId": tour_id, "tourName": tour_name, "legIndex": leg_index,
+                        "reason": "leg_endpoint_unsnapped",
                         "detail": {
                             "endpoint": endpoint,
                             "nearestType": HUB_TYPE_JSON_NAMES[nearest["type"]] if nearest else None,
@@ -192,12 +192,14 @@ def main(argv=None):
                             "nearestDistM": dist,
                         },
                     })
-                    tour_legs_json.append({
-                        "legIndex": leg_index, "edgeId": None,
-                        "from": _hub_json(from_chosen), "to": _hub_json(to_chosen),
-                    })
-                    continue
+                resolved.append((leg_index, points, from_chosen, to_chosen))
 
+            if tour_gaps:
+                gaps.extend(tour_gaps)
+                continue
+
+            tour_legs_json = []
+            for leg_index, points, from_chosen, to_chosen in resolved:
                 result = match_leg(
                     points, args.dem, args.smoothing_kernel_m, args.min_slope_segment_m,
                     speed_model, args.min_speed_ms, args.profile_points,
@@ -224,7 +226,8 @@ def main(argv=None):
                 "tourId": tour_id, "name": tour_name, "numDays": n_legs, "legs": tour_legs_json,
             })
 
-    print(f"tour legs matched: {len(matched_legs)}, gaps: {len(gaps)}")
+    print(f"tours shipped: {len(tours_index)} / {len(tour_folders)}, legs matched: {len(matched_legs)}, "
+          f"unresolved endpoints: {len(gaps)}")
 
     out_dir = Path(args.out_dir)
     records_arr, geometry_arr, profiles_arr = _pack_tour_legs(matched_legs)

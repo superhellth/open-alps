@@ -246,7 +246,7 @@ def test_main_records_a_gap_for_an_unresolvable_interior_endpoint(tmp_path, monk
     assert len(gaps) == 2  # leg 1's "to" and leg 2's "from" both fail the same shared midpoint
     assert all(g["reason"] == "leg_endpoint_unsnapped" for g in gaps)
     with open(out / "tours.json", encoding="utf-8") as f:
-        assert len(json.load(f)[0]["legs"]) == 2
+        assert json.load(f) == []
 
 
 def test_write_hubs_json_matches_hub_list(tmp_path):
@@ -262,7 +262,7 @@ def test_write_hubs_json_matches_hub_list(tmp_path):
     ]
 
 
-def _run_main(tmp_path, monkeypatch, huts_coords, legs, dem_kwargs):
+def _run_main(tmp_path, monkeypatch, huts_coords, legs, dem_kwargs, extra_tours=None):
     """huts_coords: [(lon, lat), ...] as huts; legs: {leg_number: [(lon, lat), ...]}. Returns the tour-edges output dir."""
     raw = tmp_path / "raw"
     raw.mkdir()
@@ -279,6 +279,8 @@ def _run_main(tmp_path, monkeypatch, huts_coords, legs, dem_kwargs):
     binfmt.save_array(sp / "start-points.npy", np.zeros(0, dtype=np.dtype(
         [("osm_id", "i8"), ("type", "u1"), ("lon", "f8"), ("lat", "f8")])))
     _write_tour_folder(tours_dir, "T", legs)
+    for name, extra_legs in (extra_tours or {}).items():
+        _write_tour_folder(tours_dir, name, extra_legs)
     dem_path = _flat_dem(tmp_path, **dem_kwargs)
 
     import lib.pipeline as pipeline_lib
@@ -328,29 +330,27 @@ def test_tours_json_scalars_match_records_via_edge_id(tmp_path, monkeypatch):
         assert leg["from"]["type"] == "hut" and leg["to"]["type"] == "hut"
 
 
-def test_unsnappable_endpoint_keeps_the_leg_with_null_edge_id(tmp_path, monkeypatch):
+def test_tour_with_an_unsnappable_endpoint_is_dropped_entirely(tmp_path, monkeypatch):
     # leg 1's end / leg 2's start (11.5, 47.5) is far from every hut.
     out = _run_main(
         tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.02)],
         {1: [(11.0, 47.0), (11.2, 47.2), (11.5, 47.5)],
          2: [(11.5, 47.5), (11.2, 47.3), (11.0, 47.02)]}, _WIDE_DEM)
-    tours = json.loads((out / "tours.json").read_text(encoding="utf-8"))
-    legs = tours[0]["legs"]
-    assert len(legs) == tours[0]["numDays"] == 2
-    assert legs[0] == {"legIndex": 0, "edgeId": None, "from": {"type": "hut", "id": 0}, "to": None}
-    assert legs[1] == {"legIndex": 1, "edgeId": None, "from": None, "to": {"type": "hut", "id": 1}}
-    records = binfmt.load_array(out / "records.npy", mmap=False)
-    assert len(records) == 0
+    assert json.loads((out / "tours.json").read_text(encoding="utf-8")) == []
+    assert len(binfmt.load_array(out / "records.npy", mmap=False)) == 0
+    gaps = json.loads((out / "tour-match-gaps.json").read_text(encoding="utf-8"))
+    assert {(g["legIndex"], g["detail"]["endpoint"]) for g in gaps} == {(0, "to"), (1, "from")}
 
 
-def test_edge_id_counts_only_matched_legs(tmp_path, monkeypatch):
-    # legs 1 and 2 are gaps; leg 3 is the only matched leg, so its edgeId is row 0.
+def test_dropped_tour_does_not_consume_edge_ids_or_shift_tour_ids(tmp_path, monkeypatch):
+    # tour "T" has unsnappable legs 1-2 and is dropped; tour "U" (sorted second, tourId 1) is complete.
     out = _run_main(
         tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.02), (11.0, 47.03)],
         {1: [(11.0, 47.0), (11.2, 47.2), (11.5, 47.5)],
          2: [(11.5, 47.5), (11.2, 47.3), (11.0, 47.02)],
-         3: [(11.0, 47.02), (11.0, 47.025), (11.0, 47.03)]}, _WIDE_DEM)
-    legs = json.loads((out / "tours.json").read_text(encoding="utf-8"))[0]["legs"]
-    assert [leg["edgeId"] for leg in legs] == [None, None, 0]
-    records = binfmt.load_array(out / "records.npy", mmap=False)
-    assert len(records) == 1
+         3: [(11.0, 47.02), (11.0, 47.025), (11.0, 47.03)]}, _WIDE_DEM,
+        extra_tours={"U": {1: [(11.0, 47.02), (11.0, 47.025), (11.0, 47.03)]}})
+    tours = json.loads((out / "tours.json").read_text(encoding="utf-8"))
+    assert [t["tourId"] for t in tours] == [1]
+    assert [leg["edgeId"] for leg in tours[0]["legs"]] == [0]
+    assert len(binfmt.load_array(out / "records.npy", mmap=False)) == 1
