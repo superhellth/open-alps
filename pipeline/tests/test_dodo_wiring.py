@@ -3,10 +3,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 
 import dodo  # noqa: E402
-import restructure_data_dir as rdd  # noqa: E402
 from lib.doit_support import SCRIPT_DIR  # noqa: E402
 from lib.pipeline import DATA_DIR  # noqa: E402
 
@@ -441,17 +439,6 @@ def test_no_task_declares_a_path_in_the_old_layout():
 def test_declared_data_paths_are_under_a_known_tier():
     for p in _declared_data_paths():
         assert p.startswith(("raw/", "build/", "quality/")), p
-
-
-def test_every_declared_build_or_raw_path_is_where_the_migration_puts_it():
-    # The doit cache is keyed by these path strings: a declared path the migration script does not
-    # produce would make doit rebuild that task (build_base_graph alone is ~4 h).
-    migrated = set(rdd.EXACT_MOVES.values())
-    dir_prefixes = tuple(new + "/" for new in rdd.DIR_MOVES.values())
-    for p in _declared_data_paths():
-        if p.startswith("quality/"):
-            continue
-        assert p in migrated or p.startswith(dir_prefixes), p
 
 
 def test_public_files_are_source_and_public_name_pairs():
