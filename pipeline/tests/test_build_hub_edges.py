@@ -187,11 +187,11 @@ def test_vertical_check_is_skipped_without_a_hub_elevation():
 
 
 def test_unsnapped_report_records_every_rejection(tmp_path):
-    write_unsnapped_report(tmp_path / "unsnapped_huts.json", [
+    write_unsnapped_report(tmp_path / "unsnapped-huts.json", [
         SnapRejection(hub_id=7, name="Schuesselkar-Biwak", gap_m=250.0, dz_m=258.0,
                       reason="vertical_offset"),
     ])
-    got = json.loads((tmp_path / "unsnapped_huts.json").read_text(encoding="utf-8"))
+    got = json.loads((tmp_path / "unsnapped-huts.json").read_text(encoding="utf-8"))
     assert got[0]["reason"] == "vertical_offset"
     assert got[0]["dz_m"] == 258.0
 

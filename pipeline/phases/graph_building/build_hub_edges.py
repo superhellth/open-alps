@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Routing pass of the old build_hub_edges.py, now split into three tasks (see
 docs/superpowers/plans/2026-08-23-split-build-hub-edges.md): snap_hubs.py (hub->base-graph
-snapping, cached in hub_snaps.npy/hub_snap_interior.npy - lib/hub_snap.py) and
+snapping, cached in hub-snaps.npy/hub-snap-interior.npy - lib/hub_snap.py) and
 gather_route_subgraphs.py (per-cell max-edge-km-padded subgraphs, cached under
-data/osm/route_subgraphs/ - lib/subgraph.py's save_local_subgraph/load_local_subgraph) both run
+data/build/route-subgraphs/ - lib/subgraph.py's save_local_subgraph/load_local_subgraph) both run
 first and are independent of --max-edge-km/pipeline.config.json's graph.variants respectively (the
 former) or of graph.variants alone (the latter - it DOES depend on --max-edge-km). This script
 just reloads both caches and does the actual per-cell, per-variant routing (build_igraph +
 distances + paths), the one stage whose cost genuinely scales with the variant grid. Writes
-hut_edges/ (full geometry) and access_distances.npy (distance/time scalars only, no geometry -
+hut-edges/ (full geometry) and access-distances.npy (distance/time scalars only, no geometry -
 spec 2026-09-02-hub-edge-scaling-design.md B3); a later select_approach_pairs.py +
-build_access_edges.py pair materializes start_edges/ from the selected subset.
+build_access_edges.py pair materializes start-edges/ from the selected subset.
 
 The igraph-building/path-walking primitives (BaseIgraphArrays, build_igraph_with_snaps,
 accumulate_path, path_for, ...) live in lib/cell_igraph.py, not here - they're subgraph+snaps-only
@@ -41,7 +41,10 @@ from lib.cell_igraph import (  # noqa: E402
 from lib.edge_output import fold_endpoint_snaps, write_edge_records, write_access_distances  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    ACCESS_EDGES_DIR, BASE_GRAPH_DIR, HUT_EDGES_DIR, RAW_DIR, ROUTE_SUBGRAPHS_DIR, SNAPPING_DIR,
+    START_POINTS_DIR, load_config,
+)  # noqa: E402
 from lib.progress import ProgressTracker, run_pool  # noqa: E402
 from lib.subgraph import LocalSubgraph, load_local_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
@@ -61,7 +64,7 @@ def snap_hubs_for_cell(subgraph: LocalSubgraph, core_hubs: list, all_hubs: list,
                         max_snap_m: float, max_snap_ascent_m: float = None,
                         rejections: list = None) -> dict:
     """Standalone convenience for callers that don't have snap_hubs.py's precomputed
-    hub_snaps.npy/hub_snap_interior.npy cache available (tests, `analysis/` scripts) - snaps every
+    hub-snaps.npy/hub-snap-interior.npy cache available (tests, `analysis/` scripts) - snaps every
     hub in core_hubs + the hut subset of all_hubs directly against `subgraph`, one
     snap_hub_to_subgraph call per hub. Production (build_hub_edges.py's own __main__) never calls
     this: it runs snap_hubs.py ahead of time and passes that cache straight into
@@ -114,7 +117,7 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
       - access_rows: hut->access distance/time ONLY, no geometry, no path walk (spec B3):
         {hut_id, start_id, start_type, variant, distance_m, time_s}. distance_m already has both
         ends' snap gap folded in (SnapResult.gap_m is direction-free, so this needs no path walk);
-        stored access->hut by the SAME convention start_edges/records.npy always used, even though
+        stored access->hut by the SAME convention start-edges/records.npy always used, even though
         the router itself walked hut->access (A3) - callers reading access_rows never see the
         router's own traversal direction.
 
@@ -122,7 +125,7 @@ def compute_hub_edges_for_cell(subgraph: LocalSubgraph, core_hubs: list,
     build_hub_edges.py's own __main__ gets this from snap_hubs.py's persisted cache
     (hub_snap.reconstruct_local_snaps); a standalone caller without that cache can build one via
     snap_hubs_for_cell(). A key missing from `snaps` is simply not routed - already reported by
-    whichever caller built the dict (snap_hubs.py's unsnapped_huts.json, or snap_hubs_for_cell's
+    whichever caller built the dict (snap_hubs.py's unsnapped-huts.json, or snap_hubs_for_cell's
     own `rejections` param).
 
     variants: list of lib/variants.py Variant rows to route (spec C2). Snapping is shared across
@@ -354,12 +357,19 @@ def _run_cell(args):
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                          help="directory holding the persisted base graph (build_base_graph.py's output)")
-    parser.add_argument("--route-subgraphs-dir", default=str(OSM_DIR / "route_subgraphs"),
+    parser.add_argument("--route-subgraphs-dir", default=str(ROUTE_SUBGRAPHS_DIR),
                          help="directory holding gather_route_subgraphs.py's persisted per-cell gathers")
-    parser.add_argument("--out-dir", default=str(OSM_DIR),
-                         help="directory to write hut_edges/ and start_edges/ into")
+    parser.add_argument("--snaps-dir", default=str(SNAPPING_DIR),
+                         help="directory holding snap_hubs.py's persisted hub-snap cache")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"), help="hut list (fetch_huts.py's output)")
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"),
+                         help="start-point array (filter_start_points.py's output)")
+    parser.add_argument("--hut-edges-dir", default=str(HUT_EDGES_DIR),
+                         help="directory to write the hut-edge set into")
+    parser.add_argument("--access-distances", default=str(ACCESS_EDGES_DIR / "access-distances.npy"),
+                         help="file to write the access-distance table to")
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
                          help="longest hut-to-hut trail distance kept as an edge (see pipeline.config.json's graph.maxEdgeKm)")
     parser.add_argument("--workers", type=int, default=None,
@@ -369,12 +379,12 @@ if __name__ == "__main__":
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    all_hubs_flat = load_all_hubs(OSM_DIR)
+    all_hubs_flat = load_all_hubs(Path(args.huts), Path(args.start_points))
 
-    print(f"loading persisted hub snaps from {args.out_dir} ...", flush=True)
-    hub_snaps_arr = binfmt.load_array(Path(args.out_dir) / "hub_snaps.npy", mmap=False)
+    print(f"loading persisted hub snaps from {args.snaps_dir} ...", flush=True)
+    hub_snaps_arr = binfmt.load_array(Path(args.snaps_dir) / "hub-snaps.npy", mmap=False)
     hub_snap_interior_arr = binfmt.load_array(
-        Path(args.out_dir) / "hub_snap_interior.npy", mmap=False
+        Path(args.snaps_dir) / "hub-snap-interior.npy", mmap=False
     )
     persisted_snaps = hub_snap.load_persisted_snaps(hub_snaps_arr, hub_snap_interior_arr)
 
@@ -469,7 +479,6 @@ if __name__ == "__main__":
         print(f"  {variant.name}: hut-hut {hut_counts_by_variant.get(variant.code, 0)}, "
               f"access {access_counts_by_variant.get(variant.code, 0)}")
 
-    out_dir = Path(args.out_dir)
-    write_edge_records(hut_records, out_dir / "hut_edges", write_edge_ids=True)
-    write_access_distances(access_rows, out_dir / "access_distances.npy")
-    print(f"written {out_dir / 'hut_edges'} and {out_dir / 'access_distances.npy'}")
+    write_edge_records(hut_records, Path(args.hut_edges_dir), write_edge_ids=True)
+    write_access_distances(access_rows, Path(args.access_distances))
+    print(f"written {args.hut_edges_dir} and {args.access_distances}")

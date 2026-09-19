@@ -3,7 +3,7 @@
 snaps every hub (hut/station/parking) onto the persisted base graph (build_base_graph.py,
 lib/binfmt.py) ONCE, independent of --max-edge-km and pipeline.config.json's graph.variants grid,
 and persists the result (lib/hub_snap.py's PersistedSnap, keyed by globally-stable node/edge ids)
-to hub_snaps.npy/hub_snap_interior.npy for build_hub_edges.py's routing pass to reuse.
+to hub-snaps.npy/hub-snap-interior.npy for build_hub_edges.py's routing pass to reuse.
 
 Why this is its own task: a hub only ever needs to snap once (docstring precedent already in
 build_hub_edges.py's old __main__ - "the same real-world geometry gives the same outcome each
@@ -33,7 +33,9 @@ from lib import binfmt  # noqa: E402
 from lib import hub_snap  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    BASE_GRAPH_DIR, RAW_DEM_DIR, RAW_DIR, SNAPPING_DIR, START_POINTS_DIR, load_config,
+)  # noqa: E402
 from lib.progress import ProgressTracker, run_pool  # noqa: E402
 from lib.subgraph import gather_padded_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
@@ -87,16 +89,19 @@ def _run_cell(args):
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                          help="directory holding the persisted base graph (build_base_graph.py's output)")
-    parser.add_argument("--out-dir", default=str(OSM_DIR),
+    parser.add_argument("--out-dir", default=str(SNAPPING_DIR),
                          help="directory to write the persisted hub-snap cache into")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"), help="hut list (fetch_huts.py's output)")
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"),
+                         help="start-point array (filter_start_points.py's output)")
     parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"],
                          help="max distance (m) a hub may be from the nearest trail node to count as on-network (see pipeline.config.json's graph.maxSnapM)")
     parser.add_argument("--max-snap-ascent-m", type=float,
                          default=config["graph"]["maxSnapAscentM"],
                          help="max vertical distance (m) a candidate snap point may sit from the hub's own DEM elevation (see pipeline.config.json's graph.maxSnapAscentM)")
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"),
+    parser.add_argument("--dem", default=str(RAW_DEM_DIR / "dem.tif"),
                          help="path to the materialized DEM GeoTIFF (build_dem_vrt.py's output)")
     parser.add_argument("--workers", type=int, default=None,
                          help="number of worker processes for the snap pass (default: os.cpu_count())")
@@ -105,7 +110,7 @@ if __name__ == "__main__":
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    all_hubs_flat = load_all_hubs(OSM_DIR)
+    all_hubs_flat = load_all_hubs(Path(args.huts), Path(args.start_points))
 
     dem_path = Path(args.dem)
     if dem_path.exists():
@@ -160,6 +165,6 @@ if __name__ == "__main__":
 
     out_dir = Path(args.out_dir)
     hub_snap.pack_hub_snaps(all_persisted, out_dir)
-    hub_snap.write_unsnapped_report(out_dir / "unsnapped_huts.json", all_rejections)
-    print(f"written {out_dir / 'hub_snaps.npy'}, {out_dir / 'hub_snap_interior.npy'} and "
-          f"{out_dir / 'unsnapped_huts.json'}")
+    hub_snap.write_unsnapped_report(out_dir / "unsnapped-huts.json", all_rejections)
+    print(f"written {out_dir / 'hub-snaps.npy'}, {out_dir / 'hub-snap-interior.npy'} and "
+          f"{out_dir / 'unsnapped-huts.json'}")

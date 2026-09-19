@@ -22,7 +22,7 @@ from lib.contraction import contract_structural  # noqa: E402
 from lib.geo import haversine_m_vec_pairs as haversine_m_vec  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, TRAILS_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_base_graph.py"
@@ -210,11 +210,11 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
         # can't take edges.npy as a file_dep, since it rewrites that file in place). Dropped BEFORE
         # edges.npy is written, so a crash mid-write still leaves the stamp gone rather than
         # vouching for sentinel weights.
-        (out_dir / "edge_profiles.stamp").unlink(missing_ok=True)
+        (out_dir / "edge-profiles.stamp").unlink(missing_ok=True)
         binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
-        binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-        binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-        binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+        binfmt.save_array(out_dir / "cell-index.npy", cell_index)
+        binfmt.save_array(out_dir / "node-edge-index.npy", node_edge_index)
+        binfmt.save_array(out_dir / "node-edge-ids.npy", node_edge_ids)
         binfmt.save_array(out_dir / "edges.npy", edges_arr)
         binfmt.save_array(out_dir / "interior.npy", interior_arr)
     binfmt.save_manifest(out_dir / "manifest.json", {
@@ -230,9 +230,9 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+    parser.add_argument("--trails", default=str(TRAILS_DIR / "trails.osm.pbf"),
                         help="merged trails.osm.pbf to stream and contract into the base graph")
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--out-dir", default=str(BASE_GRAPH_DIR),
                         help="directory to write the persisted base graph arrays into")
     parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"],
                         help="grid cell size (km) each node is assigned to, for later per-cell lookup by build_hub_edges.py (see pipeline.config.json's graph.tileSizeKm)")

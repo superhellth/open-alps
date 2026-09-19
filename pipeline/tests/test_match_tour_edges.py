@@ -140,8 +140,11 @@ def _write_tour_folder(base_dir: Path, name: str, legs: dict) -> Path:
 
 
 def test_main_writes_records_geometry_profiles_tours_and_gaps(tmp_path, monkeypatch):
-    osm_dir = tmp_path / "osm"
-    osm_dir.mkdir()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    sp = tmp_path / "start-points"
+    sp.mkdir()
+    out = tmp_path / "tour-edges"
     tours_dir = tmp_path / "tours"
 
     huts = {
@@ -152,8 +155,8 @@ def test_main_writes_records_geometry_profiles_tours_and_gaps(tmp_path, monkeypa
             {"type": "Feature", "properties": {"name": "End Hut"}, "geometry": {"type": "Point", "coordinates": [11.0, 47.02]}},
         ],
     }
-    (osm_dir / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
-    binfmt.save_array(osm_dir / "start_points.npy", np.zeros(0, dtype=np.dtype(
+    (raw / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
+    binfmt.save_array(sp / "start-points.npy", np.zeros(0, dtype=np.dtype(
         [("osm_id", "i8"), ("type", "u1"), ("lon", "f8"), ("lat", "f8")]
     )))
 
@@ -167,20 +170,19 @@ def test_main_writes_records_geometry_profiles_tours_and_gaps(tmp_path, monkeypa
     dem_path = _flat_dem(tmp_path, elevation=1500.0, origin=(10.9, 47.1), size=300, pixel_deg=0.001)
 
     import lib.pipeline as pipeline_lib
-    monkeypatch.setattr(pipeline_lib, "OSM_DIR", osm_dir)
     monkeypatch.setattr(pipeline_lib, "TOURS_DIR", tours_dir)
-    monkeypatch.setattr(mte, "OSM_DIR", osm_dir)
     monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
 
     mte.main([
-        "--dem", str(dem_path), "--out-dir", str(osm_dir), "--max-snap-m", "100",
+        "--dem", str(dem_path), "--huts", str(raw / "huts.geojson"),
+        "--start-points", str(sp / "start-points.npy"), "--out-dir", str(out), "--max-snap-m", "100",
         "--smoothing-kernel-m", "0", "--min-slope-segment-m", "10", "--profile-points", "5",
         "--speed-v0", "4.013", "--speed-k", "3.5", "--speed-s0", "0.05", "--min-speed-ms", "0.15",
     ])
 
-    records = binfmt.load_array(osm_dir / "tour_edges" / "records.npy", mmap=False)
-    geometry = binfmt.load_array(osm_dir / "tour_edges" / "geometry.npy", mmap=False)
-    profiles = binfmt.load_array(osm_dir / "tour_edges" / "profiles.npy", mmap=False)
+    records = binfmt.load_array(out / "records.npy", mmap=False)
+    geometry = binfmt.load_array(out / "geometry.npy", mmap=False)
+    profiles = binfmt.load_array(out / "profiles.npy", mmap=False)
     assert len(records) == 2
     assert records[0]["from_type"] == binfmt.TYPE_HUT
     assert records[0]["to_type"] == binfmt.TYPE_HUT
@@ -188,21 +190,24 @@ def test_main_writes_records_geometry_profiles_tours_and_gaps(tmp_path, monkeypa
     assert len(geometry) == sum(int(r["geom_count"]) for r in records)
     assert len(profiles) == sum(int(r["profile_count"]) for r in records)
 
-    with open(osm_dir / "tours.json", encoding="utf-8") as f:
+    with open(out / "tours.json", encoding="utf-8") as f:
         tours = json.load(f)
     assert tours[0]["numDays"] == 2
     assert len(tours[0]["legs"]) == 2
     assert tours[0]["legs"][0]["from"]["type"] == "hut"
     assert "distanceM" in tours[0]["legs"][0]
 
-    with open(osm_dir / "tour-match-gaps.json", encoding="utf-8") as f:
+    with open(out / "tour-match-gaps.json", encoding="utf-8") as f:
         gaps = json.load(f)
     assert gaps == []
 
 
 def test_main_records_a_gap_for_an_unresolvable_interior_endpoint(tmp_path, monkeypatch):
-    osm_dir = tmp_path / "osm"
-    osm_dir.mkdir()
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    sp = tmp_path / "start-points"
+    sp.mkdir()
+    out = tmp_path / "tour-edges"
     tours_dir = tmp_path / "tours"
 
     huts = {
@@ -212,8 +217,8 @@ def test_main_records_a_gap_for_an_unresolvable_interior_endpoint(tmp_path, monk
             {"type": "Feature", "properties": {"name": "End Hut"}, "geometry": {"type": "Point", "coordinates": [11.0, 47.02]}},
         ],
     }
-    (osm_dir / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
-    binfmt.save_array(osm_dir / "start_points.npy", np.zeros(0, dtype=np.dtype(
+    (raw / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
+    binfmt.save_array(sp / "start-points.npy", np.zeros(0, dtype=np.dtype(
         [("osm_id", "i8"), ("type", "u1"), ("lon", "f8"), ("lat", "f8")]
     )))
 
@@ -226,22 +231,21 @@ def test_main_records_a_gap_for_an_unresolvable_interior_endpoint(tmp_path, monk
     dem_path = _flat_dem(tmp_path, elevation=1500.0, origin=(10.0, 49.0), size=400, pixel_deg=0.005)
 
     import lib.pipeline as pipeline_lib
-    monkeypatch.setattr(pipeline_lib, "OSM_DIR", osm_dir)
     monkeypatch.setattr(pipeline_lib, "TOURS_DIR", tours_dir)
-    monkeypatch.setattr(mte, "OSM_DIR", osm_dir)
     monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
 
     mte.main([
-        "--dem", str(dem_path), "--out-dir", str(osm_dir), "--max-snap-m", "100",
+        "--dem", str(dem_path), "--huts", str(raw / "huts.geojson"),
+        "--start-points", str(sp / "start-points.npy"), "--out-dir", str(out), "--max-snap-m", "100",
         "--smoothing-kernel-m", "0", "--min-slope-segment-m", "10", "--profile-points", "5",
         "--speed-v0", "4.013", "--speed-k", "3.5", "--speed-s0", "0.05", "--min-speed-ms", "0.15",
     ])
 
-    with open(osm_dir / "tour-match-gaps.json", encoding="utf-8") as f:
+    with open(out / "tour-match-gaps.json", encoding="utf-8") as f:
         gaps = json.load(f)
     assert len(gaps) == 2  # leg 1's "to" and leg 2's "from" both fail the same shared midpoint
     assert all(g["reason"] == "leg_endpoint_unsnapped" for g in gaps)
-    with open(osm_dir / "tours.json", encoding="utf-8") as f:
+    with open(out / "tours.json", encoding="utf-8") as f:
         assert len(json.load(f)[0]["legs"]) == 2
 
 
@@ -259,32 +263,34 @@ def test_write_hubs_json_matches_hub_list(tmp_path):
 
 
 def _run_main(tmp_path, monkeypatch, huts_coords, legs, dem_kwargs):
-    """huts_coords: [(lon, lat), ...] as huts; legs: {leg_number: [(lon, lat), ...]}. Returns osm_dir."""
-    osm_dir = tmp_path / "osm"
-    osm_dir.mkdir()
+    """huts_coords: [(lon, lat), ...] as huts; legs: {leg_number: [(lon, lat), ...]}. Returns the tour-edges output dir."""
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    sp = tmp_path / "start-points"
+    sp.mkdir()
+    out = tmp_path / "tour-edges"
     tours_dir = tmp_path / "tours"
     huts = {"type": "FeatureCollection", "features": [
         {"type": "Feature", "properties": {"name": f"Hut {i}"},
          "geometry": {"type": "Point", "coordinates": list(c)}}
         for i, c in enumerate(huts_coords)
     ]}
-    (osm_dir / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
-    binfmt.save_array(osm_dir / "start_points.npy", np.zeros(0, dtype=np.dtype(
+    (raw / "huts.geojson").write_text(json.dumps(huts), encoding="utf-8")
+    binfmt.save_array(sp / "start-points.npy", np.zeros(0, dtype=np.dtype(
         [("osm_id", "i8"), ("type", "u1"), ("lon", "f8"), ("lat", "f8")])))
     _write_tour_folder(tours_dir, "T", legs)
     dem_path = _flat_dem(tmp_path, **dem_kwargs)
 
     import lib.pipeline as pipeline_lib
-    monkeypatch.setattr(pipeline_lib, "OSM_DIR", osm_dir)
     monkeypatch.setattr(pipeline_lib, "TOURS_DIR", tours_dir)
-    monkeypatch.setattr(mte, "OSM_DIR", osm_dir)
     monkeypatch.setattr(mte, "TOURS_DIR", tours_dir)
     mte.main([
-        "--dem", str(dem_path), "--out-dir", str(osm_dir), "--max-snap-m", "100",
+        "--dem", str(dem_path), "--huts", str(raw / "huts.geojson"),
+        "--start-points", str(sp / "start-points.npy"), "--out-dir", str(out), "--max-snap-m", "100",
         "--smoothing-kernel-m", "0", "--min-slope-segment-m", "10", "--profile-points", "5",
         "--speed-v0", "4.013", "--speed-k", "3.5", "--speed-s0", "0.05", "--min-speed-ms", "0.15",
     ])
-    return osm_dir
+    return out
 
 
 _DEM = dict(elevation=1500.0, origin=(10.9, 47.1), size=300, pixel_deg=0.001)
@@ -294,22 +300,22 @@ _WIDE_DEM = dict(elevation=1500.0, origin=(10.9, 47.6), size=700, pixel_deg=0.00
 def test_geometry_equals_raw_gpx_points_exactly(tmp_path, monkeypatch):
     leg1 = [(11.0, 47.0), (11.0003, 47.004), (11.0, 47.01)]
     leg2 = [(11.0, 47.01), (11.0002, 47.015), (11.0, 47.02)]
-    osm_dir = _run_main(tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.01), (11.0, 47.02)],
+    out = _run_main(tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.01), (11.0, 47.02)],
                         {1: leg1, 2: leg2}, _DEM)
-    records = binfmt.load_array(osm_dir / "tour_edges" / "records.npy", mmap=False)
-    geometry = binfmt.load_array(osm_dir / "tour_edges" / "geometry.npy", mmap=False)
+    records = binfmt.load_array(out / "records.npy", mmap=False)
+    geometry = binfmt.load_array(out / "geometry.npy", mmap=False)
     for r, expected in zip(records, (leg1, leg2)):
         sl = geometry[int(r["geom_offset"]):int(r["geom_offset"]) + int(r["geom_count"])]
         assert list(zip(sl["lon"].tolist(), sl["lat"].tolist())) == expected
 
 
 def test_tours_json_scalars_match_records_via_edge_id(tmp_path, monkeypatch):
-    osm_dir = _run_main(
+    out = _run_main(
         tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.01), (11.0, 47.02)],
         {1: [(11.0, 47.0), (11.0, 47.005), (11.0, 47.01)],
          2: [(11.0, 47.01), (11.0, 47.015), (11.0, 47.02)]}, _DEM)
-    records = binfmt.load_array(osm_dir / "tour_edges" / "records.npy", mmap=False)
-    tours = json.loads((osm_dir / "tours.json").read_text(encoding="utf-8"))
+    records = binfmt.load_array(out / "records.npy", mmap=False)
+    tours = json.loads((out / "tours.json").read_text(encoding="utf-8"))
     legs = tours[0]["legs"]
     assert tours[0]["numDays"] == len(legs) == 2
     for leg in legs:
@@ -324,27 +330,27 @@ def test_tours_json_scalars_match_records_via_edge_id(tmp_path, monkeypatch):
 
 def test_unsnappable_endpoint_keeps_the_leg_with_null_edge_id(tmp_path, monkeypatch):
     # leg 1's end / leg 2's start (11.5, 47.5) is far from every hut.
-    osm_dir = _run_main(
+    out = _run_main(
         tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.02)],
         {1: [(11.0, 47.0), (11.2, 47.2), (11.5, 47.5)],
          2: [(11.5, 47.5), (11.2, 47.3), (11.0, 47.02)]}, _WIDE_DEM)
-    tours = json.loads((osm_dir / "tours.json").read_text(encoding="utf-8"))
+    tours = json.loads((out / "tours.json").read_text(encoding="utf-8"))
     legs = tours[0]["legs"]
     assert len(legs) == tours[0]["numDays"] == 2
     assert legs[0] == {"legIndex": 0, "edgeId": None, "from": {"type": "hut", "id": 0}, "to": None}
     assert legs[1] == {"legIndex": 1, "edgeId": None, "from": None, "to": {"type": "hut", "id": 1}}
-    records = binfmt.load_array(osm_dir / "tour_edges" / "records.npy", mmap=False)
+    records = binfmt.load_array(out / "records.npy", mmap=False)
     assert len(records) == 0
 
 
 def test_edge_id_counts_only_matched_legs(tmp_path, monkeypatch):
     # legs 1 and 2 are gaps; leg 3 is the only matched leg, so its edgeId is row 0.
-    osm_dir = _run_main(
+    out = _run_main(
         tmp_path, monkeypatch, [(11.0, 47.0), (11.0, 47.02), (11.0, 47.03)],
         {1: [(11.0, 47.0), (11.2, 47.2), (11.5, 47.5)],
          2: [(11.5, 47.5), (11.2, 47.3), (11.0, 47.02)],
          3: [(11.0, 47.02), (11.0, 47.025), (11.0, 47.03)]}, _WIDE_DEM)
-    legs = json.loads((osm_dir / "tours.json").read_text(encoding="utf-8"))[0]["legs"]
+    legs = json.loads((out / "tours.json").read_text(encoding="utf-8"))[0]["legs"]
     assert [leg["edgeId"] for leg in legs] == [None, None, 0]
-    records = binfmt.load_array(osm_dir / "tour_edges" / "records.npy", mmap=False)
+    records = binfmt.load_array(out / "records.npy", mmap=False)
     assert len(records) == 1

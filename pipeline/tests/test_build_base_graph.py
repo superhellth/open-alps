@@ -125,7 +125,7 @@ def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
     bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
     bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
 
-    for fname in ("nodes.npy", "cell_index.npy", "node_edge_index.npy", "node_edge_ids.npy",
+    for fname in ("nodes.npy", "cell-index.npy", "node-edge-index.npy", "node-edge-ids.npy",
                   "edges.npy", "interior.npy", "manifest.json"):
         assert (tmp_path / fname).exists(), f"{fname} not written"
 
@@ -196,20 +196,20 @@ def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch)
 
 def test_pack_and_write_invalidates_a_stale_edge_profiles_stamp(tmp_path):
     # pack_and_write resets time_s/ascent_m/descent_m to binfmt.UNSET, which makes any
-    # edge_profiles.stamp left over from a PREVIOUS base graph a lie - and the stamp is exactly
+    # edge-profiles.stamp left over from a PREVIOUS base graph a lie - and the stamp is exactly
     # what dodo's compute_edge_profiles keys "already done" off (dag/elevation.py's targets).
     # Leaving it in place is what shipped -1 time_s all the way into build_hub_edges' igraph
     # weights, where negative weights silently switch igraph from Dijkstra to Bellman-Ford.
     bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
-    stamp = tmp_path / "edge_profiles.stamp"
+    stamp = tmp_path / "edge-profiles.stamp"
     stamp.write_text("smoothing_kernel_m=30.0\n", encoding="utf-8")
 
     bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
 
-    assert not stamp.exists(), "stale edge_profiles.stamp survived a base-graph rebuild"
+    assert not stamp.exists(), "stale edge-profiles.stamp survived a base-graph rebuild"
 
 
 def test_pack_and_write_without_a_stamp_is_not_an_error(tmp_path):
     bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
     bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
-    assert not (tmp_path / "edge_profiles.stamp").exists()
+    assert not (tmp_path / "edge-profiles.stamp").exists()

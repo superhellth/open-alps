@@ -50,24 +50,24 @@ re-streaming/re-contracting the OSM extract every run. Params: `--tile-size-km` 
    object overhead.
 3. **Spatial indexing** — every surviving node is assigned a `lib/grid.py` `Grid` cell id
    (row-major partition of the bbox into `config.graph.tileSizeKm` cells), and nodes are re-sorted
-   by cell so `cell_index.npy` addresses one contiguous slice per cell. This is what lets
+   by cell so `cell-index.npy` addresses one contiguous slice per cell. This is what lets
    `build_hub_edges.py`'s per-cell workers mmap-slice just their own region instead of loading the
    whole graph into memory.
 
-**Output** (`data/osm/base_graph/`, plain `.npy` structured arrays, `lib/binfmt.py`, all
+**Output** (`data/build/base-graph/`, plain `.npy` structured arrays, `lib/binfmt.py`, all
 memory-mappable via `np.load(..., mmap_mode="r")`):
 
 | file | dtype (`binfmt.py`) | contents |
 |---|---|---|
 | `nodes.npy` | `NODE_DTYPE = (lon f8, lat f8, cell_id i4)` | every surviving node, sorted by cell |
-| `cell_index.npy` | `CELL_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per grid cell → slice into `nodes.npy` |
+| `cell-index.npy` | `CELL_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per grid cell → slice into `nodes.npy` |
 | `node_edge_index.npy` | `NODE_EDGE_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per node → slice into `node_edge_ids.npy` (adjacency) |
 | `node_edge_ids.npy` | `i8` | flat adjacency list, CSR-indexed by `node_edge_index.npy` |
 | `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, road_m f8, ungraded_m f8, inferred_m f8, time_s f8, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, constrained_ok bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row. `time_s`/`ascent_m`/`descent_m` sit at `binfmt.UNSET` until `phases/elevation/compute_edge_profiles.py` runs |
 | `interior.npy` | `COORD_DTYPE = (lon f8, lat f8)` | flat polyline vertex pool for every chain edge's interior geometry, sliced via `interior_offset`/`interior_count` |
 | `manifest.json` | — | grid params (bbox, `tileSizeKm`) needed to reconstruct the same `Grid` at query time, plus array shapes |
 
-- **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[base_graph/manifest.json]`. `uptodate`
+- **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[base-graph/manifest.json]`. `uptodate`
   uses `TaskOptionsChanged()` over the task's own params (`--tile-size-km` plus a tracking-only
   `schema_version`, `dodo.py`'s `binfmt.SCHEMA_VERSION` — bumped on any `EDGE_DTYPE` change so a
   code-only dtype edit still forces a rerun), so a changed param triggers a rerun without `doit
@@ -81,7 +81,7 @@ hub set (huts + stations/parking/partner access points) loaded and cell-bucketed
 graph's `Grid`, and each runs its own cell-by-cell loop that must print
 `pipeline/CLAUDE.md`'s progress-logging convention. Rather than each script hand-rolling both:
 
-- **`lib/hubs.py`** — `load_all_hubs(osm_dir)` joins `huts.geojson` + `start_points.npy` into one
+- **`lib/hubs.py`** — `load_all_hubs(huts_path, start_points_path)` joins `huts.geojson` + `start-points.npy` into one
   flat `[{id, type, lon, lat, name}, ...]` list (`type` is `binfmt.TYPE_*`); `bucket_by_cell(hubs,
   grid)` buckets it into `{cell_id: [hub, ...]}`. One place to extend when a new hub type joins
   `TYPE_HUT`/`TYPE_STATION`/`TYPE_PARKING`/`TYPE_PARTNER`.
@@ -99,7 +99,7 @@ Params: `--max-snap-m` (default `config.graph.maxSnapM`), `--max-snap-ascent-m`
 
 Snaps every hub (independent of `--max-edge-km` and `graph.variants` — a hub's snap point is a
 fact about its own location, not about any routing constraint) onto the persisted base graph and
-persists the result to `hub_snaps.npy`/`hub_snap_interior.npy` (`lib/hub_snap.py`'s
+persists the result to `hub-snaps.npy`/`hub-snap-interior.npy` (`lib/hub_snap.py`'s
 `PersistedSnap`, keyed by globally-stable node/edge ids) for `build_hub_edges.py` to reuse. One
 worker process per grid cell; each worker gathers a small `lib/subgraph.py` region (buffered off
 `--max-snap-m`, not `--max-edge-km` — a few hundred metres, not tens of km) and calls
@@ -107,8 +107,8 @@ worker process per grid cell; each worker gathers a small `lib/subgraph.py` regi
 always wins; otherwise the nearest mid-chain point on a chain edge's interior polyline is found
 (`lib/edge_split.py`'s `nearest_point_on_polyline()`) and the edge is split there
 (`split_edge_at_point()`). A hub with no node within `--max-snap-m`, or whose vertical offset
-exceeds `--max-snap-ascent-m`, is rejected — recorded in `unsnapped_huts.json`, never
-force-matched. Writes `hub_snaps.npy`, `hub_snap_interior.npy`, `unsnapped_huts.json`.
+exceeds `--max-snap-ascent-m`, is rejected — recorded in `unsnapped-huts.json`, never
+force-matched. Writes `hub-snaps.npy`, `hub-snap-interior.npy`, `unsnapped-huts.json`.
 
 ## `gather_route_subgraphs.py` — cache each hub cell's routing region
 
@@ -117,7 +117,7 @@ Params: `--max-edge-km` (default `config.graph.maxEdgeKm`).
 For every hub-bearing cell, gathers and persists the `--max-edge-km`-padded `LocalSubgraph`
 (`lib/subgraph.py`'s `gather_padded_subgraph()` — a cell-union-then-edge-incidence-closure mmap
 slice of the base graph) that `build_hub_edges.py`'s routing pass needs, under
-`data/osm/route_subgraphs/cell_<id>/`. Depends only on `--max-edge-km` and the base graph — not on
+`data/build/route-subgraphs/cell_<id>/`. Depends only on `--max-edge-km` and the base graph — not on
 `graph.variants` — so retuning the variant grid alone leaves this cache untouched. Single-process,
 sequential over cells (the expensive part is the mmap slice + array copy per cell, not something
 that benefits from cross-cell parallelism the way per-hub snapping/routing do).
@@ -171,8 +171,8 @@ it, since a hub only ever needs to snap once, pipeline-wide, in `snap_hubs.py`.
 directly off the SAME base-graph edges the router walked (`_path_for()`'s `PathResult`, spec B3 -
 routing and display can't disagree because they're the same numbers), so they're only meaningful
 once `phases/elevation/compute_edge_profiles.py` has already filled `ascent_m`/`descent_m` on the
-base graph and `phases/elevation/sample_base_elevation.py` has filled `node_ele.npy`/
-`interior_ele.npy` (`lib/subgraph.py`'s `gather_padded_subgraph()` reads both, defaulting to zeros
+base graph and `phases/elevation/sample_base_elevation.py` has filled `node-ele.npy`/
+`interior-ele.npy` (`lib/subgraph.py`'s `gather_padded_subgraph()` reads both, defaulting to zeros
 if they don't exist yet - a base graph without an elevation pass still gets valid `dist`/`road_m`/
 `ungraded_m`/`inferred_m` records, just with `ascent_m`/`descent_m`/`max_ele_m` at 0). `ascent_m`/
 `descent_m` swap per edge when a path traverses it v→u instead of u→v, since the base graph stores
@@ -183,9 +183,9 @@ point's absolute elevation, not a delta, so a col strictly inside one contracted
 `ascent_m`/`descent_m`/`sac_rank`/`via_ferrata` already accept there, spec C9). `snap_m` and
 `profile_offset`/`profile_count` are left at `0`/`UNSET`, filled in by a later pass.
 
-- `data/osm/hut_edges/{records.npy, geometry.npy}` — hut-to-hut edges, one record per
+- `data/build/hut-edges/{records.npy, geometry.npy}` — hut-to-hut edges, one record per
   `(pair, variant)`.
-- `data/osm/start_edges/{records.npy, geometry.npy}` — access edges (station/parking ↔ hut), same
+- `data/build/start-edges/{records.npy, geometry.npy}` — access edges (station/parking ↔ hut), same
   shape. Named "start" for historical reasons; the edge is undirected — the same record serves a
   trip that *starts* at the station and one that *ends* there. It is only stored access→hut.
 
@@ -198,7 +198,7 @@ Bergsteigerdörfer partner businesses, routed one-directionally to huts exactly 
 stations/parking, never hut↔hut);
 `variant` is one of `binfmt.VARIANT_*` (`lib/variants.py`'s `VARIANTS` dict has the per-row
 definitions). `geom_offset`/`geom_count` slice into the sibling `geometry.npy` (`COORD_DTYPE`), a
-flat polyline vertex pool exactly like `base_graph/interior.npy`.
+flat polyline vertex pool exactly like `base-graph/interior.npy`.
 
 **Timing**: the whole cell-pool loop is one `lib/timing.py` `phase("build_hub_edges.py",
 "hub_edge_query", ...)` record. Each worker fills a `StepTimer` with its own
@@ -209,25 +209,25 @@ the columns exceed wall clock — read the ratios.
 
 - **doit wiring** (`dag/graph_building.py`, split three ways so retuning one knob doesn't force the
   other two to rerun — see each task's own comment there): `task_snap_hubs` depends only on
-  `--max-snap-m`/`--max-snap-ascent-m` (`file_dep=[base_graph/manifest.json,
-  base_graph/node_ele.npy, huts.geojson, start_points.npy, dem.tif]`,
-  `targets=[hub_snaps.npy, hub_snap_interior.npy, unsnapped_huts.json]`); `task_gather_route_subgraphs`
+  `--max-snap-m`/`--max-snap-ascent-m` (`file_dep=[base-graph/manifest.json,
+  base-graph/node-ele.npy, huts.geojson, start-points.npy, dem.tif]`,
+  `targets=[hub-snaps.npy, hub-snap-interior.npy, unsnapped-huts.json]`); `task_gather_route_subgraphs`
   depends only on `--max-edge-km` (same `file_dep` minus `dem.tif`,
-  `targets=[route_subgraphs/manifest.json]`); `task_build_hub_edges` depends on both
-  (`task_dep=[snap_hubs, gather_route_subgraphs]`, `file_dep=[base_graph/manifest.json,
-  huts.geojson, start_points.npy, hub_snaps.npy, hub_snap_interior.npy,
-  route_subgraphs/manifest.json]`, `targets=[hut_edges/records.npy, start_edges/records.npy]`) plus
+  `targets=[route-subgraphs/manifest.json]`); `task_build_hub_edges` depends on both
+  (`task_dep=[snap_hubs, gather_route_subgraphs]`, `file_dep=[base-graph/manifest.json,
+  huts.geojson, start-points.npy, hub-snaps.npy, hub-snap-interior.npy,
+  route-subgraphs/manifest.json]`, `targets=[hut-edges/records.npy, start-edges/records.npy]`) plus
   a tracking-only `variants_json` param (`config.graph.variants`, read straight from config so a
   grid edit wouldn't otherwise be seen as a param change). All three depend on `compute_edge_profiles`
   as a `task_dep` (edges.npy's `time_s`/`ascent_m`/`descent_m` are rewritten in place by that task
-  but aren't one of its declared targets, so `node_ele.npy`'s file-hash freshness alone wouldn't
+  but aren't one of its declared targets, so `node-ele.npy`'s file-hash freshness alone wouldn't
   guarantee ordering) and carry the tracking-only `schema_version` param
   (`binfmt.SCHEMA_VERSION`). `uptodate` uses `TaskOptionsChanged()` over each task's own params, so
   a flag retune reruns just the task(s) that actually depend on it, without `doit forget`.
 
 ## `match_tour_edges.py` — official tours from their GPX trace + DEM
 
-Independent of the base graph: reads only `huts.geojson`, `start_points.npy`, the DEM and
+Independent of the base graph: reads only `huts.geojson`, `start-points.npy`, the DEM and
 `pipeline/tours/<Name>/<N>.gpx` (`lib/tour_folder.py`); no base-graph task or file is a dependency,
 so tour iteration never triggers `build_base_graph`. Spec:
 `docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md`.
@@ -240,7 +240,7 @@ so tour iteration never triggers `build_base_graph`. Spec:
   come from DEM samples (`lib/dem_sample.py`) smoothed by `lib/elevation_profile.py`;
   duration uses `lib/speed.py`'s `edge_time_s` on slope-merged segments, floored at
   `graph.speedModel.minSpeedMs`.
-- **Outputs**: `tour_edges/{records,geometry,profiles}.npy` (`binfmt.TOUR_LEG_DTYPE`, one row per
+- **Outputs**: `tour-edges/{records,geometry,profiles}.npy` (`binfmt.TOUR_LEG_DTYPE`, one row per
   matched leg; the display profile is written here, `build_profiles` never touches tours),
   `tours.json` (per tour `numDays` legs; a matched leg carries `edgeId` = its `records.npy` row plus
   `distanceM/ascentM/descentM/durationS/maxEleM/from/to`; a leg with an unresolved endpoint carries
@@ -250,7 +250,7 @@ so tour iteration never triggers `build_base_graph`. Spec:
 - `tourId` is the index of the tour folder in sorted order (six folders: Kaisertour,
   Lechquellenrunde, Pitztaltour, Silvretta-Runde, Tauernhöhenweg, Welser Höhenweg), so adding a
   folder shifts later ids.
-- **doit wiring**: no `task_dep`; `file_dep=[huts.geojson, start_points.npy, dem.tif, *.gpx]`;
+- **doit wiring**: no `task_dep`; `file_dep=[huts.geojson, start-points.npy, dem.tif, *.gpx]`;
   tracking param `tour_leg_schema_version` (`binfmt.TOUR_LEG_SCHEMA_VERSION`, separate from
   `RECORD_SCHEMA_VERSION`, so a `TOUR_LEG_DTYPE` change never forces the free-routing rebuild).
 - **Tooling**: `tools/fetch_alpenvereinaktiv_tour.py` downloads a tour's per-leg GPX from

@@ -5,11 +5,11 @@ trace + the DEM - no OSM base graph, no routing, no map matching (spec docs/supe
 distance/ascent/descent/duration/geometry come straight from its raw trace; only its two endpoints
 are resolved onto a hub, by pure nearest-point distance (lib/hubs.py's nearest_hub_to_point).
 
-Produces data/osm/tour_edges/{records.npy, geometry.npy, profiles.npy} (binfmt.TOUR_LEG_DTYPE),
-data/osm/tours.json (per tour, `numDays` legs; a matched leg carries `edgeId` = its row in
-tour_edges/records.npy plus its scalars, a leg with an unresolved endpoint carries `edgeId: null`
-and a `null` for each unresolved endpoint), data/osm/tour-match-gaps.json (one reason:
-"leg_endpoint_unsnapped" entry per unresolved leg endpoint) and data/osm/hubs.json (the hub set
+Produces data/build/tour-edges/{records.npy, geometry.npy, profiles.npy} (binfmt.TOUR_LEG_DTYPE),
+data/build/tour-edges/tours.json (per tour, `numDays` legs; a matched leg carries `edgeId` = its row in
+tour-edges/records.npy plus its scalars, a leg with an unresolved endpoint carries `edgeId: null`
+and a `null` for each unresolved endpoint), data/build/tour-edges/tour-match-gaps.json (one reason:
+"leg_endpoint_unsnapped" entry per unresolved leg endpoint) and data/build/tour-edges/hubs.json (the hub set
 snapped against).
 
 Usage: python pipeline/phases/graph_building/match_tour_edges.py
@@ -29,7 +29,9 @@ from lib.dem_sample import sample_points  # noqa: E402
 from lib.elevation_profile import ascent_descent, merge_segments, resample_to_points, smooth_profile  # noqa: E402
 from lib.geo import haversine_m_vec_pairs  # noqa: E402
 from lib.hubs import HUB_TYPE_JSON_NAMES, load_all_hubs, nearest_hub_to_point  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, TOURS_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    RAW_DEM_DIR, RAW_DIR, START_POINTS_DIR, TOUR_EDGES_DIR, TOURS_DIR, load_config,
+)  # noqa: E402
 from lib.timing import phase  # noqa: E402
 from lib.tour_folder import load_all_tour_folders, load_tour_folder  # noqa: E402
 
@@ -115,6 +117,7 @@ def write_hubs_json(hubs: list, out_dir: Path) -> Path:
     GPX editor (huts/src/gpxEditor) snaps against exactly the same hubs and ids as
     tour-match-gaps.json reports (spec 2026-09-18-gpx-editor-design.md)."""
     path = Path(out_dir) / "hubs.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
     payload = [
         {"id": h["id"], "type": HUB_TYPE_JSON_NAMES[h["type"]], "lon": h["lon"], "lat": h["lat"],
          "name": h["name"]}
@@ -129,10 +132,13 @@ def main(argv=None):
     config = load_config()
     speed_cfg = config["graph"]["speedModel"]
     parser = argparse.ArgumentParser()
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"),
+    parser.add_argument("--dem", default=str(RAW_DEM_DIR / "dem.tif"),
                         help="path to the materialized DEM GeoTIFF (build_dem_vrt.py's output)")
-    parser.add_argument("--out-dir", default=str(OSM_DIR),
-                        help="directory to write matched tour edge output into")
+    parser.add_argument("--out-dir", default=str(TOUR_EDGES_DIR),
+                        help="directory to write the tour-edge set, tours.json, tour-match-gaps.json and hubs.json into")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"), help="hut list (fetch_huts.py's output)")
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"),
+                        help="start-point array (filter_start_points.py's output)")
     parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"],
                         help="max distance (m) a leg endpoint may be from the nearest hub to snap to it (see pipeline.config.json's graph.maxSnapM)")
     parser.add_argument("--smoothing-kernel-m", type=float, default=config["dem"]["smoothingKernelM"],
@@ -150,7 +156,7 @@ def main(argv=None):
 
     speed_model = {"v0": args.speed_v0, "k": args.speed_k, "s0": args.speed_s0}
 
-    hubs = load_all_hubs(Path(OSM_DIR))
+    hubs = load_all_hubs(Path(args.huts), Path(args.start_points))
     huts_only = [h for h in hubs if h["type"] == binfmt.TYPE_HUT]
 
     tour_folders = load_all_tour_folders(Path(TOURS_DIR))
@@ -220,21 +226,21 @@ def main(argv=None):
 
     print(f"tour legs matched: {len(matched_legs)}, gaps: {len(gaps)}")
 
-    out_dir = Path(args.out_dir) / "tour_edges"
+    out_dir = Path(args.out_dir)
     records_arr, geometry_arr, profiles_arr = _pack_tour_legs(matched_legs)
     binfmt.save_array(out_dir / "records.npy", records_arr)
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
     binfmt.save_array(out_dir / "profiles.npy", profiles_arr)
 
-    tours_path = Path(args.out_dir) / "tours.json"
+    tours_path = out_dir / "tours.json"
     with open(tours_path, "w", encoding="utf-8") as fh:
         json.dump(tours_index, fh)
 
-    gaps_path = Path(args.out_dir) / "tour-match-gaps.json"
+    gaps_path = out_dir / "tour-match-gaps.json"
     with open(gaps_path, "w", encoding="utf-8") as fh:
         json.dump(gaps, fh)
-    hubs_path = write_hubs_json(hubs, Path(args.out_dir))
-    print(f"written {out_dir}, {tours_path}, {gaps_path} and {hubs_path}")
+    hubs_path = write_hubs_json(hubs, out_dir)
+    print(f"written {out_dir}/records.npy, geometry.npy, profiles.npy, {tours_path}, {gaps_path} and {hubs_path}")
 
 
 if __name__ == "__main__":
