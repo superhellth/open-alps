@@ -7,14 +7,14 @@ export interface RawTourEndpoint {
 
 export interface RawTourLeg {
   legIndex: number
-  edgeId: number | null
-  distanceM?: number
-  ascentM?: number
-  descentM?: number
-  durationS?: number
-  maxEleM?: number
-  from: RawTourEndpoint | null
-  to: RawTourEndpoint | null
+  edgeId: number
+  distanceM: number
+  ascentM: number
+  descentM: number
+  durationS: number
+  maxEleM: number
+  from: RawTourEndpoint
+  to: RawTourEndpoint
 }
 
 export interface RawTour {

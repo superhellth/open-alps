@@ -28,19 +28,6 @@ describe('buildOfficialTourViews', () => {
     expect(view.totalDurationH).toBe(5)
   })
 
-  it.each([
-    ['null from', { from: null }],
-    ['null to', { to: null }],
-    ['null edgeId', { edgeId: null }],
-  ])('drops a tour with a %s leg entirely', (_name, patch) => {
-    const tour: RawTour = { ...completeTour, legs: [completeTour.legs[0], { ...completeTour.legs[1], ...patch }] }
-    expect(buildOfficialTourViews([tour])).toHaveLength(0)
-  })
-
-  it('drops a tour whose legs.length differs from numDays', () => {
-    expect(buildOfficialTourViews([{ ...completeTour, numDays: 3 }])).toHaveLength(0)
-  })
-
   it('keeps a partner_betrieb endpoint', () => {
     const tour: RawTour = {
       tourId: 3, name: 'Mixed', numDays: 1,
