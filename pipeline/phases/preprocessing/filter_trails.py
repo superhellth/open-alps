@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Filters each raw region extract down to hiking-relevant ways, using the tag filter from
-pipeline.config.json, then clips to the hub range (data/osm/hub_range.geojson,
+pipeline.config.json, then clips to the hub range (data/build/hub-range/hub-range.geojson,
 compute_hub_range.py's output - the union of a graph.maxEdgeKm-radius circle around every hut).
 No trail farther than that from every hut can ever appear on a valid hut-to-hut/hut-to-start edge
 (see compute_hub_range.py's docstring), so dropping it here means stream_osm/contract_structural
@@ -23,7 +23,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import HUB_RANGE_DIR, RAW_OSM_DIR, TRAILS_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "filter_trails.py"
@@ -35,15 +35,16 @@ parser.add_argument("--tag-filter", default=config["trailTagFilter"],
                     help="osmium tags-filter expression selecting trail ways (see pipeline.config.json's trailTagFilter)")
 args = parser.parse_args()
 
-hub_range_path = OSM_DIR / "hub_range.geojson"
+hub_range_path = HUB_RANGE_DIR / "hub-range.geojson"
+TRAILS_DIR.mkdir(parents=True, exist_ok=True)
 
 timer = StepTimer()
 with phase(SCRIPT_NAME, "filter_trails") as meta:
     for region in config["regions"]:
         name = region["name"]
-        src = OSM_DIR / "raw" / f"{name}-latest.osm.pbf"
-        tag_filtered = OSM_DIR / f"{name}-tag-filtered.osm.pbf"
-        dst = OSM_DIR / f"{name}-trails.osm.pbf"
+        src = RAW_OSM_DIR / f"{name}-latest.osm.pbf"
+        tag_filtered = TRAILS_DIR / f"{name}-tag-filtered.osm.pbf"
+        dst = TRAILS_DIR / f"{name}-trails.osm.pbf"
 
         print(f"tag-filtering {src} -> {tag_filtered}")
         with timer.step("tag_filter"):

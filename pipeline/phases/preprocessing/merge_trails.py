@@ -10,14 +10,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import TRAILS_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "merge_trails.py"
 
 config = load_config()
-inputs = [str(OSM_DIR / f"{r['name']}-trails.osm.pbf") for r in config["regions"]]
-out = OSM_DIR / "trails.osm.pbf"
+inputs = [str(TRAILS_DIR / f"{r['name']}-trails.osm.pbf") for r in config["regions"]]
+out = TRAILS_DIR / "trails.osm.pbf"
+TRAILS_DIR.mkdir(parents=True, exist_ok=True)
 
 with phase(SCRIPT_NAME, "merge_trails"):
     subprocess.run(["osmium", "merge", *inputs, "-o", str(out), "--overwrite"], check=True)

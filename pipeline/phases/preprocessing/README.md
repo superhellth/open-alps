@@ -13,15 +13,15 @@ hiking-ways network, and a bounded set of station/parking "hub" candidates.
   (shared endpoints between adjacent ways) is preserved for `graph_building/` even though most
   standalone POI nodes are dropped.
 - Requires the `osmium-tool` native binary on PATH (`alpen-osm` conda env).
-- **doit wiring**: `file_dep=[raw/<region>-latest.osm.pbf, ..., config]`,
-  `targets=[<region>-trails.osm.pbf, ...]`.
+- **doit wiring**: `file_dep=[raw/osm/<region>-latest.osm.pbf, build/hub-range/hub-range.geojson, config]`,
+  `targets=[build/trails/<region>-trails.osm.pbf, ...]`.
 
 ## `merge_trails.py`
 
 - `osmium merge <region1-trails.osm.pbf> <region2-trails.osm.pbf> ... -o trails.osm.pbf --overwrite`.
 - Combines all per-region filtered extracts into one merged hiking network — the single input
   `graph_building/build_base_graph.py` streams.
-- **doit wiring**: `file_dep=[<region>-trails.osm.pbf, ...]`, `targets=[trails.osm.pbf]`.
+- **doit wiring**: `file_dep=[build/trails/<region>-trails.osm.pbf, ...]`, `targets=[build/trails/trails.osm.pbf]`.
 
 ## `verify_trails.py` — gate
 
@@ -29,10 +29,10 @@ hiking-ways network, and a bounded set of station/parking "hub" candidates.
   before anything downstream starts on a bad/missing input.
 - Runs `osmium fileinfo -e trails.osm.pbf` to print bbox/node/way/relation counts for a quick
   sanity read.
-- Targets `verify_trails.stamp`, so an unchanged `trails.osm.pbf` (content hash) skips the rescan
+- Targets `build/trails/verify-trails.stamp`, so an unchanged `trails.osm.pbf` (content hash) skips the rescan
   instead of forcing a rerun on every `doit` invocation — the check result isn't itself cacheable,
   but "did the input change" is, via the normal `file_dep` hash.
-- **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[verify_trails.stamp]`.
+- **doit wiring**: `file_dep=[build/trails/trails.osm.pbf]`, `targets=[build/trails/verify-trails.stamp]`.
 
 ## `filter_start_points.py`
 
@@ -62,13 +62,13 @@ Reduces station/parking candidates to the ones that can possibly matter, using a
   countries' urban road networks would otherwise pass through. The beeline-to-hut filter is what
   actually bounds hub count before `build_hub_edges.py`'s per-hub shortest-path search runs.
 - **Output**:
-  - `data/osm/start_points.npy` — structured array `(lon: f8, lat: f8, osm_id: i8, type: u1)`,
+  - `data/build/start-points/start-points.npy` — structured array `(lon: f8, lat: f8, osm_id: i8, type: u1)`,
     `type` is `binfmt.TYPE_STATION` (1) / `binfmt.TYPE_PARKING` (2) / `binfmt.TYPE_PARTNER` (3,
     Bergsteigerdörfer partner businesses from `partner_betriebe.geojson` — `docs/superpowers/specs/
     2026-08-28-hut-classification-design.md`). For `TYPE_PARTNER`, `osm_id` holds the ArcGIS
     layer's `OBJECTID`, not a real OSM id.
-  - `data/osm/start_points_id_table.json` — `{"station:<osm_id>": <osm_id>, "parking:<osm_id>":
+  - `data/build/start-points/start-points-id-table.json` — `{"station:<osm_id>": <osm_id>, "parking:<osm_id>":
     <osm_id>}`, kept for symmetry/debuggability; downstream code addresses points by the
     `(osm_id, type)` pair directly rather than through this table.
 - **doit wiring**: `file_dep=[huts.geojson, stations.geojson, parking.geojson, config]`,
-  `targets=[start_points.npy, start_points_id_table.json]`.
+  `targets=[build/start-points/start-points.npy, build/start-points/start-points-id-table.json]`.
