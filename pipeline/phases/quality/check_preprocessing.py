@@ -12,10 +12,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import shapely
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import QUALITY_DIR, START_POINTS_DIR, load_config  # noqa: E402
+from lib.pipeline import QUALITY_DIR, RAW_OSM_DIR, START_POINTS_DIR, load_config  # noqa: E402
+from lib.poly import region_boundary  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -27,14 +29,13 @@ _TYPE_NAMES = {
 }
 
 
-def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagged: int) -> dict:
-    """§4.1.1: coordinates finite, inside bbox, and no (type, osm_id) duplicate rows."""
+def check_start_point_integrity(start_points: np.ndarray, region, max_flagged: int) -> dict:
+    """§4.1.1: coordinates finite, inside region (the union of the configured .poly boundaries, a
+    shapely (Multi)Polygon), and no (type, osm_id) duplicate rows."""
     lon, lat = start_points["lon"], start_points["lat"]
     finite = np.isfinite(lon) & np.isfinite(lat)
-    in_bbox = (
-        (lon >= bbox["minLng"]) & (lon <= bbox["maxLng"])
-        & (lat >= bbox["minLat"]) & (lat <= bbox["maxLat"])
-    )
+    in_region = np.zeros(len(start_points), dtype=bool)
+    in_region[finite] = shapely.contains_xy(region, lon[finite], lat[finite])
 
     flagged = []
     for i in np.nonzero(~finite)[0]:
@@ -42,11 +43,11 @@ def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagge
             "row": int(i), "type": _TYPE_NAMES.get(int(start_points[i]["type"]), "?"),
             "osm_id": int(start_points[i]["osm_id"]), "reason": "non_finite",
         })
-    for i in np.nonzero(finite & ~in_bbox)[0]:
+    for i in np.nonzero(finite & ~in_region)[0]:
         flagged.append({
             "row": int(i), "type": _TYPE_NAMES.get(int(start_points[i]["type"]), "?"),
             "osm_id": int(start_points[i]["osm_id"]), "lon": float(lon[i]), "lat": float(lat[i]),
-            "reason": "outside_bbox",
+            "reason": "outside_region",
         })
 
     seen = {}
@@ -99,8 +100,9 @@ def main(argv=None):
         with open(args.id_table, encoding="utf-8") as f:
             id_table = json.load(f)
 
+        region = region_boundary([RAW_OSM_DIR / f"{r['name']}.poly" for r in config["regions"]])
         checks = []
-        c = check_start_point_integrity(start_points, config["bbox"], args.max_flagged_rows)
+        c = check_start_point_integrity(start_points, region, args.max_flagged_rows)
         print(f"start_point_integrity: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
               flush=True)
         checks.append(c)

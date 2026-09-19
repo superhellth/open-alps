@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
 Fetches train station and trailhead-parking point locations from OSM, filtered from the raw
-region extracts already downloaded by download_extracts.py (no new download), and writes them
+region extracts already downloaded by download_extracts.py (no new download) and clipped to the
+region boundary (the .poly files), and writes them
 as two GeoJSON FeatureCollections - same flat {id?, name, ...} properties shape as 05's
 huts.geojson.
 
@@ -23,11 +24,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from shapely.geometry import shape
+from shapely.geometry import Point, shape
+from shapely.prepared import prep
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.geo import haversine_m  # noqa: E402
 from lib.pipeline import RAW_DIR, RAW_OSM_DIR, load_config  # noqa: E402
+from lib.poly import region_boundary  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_stations_parking.py"
@@ -99,6 +102,13 @@ def _area_to_point(feat: dict) -> dict:
     return feat
 
 
+def filter_to_boundary(features: list, prepared_boundary) -> list:
+    """Keeps only Point features inside prepared_boundary (a shapely.prepared.prep()-wrapped
+    (Multi)Polygon). osmium export keeps whole ways that cross the extract boundary and parking
+    areas are reduced to a centroid, so a few features can lie just outside the region."""
+    return [f for f in features if prepared_boundary.contains(Point(*f["geometry"]["coordinates"]))]
+
+
 def dedupe_stop_positions(features: list, radius_m: float = STOP_DEDUPE_RADIUS_M) -> list:
     """Drops each public_transport=stop_position feature that has a same-name feature within
     radius_m already kept. Everything that is not a stop_position (platforms, rail stations) is
@@ -145,7 +155,7 @@ def run_filter_pipeline(src: Path, pipeline: list, tmp_prefix: Path, tmp_files: 
     return out
 
 
-def export_layer(layer: dict, timer: StepTimer) -> None:
+def export_layer(layer: dict, boundary, timer: StepTimer) -> None:
     out_path = RAW_DIR / f"{layer['name']}.geojson"
     features = []
 
@@ -197,6 +207,7 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
             feat["properties"] = {k: raw_props[k] for k in layer["keep_fields"] if k in raw_props}
         features.extend(fc["features"])
 
+    features = filter_to_boundary(features, boundary)
     print(f"{layer['name']}: {len(features)} features")
     geojson = {"type": "FeatureCollection", "features": features}
     RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -207,9 +218,10 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
 
 def main():
     timer = StepTimer()
+    boundary = prep(region_boundary([RAW_OSM_DIR / f"{r['name']}.poly" for r in config["regions"]]))
     with phase(SCRIPT_NAME, "fetch_stations_parking") as meta:
         for layer in LAYERS:
-            export_layer(layer, timer)
+            export_layer(layer, boundary, timer)
         meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
 

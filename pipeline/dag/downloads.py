@@ -38,7 +38,8 @@ def task_fetch_huts():
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",
-        file_dep=[RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES],
+        file_dep=[RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
+        + [RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES],
         targets=[RAW_DIR / "stations.geojson", RAW_DIR / "parking.geojson"],
     )
 

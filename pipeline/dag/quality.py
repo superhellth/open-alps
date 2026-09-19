@@ -5,7 +5,7 @@ so wiring these into the default DAG never turns a heuristic threshold into a ha
 
 from lib.doit_support import cli_param, pipeline_task
 from lib.pipeline import (
-    BASE_GRAPH_DIR, BUILD_DIR, HUT_EDGES_DIR, QUALITY_DIR, RAW_DEM_DIR, RAW_DIR, SNAPPING_DIR,
+    BASE_GRAPH_DIR, BUILD_DIR, HUT_EDGES_DIR, QUALITY_DIR, RAW_DEM_DIR, RAW_DIR, RAW_OSM_DIR, SNAPPING_DIR,
     START_EDGES_DIR, START_POINTS_DIR, TOUR_EDGES_DIR, load_config,
 )
 
@@ -29,7 +29,8 @@ def task_check_preprocessing():
         ],
         params=[_max_flagged_param()],
         task_dep=["filter_start_points"],
-        file_dep=[START_POINTS_DIR / "start-points.npy", START_POINTS_DIR / "start-points-id-table.json"],
+        file_dep=[START_POINTS_DIR / "start-points.npy", START_POINTS_DIR / "start-points-id-table.json"]
+        + [RAW_OSM_DIR / f"{r['name']}.poly" for r in CONFIG["regions"]],
         targets=[QUALITY_DIR / "preprocessing.json"],
     )
 
