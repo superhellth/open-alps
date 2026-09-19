@@ -31,4 +31,3 @@ leuvenmapmatching = "*"
 [tasks]
 doit = "doit"
 test = "pytest"
-status = "python status.py"
