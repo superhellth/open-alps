@@ -39,3 +39,4 @@ new row when a new spec is written.
 | 2026-09-14 | [GPX-only tour matching](specs/2026-09-14-gpx-hut-snap-design.md) | done |
 | 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | done |
 | 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |
+| 2026-09-19 | [Derive every spatial extent from the hub range](specs/2026-09-19-derive-extents-from-hub-range-design.md) | draft |
