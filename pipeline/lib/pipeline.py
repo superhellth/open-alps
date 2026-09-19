@@ -1,5 +1,5 @@
 """Config reader plus small shared filesystem helpers used across pipeline scripts
-(pipeline.config.json is still the one source of truth for hyperparameters: bbox, regions, tag
+(pipeline.config.json is still the one source of truth for hyperparameters: regions, tag
 filter, graph thresholds)."""
 
 import json

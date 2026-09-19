@@ -49,7 +49,7 @@ re-streaming/re-contracting the OSM extract every run. Params: `--tile-size-km` 
    bincount/cumsum for offsets, no Python dict-of-lists), so it scales without per-node Python
    object overhead.
 3. **Spatial indexing** — every surviving node is assigned a `lib/grid.py` `Grid` cell id
-   (row-major partition of the bbox into `config.graph.tileSizeKm` cells), and nodes are re-sorted
+   (row-major partition of the node extent, snapped outward to whole degrees, into `config.graph.tileSizeKm` cells), and nodes are re-sorted
    by cell so `cell-index.npy` addresses one contiguous slice per cell. This is what lets
    `build_hub_edges.py`'s per-cell workers mmap-slice just their own region instead of loading the
    whole graph into memory.
@@ -65,7 +65,7 @@ memory-mappable via `np.load(..., mmap_mode="r")`):
 | `node_edge_ids.npy` | `i8` | flat adjacency list, CSR-indexed by `node_edge_index.npy` |
 | `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, road_m f8, ungraded_m f8, inferred_m f8, time_s f8, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, constrained_ok bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row. `time_s`/`ascent_m`/`descent_m` sit at `binfmt.UNSET` until `phases/elevation/compute_edge_profiles.py` runs |
 | `interior.npy` | `COORD_DTYPE = (lon f8, lat f8)` | flat polyline vertex pool for every chain edge's interior geometry, sliced via `interior_offset`/`interior_count` |
-| `manifest.json` | — | grid params (bbox, `tileSizeKm`) needed to reconstruct the same `Grid` at query time, plus array shapes |
+| `manifest.json` | — | grid params (bbox = node extent, `tileSizeKm`) needed to reconstruct the same `Grid` at query time, plus array shapes |
 
 - **doit wiring**: `file_dep=[trails.osm.pbf]`, `targets=[base-graph/manifest.json]`. `uptodate`
   uses `TaskOptionsChanged()` over the task's own params (`--tile-size-km` plus a tracking-only

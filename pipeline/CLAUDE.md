@@ -15,7 +15,7 @@ data structures and algorithms: **`pipeline/phases/README.md`** (high-level DAG 
 **`docs/osm-trail-pipeline.md`**.
 
 Pipeline is plain Python, no bash/Node/Docker: config-driven — every hyperparameter (region list,
-hut bbox, trail tag filter, max-edge-km / max-snap-m, DEM provider) lives in
+trail tag filter, max-edge-km / max-snap-m, DEM provider) lives in
 `pipeline/pipeline.config.json` — and `pipeline/dodo.py` runs the whole thing as a
 [doit](https://pydoit.org) task DAG (one task per script, wired by `file_dep`/`targets` rather than
 a numbered run order), idempotently (`doit` skips a task whose targets are already up to date;
@@ -61,7 +61,7 @@ Per-script purpose, requirements and outputs, plus the rules a new script here h
 **V2 architecture** (`docs/superpowers/specs/2026-08-19-pipeline-v2-design.md`): a persisted,
 hub-agnostic base graph (`phases/graph_building/build_base_graph.py`, streams+contracts `trails.osm.pbf` once into
 `data/build/base-graph/`'s plain `.npy` structured arrays, `lib/binfmt.py`) is decoupled from the
-hub-edge query (`phases/graph_building/build_hub_edges.py`), which partitions the bbox into `lib/grid.py` cells and
+hub-edge query (`phases/graph_building/build_hub_edges.py`), which partitions the base graph extent into `lib/grid.py` cells and
 runs one worker process per cell (`ProcessPoolExecutor`), each mmap-slicing only its own padded
 region of the base graph (`lib/subgraph.py`) rather than sharing one big in-process graph. This
 means the expensive stream+contract step is cached across hub-set changes and hyperparameter

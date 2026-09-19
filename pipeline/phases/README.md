@@ -85,12 +85,12 @@ Not a phase — code imported across phases:
 
 - **`pipeline.py`** — `load_config()`, path constants (`RAW_DIR`, `BUILD_DIR` and one constant per
   `data/build/<component>/` directory, `PUBLIC_DATA_DIR`, ...), `materialize_geotiff()`, `normalize_colorinterp()`, `build_dem_vrt()`, `run_tippecanoe()`
-  (native-or-WSL dispatch), `hut_points()` / `edge_points()` / `bbox_from_huts()`.
+  (native-or-WSL dispatch), `hut_points()` / `edge_points()`.
 - **`timing.py`** — `phase(script, name, **meta)` context manager, appends one JSON line to
   `data/timings.jsonl` per completed phase. Used by `graph_building/build_base_graph.py` and
   `elevation/build_dem_vrt.py`/`sample_base_elevation.py`/`compute_edge_profiles.py` to track
   which step stops scaling first as regional scope grows past AT+Bayern.
-- **`grid.py`** — `Grid`, the row-major spatial grid `graph_building/` partitions the bbox into.
+- **`grid.py`** — `Grid`, the row-major spatial grid `graph_building/` partitions the base graph extent into.
 - **`binfmt.py`** — shared binary array formats (dtypes, `save_array()`/`load_array()`,
   `save_manifest()`/`load_manifest()`, `build_csr_index()`, `SCHEMA_VERSION`).
 - **`grading.py`** — `classify_way()`/`excluded_from_constrained()`, per-way passability grading

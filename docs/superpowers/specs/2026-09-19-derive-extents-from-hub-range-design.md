@@ -1,7 +1,7 @@
 # Derive every spatial extent from the hub range — drop the hand-typed `bbox`
 
 Date: 2026-09-19
-Status: draft, for planning
+Status: done
 
 ## Problem
 
