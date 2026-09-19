@@ -41,7 +41,7 @@ why it exists as real code instead of `doit`'s built-in `config_changed`.
 
 ### Keep task-wiring rationale short-lived
 
-A `dag/*.py` comment should state *why the wiring is what it is now* (e.g. "not force-rerun: ~4h
+A `dag/*.py` comment should state *why the wiring is what it is now* (e.g. "not force-rerun: ~1h
 rebuild", "split from X because Y only needs Z") in one or two lines — not the history of what used
 to be wrong and how it got fixed. `dodo.py` grew past 700 lines mostly from that narrative form
 repeated per task; it's real information, but it belongs in the commit that made the change (or

@@ -91,11 +91,14 @@ from `tours.json`. The dev-only GPX editor (`npm run dev` in `huts/`, then `/gpx
 `docs/gpx-editor.md`) edits those GPX files.
 
 **Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
-first asking the user and getting explicit confirmation.** `build_base_graph` alone has measured at
-~4 hours (see `data/timings.jsonl`) and is a normal dependency of the default `doit` run — a
-freshness check can still decide it's stale and silently kick off a multi-hour job. This applies
-even to tasks that look cheap or read-only. (`build_profiles` is hardcoded to always run when
-selected, but is genuinely cheap — seconds, and never reopens the DEM.)
+first asking the user and getting explicit confirmation.** Claude must never execute doit tasks
+itself, even after a freshness check or for tasks that look cheap or read-only: a stale dependency
+can silently kick off a multi-hour job. Measured wall times (`data/timings.jsonl`): `hub_snap`
+~60 min (dominant; scales with access-point count, ~80 ms CPU per hub), `materialize_regions` ~14
+min, `check_graph_building` ~7 min, `build_base_graph` ~6 min, `compute_edge_profiles` /
+`build_access_edges` ~5 min each, `hub_edge_query` ~4 min; the rest are under a minute.
+(`build_profiles` is hardcoded to always run when selected, but is genuinely cheap — seconds, and
+never reopens the DEM.)
 
 ## Fix problems at their root layer
 
