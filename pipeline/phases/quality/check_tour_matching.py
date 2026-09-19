@@ -2,7 +2,8 @@
 """Read-only checks over phases/graph_building/match_tour_edges.py's output (spec
 docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md "Quality checks"): every leg endpoint
 resolves to a hub of the type its position in the tour requires, every matched leg's scalar fields
-are finite and non-negative, every tour-match-gaps.json entry is reported with its reason,
+are finite and non-negative, tours.json ships no gap legs, every tour-match-gaps.json entry is
+reported with its reason,
 tour-edges' profiles are well-formed, and tours.json's edgeIds agree with tour-edges/records.npy.
 Never mutates its inputs; always exits 0.
 
@@ -31,7 +32,7 @@ def check_endpoint_types(tours: list, max_flagged: int) -> dict:
     at any hub type); every leg's "to" must be a hut unless legIndex == numDays - 1 (the tour's
     very last leg may end at any hub type) - checked against legIndex rather than the leg's
     position in tours.json's legs list. A gap leg's unresolved endpoint (None) is not flagged - it
-    is reported by check_gap_reasons."""
+    is reported by check_no_gap_legs."""
     flagged = []
     checked = 0
     for tour in tours:
@@ -79,7 +80,7 @@ def check_leg_scalars(tours: list, max_flagged: int) -> dict:
 
 def check_gap_reasons(gaps: list, max_flagged: int) -> dict:
     """Every entry in tour-match-gaps.json is a leg endpoint that did not resolve, so every one is
-    flagged (with its reason and detail) to keep unmatched legs visible."""
+    flagged (with its reason and detail) to keep dropped tours visible."""
     flagged = [
         {"tourId": g["tourId"], "tourName": g["tourName"], "legIndex": g["legIndex"],
          "reason": g["reason"], "detail": g.get("detail")}
@@ -87,6 +88,31 @@ def check_gap_reasons(gaps: list, max_flagged: int) -> dict:
     ]
     return build_check(
         "tour_gap_reasons", {}, checked=len(gaps), flagged_rows=flagged, baseline=0,
+        max_flagged_rows=max_flagged,
+    )
+
+
+def check_no_gap_legs(tours: list, max_flagged: int) -> dict:
+    """tours.json ships only complete tours: every leg carries an edgeId and both endpoints, and a
+    tour has exactly numDays legs. Tours with unresolved endpoints are dropped by match_tour_edges
+    and appear only in tour-match-gaps.json (see check_gap_reasons)."""
+    flagged = []
+    checked = 0
+    for tour in tours:
+        if len(tour["legs"]) != tour["numDays"]:
+            flagged.append({
+                "tourId": tour["tourId"], "tourName": tour["name"], "reason": "leg_count_mismatch",
+                "legs": len(tour["legs"]), "numDays": tour["numDays"],
+            })
+        for leg in tour["legs"]:
+            checked += 1
+            if leg.get("edgeId") is None or leg.get("from") is None or leg.get("to") is None:
+                flagged.append({
+                    "tourId": tour["tourId"], "tourName": tour["name"], "legIndex": leg["legIndex"],
+                    "reason": "gap_leg_shipped",
+                })
+    return build_check(
+        "tour_no_gap_legs", {}, checked=checked, flagged_rows=flagged, baseline=0,
         max_flagged_rows=max_flagged,
     )
 
@@ -138,6 +164,10 @@ def main(argv=None):
 
         c = check_leg_scalars(tours, args.max_flagged_rows)
         print(f"tour_leg_scalars: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged", flush=True)
+        checks.append(c)
+
+        c = check_no_gap_legs(tours, args.max_flagged_rows)
+        print(f"tour_no_gap_legs: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged", flush=True)
         checks.append(c)
 
         c = check_gap_reasons(gaps, args.max_flagged_rows)

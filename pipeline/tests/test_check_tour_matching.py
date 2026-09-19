@@ -5,7 +5,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from quality.check_tour_matching import (  # noqa: E402
-    check_endpoint_types, check_gap_reasons, check_leg_scalars, check_tours_json_agreement,
+    check_endpoint_types, check_gap_reasons, check_leg_scalars, check_no_gap_legs,
+    check_tours_json_agreement,
 )
 
 
@@ -117,3 +118,19 @@ def test_profile_integrity_accepts_tour_leg_records():
     check = check_profile_integrity(records, profiles, 5, "tour_edges", max_flagged=500)
     assert check["summary"]["checked"] == 1
     assert check["summary"]["flagged"] == 0
+
+
+def test_no_gap_legs_flags_null_edge_id_null_endpoint_and_leg_count_mismatch():
+    gap = _leg(1, None, {"type": "hut", "id": 3})
+    gap["edgeId"] = None
+    tours = [
+        _tour(0, "T", 2, [_leg(0, {"type": "hut", "id": 1}, {"type": "hut", "id": 2}), gap]),
+        _tour(1, "U", 3, [_leg(0, {"type": "hut", "id": 1}, {"type": "hut", "id": 2})]),
+    ]
+    check = check_no_gap_legs(tours, max_flagged=500)
+    assert [f["reason"] for f in check["flagged"]] == ["gap_leg_shipped", "leg_count_mismatch"]
+
+
+def test_no_gap_legs_clean_case():
+    tours = [_tour(0, "T", 1, [_leg(0, {"type": "hut", "id": 1}, {"type": "hut", "id": 2})])]
+    assert check_no_gap_legs(tours, max_flagged=500)["summary"]["flagged"] == 0
