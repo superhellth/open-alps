@@ -123,93 +123,192 @@ def check_range_cap(records: np.ndarray, layer_name: str, max_edge_km: float,
 
 
 
-def polyline_for_record(record, geometry: np.ndarray) -> np.ndarray:
-    """Returns a (n, 2) lon/lat array for one hut-edges/start-edges record, sliced out
-    of that layer's flat geometry.npy by geom_offset/geom_count."""
-    offset, count = int(record["geom_offset"]), int(record["geom_count"])
-    sl = geometry[offset:offset + count]
-    return np.column_stack([sl["lon"], sl["lat"]]).astype(np.float64)
+# Vertices per chunk: bounds the temporaries the vectorized geometry checks allocate (~12 float64/
+# int64 arrays of this length) while staying big enough that numpy call overhead is negligible.
+CHUNK_VERTICES = 4_000_000
+# rec id occupies the top 22 bits of check_self_retrace's packed sort key.
+MAX_CHUNK_RECORDS = 1 << 21
 
 
-def polyline_for_base_edge(edge, nodes: np.ndarray, interior: np.ndarray) -> np.ndarray:
-    """Returns a (n, 2) lon/lat array for one base-graph/edges.npy row: its u node, interior
-    polyline, then its v node - the same concatenation build_base_graph.py's contraction reasons
-    about, reconstructed for a check rather than for routing."""
-    u, v = int(edge["u"]), int(edge["v"])
-    offset, count = int(edge["interior_offset"]), int(edge["interior_count"])
-    interior_slice = interior[offset:offset + count]
-    lons = np.concatenate([[nodes[u]["lon"]], interior_slice["lon"], [nodes[v]["lon"]]])
-    lats = np.concatenate([[nodes[u]["lat"]], interior_slice["lat"], [nodes[v]["lat"]]])
-    return np.column_stack([lons, lats]).astype(np.float64)
+class PolylineSet:
+    """A ragged set of n polylines, served in chunks so the geometry checks can run vectorized
+    without materializing every vertex at once (start_edges alone is hundreds of millions).
+
+    chunks() yields (lo, lon, lat, starts, counts): the polylines lo..lo+len(counts)-1 flattened
+    into lon/lat, polyline j occupying lon[starts[j]:starts[j] + counts[j]]. identity(i) is the
+    report-row identity of polyline i."""
+
+    def __init__(self, n: int, chunks, identity):
+        self.n = n
+        self.chunks = chunks
+        self.identity = identity
 
 
-def check_vertex_gap(polylines: list, layer_name: str, max_gap_m: float, max_flagged: int) -> dict:
-    """§4.3.4: the longest gap between consecutive vertices of a record's polyline. Vectorized
-    per record (haversine over the whole coords array at once via slicing), not per point."""
+def _chunk_bounds(counts: np.ndarray, max_vertices: int):
+    """Yields (lo, hi) record ranges holding at most max_vertices vertices (a lone bigger record
+    gets its own chunk) and MAX_CHUNK_RECORDS records."""
+    cum = np.cumsum(counts)
+    n = len(counts)
+    lo = 0
+    while lo < n:
+        before = int(cum[lo - 1]) if lo else 0
+        hi = int(np.searchsorted(cum, before + max_vertices, side="right"))
+        hi = min(max(hi, lo + 1), lo + MAX_CHUNK_RECORDS, n)
+        yield lo, hi
+        lo = hi
+
+
+def polylines_from_records(records: np.ndarray, geometry: np.ndarray,
+                            max_vertices: int = CHUNK_VERTICES) -> PolylineSet:
+    """Polylines of a hut-edges/start-edges layer: record i is geometry[geom_offset:+geom_count]."""
+    offsets = records["geom_offset"].astype(np.int64)
+    counts = records["geom_count"].astype(np.int64)
+
+    def chunks():
+        for lo, hi in _chunk_bounds(counts, max_vertices):
+            cnt = counts[lo:hi]
+            starts = np.cumsum(cnt) - cnt
+            total = int(cnt.sum())
+            off = offsets[lo:hi]
+            if hi - lo == 1 or np.all(off[1:] == off[:-1] + cnt[:-1]):
+                sl = geometry[int(off[0]):int(off[0]) + total]
+            else:
+                sl, _ = binfmt.gather_ragged(geometry, off, cnt)
+            yield lo, np.ascontiguousarray(sl["lon"]), np.ascontiguousarray(sl["lat"]), starts, cnt
+
+    def identity(i):
+        variant = int(records[i]["variant"])
+        return {"from_id": int(records[i]["from_id"]), "to_id": int(records[i]["to_id"]),
+                "variant": binfmt.VARIANT_NAMES.get(variant, str(variant))}
+
+    return PolylineSet(len(records), chunks, identity)
+
+
+def polylines_from_base_edges(edges: np.ndarray, nodes: np.ndarray, interior: np.ndarray,
+                               max_vertices: int = CHUNK_VERTICES) -> PolylineSet:
+    """Polylines of base-graph/edges.npy: each edge's u node, interior polyline, then v node - the
+    same concatenation build_base_graph.py's contraction reasons about, reconstructed for a check
+    rather than for routing."""
+    interior_counts = edges["interior_count"].astype(np.int64)
+    counts = interior_counts + 2
+
+    def chunks():
+        for lo, hi in _chunk_bounds(counts, max_vertices):
+            cnt = counts[lo:hi]
+            ic = interior_counts[lo:hi]
+            starts = np.cumsum(cnt) - cnt
+            total = int(cnt.sum())
+            lon = np.empty(total)
+            lat = np.empty(total)
+            u, v = edges["u"][lo:hi], edges["v"][lo:hi]
+            lon[starts], lat[starts] = nodes["lon"][u], nodes["lat"][u]
+            lon[starts + cnt - 1], lat[starts + cnt - 1] = nodes["lon"][v], nodes["lat"][v]
+            if ic.sum():
+                pts, group = binfmt.gather_ragged(interior, edges["interior_offset"][lo:hi], ic)
+                dst = starts[group] + 1 + binfmt.ragged_positions(ic)
+                lon[dst], lat[dst] = pts["lon"], pts["lat"]
+            yield lo, lon, lat, starts, cnt
+
+    def identity(i):
+        return {"edge_id": int(edges[i]["edge_id"]), "u": int(edges[i]["u"]), "v": int(edges[i]["v"])}
+
+    return PolylineSet(len(edges), chunks, identity)
+
+
+def _segment_lengths(lon: np.ndarray, lat: np.ndarray, starts: np.ndarray, counts: np.ndarray,
+                      fill: float) -> np.ndarray:
+    """seg[i] = metres from vertex i to vertex i+1 of the same polyline; `fill` at each
+    polyline's last vertex (which has no next vertex within its polyline)."""
+    seg = np.empty(len(lon))
+    seg[:-1] = haversine_m_vec_pairs(lon[:-1], lat[:-1], lon[1:], lat[1:])
+    seg[-1] = fill
+    seg[(starts + counts - 1)[counts > 0]] = fill
+    return seg
+
+
+def check_vertex_gap(polylines: PolylineSet, layer_name: str, max_gap_m: float, max_flagged: int) -> dict:
+    """§4.3.4: the longest gap between consecutive vertices of a record's polyline."""
     flagged = []
-    checked = 0
-    for identity, coords in polylines:
-        checked += 1
-        if len(coords) < 2:
+    for lo, lon, lat, starts, counts in polylines.chunks():
+        long_enough = counts >= 2
+        if not long_enough.any():
             continue
-        seg_dist = haversine_m_vec_pairs(
-            coords[:-1, 0], coords[:-1, 1], coords[1:, 0], coords[1:, 1],
-        )
-        worst_idx = int(np.argmax(seg_dist))
-        max_gap = float(seg_dist[worst_idx])
-        if max_gap > max_gap_m:
+        seg = _segment_lengths(lon, lat, starts, counts, fill=-1.0)
+        # Records under 2 vertices inside a reduceat range only contribute the -1 fill.
+        worst = np.maximum.reduceat(seg, starts[long_enough])
+        for j in np.nonzero(long_enough)[0][worst > max_gap_m]:
+            rec_seg = seg[starts[j]:starts[j] + counts[j]]
+            worst_idx = int(np.argmax(rec_seg))
             flagged.append({
-                "layer": layer_name, **identity, "max_gap_m": max_gap,
-                "gap_at_segment": worst_idx, "n_points": len(coords),
+                "layer": layer_name, **polylines.identity(lo + int(j)),
+                "max_gap_m": float(rec_seg[worst_idx]), "gap_at_segment": worst_idx,
+                "n_points": int(counts[j]),
             })
     baseline = {"hut_edges": 700, "base_graph": 3362}.get(layer_name, 0)
     return build_check(
-        f"vertex_gap_{layer_name}", {"max_vertex_gap_m": max_gap_m}, checked=checked,
+        f"vertex_gap_{layer_name}", {"max_vertex_gap_m": max_gap_m}, checked=polylines.n,
         flagged_rows=flagged, baseline=baseline,
         max_flagged_rows=max_flagged, sort_key=lambda r: r["max_gap_m"],
     )
 
 
-def check_self_retrace(polylines: list, layer_name: str, snap_tolerance_m: float,
+_CELL_BITS = 21
+_CELL_HALF_RANGE = 1 << (_CELL_BITS - 1)
+
+
+def _worst_retrace_separation(lon: np.ndarray, lat: np.ndarray, starts: np.ndarray,
+                               counts: np.ndarray, snap_tolerance_m: float) -> np.ndarray:
+    """Per polyline: the largest along-path distance between two vertices in the same
+    snap_tolerance_m grid cell (0 if it never revisits a cell). Vertices are keyed by
+    (polyline, cell relative to the polyline's first vertex) packed into one uint64, so one sort
+    groups them."""
+    n_rec = len(counts)
+    rec = np.repeat(np.arange(n_rec), counts)
+    lat0 = np.bincount(rec, weights=lat, minlength=n_rec) / np.maximum(counts, 1)
+    m_per_deg_lat = 111_320.0
+    m_per_deg_lon = m_per_deg_lat * np.maximum(np.cos(np.radians(lat0)), 1e-6)
+    cell_x = np.round(lon * m_per_deg_lon[rec] / snap_tolerance_m).astype(np.int64)
+    cell_y = np.round(lat * m_per_deg_lat / snap_tolerance_m).astype(np.int64)
+    first = np.minimum(starts, len(lon) - 1)[rec]
+    dx = np.clip(cell_x - cell_x[first], -_CELL_HALF_RANGE, _CELL_HALF_RANGE - 1) + _CELL_HALF_RANGE
+    dy = np.clip(cell_y - cell_y[first], -_CELL_HALF_RANGE, _CELL_HALF_RANGE - 1) + _CELL_HALF_RANGE
+    key = ((rec.astype(np.uint64) << np.uint64(2 * _CELL_BITS))
+           | (dx.astype(np.uint64) << np.uint64(_CELL_BITS)) | dy.astype(np.uint64))
+
+    seg = _segment_lengths(lon, lat, starts, counts, fill=0.0)
+    path_pos = np.cumsum(seg) - seg  # metres from the global chunk start; only differences within a polyline are used
+
+    order = np.argsort(key)
+    sorted_key, sorted_pos = key[order], path_pos[order]
+    group_start = np.flatnonzero(np.concatenate([[True], sorted_key[1:] != sorted_key[:-1]]))
+    span = np.maximum.reduceat(sorted_pos, group_start) - np.minimum.reduceat(sorted_pos, group_start)
+    group_rec = (sorted_key[group_start] >> np.uint64(2 * _CELL_BITS)).astype(np.int64)
+    rec_start = np.flatnonzero(np.concatenate([[True], group_rec[1:] != group_rec[:-1]]))
+    worst = np.zeros(n_rec)
+    worst[group_rec[rec_start]] = np.maximum.reduceat(span, rec_start)
+    return worst
+
+
+def check_self_retrace(polylines: PolylineSet, layer_name: str, snap_tolerance_m: float,
                         min_separation_m: float, max_flagged: int) -> dict:
     """§4.3.5: a record's own polyline revisiting a snap_tolerance_m grid cell where the two
     visits are more than min_separation_m apart along the path. The separation term is what keeps
     ordinary switchback geometry from flagging (spec: naive 5m-only rule hits 98.5% of records)."""
     flagged = []
-    checked = 0
-    for identity, coords in polylines:
-        checked += 1
-        if len(coords) < 3:
+    for lo, lon, lat, starts, counts in polylines.chunks():
+        if len(lon) == 0:
             continue
-        lat0 = float(np.mean(coords[:, 1]))
-        m_per_deg_lat = 111_320.0
-        m_per_deg_lon = 111_320.0 * max(np.cos(np.radians(lat0)), 1e-6)
-        cell_x = np.round(coords[:, 0] * m_per_deg_lon / snap_tolerance_m).astype(np.int64)
-        cell_y = np.round(coords[:, 1] * m_per_deg_lat / snap_tolerance_m).astype(np.int64)
-
-        seg_dist = haversine_m_vec_pairs(coords[:-1, 0], coords[:-1, 1], coords[1:, 0], coords[1:, 1])
-        cum_dist = np.concatenate([[0.0], np.cumsum(seg_dist)])
-
-        by_cell = defaultdict(list)
-        for i in range(len(coords)):
-            by_cell[(int(cell_x[i]), int(cell_y[i]))].append(i)
-
-        worst_separation_m = 0.0
-        for indices in by_cell.values():
-            if len(indices) < 2:
-                continue
-            span = float(cum_dist[max(indices)] - cum_dist[min(indices)])
-            worst_separation_m = max(worst_separation_m, span)
-
-        if worst_separation_m > min_separation_m:
+        worst = _worst_retrace_separation(lon, lat, starts, counts, snap_tolerance_m)
+        worst[counts < 3] = 0.0
+        for j in np.nonzero(worst > min_separation_m)[0]:
             flagged.append({
-                "layer": layer_name, **identity, "retrace_separation_m": worst_separation_m,
-                "n_points": len(coords),
+                "layer": layer_name, **polylines.identity(lo + int(j)),
+                "retrace_separation_m": float(worst[j]), "n_points": int(counts[j]),
             })
     return build_check(
         f"self_retrace_{layer_name}",
         {"snap_tolerance_m": snap_tolerance_m, "min_retrace_separation_m": min_separation_m},
-        checked=checked, flagged_rows=flagged, baseline=270 if layer_name == "hut_edges" else 0,
+        checked=polylines.n, flagged_rows=flagged, baseline=270 if layer_name == "hut_edges" else 0,
         max_flagged_rows=max_flagged, sort_key=lambda r: r["retrace_separation_m"],
     )
 
@@ -218,26 +317,25 @@ def check_scalar_sanity(records: np.ndarray, layer_name: str, ascent_cap_m: floa
                          dem_min_ele_m: float, max_flagged: int) -> dict:
     """§4.3.6: max_ele_m below the DEM's lowest sampled node, ascent_m over ascent_cap_m, and any
     negative distance/ascent/descent."""
+    reason_masks = [
+        ("max_ele_below_dem_minimum", records["max_ele_m"] < dem_min_ele_m),
+        ("ascent_over_cap", records["ascent_m"] > ascent_cap_m),
+        ("negative_distance", records["distance_m"] < 0),
+        ("negative_ascent", records["ascent_m"] < 0),
+        ("negative_descent", records["descent_m"] < 0),
+    ]
+    any_reason = np.logical_or.reduce([mask for _, mask in reason_masks])
     flagged = []
-    for i in range(len(records)):
+    for i in np.nonzero(any_reason)[0]:
         r = records[i]
-        reasons = []
-        if float(r["max_ele_m"]) < dem_min_ele_m:
-            reasons.append("max_ele_below_dem_minimum")
-        if float(r["ascent_m"]) > ascent_cap_m:
-            reasons.append("ascent_over_cap")
-        if float(r["distance_m"]) < 0:
-            reasons.append("negative_distance")
-        if float(r["ascent_m"]) < 0:
-            reasons.append("negative_ascent")
-        if float(r["descent_m"]) < 0:
-            reasons.append("negative_descent")
-        for reason in reasons:
-            flagged.append({
-                "layer": layer_name, "row": i, "from_id": int(r["from_id"]), "to_id": int(r["to_id"]),
-                "max_ele_m": float(r["max_ele_m"]), "ascent_m": float(r["ascent_m"]),
-                "distance_m": float(r["distance_m"]), "reason": reason,
-            })
+        for reason, mask in reason_masks:
+            if mask[i]:
+                flagged.append({
+                    "layer": layer_name, "row": int(i), "from_id": int(r["from_id"]),
+                    "to_id": int(r["to_id"]), "max_ele_m": float(r["max_ele_m"]),
+                    "ascent_m": float(r["ascent_m"]), "distance_m": float(r["distance_m"]),
+                    "reason": reason,
+                })
     return build_check(
         f"scalar_sanity_{layer_name}", {"ascent_cap_m": ascent_cap_m, "dem_min_ele_m": dem_min_ele_m},
         checked=len(records), flagged_rows=flagged,
@@ -298,15 +396,11 @@ def main(argv=None):
         base_graph_dir = build_dir / "base-graph"
         nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
         base_edges = binfmt.load_array(base_graph_dir / "edges.npy", mmap=False)
-        interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
+        interior = binfmt.load_array(base_graph_dir / "interior.npy")
         node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy", mmap=False)
         dem_min_ele_m = float(np.min(node_ele)) if len(node_ele) else 0.0
 
-        base_polylines = [
-            ({"edge_id": int(base_edges[i]["edge_id"]), "u": int(base_edges[i]["u"]),
-              "v": int(base_edges[i]["v"])}, polyline_for_base_edge(base_edges[i], nodes, interior))
-            for i in range(len(base_edges))
-        ]
+        base_polylines = polylines_from_base_edges(base_edges, nodes, interior)
         c = check_vertex_gap(base_polylines, "base_graph", args.max_vertex_gap_m, args.max_flagged_rows)
         print(f"vertex_gap[base_graph]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
               flush=True)
@@ -319,13 +413,8 @@ def main(argv=None):
             if not records_path.exists() or not geometry_path.exists():
                 continue
             records = binfmt.load_array(records_path, mmap=False)
-            geometry = binfmt.load_array(geometry_path, mmap=False)
-            polylines = [
-                ({"from_id": int(records[i]["from_id"]), "to_id": int(records[i]["to_id"]),
-                  "variant": binfmt.VARIANT_NAMES.get(int(records[i]["variant"]), str(int(records[i]["variant"])))},
-                 polyline_for_record(records[i], geometry))
-                for i in range(len(records))
-            ]
+            geometry = binfmt.load_array(geometry_path)
+            polylines = polylines_from_records(records, geometry)
 
             c = check_vertex_gap(polylines, layer_name, args.max_vertex_gap_m, args.max_flagged_rows)
             print(f"vertex_gap[{layer_name}]: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",

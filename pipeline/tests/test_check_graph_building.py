@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 from lib import binfmt  # noqa: E402
 from quality.check_graph_building import (  # noqa: E402
     check_connectivity, check_range_cap, check_snap_health,
-    check_scalar_sanity, check_self_retrace, check_vertex_gap, polyline_for_base_edge,
-    polyline_for_record, union_find_components,
+    PolylineSet, check_scalar_sanity, check_self_retrace, check_vertex_gap,
+    polylines_from_base_edges, polylines_from_records, union_find_components,
 )
 
 
@@ -79,36 +79,73 @@ def test_range_cap_flags_distance_over_the_configured_max():
 
 
 
-def test_polyline_for_record_slices_geometry_by_offset_and_count():
+def _record_with_geometry(offset, count, from_id=1, to_id=2):
+    record = np.zeros(1, dtype=binfmt.RECORD_DTYPE)[0]
+    record["geom_offset"], record["geom_count"] = offset, count
+    record["from_id"], record["to_id"], record["variant"] = from_id, to_id, binfmt.VARIANT_FAST_ANY
+    return record
+
+
+def _collect(polylines):
+    """Flattens a PolylineSet back to a list of (n, 2) coordinate arrays."""
+    out = []
+    for _, lon, lat, starts, counts in polylines.chunks():
+        for s, c in zip(starts, counts):
+            out.append(np.column_stack([lon[s:s + c], lat[s:s + c]]).tolist())
+    return out
+
+
+def test_polylines_from_records_slices_geometry_by_offset_and_count():
     geometry = np.zeros(5, dtype=binfmt.COORD_DTYPE)
     geometry["lon"] = [0, 1, 2, 3, 4]
-    geometry["lat"] = [0, 0, 0, 0, 0]
-    record = np.zeros(1, dtype=binfmt.RECORD_DTYPE)[0]
-    record["geom_offset"], record["geom_count"] = 1, 3
-    coords = polyline_for_record(record, geometry)
-    assert coords.tolist() == [[1, 0], [2, 0], [3, 0]]
+    records = np.array([_record_with_geometry(1, 3)])
+    assert _collect(polylines_from_records(records, geometry)) == [[[1, 0], [2, 0], [3, 0]]]
 
 
-def test_polyline_for_base_edge_concatenates_node_interior_node():
-    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
-    nodes["lon"], nodes["lat"] = [0.0, 2.0], [0.0, 0.0]
+def test_polylines_from_records_handles_non_contiguous_records_across_chunks():
+    geometry = np.zeros(6, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"] = [0, 1, 2, 3, 4, 5]
+    # out of geometry order, sharing a vertex, plus an empty record; tiny chunks force splits
+    records = np.array([_record_with_geometry(4, 2), _record_with_geometry(0, 3),
+                        _record_with_geometry(0, 0), _record_with_geometry(2, 2)])
+    polylines = polylines_from_records(records, geometry, max_vertices=3)
+    assert [len(c) for _, _, _, _, c in polylines.chunks()] != [4]  # actually split
+    assert _collect(polylines) == [
+        [[4, 0], [5, 0]], [[0, 0], [1, 0], [2, 0]], [], [[2, 0], [3, 0]],
+    ]
+
+
+def test_polylines_from_base_edges_concatenates_node_interior_node():
+    nodes = np.zeros(3, dtype=binfmt.NODE_DTYPE)
+    nodes["lon"], nodes["lat"] = [0.0, 2.0, 5.0], [0.0, 0.0, 0.0]
     interior = np.zeros(1, dtype=binfmt.COORD_DTYPE)
     interior["lon"], interior["lat"] = [1.0], [0.0]
-    edge = np.zeros(1, dtype=binfmt.EDGE_DTYPE)[0]
-    edge["u"], edge["v"], edge["interior_offset"], edge["interior_count"] = 0, 1, 0, 1
-    coords = polyline_for_base_edge(edge, nodes, interior)
-    assert coords.tolist() == [[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]]
+    edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
+    edges["u"], edges["v"] = [0, 1], [1, 2]
+    edges["interior_offset"], edges["interior_count"] = [0, 0], [1, 0]
+    polylines = polylines_from_base_edges(edges, nodes, interior, max_vertices=3)
+    assert _collect(polylines) == [[[0.0, 0.0], [1.0, 0.0], [2.0, 0.0]], [[2.0, 0.0], [5.0, 0.0]]]
 
 
 def _poly_row(lons, lats, **identity):
-    coords = np.column_stack([lons, lats]).astype(np.float64)
-    return (identity, coords)
+    return (identity, np.column_stack([lons, lats]).astype(np.float64))
+
+
+def _polyline_set(rows):
+    """One-chunk PolylineSet over (identity, coords) rows."""
+    counts = np.array([len(c) for _, c in rows], dtype=np.int64)
+    starts = np.cumsum(counts) - counts
+    coords = np.concatenate([c for _, c in rows]) if rows else np.zeros((0, 2))
+    return PolylineSet(
+        len(rows), lambda: iter([(0, coords[:, 0].copy(), coords[:, 1].copy(), starts, counts)]),
+        lambda i: rows[i][0],
+    )
 
 
 def test_vertex_gap_flags_a_long_hop_between_consecutive_vertices():
     # ~0.01 deg longitude at the equator is ~1.1km - use a big jump to be unambiguous regardless
     # of latitude-dependent scaling.
-    polylines = [_poly_row([11.0, 11.0, 11.5], [47.0, 47.001, 47.001], from_id=1, to_id=2, variant="FAST_ANY")]
+    polylines = _polyline_set([_poly_row([11.0, 11.0, 11.5], [47.0, 47.001, 47.001], from_id=1, to_id=2, variant="FAST_ANY")])
     check = check_vertex_gap(polylines, "hut_edges", max_gap_m=500, max_flagged=500)
     assert check["summary"]["flagged"] == 1
     assert check["flagged"][0]["max_gap_m"] > 500
@@ -117,7 +154,7 @@ def test_vertex_gap_flags_a_long_hop_between_consecutive_vertices():
 def test_vertex_gap_does_not_flag_dense_polyline():
     lons = np.linspace(11.0, 11.001, 20)
     lats = np.full(20, 47.0)
-    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    polylines = _polyline_set([_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")])
     check = check_vertex_gap(polylines, "hut_edges", max_gap_m=500, max_flagged=500)
     assert check["summary"]["flagged"] == 0
 
@@ -127,7 +164,7 @@ def test_self_retrace_flags_a_far_apart_revisit_of_the_same_cell():
     # by well over 200m of path length.
     lons = [11.0, 11.01, 11.0]
     lats = [47.0, 47.0, 47.0]
-    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    polylines = _polyline_set([_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")])
     check = check_self_retrace(polylines, "hut_edges", snap_tolerance_m=5, min_separation_m=200,
                                 max_flagged=500)
     assert check["summary"]["flagged"] == 1
@@ -138,7 +175,7 @@ def test_self_retrace_does_not_flag_a_nearby_switchback():
     # naive 5m-only rule flags 98.5% of real trail geometry at switchbacks).
     lons = [11.0, 11.00002, 11.00004]
     lats = [47.0, 47.0, 47.0]
-    polylines = [_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")]
+    polylines = _polyline_set([_poly_row(lons, lats, from_id=1, to_id=2, variant="FAST_ANY")])
     check = check_self_retrace(polylines, "hut_edges", snap_tolerance_m=5, min_separation_m=200,
                                 max_flagged=500)
     assert check["summary"]["flagged"] == 0
@@ -179,3 +216,17 @@ def test_scalar_sanity_clean_case_flags_nothing():
     check = check_scalar_sanity(records, "start_edges", ascent_cap_m=5000, dem_min_ele_m=120.0,
                                  max_flagged=500)
     assert check["summary"]["flagged"] == 0
+
+
+def test_self_retrace_and_vertex_gap_agree_across_polylines_in_one_chunk():
+    # a clean line, a far-apart revisit, and a big hop in one chunk: each polyline must be
+    # judged on its own vertices, not its neighbours'.
+    rows = [
+        _poly_row([11.0, 11.001, 11.002], [47.0, 47.0, 47.0], from_id=1, to_id=2, variant="FAST_ANY"),
+        _poly_row([11.0, 11.01, 11.0], [47.0, 47.0, 47.0], from_id=3, to_id=4, variant="FAST_ANY"),
+        _poly_row([12.0, 12.5], [47.0, 47.0], from_id=5, to_id=6, variant="FAST_ANY"),
+    ]
+    retrace = check_self_retrace(_polyline_set(rows), "hut_edges", 5, 200, 500)
+    assert [r["from_id"] for r in retrace["flagged"]] == [3]
+    gap = check_vertex_gap(_polyline_set(rows), "hut_edges", 500, 500)
+    assert sorted(r["from_id"] for r in gap["flagged"]) == [3, 5]
