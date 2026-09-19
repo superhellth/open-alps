@@ -139,7 +139,6 @@ PUBLIC_FILES = [
     (TOUR_EDGES_DIR / "geometry.json", "tour-edge-geometry.json"),
     (TOUR_EDGES_DIR / "elevation.bin", "tour-edge-elevation.bin"),
     (TOUR_EDGES_DIR / "elevation.json", "tour-edge-elevation.json"),
-    (TOUR_EDGES_DIR / "tour-match-gaps.json", "tour-match-gaps.json"),
 ]
 
 

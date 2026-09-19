@@ -273,9 +273,13 @@ def test_public_files_includes_every_tour_output():
     for name in [
         "tours.json", "tour-edges.pmtiles", "tour-edge-stats.json",
         "tour-edge-geometry.bin", "tour-edge-geometry.json",
-        "tour-match-gaps.json",
     ]:
         assert name in _public_names(), name
+
+
+def test_public_files_does_not_include_tour_match_gaps():
+    # gap reports are data-quality only; tours.json ships complete tours.
+    assert "tour-match-gaps.json" not in _public_names()
 
 
 def test_public_files_does_not_include_internal_tour_traces():
@@ -442,7 +446,7 @@ def test_declared_data_paths_are_under_a_known_tier():
 
 
 def test_public_files_are_source_and_public_name_pairs():
-    assert len(dodo.PUBLIC_FILES) == 33
+    assert len(dodo.PUBLIC_FILES) == 32
     names = [name for _, name in dodo.PUBLIC_FILES]
     assert len(names) == len(set(names))
     for src, name in dodo.PUBLIC_FILES:
@@ -454,7 +458,6 @@ def test_public_files_are_source_and_public_name_pairs():
     assert by_name["unsnapped_huts.json"] == "build/snapping/unsnapped-huts.json"
     assert by_name["huts.geojson"] == "raw/huts.geojson"
     assert by_name["approaches.bin"] == "build/start-edges/approaches.bin"
-    assert by_name["tour-match-gaps.json"] == "build/tour-edges/tour-match-gaps.json"
 
 
 def test_copy_public_data_declares_every_source_and_public_target():
