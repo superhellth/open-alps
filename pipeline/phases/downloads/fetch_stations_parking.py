@@ -205,9 +205,14 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
     print(f"written {out_path}")
 
 
-timer = StepTimer()
-with phase(SCRIPT_NAME, "fetch_stations_parking") as meta:
-    for layer in LAYERS:
-        export_layer(layer, timer)
-    meta.update(timer.as_meta())
-print(f"step totals: {timer.summary()}", flush=True)
+def main():
+    timer = StepTimer()
+    with phase(SCRIPT_NAME, "fetch_stations_parking") as meta:
+        for layer in LAYERS:
+            export_layer(layer, timer)
+        meta.update(timer.as_meta())
+    print(f"step totals: {timer.summary()}", flush=True)
+
+
+if __name__ == "__main__":
+    main()
