@@ -68,22 +68,37 @@ def _project_m(lon, lat, km_per_deg_lng: float):
     return lon * km_per_deg_lng * 1000.0, lat * KM_PER_DEG_LAT * 1000.0
 
 
+# Edge index resolution: every polyline segment is represented by sample points at most this far
+# apart along it, so a hub within max_snap_m of any point on a segment is within
+# max_snap_m + step/2 of one of that segment's samples, no matter how long the segment is.
+EDGE_INDEX_SAMPLE_STEP_M = 50.0
+
+# The index is built in a projected space that differs from the exact check's per-hub lng_scale and
+# haversine by well under 1% at cell scale; candidate radii are padded by this relative + absolute
+# slack so the prefilter can only ever over-include (the exact check afterwards decides).
+_RADIUS_SLACK_REL = 0.02
+_RADIUS_SLACK_ABS_M = 1.0
+
+
+def _padded_radius(r):
+    return r * (1.0 + _RADIUS_SLACK_REL) + _RADIUS_SLACK_ABS_M
+
+
 def _build_edge_spatial_index(subgraph: LocalSubgraph):
-    """Indexes every polyline vertex (endpoints + interior points) of every local edge in a
-    cKDTree, tagged with the owning edge_local_index, so snap_hub_to_subgraph's edge scan can
-    query a small candidate set instead of looping every edge. Built once per cell (called once,
-    then cached on the subgraph) rather than once per hub - this is what turns the old
-    candidates * edges Python loop into edges (build) + candidates * log(edges) (query).
+    """cKDTree over sample points along every local edge's polyline (u -> interior -> v), each
+    tagged with its owning edge_local_index and the half-length of the sub-piece it represents,
+    so snap_hub_to_subgraph's edge scan queries a small candidate set instead of looping every
+    edge. Built once per cell (cached on the subgraph), not once per hub.
 
-    Correctness: the true nearest point on a polyline segment can lie strictly between its two
-    vertices, so a hub within max_snap_m of that point isn't necessarily within max_snap_m of a
-    vertex - it can be up to max_snap_m + segment_length away from the nearest vertex (triangle
-    inequality). Query radius therefore pads max_snap_m by this cell's longest single segment
-    (max_seg_len_m), computed once here, not by max_snap_m alone.
+    Each segment is cut into ceil(len / EDGE_INDEX_SAMPLE_STEP_M) equal pieces and represented by
+    the piece midpoints, so every point on a segment lies within that piece's half-length
+    (<= step/2) of its sample. A hub within max_snap_m of a segment's nearest point is therefore
+    within max_snap_m + half_len of one of its samples; _candidate_edges_near queries at
+    max_snap_m + the largest half_len, then keeps only samples within max_snap_m + their own
+    half_len - short segments (the common case) prune tightly, and one long segment elsewhere in
+    the cell no longer widens the search for every hub.
 
-    Vectorized (binfmt.gather_ragged/ragged_positions) rather than a per-edge Python loop with
-    per-point scalar structured-array access - was the hot path on a 60km cell with thousands of
-    edges * tens-hundreds of interior points each."""
+    Vectorized (binfmt.gather_ragged/ragged_positions) rather than a per-edge Python loop."""
     local_edges = subgraph.local_edges
     n_edges = len(local_edges)
     if n_edges == 0:
@@ -101,34 +116,35 @@ def _build_edge_spatial_index(subgraph: LocalSubgraph):
     interior_pts, group_ids = binfmt.gather_ragged(
         subgraph.interior, local_edges["interior_offset"], local_edges["interior_count"],
     )
-    interior_lon, interior_lat = interior_pts["lon"], interior_pts["lat"]
 
-    # Point order doesn't matter for the KDTree itself (only the edge_id tag per point does) -
-    # true polyline order is only needed below, for max_seg_len_m.
-    all_lon = np.concatenate([u_lon, interior_lon, v_lon])
-    all_lat = np.concatenate([u_lat, interior_lat, v_lat])
+    all_lon = np.concatenate([u_lon, interior_pts["lon"], v_lon])
+    all_lat = np.concatenate([u_lat, interior_pts["lat"], v_lat])
     edge_ids = np.concatenate([np.arange(n_edges), group_ids, np.arange(n_edges)])
-    xs, ys = _project_m(all_lon, all_lat, km_per_deg_lng)
 
     # True per-edge polyline order (u -> interior in offset order -> v), reconstructed via a
-    # position key + lexsort, needed only to compute real consecutive-segment lengths.
+    # position key + lexsort.
     counts = local_edges["interior_count"].astype(np.int64)
     pos = np.concatenate([np.zeros(n_edges, dtype=np.int64),
                            binfmt.ragged_positions(counts) + 1, counts + 1])
     order = np.lexsort((pos, edge_ids))
-    ordered_edge_ids, ordered_lon, ordered_lat = edge_ids[order], all_lon[order], all_lat[order]
-    max_seg_len_m = 0.0
-    if len(ordered_edge_ids) > 1:
-        same_next = ordered_edge_ids[:-1] == ordered_edge_ids[1:]
-        if np.any(same_next):
-            seg_lens = _haversine_m_vec_pairs(
-                ordered_lon[:-1][same_next], ordered_lat[:-1][same_next],
-                ordered_lon[1:][same_next], ordered_lat[1:][same_next],
-            )
-            max_seg_len_m = float(seg_lens.max())
+    ordered_edge_ids = edge_ids[order]
+    xs, ys = _project_m(all_lon[order], all_lat[order], km_per_deg_lng)
 
-    tree = cKDTree(np.column_stack([xs, ys]))
-    return tree, edge_ids, max_seg_len_m, km_per_deg_lng
+    same_next = ordered_edge_ids[:-1] == ordered_edge_ids[1:]
+    ax, ay = xs[:-1][same_next], ys[:-1][same_next]
+    bx, by = xs[1:][same_next], ys[1:][same_next]
+    seg_edge = ordered_edge_ids[:-1][same_next]
+    seg_len = np.hypot(bx - ax, by - ay)
+    n_sub = np.maximum(1, np.ceil(seg_len / EDGE_INDEX_SAMPLE_STEP_M)).astype(np.int64)
+
+    seg_of_sample = np.repeat(np.arange(len(seg_len)), n_sub)
+    t = (binfmt.ragged_positions(n_sub) + 0.5) / n_sub[seg_of_sample]
+    sample_x = ax[seg_of_sample] + t * (bx - ax)[seg_of_sample]
+    sample_y = ay[seg_of_sample] + t * (by - ay)[seg_of_sample]
+    half_len = seg_len[seg_of_sample] / (2.0 * n_sub[seg_of_sample])
+
+    tree = cKDTree(np.column_stack([sample_x, sample_y]))
+    return tree, seg_edge[seg_of_sample], half_len, float(half_len.max()), km_per_deg_lng
 
 
 def _build_node_spatial_index(subgraph: LocalSubgraph):
@@ -166,16 +182,23 @@ def _nearest_node(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float) -> tu
 
 def _candidate_edges_near(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
                            max_snap_m: float) -> list:
+    """Sorted edge_local_indexes that may hold a point within max_snap_m of the hub - a superset
+    of the true set (the exact polyline distance check in snap_hub_to_subgraph decides)."""
     index = getattr(subgraph, "_edge_spatial_index", "unset")
     if index == "unset":
         index = _build_edge_spatial_index(subgraph)
         subgraph._edge_spatial_index = index
     if index is None:
         return []
-    tree, edge_ids, max_seg_len_m, km_per_deg_lng = index
+    tree, edge_ids, half_len, max_half_len, km_per_deg_lng = index
     x, y = _project_m(hub_lon, hub_lat, km_per_deg_lng)
-    point_idxs = tree.query_ball_point([x, y], r=max_snap_m + max_seg_len_m)
-    return sorted(set(edge_ids[point_idxs].tolist()))
+    hits = tree.query_ball_point([x, y], r=_padded_radius(max_snap_m + max_half_len))
+    if not hits:
+        return []
+    hits = np.asarray(hits)
+    dist = np.hypot(tree.data[hits, 0] - x, tree.data[hits, 1] - y)
+    keep = dist <= _padded_radius(max_snap_m + half_len[hits])
+    return np.unique(edge_ids[hits[keep]]).tolist()
 
 
 def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float,
@@ -208,10 +231,8 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
     best_edge = None  # (dist_m, edge_local_index, split)
     for ei in _candidate_edges_near(subgraph, hub_lon, hub_lat, max_snap_m):
         e = subgraph.local_edges[ei]
-        interior = [
-            (subgraph.interior[j]["lon"], subgraph.interior[j]["lat"])
-            for j in range(e["interior_offset"], e["interior_offset"] + e["interior_count"])
-        ]
+        pts = subgraph.interior[e["interior_offset"]:e["interior_offset"] + e["interior_count"]]
+        interior = list(zip(pts["lon"].tolist(), pts["lat"].tolist()))
         u = subgraph.local_nodes[e["u"]]
         v = subgraph.local_nodes[e["v"]]
         polyline = [(u["lon"], u["lat"]), *interior, (v["lon"], v["lat"])]
