@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds tour_edges/'s PMTiles vector-tile archive + compact JSON stats file from
+"""Builds tour-edges/'s PMTiles vector-tile archive + compact JSON stats file from
 match_tour_edges.py's TOUR_LEG_DTYPE output (records.npy/geometry.npy/profiles.npy). Geometry is
 every raw GPX point, unsimplified. Display ids for non-hut endpoint types (station/parking/partner
 at a tour's start/end) resolve through the start-point id table.
@@ -16,7 +16,7 @@ import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import START_POINTS_DIR, TOUR_EDGES_DIR, load_config  # noqa: E402
 from lib.tippecanoe import build_pmtiles  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
@@ -84,14 +84,14 @@ def main(argv=None):
     tiles_config = config.get("hutEdgeTiles", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "tour_edges"))
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"))
-    parser.add_argument("--out-tiles", default=str(OSM_DIR / "tour-edges.pmtiles"))
-    parser.add_argument("--out-stats", default=str(OSM_DIR / "tour-edge-stats.json"))
-    parser.add_argument("--out-geometry-bin", default=str(OSM_DIR / "tour-edge-geometry.bin"))
-    parser.add_argument("--out-geometry-json", default=str(OSM_DIR / "tour-edge-geometry.json"))
-    parser.add_argument("--out-elevation-bin", default=str(OSM_DIR / "tour-edge-elevation.bin"))
-    parser.add_argument("--out-elevation-json", default=str(OSM_DIR / "tour-edge-elevation.json"))
+    parser.add_argument("--edges-dir", default=str(TOUR_EDGES_DIR))
+    parser.add_argument("--id-table", default=str(START_POINTS_DIR / "start-points-id-table.json"))
+    parser.add_argument("--out-tiles", default=str(TOUR_EDGES_DIR / "edges.pmtiles"))
+    parser.add_argument("--out-stats", default=str(TOUR_EDGES_DIR / "stats.json"))
+    parser.add_argument("--out-geometry-bin", default=str(TOUR_EDGES_DIR / "geometry.bin"))
+    parser.add_argument("--out-geometry-json", default=str(TOUR_EDGES_DIR / "geometry.json"))
+    parser.add_argument("--out-elevation-bin", default=str(TOUR_EDGES_DIR / "elevation.bin"))
+    parser.add_argument("--out-elevation-json", default=str(TOUR_EDGES_DIR / "elevation.json"))
     parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6))
     parser.add_argument("--max-zoom", type=int, default=tiles_config.get("maxZoom", 14))
     args = parser.parse_args(argv)

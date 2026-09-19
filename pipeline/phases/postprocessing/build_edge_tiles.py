@@ -6,8 +6,8 @@ for hut-edges, once for start-edges - same script, different --edges-dir/--layer
 docs/superpowers/specs/2026-08-19-pipeline-v2-design.md.
 
 Usage:
-    python pipeline/phases/postprocessing/build_edge_tiles.py --edges-dir data/osm/hut_edges --layer-name hut_edges \
-        --out-tiles data/osm/hut-edges.pmtiles --out-stats data/osm/hut-edge-stats.json
+    python pipeline/phases/postprocessing/build_edge_tiles.py --edges-dir data/build/hut-edges --layer-name hut_edges \
+        --out-tiles data/build/hut-edges/edges.pmtiles --out-stats data/build/hut-edges/stats.json
 """
 
 import argparse
@@ -124,7 +124,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--edges-dir", required=True,
-                         help="directory holding the edge records to tile (hut_edges/ or start_edges/)")
+                         help="directory holding the edge records to tile (hut-edges/ or start-edges/)")
     parser.add_argument("--id-table", required=True,
                          help="path to the id table for the edge set being tiled (build_edge_ids.py's output)")
     parser.add_argument("--layer-name", required=True,

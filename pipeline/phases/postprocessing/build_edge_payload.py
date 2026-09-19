@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Packs hut_edges/records.npy (spec F) into the columnar payload the client loads once, up front.
+"""Packs hut-edges/records.npy (spec F) into the columnar payload the client loads once, up front.
 
 Measured, not assumed (data/analysis/payload_sizing.json): 3 variants x 6,067 edges x 13 columns =
 693 KB raw, 43.4 KB gzipped; a byte-shuffle filter made it WORSE (46.4 KB), so this does not add
@@ -27,7 +27,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.geo import hut_points  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import HUT_EDGES_DIR, RAW_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 # (column name, packed dtype) - hut ids narrow i8 -> u2 (huts.geojson is well under 65536 huts);
@@ -65,13 +65,13 @@ def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"),
-                        help="directory holding hut_edges/ records (build_hub_edges.py's output)")
-    parser.add_argument("--huts", default=str(OSM_DIR / "huts.geojson"),
+    parser.add_argument("--edges-dir", default=str(HUT_EDGES_DIR),
+                        help="directory holding hut-edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"),
                         help="path to the hut master-data GeoJSON")
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-payload.bin"),
+    parser.add_argument("--out-bin", default=str(HUT_EDGES_DIR / "payload.bin"),
                         help="path to write the packed hut-edge-payload binary")
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-payload.json"),
+    parser.add_argument("--out-manifest", default=str(HUT_EDGES_DIR / "payload.json"),
                         help="path to write the hut-edge-payload manifest")
     args = parser.parse_args()
 

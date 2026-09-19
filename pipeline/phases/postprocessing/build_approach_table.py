@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Reduces start_edges/records.npy (spec E1/E2) to a shippable approach/exit table.
+"""Reduces start-edges/records.npy (spec E1/E2) to a shippable approach/exit table.
 
-27,261 parkings and 3,025 stations exist and start_edges/records.npy holds 92,426 records - neither
+27,261 parkings and 3,025 stations exist and start-edges/records.npy holds 92,426 records - neither
 is shippable or seedable as-is. This writes two things instead:
 
 1. The k-best-per-hut approach table (E1): "k fastest" is wrong on purpose - the fastest edge into
@@ -16,9 +16,9 @@ is shippable or seedable as-is. This writes two things instead:
 
 2. The loop-closure reverse index (E2): the client's car mode requires exit start-point == entry
    start-point, and the k~=3 tables of the first and last hut essentially never share a start id -
-   a post-filter would annihilate the result set. So every start_edges record whose start point
+   a post-filter would annihilate the result set. So every start-edges record whose start point
    appears in ANY hut's retained approach ships too, keyed both hut->starts and start->huts. Size
-   is bounded above by the whole start_edges table (~92,426 rows), which cannot break the payload
+   is bounded above by the whole start-edges table (~92,426 rows), which cannot break the payload
    budget even unfiltered.
 
 Only variant FAST_ANY records are candidates for the approach table (an approach is a fastest,
@@ -39,7 +39,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib import speed  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import START_EDGES_DIR, START_POINTS_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 config = load_config()
@@ -150,9 +150,9 @@ def parse_variant_names(csv: str) -> set:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "start_edges"),
-                        help="directory holding start_edges/ records (build_hub_edges.py's output)")
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"),
+    parser.add_argument("--edges-dir", default=str(START_EDGES_DIR),
+                        help="directory holding start-edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--id-table", default=str(START_POINTS_DIR / "start-points-id-table.json"),
                         help="path to the start-point id table (build_edge_ids.py's output)")
     parser.add_argument(
         "--duration-buckets-h", type=str,
@@ -165,9 +165,9 @@ if __name__ == "__main__":
         help="comma-separated binfmt.VARIANT_NAMES values eligible as approach candidates "
              "(see pipeline.config.json's approach.variants)",
     )
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "approaches.bin"),
+    parser.add_argument("--out-bin", default=str(START_EDGES_DIR / "approaches.bin"),
                         help="path to write the packed approach-table binary")
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "approaches.json"),
+    parser.add_argument("--out-manifest", default=str(START_EDGES_DIR / "approaches.json"),
                         help="path to write the approach-table manifest")
     args = parser.parse_args()
 
@@ -180,7 +180,7 @@ if __name__ == "__main__":
             id_table = json.load(f)
 
         approaches, index = build_tables(records, id_table, duration_buckets, variant_ids)
-        print(f"start_edges records: {len(records):,}", flush=True)
+        print(f"start-edges records: {len(records):,}", flush=True)
         print(f"approach rows (buckets={duration_buckets}, variants={sorted(variant_ids)}): "
               f"{len(approaches):,}", flush=True)
         print(f"reverse index: {len(index['hut_to_starts']):,} huts, "
