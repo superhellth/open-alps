@@ -7,18 +7,21 @@ under `docs/superpowers/`.
 
 ## High
 
-### Stable hut ids
+### Stable edge ids
 
-Hut and edge ids are array positions in the emitted payloads, not stable identities — `hut_ids` is
-indexed by array order and `edge_id` indexes the geometry payload the same way, so any pipeline
-rerun that reorders either one silently remaps every reference to it.
+Edge ids are array positions in the emitted payloads, not stable identities — `edge_id` is the base
+graph's `np.arange` row position (`build_base_graph.py`) and indexes the geometry payload the same
+way, so any pipeline rerun that reorders edges silently remaps every reference to one. Hut identity
+is already solved: the manifest's `hut_ids` are ArcGIS GUIDs and anything persisted must store those
+(`tourSearch/hutIdentity.ts` resolves them to payload indices), while the numeric `from_id`/`to_id`
+stay positional.
 
 This blocks trip persistence in the Trip Planner Reenvision design
 (`docs/superpowers/specs/2026-09-04-trip-planner-reenvision-design.md`): a saved trip stored in
-`localStorage` references huts and edges by those ids, so after a rerun it would render as a
-*different but plausible-looking* trip with nothing visibly broken. The fix is emitting ids that are
-stable across runs, not client-side staleness heuristics — the spec deliberately designs no UI
-mitigation.
+`localStorage` references edges by those ids, so after a rerun it would render as a *different but
+plausible-looking* trip with nothing visibly broken. The fix is emitting edge identities that are
+stable across runs (content-derived, e.g. from OSM way ids/endpoints), not client-side staleness
+heuristics — the spec deliberately designs no UI mitigation.
 
 ## Medium
 

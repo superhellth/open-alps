@@ -41,6 +41,16 @@ COLUMNS = [
 ]
 
 
+def hut_guids(features: list) -> list:
+    """Each hut feature's GUID (properties.id), in feature order. The client persists these as the
+    stable hut identity, so a feature without one is an error, never an index stand-in."""
+    guids = [feat["properties"].get("id") for feat in features]
+    missing = [i for i, g in enumerate(guids) if not g]
+    if missing:
+        raise ValueError(f"huts without a GUID at feature indices {missing[:10]}")
+    return guids
+
+
 def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
     columns = {name: (dtype, records[name]) for name, dtype in COLUMNS}
     payload, column_manifest = binfmt.pack_columns(columns)
@@ -71,10 +81,7 @@ if __name__ == "__main__":
         # order (see its hut_coords_by_id = {i: coord ...}), so the same enumeration recovers each
         # index's real hut id here without re-deriving anything.
         with open(args.huts, encoding="utf-8") as f:
-            hut_ids = [
-                feat["properties"].get("id", i)
-                for i, feat in enumerate(json.load(f)["features"])
-            ]
+            hut_ids = hut_guids(json.load(f)["features"])
 
         payload, manifest = pack_edges(records, hut_ids)
 

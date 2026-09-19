@@ -143,3 +143,12 @@ def test_filter_to_boundary_drops_features_with_no_geometry():
     features = [{"attributes": {"id": "a", "name": "No Geometry"}, "geometry": None}]
 
     assert filter_to_boundary(features, boundary) == []
+
+
+def test_split_features_drops_huts_without_guid():
+    def feat(guid):
+        return {"attributes": {"OBJECTID": 1, "id": guid, "name": "H", "kategorie_nr": 1,
+                               "verein_nr": "1"},
+                "geometry": {"x": 1.0, "y": 2.0}}
+    huts, _ = split_features([feat("{A}"), feat(None), feat("")])
+    assert [h["properties"]["id"] for h in huts] == ["{A}"]

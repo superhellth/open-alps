@@ -2,12 +2,13 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
-from postprocessing.build_edge_payload import pack_edges  # noqa: E402
+from postprocessing.build_edge_payload import hut_guids, pack_edges  # noqa: E402
 
 
 def _record(from_id, to_id, variant, distance_m=1000.0, ascent_m=50.0, descent_m=20.0,
@@ -70,3 +71,14 @@ def test_pack_edges_has_no_tour_columns():
 
 
 
+
+
+def test_hut_guids_in_feature_order():
+    feats = [{"properties": {"id": "{A}"}}, {"properties": {"id": "{B}"}}]
+    assert hut_guids(feats) == ["{A}", "{B}"]
+
+
+@pytest.mark.parametrize("bad", [{}, {"id": None}, {"id": ""}])
+def test_hut_guids_rejects_missing_guid(bad):
+    with pytest.raises(ValueError):
+        hut_guids([{"properties": {"id": "{A}"}}, {"properties": bad}])

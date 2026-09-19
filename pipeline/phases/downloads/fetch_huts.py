@@ -71,7 +71,7 @@ def classify_hut(kategorie_nr, verein_nr):
 def split_features(features):
     """Splits ArcGIS features (each {"attributes": {...}, "geometry": {"x", "y"}}) into
     (hut_features, partner_features) - plain GeoJSON Feature dicts, in the input order within
-    each list. Hut features carry hutType/serviced/elevation/ohrsHutId/tenantCode properties;
+    each list. Huts without a GUID are dropped. Hut features carry hutType/serviced/elevation/ohrsHutId/tenantCode properties;
     ohrsHutId is null for direct-booking-only huts (docs/alpenverein-api.md §1). Partner features
     keep the same minimal {id, name} shape stations.geojson/parking.geojson already use, with "id"
     set to the ArcGIS layer's OBJECTID (an int) - not the "id" attribute, which is a GUID string
@@ -88,6 +88,8 @@ def split_features(features):
                 "properties": {"id": a["OBJECTID"], "name": a["name"]},
                 "geometry": geometry,
             })
+        elif not a.get("id"):
+            continue  # no GUID -> no stable identity for trips to reference
         else:
             huts.append({
                 "type": "Feature",
