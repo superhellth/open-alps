@@ -388,7 +388,12 @@ if __name__ == "__main__":
     )
     persisted_snaps = hub_snap.load_persisted_snaps(hub_snaps_arr, hub_snap_interior_arr)
 
-    hubs_by_cell = bucket_by_cell(all_hubs_flat, grid)
+    # Only huts are Dijkstra sources, so a cell without a hut emits nothing; its stations and
+    # parking are still targets via the padded candidate set of neighbouring hut cells.
+    hubs_by_cell = {
+        cid: hubs for cid, hubs in bucket_by_cell(all_hubs_flat, grid).items()
+        if any(h["type"] == binfmt.TYPE_HUT for h in hubs)
+    }
 
     def _candidate_hubs_for_cell(cid):
         # Trail distance is always >= straight-line distance, so a bbox padded by max_edge_km
@@ -429,7 +434,7 @@ if __name__ == "__main__":
 
     total = len(tasks)
     n_huts = sum(1 for h in all_hubs_flat if h["type"] == binfmt.TYPE_HUT)
-    print(f"{total} cells with hubs to process "
+    print(f"{total} cells with huts to process "
           f"({n_huts:,} huts, {len(all_hubs_flat) - n_huts:,} access points)", flush=True)
     shard_hut_records = []
     shard_access_rows = []
