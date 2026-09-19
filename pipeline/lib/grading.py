@@ -8,7 +8,7 @@ positive fact that can be summed along a path (ungraded_m) instead of a silence.
 
 Inference is asymmetric on purpose: UPGRADES require physics (a tag that makes alpine terrain
 impossible by construction); DOWNGRADES are always honoured. Measured 2026-08-21 over
-data/osm/austria-trails.osm.pbf (2.33M ways / 23.1M segments): the implication table below covers
+data/build/trails/austria-trails.osm.pbf (2.33M ways / 23.1M segments): the implication table below covers
 91.3% of untagged segment mass, leaving genuinely unknown terrain at 7.9% of the network - not the
 95% a naive sac_scale-coverage figure suggests.
 """

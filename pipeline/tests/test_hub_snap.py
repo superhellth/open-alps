@@ -74,8 +74,8 @@ def test_node_snap_round_trips_through_pack_and_load(tmp_path):
     assert persisted.global_node_id == 100   # global_node_ids[0]
 
     hub_snap.pack_hub_snaps({(TYPE_HUT, 1): persisted}, tmp_path)
-    arr = binfmt.load_array(tmp_path / "hub_snaps.npy", mmap=False)
-    interior_arr = binfmt.load_array(tmp_path / "hub_snap_interior.npy", mmap=False)
+    arr = binfmt.load_array(tmp_path / "hub-snaps.npy", mmap=False)
+    interior_arr = binfmt.load_array(tmp_path / "hub-snap-interior.npy", mmap=False)
     reloaded = hub_snap.load_persisted_snaps(arr, interior_arr)
     assert reloaded[(TYPE_HUT, 1)].global_node_id == 100
 
@@ -90,8 +90,8 @@ def test_edge_split_snap_round_trips_through_pack_and_load(tmp_path):
     assert persisted.global_edge_id == 7   # local_edges["edge_id"][0], NOT the local index 0
 
     hub_snap.pack_hub_snaps({(TYPE_HUT, 2): persisted}, tmp_path)
-    arr = binfmt.load_array(tmp_path / "hub_snaps.npy", mmap=False)
-    interior_arr = binfmt.load_array(tmp_path / "hub_snap_interior.npy", mmap=False)
+    arr = binfmt.load_array(tmp_path / "hub-snaps.npy", mmap=False)
+    interior_arr = binfmt.load_array(tmp_path / "hub-snap-interior.npy", mmap=False)
     reloaded = hub_snap.load_persisted_snaps(arr, interior_arr)
     got = reloaded[(TYPE_HUT, 2)]
     assert got.global_edge_id == 7

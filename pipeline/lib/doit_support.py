@@ -26,7 +26,7 @@ def rel(path) -> str:
     """file_dep/targets entries use this instead of a bare str(path): doit's dependency DB keys
     each file's tracked hash by the literal string given here, resolved against doit's own cwd
     (SCRIPT_DIR - pipeline/; both pixi.toml's [tasks] and the README's manual conda flow always run
-    doit from there). OSM_DIR/DEM_DIR/PUBLIC_DATA_DIR (lib/pipeline.py) are absolute, .resolve()d
+    doit from there). DATA_DIR/PUBLIC_DATA_DIR-derived constants (lib/pipeline.py) are absolute, .resolve()d
     paths - deliberately, so a worktree's data/ symlink and the main checkout's real data/ dir
     produce identical strings on the SAME machine/OS. But an absolute path is still different text
     on native Windows (C:\\Users\\...) vs WSL (/home/...) for the exact same file, so switching
@@ -35,7 +35,7 @@ def rel(path) -> str:
     path relative to SCRIPT_DIR, normalized to forward slashes, is identical text regardless of OS
     or which machine last ran doit - only the *content* of pipeline.config.json/scripts should
     invalidate a task, not which OS wrote the cache. Actions (subprocess/script CLI args) are
-    untouched by this - they still use OSM_DIR/DEM_DIR absolute paths directly, since those are
+    untouched by this - they still use the DATA_DIR-derived absolute paths directly, since those are
     just runtime arguments to a fresh process each run, not something doit hashes and compares
     across runs."""
     return os.path.relpath(Path(path).resolve(), SCRIPT_DIR).replace(os.sep, "/")

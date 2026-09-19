@@ -36,11 +36,11 @@ def _write_fixture_base_graph(tmp_path, grid):
     node_edge_ids = doubled_edge_ids[order]
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
 
-    out_dir = tmp_path / "base_graph"
+    out_dir = tmp_path / "base-graph"
     binfmt.save_array(out_dir / "nodes.npy", nodes)
-    binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-    binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-    binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+    binfmt.save_array(out_dir / "cell-index.npy", cell_index)
+    binfmt.save_array(out_dir / "node-edge-index.npy", node_edge_index)
+    binfmt.save_array(out_dir / "node-edge-ids.npy", node_edge_ids)
     binfmt.save_array(out_dir / "edges.npy", edges)
     binfmt.save_array(out_dir / "interior.npy", interior)
     return out_dir
@@ -85,11 +85,11 @@ def _write_fixture_base_graph_with_interior(tmp_path, grid):
     order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=3)
     node_edge_ids = doubled_edge_ids[order]
 
-    out_dir = tmp_path / "base_graph"
+    out_dir = tmp_path / "base-graph"
     binfmt.save_array(out_dir / "nodes.npy", nodes)
-    binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-    binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-    binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+    binfmt.save_array(out_dir / "cell-index.npy", cell_index)
+    binfmt.save_array(out_dir / "node-edge-index.npy", node_edge_index)
+    binfmt.save_array(out_dir / "node-edge-ids.npy", node_edge_ids)
     binfmt.save_array(out_dir / "edges.npy", edges)
     binfmt.save_array(out_dir / "interior.npy", interior)
     return out_dir

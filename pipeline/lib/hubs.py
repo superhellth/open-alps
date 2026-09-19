@@ -4,7 +4,7 @@ and build_hub_edges.py each need before their own per-cell work, previously hand
 three __main__ blocks. One place to extend when a new hub type joins TYPE_HUT/TYPE_STATION/
 TYPE_PARKING/TYPE_PARTNER, instead of three near-identical joins silently drifting apart.
 
-Usage: `hubs = load_all_hubs(OSM_DIR)` then `hubs_by_cell = bucket_by_cell(hubs, grid)`."""
+Usage: `hubs = load_all_hubs(RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy")` then `hubs_by_cell = bucket_by_cell(hubs, grid)`."""
 
 import json
 from pathlib import Path
@@ -19,12 +19,11 @@ HUB_TYPE_JSON_NAMES = {
 }
 
 
-def load_all_hubs(osm_dir: Path) -> list:
+def load_all_hubs(huts_path: Path, start_points_path: Path) -> list:
     """Returns every hub as a flat {id, type, lon, lat, name} dict - `type` is one of
-    binfmt.TYPE_*, `id` is the type-scoped id (hut index or start_points.npy's osm_id). `name` is
-    only populated for huts (start_points.npy carries no name column); non-hut hubs get "" so
+    binfmt.TYPE_*, `id` is the type-scoped id (hut index or start-points.npy's osm_id). `name` is
+    only populated for huts (start-points.npy carries no name column); non-hut hubs get "" so
     every dict has the same keys regardless of type."""
-    huts_path = osm_dir / "huts.geojson"
     hut_coords_by_id = {i: tuple(c) for i, c in enumerate(hut_points(huts_path))}
     with open(huts_path, encoding="utf-8") as f:
         hut_names_by_id = {
@@ -32,7 +31,7 @@ def load_all_hubs(osm_dir: Path) -> list:
             for i, feat in enumerate(json.load(f)["features"])
         }
 
-    start_points = binfmt.load_array(osm_dir / "start_points.npy", mmap=False)
+    start_points = binfmt.load_array(start_points_path, mmap=False)
     start_by_id = {}
     for p in start_points:
         start_by_id.setdefault(int(p["type"]), {})[int(p["osm_id"])] = (float(p["lon"]), float(p["lat"]))

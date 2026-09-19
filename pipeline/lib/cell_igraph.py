@@ -75,7 +75,7 @@ def _check_routable(subgraph: LocalSubgraph) -> None:
             f"{n_unset:,} of {len(times):,} edges have an UNSET/negative time_s - this subgraph "
             "was built from a base graph whose compute_edge_profiles pass never ran. Rerun "
             "`doit compute_edge_profiles`, then `doit gather_route_subgraphs` to rebuild the "
-            "per-cell caches under data/osm/route_subgraphs/."
+            "per-cell caches under data/build/route-subgraphs/."
         )
 
 

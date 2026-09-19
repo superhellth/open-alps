@@ -284,7 +284,7 @@ def snap_hub_to_subgraph(subgraph: LocalSubgraph, hub_lon: float, hub_lat: float
 
 
 def write_unsnapped_report(path, rejections: list) -> None:
-    """Emits data/osm/unsnapped_huts.json (spec E3) - the report that turns a hub failing to
+    """Emits data/build/snapping/unsnapped-huts.json (spec E3) - the report that turns a hub failing to
     snap into a countable, visible fact instead of a silent drop (956 hubs measured, 205
     unsnapped, data/analysis/snap_stats.json - before any vertical cap even applied). Sorted by
     |dz_m| descending so the worst vertical outliers (bivouac boxes on walls) surface first."""
@@ -344,7 +344,7 @@ def sample_hub_elevations(dem_path, hubs: list, grid: Grid, buffer_km: float = 0
 @dataclass
 class PersistedSnap:
     """A SnapResult translated into subgraph-independent, globally-stable ids (see this module's
-    docstring) - what actually gets packed into hub_snaps.npy."""
+    docstring) - what actually gets packed into hub-snaps.npy."""
     kind: int  # binfmt.SNAP_KIND_NODE or SNAP_KIND_EDGE
     global_node_id: int = -1
     global_edge_id: int = -1
@@ -421,8 +421,8 @@ def pack_hub_snaps(snaps: dict, out_dir) -> None:
         interior_arr["lon"] = [c[0] for c in flat_interior]
         interior_arr["lat"] = [c[1] for c in flat_interior]
 
-    binfmt.save_array(out_dir / "hub_snaps.npy", records)
-    binfmt.save_array(out_dir / "hub_snap_interior.npy", interior_arr)
+    binfmt.save_array(out_dir / "hub-snaps.npy", records)
+    binfmt.save_array(out_dir / "hub-snap-interior.npy", interior_arr)
 
 
 def load_persisted_snaps(hub_snaps_arr: np.ndarray, interior_arr: np.ndarray) -> dict:
@@ -462,7 +462,7 @@ def load_persisted_snaps(hub_snaps_arr: np.ndarray, interior_arr: np.ndarray) ->
 def reconstruct_local_snaps(subgraph: LocalSubgraph, keys, persisted: dict) -> dict:
     """Translates persisted (global-id) snaps back into subgraph-local SnapResult objects, for
     exactly the hub `keys` a cell's routing pass needs. A key missing from `persisted` (rejected
-    at snap time, already reported by snap_hubs.py's own unsnapped_huts.json) or whose global
+    at snap time, already reported by snap_hubs.py's own unsnapped-huts.json) or whose global
     node/edge id isn't present in THIS subgraph is simply omitted - the latter should not happen
     in practice (this subgraph's buffer_km is max_edge_km-sized, snap_hubs.py's buffer_km is
     max_snap_m-sized and max_snap_m << max_edge_km*1000 operationally, so any snap point - within

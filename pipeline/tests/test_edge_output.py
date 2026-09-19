@@ -18,7 +18,7 @@ def _access_row(hut_id=3, start_id=100, start_type=binfmt.TYPE_PARKING, variant=
 
 
 def test_write_access_distances_round_trips_fields(tmp_path):
-    path = tmp_path / "access_distances.npy"
+    path = tmp_path / "access-distances.npy"
     write_access_distances([_access_row(), _access_row(hut_id=7, start_type=binfmt.TYPE_STATION)],
                             path)
     arr = binfmt.load_array(path, mmap=False)
@@ -30,7 +30,7 @@ def test_write_access_distances_round_trips_fields(tmp_path):
 
 
 def test_write_access_distances_handles_empty_input(tmp_path):
-    path = tmp_path / "access_distances.npy"
+    path = tmp_path / "access-distances.npy"
     write_access_distances([], path)
     arr = binfmt.load_array(path, mmap=False)
     assert len(arr) == 0
@@ -73,10 +73,10 @@ def test_differing_geometries_do_not_share(tmp_path):
 
 
 def test_write_edge_output_writes_sorted_edge_ids_and_prefix_suffix(tmp_path):
-    out_dir = tmp_path / "hut_edges"
+    out_dir = tmp_path / "hut-edges"
     write_edge_records([_rec(base_edge_ids=[30, 10, 20])], out_dir, write_edge_ids=True)
     records = binfmt.load_array(out_dir / "records.npy", mmap=False)
-    edge_ids = binfmt.load_array(out_dir / "edge_ids.npy", mmap=False)
+    edge_ids = binfmt.load_array(out_dir / "edge-ids.npy", mmap=False)
     assert list(edge_ids) == [10, 20, 30]
     assert records["edge_id_count"][0] == 3
     assert records["prefix_count"][0] == 3
@@ -84,9 +84,9 @@ def test_write_edge_output_writes_sorted_edge_ids_and_prefix_suffix(tmp_path):
 
 
 def test_write_edge_output_skips_edge_ids_when_not_requested(tmp_path):
-    out_dir = tmp_path / "start_edges"
+    out_dir = tmp_path / "start-edges"
     write_edge_records([_rec()], out_dir, write_edge_ids=False)
-    assert not (out_dir / "edge_ids.npy").exists()
+    assert not (out_dir / "edge-ids.npy").exists()
     records = binfmt.load_array(out_dir / "records.npy", mmap=False)
     assert records["edge_id_count"][0] == 0
     assert records["prefix_count"][0] == 0
