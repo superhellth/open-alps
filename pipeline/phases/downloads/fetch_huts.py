@@ -35,12 +35,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from shapely.geometry import Point
-from shapely.prepared import prep
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import RAW_DIR, RAW_OSM_DIR, load_config  # noqa: E402
-from lib.poly import region_boundary  # noqa: E402
+from lib.pipeline import RAW_DIR, load_config  # noqa: E402
+from lib.poly import filter_to_boundary, load_region_boundary  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_huts.py"
@@ -108,21 +106,13 @@ def _write_feature_collection(path, features):
         json.dump({"type": "FeatureCollection", "features": features}, fh)
 
 
-def filter_to_boundary(features, prepared_boundary):
-    """Keeps only ArcGIS features with a geometry falling inside prepared_boundary (a
-    shapely.prepared.prep()-wrapped (Multi)Polygon) - drops records with no geometry at all, and
-    records outside the real AT+Bavaria coverage area (see module docstring)."""
-    return [
-        f for f in features
-        if f.get("geometry")
-        and prepared_boundary.contains(Point(f["geometry"]["x"], f["geometry"]["y"]))
-    ]
+def _arcgis_xy(feature):
+    geometry = feature.get("geometry")
+    return (geometry["x"], geometry["y"]) if geometry else None
 
 
 if __name__ == "__main__":
     config = load_config()
-    raw_dir = RAW_OSM_DIR
-    poly_paths = [raw_dir / f"{r['name']}.poly" for r in config["regions"]]
     huts_out_path = RAW_DIR / "huts.geojson"
     partner_out_path = RAW_DIR / "partner_betriebe.geojson"
 
@@ -137,8 +127,7 @@ if __name__ == "__main__":
         with urllib.request.urlopen(url) as res:
             data = json.load(res)
 
-    boundary = prep(region_boundary(poly_paths))
-    features = filter_to_boundary(data["features"], boundary)
+    features = filter_to_boundary(data["features"], load_region_boundary(config), _arcgis_xy)
     print(f"records inside AT+Bavaria boundary: {len(features)}")
 
     hut_features, partner_features = split_features(features)

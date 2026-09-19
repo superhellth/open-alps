@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from downloads.fetch_stations_parking import (  # noqa: E402
-    LAYERS, _area_to_point, dedupe_stop_positions, filter_to_boundary,
+    LAYERS, _area_to_point, dedupe_stop_positions,
 )
 
 
@@ -112,12 +112,3 @@ def test_dedupe_never_drops_rail_stations():
     rail = _stop("n9", "Landeck", None, 10.5, 47.1)
     stop_pos = _stop("n1", "Landeck", "stop_position", 10.50001, 47.1)
     assert dedupe_stop_positions([stop_pos, rail]) == [rail]
-
-
-def test_filter_to_boundary_drops_points_outside_the_region():
-    inside = {"id": "n1", "geometry": {"type": "Point", "coordinates": [0.5, 0.5]}, "properties": {}}
-    outside = {"id": "n2", "geometry": {"type": "Point", "coordinates": [2.0, 0.5]}, "properties": {}}
-
-    kept = filter_to_boundary([inside, outside], prep(box(0, 0, 1, 1)))
-
-    assert [f["id"] for f in kept] == ["n1"]

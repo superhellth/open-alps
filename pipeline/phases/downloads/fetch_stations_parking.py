@@ -3,8 +3,7 @@
 Fetches train station and trailhead-parking point locations from OSM, filtered from the raw
 region extracts already downloaded by download_extracts.py (no new download) and clipped to the
 region boundary (the .poly files), and writes them
-as two GeoJSON FeatureCollections - same flat {id?, name, ...} properties shape as 05's
-huts.geojson.
+as two GeoJSON FeatureCollections - flat {id?, name, ...} properties per feature.
 
 osmium export dumps every OSM tag verbatim, which is noisy (source, fixme, survey:date, etc.) -
 KEEP_FIELDS below prunes each layer's raw properties down to a fixed field set, mirroring 05's
@@ -24,13 +23,12 @@ import subprocess
 import sys
 from pathlib import Path
 
-from shapely.geometry import Point, shape
-from shapely.prepared import prep
+from shapely.geometry import shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.geo import haversine_m  # noqa: E402
 from lib.pipeline import RAW_DIR, RAW_OSM_DIR, load_config  # noqa: E402
-from lib.poly import region_boundary  # noqa: E402
+from lib.poly import filter_to_boundary, load_region_boundary  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_stations_parking.py"
@@ -102,11 +100,8 @@ def _area_to_point(feat: dict) -> dict:
     return feat
 
 
-def filter_to_boundary(features: list, prepared_boundary) -> list:
-    """Keeps only Point features inside prepared_boundary (a shapely.prepared.prep()-wrapped
-    (Multi)Polygon). osmium export keeps whole ways that cross the extract boundary and parking
-    areas are reduced to a centroid, so a few features can lie just outside the region."""
-    return [f for f in features if prepared_boundary.contains(Point(*f["geometry"]["coordinates"]))]
+def _point_xy(feature: dict):
+    return tuple(feature["geometry"]["coordinates"])
 
 
 def dedupe_stop_positions(features: list, radius_m: float = STOP_DEDUPE_RADIUS_M) -> list:
@@ -207,7 +202,7 @@ def export_layer(layer: dict, boundary, timer: StepTimer) -> None:
             feat["properties"] = {k: raw_props[k] for k in layer["keep_fields"] if k in raw_props}
         features.extend(fc["features"])
 
-    features = filter_to_boundary(features, boundary)
+    features = filter_to_boundary(features, boundary, _point_xy)
     print(f"{layer['name']}: {len(features)} features")
     geojson = {"type": "FeatureCollection", "features": features}
     RAW_DIR.mkdir(parents=True, exist_ok=True)
@@ -218,7 +213,7 @@ def export_layer(layer: dict, boundary, timer: StepTimer) -> None:
 
 def main():
     timer = StepTimer()
-    boundary = prep(region_boundary([RAW_OSM_DIR / f"{r['name']}.poly" for r in config["regions"]]))
+    boundary = load_region_boundary(config)
     with phase(SCRIPT_NAME, "fetch_stations_parking") as meta:
         for layer in LAYERS:
             export_layer(layer, boundary, timer)

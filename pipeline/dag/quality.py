@@ -30,6 +30,7 @@ def task_check_preprocessing():
         params=[_max_flagged_param()],
         task_dep=["filter_start_points"],
         file_dep=[START_POINTS_DIR / "start-points.npy", START_POINTS_DIR / "start-points-id-table.json"]
+        + [RAW_DIR / f"{layer}.geojson" for layer in ("huts", "stations", "parking", "partner_betriebe")]
         + [RAW_OSM_DIR / f"{r['name']}.poly" for r in CONFIG["regions"]],
         targets=[QUALITY_DIR / "preprocessing.json"],
     )

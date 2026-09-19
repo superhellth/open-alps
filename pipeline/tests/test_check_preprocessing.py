@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
 from quality.check_preprocessing import (  # noqa: E402
-    check_id_table_coverage, check_start_point_integrity,
+    check_id_table_coverage, check_source_layer_in_region, check_start_point_integrity,
 )
 
 _TYPE_STATION, _TYPE_PARKING = binfmt.TYPE_STATION, binfmt.TYPE_PARKING
@@ -72,3 +72,26 @@ def test_point_inside_bounding_box_but_outside_polygon_is_flagged():
     check = check_start_point_integrity(points, triangle, max_flagged=500)
     assert [f["osm_id"] for f in check["flagged"]] == [2]
     assert check["flagged"][0]["reason"] == "outside_region"
+
+
+def _feature(x, y, id_="n1"):
+    return {"id": id_, "geometry": {"type": "Point", "coordinates": [x, y]}, "properties": {}}
+
+
+def test_source_layer_flags_point_outside_region():
+    features = [_feature(11.0, 47.0, "in"), _feature(200.0, 47.0, "out")]
+    check = check_source_layer_in_region("huts", features, _REGION, max_flagged=500)
+    assert check["check"] == "source_layer_in_region_huts"
+    assert [f["id"] for f in check["flagged"]] == ["out"]
+    assert check["flagged"][0]["reason"] == "outside_region"
+
+
+def test_source_layer_flags_missing_geometry():
+    check = check_source_layer_in_region(
+        "huts", [{"id": "x", "geometry": None, "properties": {}}], _REGION, max_flagged=500)
+    assert check["flagged"][0]["reason"] == "no_geometry"
+
+
+def test_source_layer_clean_points_are_not_flagged():
+    check = check_source_layer_in_region("parking", [_feature(11.0, 47.0)], _REGION, max_flagged=500)
+    assert check["summary"]["flagged"] == 0
