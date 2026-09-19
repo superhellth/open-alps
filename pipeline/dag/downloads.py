@@ -3,7 +3,7 @@
 import json
 
 from lib.doit_support import cli_param, pipeline_task, tracking_param
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config
+from lib.pipeline import RAW_DEM_DIR, RAW_DIR, RAW_OSM_DIR, load_config
 
 CONFIG = load_config()
 REGION_NAMES = [r["name"] for r in CONFIG["regions"]]
@@ -18,8 +18,8 @@ def task_download_extracts():
             tracking_param("regions_json", str, json.dumps(CONFIG["regions"], sort_keys=True)),
         ],
         targets=(
-            [OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
-            + [OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES]
+            [RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
+            + [RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES]
         ),
     )
 
@@ -30,16 +30,16 @@ def task_fetch_huts():
         # Depends on download_extracts.py's .poly outputs (same downloads/ phase, not the usual
         # downloads->preprocessing direction) because the AT+Bavaria coverage filter needs the
         # real admin-boundary polygon Geofabrik ships alongside each extract - see lib/poly.py.
-        file_dep=[OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES],
-        targets=[OSM_DIR / "huts.geojson", OSM_DIR / "partner_betriebe.geojson"],
+        file_dep=[RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES],
+        targets=[RAW_DIR / "huts.geojson", RAW_DIR / "partner_betriebe.geojson"],
     )
 
 
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",
-        file_dep=[OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES],
-        targets=[OSM_DIR / "stations.geojson", OSM_DIR / "parking.geojson"],
+        file_dep=[RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES],
+        targets=[RAW_DIR / "stations.geojson", RAW_DIR / "parking.geojson"],
     )
 
 
@@ -55,5 +55,5 @@ def task_fetch_dem():
             tracking_param("dem_json", str, json.dumps(CONFIG["dem"], sort_keys=True)),
             tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
         ],
-        targets=[DEM_DIR / "fetch_manifest.json"],
+        targets=[RAW_DEM_DIR / "fetch_manifest.json"],
     )

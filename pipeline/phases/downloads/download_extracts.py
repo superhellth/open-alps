@@ -12,13 +12,13 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import RAW_OSM_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "download_extracts.py"
 
 config = load_config()
-raw_dir = OSM_DIR / "raw"
+raw_dir = RAW_OSM_DIR
 raw_dir.mkdir(parents=True, exist_ok=True)
 
 timer = StepTimer()

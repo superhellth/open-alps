@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Downloads whatever raw DEM tiles the region(s) configured in pipeline.config.json need, then
-writes data/dem/fetch_manifest.json recording exactly what was fetched (provider name, raw tile
+writes data/raw/dem/fetch_manifest.json recording exactly what was fetched (provider name, raw tile
 paths, and where each region's reprojected VRT will go) - see
 pipeline/phases/downloads/dem_providers/base.py for the provider contract, and pipeline/README.md's DEM
 section for why this is pluggable.
@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dem_providers.composite import fetch_regions  # noqa: E402
-from lib.pipeline import DEM_DIR, load_config  # noqa: E402
+from lib.pipeline import RAW_DEM_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_dem.py"
@@ -39,13 +39,13 @@ args = parser.parse_args()
 provider_config = dict(config["dem"]["providerConfig"])
 provider_config.setdefault("bbox", config["bbox"])
 
-DEM_DIR.mkdir(parents=True, exist_ok=True)
+RAW_DEM_DIR.mkdir(parents=True, exist_ok=True)
 
 with phase(SCRIPT_NAME, "fetch_dem") as meta:
-    manifest = fetch_regions(provider_config, DEM_DIR, max_edge_km=args.max_edge_km)
+    manifest = fetch_regions(provider_config, RAW_DEM_DIR, max_edge_km=args.max_edge_km)
     meta["n_regions"] = len(manifest)
 
-manifest_path = DEM_DIR / "fetch_manifest.json"
+manifest_path = RAW_DEM_DIR / "fetch_manifest.json"
 with open(manifest_path, "w", encoding="utf-8") as f:
     json.dump(manifest, f, indent=2)
 n_tiles = sum(len(r["tile_paths"]) for r in manifest)

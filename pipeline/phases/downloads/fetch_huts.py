@@ -39,7 +39,7 @@ from shapely.geometry import Point
 from shapely.prepared import prep
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import RAW_DIR, RAW_OSM_DIR, load_config  # noqa: E402
 from lib.poly import region_boundary  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -121,10 +121,10 @@ def filter_to_boundary(features, prepared_boundary):
 
 if __name__ == "__main__":
     config = load_config()
-    raw_dir = OSM_DIR / "raw"
+    raw_dir = RAW_OSM_DIR
     poly_paths = [raw_dir / f"{r['name']}.poly" for r in config["regions"]]
-    huts_out_path = OSM_DIR / "huts.geojson"
-    partner_out_path = OSM_DIR / "partner_betriebe.geojson"
+    huts_out_path = RAW_DIR / "huts.geojson"
+    partner_out_path = RAW_DIR / "partner_betriebe.geojson"
 
     url = (
         "https://services1.arcgis.com/PHS4LHADrqt5glC9/arcgis/rest/services/"
@@ -144,6 +144,7 @@ if __name__ == "__main__":
     hut_features, partner_features = split_features(features)
     print(f"huts: {len(hut_features)}, partner betriebe: {len(partner_features)}")
 
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     _write_feature_collection(huts_out_path, hut_features)
     _write_feature_collection(partner_out_path, partner_features)
     print(f"written {huts_out_path}")

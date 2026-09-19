@@ -21,7 +21,7 @@ from . import get_provider
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 from lib.geo import HUB_RANGE_SAFETY_MARGIN, hut_points  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import RAW_DIR  # noqa: E402
 
 
 def _points_for_region(filter_bbox: dict) -> list[list[float]]:
@@ -29,7 +29,7 @@ def _points_for_region(filter_bbox: dict) -> list[list[float]]:
     trail-polyline vertices (a V1-era hut-edges.geojson) when that file existed, so a trail's
     mid-edge wander was covered without over-sizing bufferKm - that file is no longer produced by
     any task in the current DAG (see git history), so this is hut points only now."""
-    return hut_points(OSM_DIR / "huts.geojson", filter_bbox=filter_bbox)
+    return hut_points(RAW_DIR / "huts.geojson", filter_bbox=filter_bbox)
 
 
 def fetch_regions(provider_config: dict, dem_dir: Path, max_edge_km: float) -> list[dict]:

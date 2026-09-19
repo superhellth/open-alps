@@ -1,7 +1,6 @@
 # phases/downloads/ — fetch raw data
 
-Four fetchers, mostly independent - each pulls from a remote source and writes into `data/osm/` or
-`data/dem/`. All read `pipeline/pipeline.config.json` via `lib/pipeline.py`'s `load_config()`.
+Four fetchers, mostly independent - each pulls from a remote source and writes into `data/raw/`. All read `pipeline/pipeline.config.json` via `lib/pipeline.py`'s `load_config()`.
 `fetch_huts.py` is the one exception: it depends on `download_extracts.py`'s `.poly` outputs (see
 below) to filter to real AT+Bavaria coverage.
 
@@ -9,12 +8,12 @@ below) to filter to real AT+Bavaria coverage.
 
 - Reads `config["regions"]` (name + Geofabrik `.osm.pbf` URL + `.poly` boundary-polygon URL, e.g.
   austria/bayern).
-- For each region: `urllib.request.urlretrieve` the `.osm.pbf` to `data/osm/raw/<name>-latest.osm.pbf`
-  and the `.poly` boundary to `data/osm/raw/<name>.poly` (the same admin-boundary shape Geofabrik
+- For each region: `urllib.request.urlretrieve` the `.osm.pbf` to `data/raw/osm/<name>-latest.osm.pbf`
+  and the `.poly` boundary to `data/raw/osm/<name>.poly` (the same admin-boundary shape Geofabrik
   clipped the extract to - `fetch_huts.py`'s real-coverage filter, see `lib/poly.py`).
 - No pinning — Geofabrik extracts regenerate daily; rerun to refresh.
 - **doit wiring**: `file_dep=[pipeline.config.json]`,
-  `targets=[raw/<region>-latest.osm.pbf, raw/<region>.poly, ...]`.
+  `targets=[raw/osm/<region>-latest.osm.pbf, raw/osm/<region>.poly, ...]`.
 
 ## `fetch_huts.py` — Alpenverein hut points
 
@@ -24,10 +23,10 @@ below) to filter to real AT+Bavaria coverage.
 - Filters returned features to those whose geometry falls inside the real AT+Bavaria boundary -
   the union of `download_extracts.py`'s per-region `.poly` files (`lib/poly.py`), not a rectangular
   bbox (a bbox also catches huts in neighboring countries with zero nearby trail data).
-- Classifies and splits into `data/osm/huts.geojson` (real huts, `properties` includes
+- Classifies and splits into `data/raw/huts.geojson` (real huts, `properties` includes
   `id/name/hutType/serviced/elevation/ohrsHutId/tenantCode`) and
-  `data/osm/partner_betriebe.geojson` (Bergsteigerdörfer partner businesses, `properties = {id, name}`).
-- **doit wiring**: `file_dep=[raw/<region>.poly, ...]`, `targets=[huts.geojson, partner_betriebe.geojson]`.
+  `data/raw/partner_betriebe.geojson` (Bergsteigerdörfer partner businesses, `properties = {id, name}`).
+- **doit wiring**: `file_dep=[raw/osm/<region>.poly, ...]`, `targets=[huts.geojson, partner_betriebe.geojson]`.
 
 ## `fetch_stations_parking.py` — OSM railway stations + parking
 
@@ -53,8 +52,8 @@ new network download):
   centroid, not its ring — keeps this a plain `Point` layer like everything else), properties
   pruned to `{name, capacity, fee, access, motor_vehicle, barrier}`.
 - Per-layer features from every region are concatenated into one `FeatureCollection` each:
-  `data/osm/stations.geojson`, `data/osm/parking.geojson`.
-- **doit wiring**: `file_dep=[raw/<region>-latest.osm.pbf, ...]`,
+  `data/raw/stations.geojson`, `data/raw/parking.geojson`.
+- **doit wiring**: `file_dep=[raw/osm/<region>-latest.osm.pbf, ...]`,
   `targets=[stations.geojson, parking.geojson]`.
 
 ## `fetch_dem.py` — elevation raster tiles
@@ -68,7 +67,7 @@ new network download):
   reproject/merge/materialize — that's `phases/elevation/build_dem_vrt.py`, split out so retuning
   reprojection or rerunning after a fresh tile download never re-triggers a provider's own
   tile-existence check (Bavaria's is a per-1km-tile WMS coverage grid).
-- Writes `data/dem/fetch_manifest.json`.
+- Writes `data/raw/dem/fetch_manifest.json`.
 - **doit wiring**: `file_dep=[config]`, `targets=[fetch_manifest.json]`.
 
 ### Providers (`dem_providers/`)

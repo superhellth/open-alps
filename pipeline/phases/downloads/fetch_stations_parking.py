@@ -27,7 +27,7 @@ from shapely.geometry import shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib.geo import haversine_m  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import RAW_DIR, RAW_OSM_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_stations_parking.py"
@@ -146,18 +146,18 @@ def run_filter_pipeline(src: Path, pipeline: list, tmp_prefix: Path, tmp_files: 
 
 
 def export_layer(layer: dict, timer: StepTimer) -> None:
-    out_path = OSM_DIR / f"{layer['name']}.geojson"
+    out_path = RAW_DIR / f"{layer['name']}.geojson"
     features = []
 
     for region in config["regions"]:
-        src = OSM_DIR / "raw" / f"{region['name']}-latest.osm.pbf"
-        filtered = OSM_DIR / f"{region['name']}-{layer['name']}.osm.pbf"
+        src = RAW_OSM_DIR / f"{region['name']}-latest.osm.pbf"
+        filtered = RAW_OSM_DIR / f"{region['name']}-{layer['name']}.osm.pbf"
         print(f"filtering {src} -> {filtered}")
         with timer.step(f"{layer['name']}_tag_filter"):
             pipeline_outputs = []
             tmp_files = []
             for p, pipeline in enumerate(layer["tag_filter_pipelines"]):
-                tmp_prefix = OSM_DIR / f"{region['name']}-{layer['name']}-p{p}"
+                tmp_prefix = RAW_OSM_DIR / f"{region['name']}-{layer['name']}-p{p}"
                 stage_out = run_filter_pipeline(src, pipeline, tmp_prefix, tmp_files)
                 pipeline_outputs.append(stage_out)
             if len(pipeline_outputs) > 1:
@@ -188,6 +188,7 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
                 check=True, capture_output=True, text=True, encoding="utf-8",
             )
         fc = json.loads(result.stdout)
+        filtered.unlink(missing_ok=True)
         if layer["name"] == "stations":
             fc["features"] = dedupe_stop_positions(fc["features"])
         for feat in fc["features"]:
@@ -198,6 +199,7 @@ def export_layer(layer: dict, timer: StepTimer) -> None:
 
     print(f"{layer['name']}: {len(features)} features")
     geojson = {"type": "FeatureCollection", "features": features}
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as fh:
         json.dump(geojson, fh)
     print(f"written {out_path}")
