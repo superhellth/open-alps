@@ -37,7 +37,7 @@ def test_pipeline_task_builds_action_with_param_flags():
         "phases/graph_building/build_hub_edges.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, 30)],
         file_dep=[SCRIPTS_DIR / "pipeline.config.json"],
-        targets=[SCRIPTS_DIR.parent / "data" / "osm" / "hut_edges" / "records.npy"],
+        targets=[SCRIPTS_DIR.parent / "data" / "build" / "hut-edges" / "records.npy"],
     )
     assert "--max-edge-km %(max_edge_km)s" in task["actions"][0]
     assert task["file_dep"] == ["pipeline.config.json"]
