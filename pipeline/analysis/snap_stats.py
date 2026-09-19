@@ -2,16 +2,16 @@
 """Standalone analysis script — not part of the doit task graph, not imported by any phase
 script. Quantifies snap_hub_to_subgraph()'s three outcomes (existing-node, mid-chain split,
 unsnapped) over the real hub set, calling that real production function directly against the
-already-persisted base_graph/ output — no reimplementation of the snap logic, no changes to
+already-persisted base-graph/ output — no reimplementation of the snap logic, no changes to
 build_hub_edges.py or dodo.py.
 
 Answers: how many hubs snap to an existing node vs. a mid-chain point vs. nothing at all; how
 expensive is the mid-chain search relative to the cheap node-only check; and how many of the
-already-computed hut_edges/start_edges would lose an endpoint if mid-chain snapping were dropped
+already-computed hut-edges/start-edges would lose an endpoint if mid-chain snapping were dropped
 in favor of a simpler node-or-drop rule.
 
-Requires data/osm/base_graph/ (build_base_graph.py) and, for the edge-impact section,
-data/osm/hut_edges/ + start_edges/ (build_hub_edges.py) to already exist.
+Requires data/build/base-graph/ (build_base_graph.py) and, for the edge-impact section,
+data/build/hut-edges/ + start-edges/ (build_hub_edges.py) to already exist.
 
 Usage: python pipeline/analysis/snap_stats.py [--max-snap-m 200]
 """
@@ -30,7 +30,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases" / "graph_building"))
 import build_hub_edges as bhe  # noqa: E402
 
-DATA_DIR = bhe.OSM_DIR.parent
+from lib.pipeline import (  # noqa: E402
+    BASE_GRAPH_DIR, BUILD_DIR, DATA_DIR, EDGE_LAYER_DIRNAMES, RAW_DIR, START_POINTS_DIR,
+)
 TYPE_NAMES = {
     bhe.binfmt.TYPE_HUT: "hut",
     bhe.binfmt.TYPE_STATION: "station",
@@ -41,9 +43,9 @@ TYPE_NAMES = {
 def assemble_hubs() -> list:
     """Same hub assembly as build_hub_edges.py's __main__ block (not extracted there as a
     function, so duplicated here rather than touching that script)."""
-    hut_coords = bhe.hut_points(bhe.OSM_DIR / "huts.geojson")
+    hut_coords = bhe.hut_points(RAW_DIR / "huts.geojson")
     hut_coords_by_id = {i: tuple(c) for i, c in enumerate(hut_coords)}
-    start_points = bhe.binfmt.load_array(bhe.OSM_DIR / "start_points.npy", mmap=False)
+    start_points = bhe.binfmt.load_array(START_POINTS_DIR / "start-points.npy", mmap=False)
     start_by_id = {}
     for p in start_points:
         start_by_id.setdefault(int(p["type"]), {})[int(p["osm_id"])] = (
@@ -94,7 +96,7 @@ def edge_impact(per_hub: list) -> dict:
         return {}
     result = {}
     for name in ("hut_edges", "start_edges"):
-        path = bhe.OSM_DIR / name / "records.npy"
+        path = BUILD_DIR / EDGE_LAYER_DIRNAMES[name] / "records.npy"
         if not path.exists():
             continue
         records = bhe.binfmt.load_array(path, mmap=False)
@@ -156,7 +158,7 @@ def report(per_hub: list, total_elapsed_s: float, args) -> dict:
 def main():
     config = bhe.load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(bhe.OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--max-snap-m", type=float, default=config["graph"]["maxSnapM"],
                         help="max distance (m) a hub may be from the nearest trail node to count as on-network (see pipeline.config.json's graph.maxSnapM)")

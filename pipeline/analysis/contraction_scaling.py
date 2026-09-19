@@ -42,7 +42,7 @@ from lib import binfmt  # noqa: E402
 from lib.contraction import contract_structural  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
-from lib.pipeline import DATA_DIR, OSM_DIR  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, DATA_DIR  # noqa: E402
 from reconstruct_raw_graph import reconstruct_raw, select_edges_in_cells  # noqa: E402
 
 
@@ -167,7 +167,7 @@ def profile_one(base_graph_dir, fraction, out_path):
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     parser.add_argument("--fractions", default="0.05,0.1,0.25,0.5,0.75,1.0",
                         help="comma-separated fractions of the base graph to contract, for the scaling sweep")

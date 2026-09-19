@@ -2,7 +2,7 @@
 """Standalone analysis module - not part of the doit task graph, not imported by any phase script.
 
 Rebuilds the raw (pre-contraction) node/edge arrays by un-contracting the already-persisted
-data/osm/base_graph/, so contraction cost can be measured at any graph size without re-running
+data/build/base-graph/, so contraction cost can be measured at any graph size without re-running
 stream_osm (914s per attempt). Each chain edge e is the raw path u -> interior[offset..offset+
 count) -> v; interior_offset is monotone in edge order, so raw node ids fall out as
 n_junctions + flat_interior_index with no bookkeeping.
@@ -18,7 +18,7 @@ everything contraction's cost depends on.
 
 See docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md.
 
-Usage: python pipeline/analysis/reconstruct_raw_graph.py [--base-graph data/osm/base_graph]
+Usage: python pipeline/analysis/reconstruct_raw_graph.py [--base-graph data/build/base-graph]
        (running it directly reconstructs the full graph and prints a size/consistency report)
 """
 
@@ -34,7 +34,7 @@ from lib import binfmt  # noqa: E402
 # same formula and earth radius as build_base_graph.py's haversine_m_vec (both import this same
 # shared function), so reconstructed segment distances sum back to the persisted chain distances
 from lib.geo import haversine_m_vec_pairs as _haversine_m_vec  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR  # noqa: E402
 
 
 @dataclass
@@ -122,7 +122,7 @@ def reconstruct_raw(nodes, edges, interior, edge_ids) -> RawGraph:
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     args = parser.parse_args(argv)
 
