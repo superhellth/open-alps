@@ -5,7 +5,7 @@ export interface TourListing {
   legs: number[]
 }
 
-const legUrl = (tour: string, leg: number) => `/api/gpx/tours/${encodeURIComponent(tour)}/${leg}`
+const legUrl = (tour: string, leg: number | 'restructure') => `/api/gpx/tours/${encodeURIComponent(tour)}/${leg}`
 
 async function failure(res: Response): Promise<Error> {
   try {
@@ -38,4 +38,14 @@ export async function putLeg(
   if (res.status === 409) return { ok: false, conflict: true }
   if (!res.ok) throw await failure(res)
   return { ok: true, mtime: (await res.json()).mtime }
+}
+
+export type LegSource = { from: number } | { text: string }
+
+/** legs[i] becomes leg i+1 of the tour; `checks` maps leg number to the mtime the caller loaded. */
+export async function restructureTour(
+  tour: string, legs: LegSource[], checks: Record<number, string> = {},
+): Promise<void> {
+  const res = await fetch(legUrl(tour, 'restructure'), { method: 'POST', body: JSON.stringify({ legs, checks }) })
+  if (!res.ok) throw await failure(res)
 }

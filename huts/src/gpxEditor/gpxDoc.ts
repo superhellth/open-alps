@@ -107,3 +107,43 @@ export function deleteEdit(g: GpxDoc, index: number): Edit {
     },
   }
 }
+
+function removePoint(el: Element): void {
+  precedingWhitespace(el)?.remove()
+  el.remove()
+}
+
+/** Splits at trackpoint `index`; that point ends the first document and starts the second. */
+export function splitGpx(text: string, index: number): [string, string] {
+  const total = trkpts(parseGpx(text)).length
+  if (!Number.isInteger(index) || index < 1 || index > total - 2) {
+    throw new Error(`cannot split a ${total}-point leg at point ${index}`)
+  }
+  const head = parseGpx(text)
+  trkpts(head).slice(index + 1).forEach(removePoint)
+  const tail = parseGpx(text)
+  trkpts(tail).slice(0, index).forEach(removePoint)
+  return [serializeGpx(head), serializeGpx(tail)]
+}
+
+const samePosition = (a: Element, b: Element) =>
+  fmt(Number(a.getAttribute('lat'))) === fmt(Number(b.getAttribute('lat'))) &&
+  fmt(Number(a.getAttribute('lon'))) === fmt(Number(b.getAttribute('lon')))
+
+/** Appends `second`'s trackpoints to `first`; a duplicate join point is kept once. Metadata comes from `first`. */
+export function mergeGpx(first: string, second: string): string {
+  const a = parseGpx(first)
+  const aPts = trkpts(a)
+  const last = aPts[aPts.length - 1]
+  if (!last?.parentNode) throw new Error('first leg has no trackpoints')
+  const bPts = trkpts(parseGpx(second))
+  const rest = bPts.length > 0 && samePosition(last, bPts[0]!) ? bPts.slice(1) : bPts
+  const indent = precedingWhitespace(last)
+  const nodes: Node[] = []
+  for (const p of rest) {
+    if (indent) nodes.push(indent.cloneNode())
+    nodes.push(a.doc.importNode(p, true))
+  }
+  last.after(...nodes)
+  return serializeGpx(a)
+}

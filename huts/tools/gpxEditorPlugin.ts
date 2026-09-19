@@ -65,6 +65,65 @@ async function listTours(toursDir: string) {
   return tours
 }
 
+type LegSource = { from: number } | { text: string }
+
+interface RestructureBody {
+  legs: LegSource[]
+  /** leg number -> mtime the client loaded; a mismatch aborts before anything is written. */
+  checks: Record<string, string>
+}
+
+function parseRestructure(raw: string): RestructureBody {
+  let body: unknown
+  try {
+    body = JSON.parse(raw)
+  } catch {
+    throw new HttpError(400, 'body is not JSON')
+  }
+  const { legs, checks } = (body ?? {}) as Partial<RestructureBody>
+  if (!Array.isArray(legs) || legs.length === 0) throw new HttpError(400, 'legs must be a non-empty array')
+  for (const l of legs) {
+    const ok = 'from' in l ? Number.isInteger(l.from) : typeof l.text === 'string' && l.text.includes('<gpx')
+    if (!ok) throw new HttpError(400, 'each leg needs an integer "from" or GPX "text"')
+  }
+  return { legs, checks: checks ?? {} }
+}
+
+/**
+ * Rewrites a tour's leg files so that legs[i] becomes leg i+1: `from` keeps/moves an existing file,
+ * `text` writes new content. Existing files beyond the new leg count are removed. New content is
+ * staged in temp files first, so a failure before the renames leaves the tour untouched.
+ */
+async function restructureTour(tourDir: string, raw: string) {
+  const { legs, checks } = parseRestructure(raw)
+  const existing = (await fs.readdir(tourDir)).filter((f) => /^\d+\.gpx$/.test(f)).map((f) => parseInt(f, 10))
+  for (const l of legs) {
+    if ('from' in l && !existing.includes(l.from)) throw new HttpError(404, `unknown leg: ${l.from}`)
+  }
+  for (const [leg, mtime] of Object.entries(checks)) {
+    if (!existing.includes(Number(leg))) throw new HttpError(404, `unknown leg: ${leg}`)
+    if (String((await fs.stat(path.join(tourDir, `${leg}.gpx`))).mtimeMs) !== mtime) {
+      throw new HttpError(409, `leg ${leg} changed on disk since it was loaded`)
+    }
+  }
+  const staged: { tmp: string; target: string }[] = []
+  try {
+    for (const [i, l] of legs.entries()) {
+      const target = path.join(tourDir, `${i + 1}.gpx`)
+      const tmp = `${target}.tmp-${process.pid}-${Date.now()}`
+      staged.push({ tmp, target })
+      if ('from' in l) await fs.copyFile(path.join(tourDir, `${l.from}.gpx`), tmp)
+      else await fs.writeFile(tmp, l.text, 'utf-8')
+    }
+  } catch (e) {
+    await Promise.all(staged.map((s) => fs.rm(s.tmp, { force: true })))
+    throw e
+  }
+  for (const s of staged) await fs.rename(s.tmp, s.target)
+  await Promise.all(existing.filter((n) => n > legs.length).map((n) => fs.rm(path.join(tourDir, `${n}.gpx`))))
+  return { legs: legs.length }
+}
+
 async function readJsonFile(file: string, missingMessage: string): Promise<unknown> {
   try {
     return JSON.parse(await fs.readFile(file, 'utf-8'))
@@ -78,6 +137,11 @@ async function handle(paths: GpxApiPaths, req: IncomingMessage, res: ServerRespo
   const [head, tourName, leg] = segments
   if (head === 'tours' && segments.length === 1 && req.method === 'GET') {
     return sendJson(res, 200, await listTours(paths.toursDir))
+  }
+  if (head === 'tours' && segments.length === 3 && tourName !== undefined && leg === 'restructure' &&
+      req.method === 'POST') {
+    const tourDir = await resolveTourDir(paths.toursDir, tourName)
+    return sendJson(res, 200, await restructureTour(tourDir, await readBody(req)))
   }
   if (head === 'tours' && segments.length === 3 && tourName !== undefined && leg !== undefined) {
     const file = await resolveLegFile(await resolveTourDir(paths.toursDir, tourName), leg)

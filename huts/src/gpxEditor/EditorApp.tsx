@@ -4,7 +4,7 @@ import * as api from './api.js'
 import { densify } from './densify.js'
 import EditorMap from './EditorMap.js'
 import {
-  deleteEdit, insertEdit, listPoints, moveEdit, parseGpx, serializeGpx, type GpxDoc,
+  deleteEdit, insertEdit, listPoints, mergeGpx, moveEdit, parseGpx, serializeGpx, splitGpx, type GpxDoc,
 } from './gpxDoc.js'
 import { History, composite, type Edit } from './history.js'
 import {
@@ -25,6 +25,26 @@ interface Session {
 const key = (tour: string, leg: number) => `${tour}/${leg}`
 const LOAD_CONCURRENCY = 6
 
+/** Loads each leg's endpoints (for sidebar badges) with bounded concurrency. */
+async function loadShapes(
+  queue: { tour: string; leg: number }[],
+  onShape: (tour: string, leg: number, shape: LegShape) => void,
+  cancelled: () => boolean = () => false,
+) {
+  const worker = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) {
+      try {
+        const { text } = await api.getLeg(item.tour, item.leg)
+        const shape = legShape(listPoints(parseGpx(text)))
+        if (shape && !cancelled()) onShape(item.tour, item.leg, shape)
+      } catch {
+        // a leg that fails to load simply shows no badge
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: LOAD_CONCURRENCY }, worker))
+}
+
 export default function EditorApp() {
   const [tours, setTours] = useState<api.TourListing[]>([])
   const [hubs, setHubs] = useState<Hub[]>([])
@@ -33,6 +53,7 @@ export default function EditorApp() {
   const [message, setMessage] = useState<string | null>(null)
   const [shapes, setShapes] = useState<Record<string, LegShape>>({})
   const [session, setSession] = useState<Session | null>(null)
+  const [selectedPoint, setSelectedPoint] = useState<number | null>(null)
   const [tick, setTick] = useState(0)
   const bump = () => setTick((t) => t + 1)
 
@@ -56,18 +77,8 @@ export default function EditorApp() {
           setWarning(`Snap overlay disabled: ${failed.map((f) => (f.reason as Error).message).join('; ')}`)
         }
         const queue = list.flatMap((t) => t.legs.map((leg) => ({ tour: t.name, leg })))
-        const worker = async () => {
-          for (let item = queue.shift(); item; item = queue.shift()) {
-            try {
-              const { text } = await api.getLeg(item.tour, item.leg)
-              const shape = legShape(listPoints(parseGpx(text)))
-              if (shape && !cancelled) setShapes((s) => ({ ...s, [key(item.tour, item.leg)]: shape }))
-            } catch {
-              // a leg that fails to load simply shows no badge
-            }
-          }
-        }
-        await Promise.all(Array.from({ length: LOAD_CONCURRENCY }, worker))
+        await loadShapes(queue, (tour, leg, shape) => setShapes((sh) => ({ ...sh, [key(tour, leg)]: shape })),
+          () => cancelled)
       } catch (e) {
         setMessage((e as Error).message)
       }
@@ -171,8 +182,72 @@ export default function EditorApp() {
     }
   }
 
-  const activeStatus = session ? statuses[key(session.tour, session.leg)] ?? null : null
   const position = session ? tours.find((t) => t.name === session.tour)?.legs.indexOf(session.leg) ?? 0 : 0
+
+  // Structural edits write to disk immediately; they need a clean open leg so nothing unsaved is lost.
+  const restructure = async (
+    tour: string, legs: api.LegSource[], checks: Record<number, string>, selectIndex: number, confirmText: string,
+  ) => {
+    if (!window.confirm(`${confirmText}\nThis rewrites the leg files on disk now (git is the undo).`)) return
+    try {
+      await api.restructureTour(tour, legs, checks)
+      const list = await api.getTours()
+      setTours(list)
+      setShapes((sh) => Object.fromEntries(Object.entries(sh).filter(([k]) => !k.startsWith(`${tour}/`))))
+      const legsNow = list.find((t) => t.name === tour)?.legs ?? []
+      void loadShapes(legsNow.map((leg) => ({ tour, leg })),
+        (t, leg, shape) => setShapes((sh) => ({ ...sh, [key(t, leg)]: shape })))
+      const target = legsNow[selectIndex]
+      if (target !== undefined) await openLeg(tour, target)
+      else setSession(null)
+    } catch (e) {
+      setMessage(`Restructure failed: ${(e as Error).message}`)
+    }
+  }
+
+  const tourLegs = session ? tours.find((t) => t.name === session.tour)?.legs ?? [] : []
+  const canSplit = !!session && !dirty && selectedPoint !== null && selectedPoint > 0 && selectedPoint < points.length - 1
+  const canMerge = !!session && !dirty && position < tourLegs.length - 1
+  const canMoveEarlier = !!session && !dirty && position > 0
+  const canMoveLater = !!session && !dirty && position < tourLegs.length - 1
+
+  const splitLeg = async () => {
+    if (!session || selectedPoint === null) return
+    const { tour, leg } = session
+    try {
+      const { text, mtime } = await api.getLeg(tour, leg)
+      const [head, tail] = splitGpx(text, selectedPoint)
+      const legs = tourLegs.flatMap((n): api.LegSource[] => (n === leg ? [{ text: head }, { text: tail }] : [{ from: n }]))
+      await restructure(tour, legs, { [leg]: mtime }, position, `Split ${tour} leg ${leg} at point ${selectedPoint}?`)
+    } catch (e) {
+      setMessage(`Split failed: ${(e as Error).message}`)
+    }
+  }
+
+  const mergeNext = async () => {
+    if (!session) return
+    const { tour, leg } = session
+    const next = tourLegs[position + 1]
+    if (next === undefined) return
+    try {
+      const [a, b] = await Promise.all([api.getLeg(tour, leg), api.getLeg(tour, next)])
+      const merged = mergeGpx(a.text, b.text)
+      const legs = tourLegs.flatMap((n): api.LegSource[] => (n === leg ? [{ text: merged }] : n === next ? [] : [{ from: n }]))
+      await restructure(tour, legs, { [leg]: a.mtime, [next]: b.mtime }, position, `Merge ${tour} legs ${leg} and ${next}?`)
+    } catch (e) {
+      setMessage(`Merge failed: ${(e as Error).message}`)
+    }
+  }
+
+  const moveLeg = async (delta: -1 | 1) => {
+    if (!session) return
+    const order = tourLegs.map((n): api.LegSource => ({ from: n }))
+    const other = position + delta
+    ;[order[position], order[other]] = [order[other]!, order[position]!]
+    await restructure(session.tour, order, {}, other, `Move ${session.tour} leg ${session.leg} to position ${other + 1}?`)
+  }
+
+  const activeStatus = session ? statuses[key(session.tour, session.leg)] ?? null : null
   const nLegs = session ? tours.find((t) => t.name === session.tour)?.legs.length ?? 1 : 1
   const requireHut = useMemo(() => endpointRequiresHut(position, nLegs), [position, nLegs])
 
@@ -242,6 +317,10 @@ export default function EditorApp() {
           <Button size="small" variant="contained" disabled={!dirty} onClick={() => void save()}>Save</Button>
           <Button size="small" disabled={!session?.history.canUndo()} onClick={undo}>Undo</Button>
           <Button size="small" disabled={!session?.history.canRedo()} onClick={redo}>Redo</Button>
+          <Button size="small" disabled={!canSplit} onClick={() => void splitLeg()}>Split at point</Button>
+          <Button size="small" disabled={!canMerge} onClick={() => void mergeNext()}>Merge with next</Button>
+          <Button size="small" disabled={!canMoveEarlier} onClick={() => void moveLeg(-1)}>Move earlier</Button>
+          <Button size="small" disabled={!canMoveLater} onClick={() => void moveLeg(1)}>Move later</Button>
           {snapEnabled && activeStatus && !activeStatus.startOk && activeStatus.start.nearest && (
             <Button size="small" color="error" onClick={() => snapEndpoint('start')}>Snap start to hub</Button>
           )}
@@ -261,6 +340,7 @@ export default function EditorApp() {
             requireHut={requireHut}
             onMove={(i, lon, lat) => session && run(moveEdit(session.gpx, i, { lon, lat }))}
             onInsert={(after, lon, lat) => session && run(insertEdit(session.gpx, after, [{ lon, lat }]))}
+            onSelectPoint={setSelectedPoint}
             onDelete={(i) => session && i > 0 && i < points.length - 1 && run(deleteEdit(session.gpx, i))}
           />
         </Box>

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { GPX_NS, deleteEdit, insertEdit, listPoints, moveEdit, parseGpx, serializeGpx } from './gpxDoc.js'
+import { GPX_NS, deleteEdit, insertEdit, listPoints, mergeGpx, moveEdit, parseGpx, serializeGpx, splitGpx } from './gpxDoc.js'
 
 const SRC =
   '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' +
@@ -75,5 +75,33 @@ describe('gpxDoc', () => {
     e.revert()
     e.apply()
     expect(listPoints(g)).toHaveLength(2)
+  })
+})
+
+describe('splitGpx / mergeGpx', () => {
+  it('split shares the split point and keeps the prolog', () => {
+    const [head, tail] = splitGpx(SRC, 1)
+    expect(listPoints(parseGpx(head))).toEqual([{ lon: 11.1, lat: 47.1 }, { lon: 11.2, lat: 47.2 }])
+    expect(listPoints(parseGpx(tail))).toEqual([{ lon: 11.2, lat: 47.2 }, { lon: 11.3, lat: 47.3 }])
+    expect(head.startsWith('<?xml')).toBe(true)
+    expect(tail).toContain('<oa:x>1</oa:x>')
+  })
+
+  it('split rejects endpoints and out-of-range indices', () => {
+    expect(() => splitGpx(SRC, 0)).toThrow()
+    expect(() => splitGpx(SRC, 2)).toThrow()
+  })
+
+  it('merge undoes a split byte-for-byte on points', () => {
+    const [head, tail] = splitGpx(SRC, 1)
+    expect(listPoints(parseGpx(mergeGpx(head, tail)))).toEqual(listPoints(parseGpx(SRC)))
+  })
+
+  it('merge keeps distinct join points and puts new points in the GPX namespace', () => {
+    const [head, tail] = splitGpx(SRC, 1)
+    const merged = parseGpx(mergeGpx(head, splitGpx(SRC, 1)[1].replace('47.200000', '47.250000')))
+    expect(listPoints(merged)).toHaveLength(4)
+    expect(merged.doc.getElementsByTagNameNS(GPX_NS, 'trkpt')).toHaveLength(4)
+    expect(tail).toBeTruthy()
   })
 })

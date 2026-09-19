@@ -12,6 +12,10 @@ Browser tool to inspect tour legs against the pipeline's hubs and repair GPX tra
 4. Drag handles to move points, click the line to insert a point, right-click a handle (or select it and press
    `Del`) to delete, `Ctrl+Z` / `Ctrl+Shift+Z` undo/redo, "Snap start/end to hub" fixes a red endpoint,
    `Ctrl+S` saves to `pipeline/tours/<Tour>/<N>.gpx`.
-5. After saving, re-run `doit` as usual. Git is the undo for saved files: the tool makes no backups.
+5. Restructure a tour with the toolbar buttons (they need a clean open leg, i.e. saved or no edits):
+   select a point and "Split at point" (the point ends the leg and starts the next), "Merge with next",
+   "Move earlier" / "Move later". These rewrite and renumber the leg files on disk immediately, after a
+   confirm prompt. Later legs are renumbered so a tour always has legs `1..n`.
+6. After saving, re-run `doit` as usual. Git is the undo for saved files: the tool makes no backups.
 
 The editor is dev-only: `vite build` builds only `index.html`.

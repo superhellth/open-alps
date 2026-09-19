@@ -16,6 +16,7 @@ export interface EditorMapProps {
   onMove(index: number, lon: number, lat: number): void
   onInsert(afterIndex: number, lon: number, lat: number): void
   onDelete(index: number): void
+  onSelectPoint?(index: number | null): void
 }
 
 const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
@@ -161,6 +162,7 @@ export default function EditorMap(props: EditorMapProps) {
       })
       marker.on('click', () => {
         selectedRef.current = i
+        latest.current.onSelectPoint?.(i)
         g.handles.eachLayer((layer) => (layer as L.Marker).getElement()?.classList.remove('selected'))
         marker.getElement()?.classList.add('selected')
       })
@@ -210,6 +212,7 @@ export default function EditorMap(props: EditorMapProps) {
     const map = mapRef.current
     if (!map) return
     selectedRef.current = null
+    latest.current.onSelectPoint?.(null)
     redrawLine()
     redrawOverlay(props.points)
     redrawHandles()

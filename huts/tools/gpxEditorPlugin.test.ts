@@ -111,4 +111,53 @@ describe('gpx api', () => {
     writeFileSync(path.join(root, 'pipeline.config.json'), '{"graph":{"maxSnapM":100}}')
     expect(await (await fetch(`${base}/api/gpx/config`)).json()).toEqual({ maxSnapM: 100 })
   })
+
+  describe('restructure', () => {
+    const tourDir = () => path.join(toursDir, 'Kaisertour')
+    const files = () => readdirSync(tourDir()).sort()
+    const post = (body: unknown) =>
+      fetch(`${base}/api/gpx/tours/Kaisertour/restructure`, { method: 'POST', body: JSON.stringify(body) })
+
+    beforeEach(() => {
+      rmSync(tourDir(), { recursive: true })
+      mkdirSync(tourDir())
+      for (const n of ['1', '2', '3']) writeFileSync(path.join(tourDir(), `${n}.gpx`), GPX.replace('<trkseg>', `<!--${n}--><trkseg>`))
+    })
+    const marker = (n: number) => /<!--(\d)-->/.exec(readFileSync(path.join(tourDir(), `${n}.gpx`), 'utf-8'))![1]
+
+    it('reorders by renumbering', async () => {
+      expect((await post({ legs: [{ from: 2 }, { from: 1 }, { from: 3 }] })).status).toBe(200)
+      expect([1, 2, 3].map(marker)).toEqual(['2', '1', '3'])
+      expect(files()).toEqual(['1.gpx', '2.gpx', '3.gpx'])
+    })
+
+    it('split: new text inserted, later legs shift up', async () => {
+      const res = await post({ legs: [{ from: 1 }, { text: NEW_GPX }, { text: NEW_GPX }, { from: 3 }] })
+      expect(res.status).toBe(200)
+      expect(readFileSync(path.join(tourDir(), '2.gpx'), 'utf-8')).toBe(NEW_GPX)
+      expect(marker(4)).toBe('3')
+      expect(files()).toEqual(['1.gpx', '2.gpx', '3.gpx', '4.gpx'])
+    })
+
+    it('merge: shrinks the tour and removes leftover files', async () => {
+      const mtime = (await fetch(leg('Kaisertour', '1'))).headers.get('x-gpx-mtime')!
+      const res = await post({ legs: [{ text: NEW_GPX }, { from: 3 }], checks: { 1: mtime } })
+      expect(res.status).toBe(200)
+      expect(marker(2)).toBe('3')
+      expect(files()).toEqual(['1.gpx', '2.gpx'])
+    })
+
+    it('stale check returns 409 and changes nothing', async () => {
+      const res = await post({ legs: [{ from: 2 }, { from: 1 }], checks: { 1: '1' } })
+      expect(res.status).toBe(409)
+      expect([1, 2, 3].map(marker)).toEqual(['1', '2', '3'])
+    })
+
+    it('rejects unknown legs and malformed bodies without writing', async () => {
+      expect((await post({ legs: [{ from: 9 }] })).status).toBe(404)
+      expect((await post({ legs: [] })).status).toBe(400)
+      expect((await post({ legs: [{ text: 'nope' }] })).status).toBe(400)
+      expect(files()).toEqual(['1.gpx', '2.gpx', '3.gpx'])
+    })
+  })
 })
