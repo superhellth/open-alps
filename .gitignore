@@ -1,7 +1,7 @@
 # Offline precompute pipeline - large derived/downloaded outputs, not source.
 # Pipeline code/config lives in pipeline/ and IS tracked - only data/'s raw/generated
 # dirs below are excluded.
-data/
+/data/
 .superpowers/
 
 # Generated pipeline output, copied here by the pipeline's copy_public_data doit task -
