@@ -5,6 +5,8 @@ import 'leaflet/dist/leaflet.css'
 import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
 import RouteLayer from './map/RouteLayer.js'
+import TripLayer from './map/TripLayer.js'
+import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/TripLayer.js'
 import { ACTIVE_TILES } from './map/tiles.js'
 import type { PlannerTour } from './tours.js'
 import type { Route, StartPoint } from './types.js'
@@ -21,11 +23,19 @@ export interface PlannerMapProps {
   route: Route | null
   fitRoute: boolean
   highlightedLeg: number | null
+  tripHuts: TripHutMarker[]
+  tripEnds: TripEndMarker[]
+  /** Swap/extend candidates of the active edit, drawn as signposts. */
+  candidates: CandidateMapMarker[]
+  onPickCandidate: (hutIndex: number) => void
 }
 
 // One MapContainer stays mounted across discover <-> trip so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
-  const { mode, groups, dimmed, startById, onSelectStarts, route, fitRoute, highlightedLeg } = props
+  const {
+    mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
+    tripHuts, tripEnds, candidates, onPickCandidate,
+  } = props
   return (
     <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%' }}>
       <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>
@@ -37,6 +47,12 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           <DiscoverLayer groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts} />
         )}
         {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
+        {mode === 'trip' && (
+          <TripLayer
+            tripHuts={tripHuts} tripEnds={tripEnds} candidates={candidates}
+            hutCoordsById={hutCoordsById} onPickCandidate={onPickCandidate}
+          />
+        )}
       </MapContainer>
     </Box>
   )

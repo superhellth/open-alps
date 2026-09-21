@@ -24,3 +24,20 @@
 .start-count-marker.dimmed span {
   opacity: 0.45;
 }
+
+.start-symbol {
+  background: none;
+  border: none;
+}
+.swap-signpost {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 14px 3px 8px;
+  background: #f5b700;
+  color: #23272b;
+  font: 600 0.8rem/1.2 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font-variant-numeric: tabular-nums;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  cursor: pointer;
+}

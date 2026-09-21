@@ -16,6 +16,7 @@ const startById = new Map([
 const base = {
   mode: 'discover' as const, dimmed: false, startById, hutCoordsById: new Map(),
   onSelectStarts: () => {}, route: null, fitRoute: false, highlightedLeg: null,
+  tripHuts: [], tripEnds: [], candidates: [], onPickCandidate: () => {},
 }
 
 describe('PlannerMap discover mode', () => {
@@ -38,5 +39,35 @@ describe('PlannerMap discover mode', () => {
     expect(container.querySelector('.map-muted')).not.toBeNull()
     rerender(<PlannerMap {...base} mode="trip" groups={[]} />)
     expect(container.querySelector('.map-muted')).toBeNull()
+  })
+})
+
+describe('PlannerMap trip mode', () => {
+  const tripBase = {
+    ...base, mode: 'trip' as const, groups: [], hutCoordsById: new Map([[0, { lat: 47.3, lng: 12.0 }]]),
+    tripHuts: [{ hutIndex: 0, name: 'Hütte A', operator: 'av' as const, serviced: true }],
+    tripEnds: [{ lat: 47.29, lng: 12.0, sourceType: 1 }],
+    candidates: [{ hutIndex: 5, lat: 47.35, lng: 12.05, name: 'Hütte X', legInH: 2.5, legOutH: 3 }],
+    onPickCandidate: () => {},
+  }
+  it('draws trip huts as yellow-filled symbols and start/exit symbols', async () => {
+    const { container } = render(<PlannerMap {...tripBase} />)
+    await waitFor(() => expect(container.querySelectorAll('.hut-marker').length).toBe(1))
+    expect(container.querySelector('.hut-marker svg')?.innerHTML).toContain('#F5B700')
+    expect(container.querySelectorAll('.start-symbol')).toHaveLength(1)
+  })
+  it('shows swap candidates as signposts with both leg times and reports a pick', async () => {
+    const onPickCandidate = vi.fn()
+    const { container } = render(<PlannerMap {...tripBase} onPickCandidate={onPickCandidate} />)
+    await waitFor(() => expect(container.querySelector('.swap-marker')).not.toBeNull())
+    expect(container.querySelector('.swap-marker')?.textContent).toContain('Hütte X')
+    expect(container.querySelector('.swap-marker')?.textContent).toContain('2½ Std')
+    expect(container.querySelector('.swap-marker')?.textContent).toContain('3 Std')
+    fireEvent.click(container.querySelector('.swap-marker')!)
+    expect(onPickCandidate).toHaveBeenCalledWith(5)
+  })
+  it('shows no discover markers in trip mode', () => {
+    const { container } = render(<PlannerMap {...tripBase} groups={[{ startId: 1, tours: [] }]} />)
+    expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
   })
 })
