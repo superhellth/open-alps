@@ -47,6 +47,33 @@ def test_simplify_edges_handles_out_of_order_and_short_edges():
     assert points.tolist() == [[10.0, 0.0], [12.0, 0.0], [0.0, 0.0], [2.0, 0.0], [50.0, 0.0]]
 
 
+def test_simplify_edges_chunked_matches_single_chunk():
+    rng = np.random.default_rng(0)
+    n_edges = 25
+    counts = rng.integers(0, 12, n_edges)  # includes empty, single-point and long edges
+    records = np.zeros(n_edges, dtype=binfmt.RECORD_DTYPE)
+    records["geom_count"] = counts
+    records["geom_offset"] = rng.permutation(n_edges) * 12  # out of order, non-overlapping
+    geometry = np.zeros(n_edges * 12, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"] = rng.random(len(geometry))
+    geometry["lat"] = rng.random(len(geometry))
+    expected = simplify_edges(records, geometry, 0.05, chunk_edges=n_edges)
+    for chunk_edges in (1, 4, 7):
+        points, out_counts = simplify_edges(records, geometry, 0.05, chunk_edges=chunk_edges)
+        assert out_counts.tolist() == expected[1].tolist()
+        assert np.array_equal(points, expected[0])
+
+
+def test_simplify_edges_chunk_of_only_short_edges():
+    records = np.zeros(2, dtype=binfmt.RECORD_DTYPE)
+    records["geom_offset"], records["geom_count"] = [0, 1], [1, 1]
+    geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"] = [3.0, 4.0]
+    points, counts = simplify_edges(records, geometry, 0.01, chunk_edges=1)
+    assert counts.tolist() == [1, 1]
+    assert points.tolist() == [[3.0, 0.0], [4.0, 0.0]]
+
+
 def test_build_stats_resolves_ids_via_id_table():
     records = np.zeros(1, dtype=binfmt.RECORD_DTYPE)
     records[0] = (1, 2, binfmt.TYPE_HUT, binfmt.TYPE_HUT, 0, 1000.0, 0.0, 50.0, 10.0,

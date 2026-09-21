@@ -41,18 +41,38 @@ def _gather_indices(offsets: np.ndarray, counts: np.ndarray) -> np.ndarray:
     return np.repeat(offsets - starts, counts) + np.arange(total)
 
 
-def simplify_edges(records: np.ndarray, geometry: np.ndarray, tolerance_deg: float) -> tuple:
-    """Douglas-Peucker-simplifies every edge's geometry in one GEOS call. Returns the concatenated
-    (n, 2) f8 [lon, lat] points and the per-edge point counts. Edges with fewer than two points
-    are passed through unsimplified."""
+# Edges simplified per GEOS call. Peak memory grows ~110 KB per edge on start-edges (whole-array
+# passes over 400k edges need tens of GB); throughput is flat up to ~1000 edges and drops beyond.
+SIMPLIFY_CHUNK_EDGES = 1000
+
+
+def simplify_edges(records: np.ndarray, geometry: np.ndarray, tolerance_deg: float,
+                   chunk_edges: int = SIMPLIFY_CHUNK_EDGES) -> tuple:
+    """Douglas-Peucker-simplifies every edge's geometry, chunk_edges edges per GEOS call. Returns
+    the concatenated (n, 2) f8 [lon, lat] points and the per-edge point counts. Edges with fewer
+    than two points are passed through unsimplified. geometry may be memory-mapped: only each
+    chunk's own points are read."""
+    if len(records) == 0:
+        return np.zeros((0, 2), dtype=np.float64), np.zeros(0, dtype=np.int64)
+    chunks = [
+        _simplify_chunk(records[start:start + chunk_edges], geometry, tolerance_deg)
+        for start in range(0, len(records), chunk_edges)
+    ]
+    return np.concatenate([c[0] for c in chunks]), np.concatenate([c[1] for c in chunks])
+
+
+def _simplify_chunk(records: np.ndarray, geometry: np.ndarray, tolerance_deg: float) -> tuple:
     offsets = records["geom_offset"].astype(np.int64)
     counts = records["geom_count"].astype(np.int64)
-    coords = np.column_stack([geometry["lon"], geometry["lat"]])[_gather_indices(offsets, counts)]
+    gathered = geometry[_gather_indices(offsets, counts)]
+    coords = np.column_stack([gathered["lon"], gathered["lat"]])
     edge_of_point = np.repeat(np.arange(len(records)), counts)
 
     long_edges = counts >= 2
     long_mask = long_edges[edge_of_point]
-    lines = shapely.linestrings(coords[long_mask], indices=edge_of_point[long_mask])
+    # shapely wants consecutive line indices, so number the long edges among themselves.
+    line_of_edge = np.cumsum(long_edges) - 1
+    lines = shapely.linestrings(coords[long_mask], indices=line_of_edge[edge_of_point[long_mask]])
     simplified = shapely.simplify(lines, tolerance_deg, preserve_topology=False)
     simplified_coords, line_of_point = shapely.get_coordinates(simplified, return_index=True)
     simplified_counts = np.bincount(line_of_point, minlength=len(lines))
@@ -164,7 +184,7 @@ if __name__ == "__main__":
                min_zoom=args.min_zoom, max_zoom=args.max_zoom) as meta:
         with timer.step("load_arrays"):
             records = binfmt.load_array(edges_dir / "records.npy", mmap=False)
-            geometry = binfmt.load_array(edges_dir / "geometry.npy", mmap=False)
+            geometry = binfmt.load_array(edges_dir / "geometry.npy")
             profiles = binfmt.load_array(edges_dir / "profiles.npy", mmap=False)
             with open(args.id_table, encoding="utf-8") as f:
                 id_table = json.load(f)
