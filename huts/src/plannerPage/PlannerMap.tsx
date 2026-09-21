@@ -1,6 +1,6 @@
 import { memo } from 'react'
 import { Box } from '@mui/material'
-import { MapContainer, TileLayer } from 'react-leaflet'
+import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
@@ -20,6 +20,7 @@ export interface PlannerMapProps {
   startById: Map<number, StartPoint>
   hutCoordsById: Map<number, { lat: number; lng: number }>
   onSelectStarts: (startIds: number[]) => void
+  onMapClick?: () => void
   route: Route | null
   fitRoute: boolean
   highlightedLeg: number | null
@@ -30,11 +31,16 @@ export interface PlannerMapProps {
   onPickCandidate: (hutIndex: number) => void
 }
 
+function MapClickWatcher({ onClick }: { onClick?: () => void }) {
+  useMapEvents({ click: () => onClick?.() })
+  return null
+}
+
 // One MapContainer stays mounted across discover <-> trip so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
     mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
-    tripHuts, tripEnds, candidates, onPickCandidate,
+    tripHuts, tripEnds, candidates, onPickCandidate, onMapClick,
   } = props
   return (
     <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%' }}>
@@ -43,6 +49,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           url={ACTIVE_TILES.url} attribution={ACTIVE_TILES.attribution}
           subdomains={ACTIVE_TILES.subdomains} maxZoom={ACTIVE_TILES.maxZoom}
         />
+        <MapClickWatcher onClick={onMapClick} />
         {mode === 'discover' && (
           <DiscoverLayer groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts} />
         )}
