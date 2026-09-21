@@ -78,3 +78,23 @@ describe('suppressSimilar', () => {
     expect(result[0].totalDurationH).toBe(1)
   })
 })
+
+describe('suppressSimilar scope', () => {
+  const mk = (huts: number[], startId: number, d: number) => ({ huts, startId, totalDurationH: d })
+
+  it('perStart keeps several tours from the same start point when their huts differ', () => {
+    const chains = [mk([1, 2], 10, 5), mk([3, 4], 10, 6)]
+    expect(suppressSimilar(chains, { scope: 'perStart' })).toHaveLength(2)
+    expect(suppressSimilar(chains)).toHaveLength(1) // global default keeps one per start
+  })
+
+  it('perStart still drops a same-start tour sharing more than half its huts', () => {
+    const chains = [mk([1, 2, 3], 10, 5), mk([1, 2, 4], 10, 6)]
+    expect(suppressSimilar(chains, { scope: 'perStart' })).toEqual([chains[0]])
+  })
+
+  it('perStart never compares tours across different start points', () => {
+    const chains = [mk([1, 2], 10, 5), mk([1, 2], 11, 6)]
+    expect(suppressSimilar(chains, { scope: 'perStart' })).toHaveLength(2)
+  })
+})

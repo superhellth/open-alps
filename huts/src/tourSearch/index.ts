@@ -15,9 +15,13 @@ export async function loadTourSearchData(baseUrl = '/data'): Promise<GraphData> 
   return { hutEdges, approaches, hutEdgeIds, startEdgeIds }
 }
 
-export function findTours(query: Query, graphData: GraphData): SearchResult {
+export function findTours(
+  query: Query,
+  graphData: GraphData,
+  options: { similarityScope?: 'global' | 'perStart' } = {},
+): SearchResult {
   const { chains, killCounters } = searchChains(query, graphData)
   const deduped = dedupeReversePairs(chains)
-  const diverse = suppressSimilar(deduped)
+  const diverse = suppressSimilar(deduped, { scope: options.similarityScope })
   return { chains: diverse, killCounters }
 }

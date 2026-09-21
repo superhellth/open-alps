@@ -70,4 +70,25 @@ describe('findTours', () => {
     expect(chains).toEqual([])
     expect(killCounters).toBeDefined()
   })
+
+  it('accepts the perStart similarity scope and never returns fewer chains than the global scope', () => {
+    const graphData: GraphData = {
+      hutEdges: { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [] },
+      approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+      hutEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+      startEdgeIds: {
+        getSortedIds: () => new Int32Array(0),
+        getPrefixIds: () => new Int32Array(0),
+        getSuffixIds: () => new Int32Array(0),
+      },
+    }
+    const query: Query = { mode: 'transit', legCountMin: 2, legCountMax: 2, maxLegTimeH: 5 }
+    const global = findTours(query, graphData)
+    const perStart = findTours(query, graphData, { similarityScope: 'perStart' })
+    expect(perStart.chains.length).toBeGreaterThanOrEqual(global.chains.length)
+  })
 })
