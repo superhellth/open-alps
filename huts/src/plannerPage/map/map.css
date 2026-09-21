@@ -1,0 +1,26 @@
+/* Discover mode: desaturated, lightened tiles so the count markers stand out. */
+.map-muted .leaflet-tile-pane {
+  filter: grayscale(0.75) brightness(1.08) contrast(0.9);
+}
+.hut-marker,
+.start-count-marker,
+.swap-marker {
+  background: none;
+  border: none;
+}
+.start-count-marker span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #f5b700;
+  color: #23272b;
+  border: 2px solid #23272b;
+  font: 700 0.9rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+.start-count-marker.dimmed span {
+  opacity: 0.45;
+}

@@ -34,3 +34,14 @@ export function hutClassLabel(c: HutClass): string {
 export function hutClassBadge(c: HutClass): string {
   return c.serviced ? OPERATOR_BADGE[c.operator] : `${OPERATOR_BADGE[c.operator]}·SV`
 }
+
+export type HutShape = 'house' | 'circle'
+
+/** Map marker shape = operator; fill (below) = service. Two independent axes, no hues. */
+export const OPERATOR_SHAPE: Record<HutOperator, HutShape> = { av: 'house', sonstige: 'circle' }
+
+export type HutFill = 'filled' | 'outline'
+
+export function hutFill(c: HutClass): HutFill {
+  return c.serviced ? 'filled' : 'outline'
+}
