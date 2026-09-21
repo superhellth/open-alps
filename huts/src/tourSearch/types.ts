@@ -62,6 +62,7 @@ export interface HutLeg extends LegBase {
 export interface StartLeg extends LegBase {
   startId: number
   sourceType: SourceType
+  variant?: number
   hutIndex?: number
   accessUnknown?: boolean
   access?: string | null

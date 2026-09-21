@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildAdjacency } from './adjacency.js'
+import { buildAdjacency, getAdjacency } from './adjacency.js'
 import type { HutEdgesData } from './types.js'
 
 const hutEdgesData: HutEdgesData = {
@@ -25,5 +25,11 @@ describe('buildAdjacency', () => {
     const adjacency = buildAdjacency(hutEdgesData, 1)
     expect(adjacency.get(0)).toHaveLength(1)
     expect(adjacency.has(1)).toBe(false)
+  })
+
+  it('getAdjacency returns the same map for the same payload object and variant', () => {
+    const data = { hutIds: ['A', 'B'], variantNames: { 0: 'FAST_ANY' }, records: [] }
+    expect(getAdjacency(data, 0)).toBe(getAdjacency(data, 0))
+    expect(getAdjacency(data, 0)).not.toBe(getAdjacency({ ...data }, 0))
   })
 })
