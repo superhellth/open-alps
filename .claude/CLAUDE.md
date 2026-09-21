@@ -28,18 +28,33 @@ not be called in a loop over the whole hut list.
 ## App structure
 
 `huts/src/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
-(`theme.ts`)/`CssBaseline`: the default route (no hash) renders `tourSearchPage/TourSearchPage.tsx`,
-`#admin` renders `adminPage/AdminPage.tsx`. Both pages are wrapped in the shared `AppShell.tsx` (top
-app bar + tab nav between the two routes).
+(`theme.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: the default route (no hash) renders
+`plannerPage/PlannerPage.tsx`, `#trips` renders `plannerPage/TripsPage.tsx`, `#trip=<payload>` is a
+share link that opens the planner with an import offer, and `#admin` renders `adminPage/AdminPage.tsx`
+outside the providers (it needs none of the planner's data or the search worker). Pages are wrapped in
+the shared `AppShell.tsx` (top app bar + "Planen"/"Meine Touren" tabs; the admin view is unlinked).
+Planen and Meine Touren share one provider stack above the router: `data/AppDataProvider.tsx`
+(`buildAppData.ts` joins huts/stations/parking/partner geojson, the routing graph and official tours),
+`search/SearchClientProvider.tsx` and `trip/TripsProvider.tsx` (autosave to `localStorage`).
 
-`huts/src/tourSearchPage/TourSearchPage.tsx` is the main page: a form
-(`formState.ts` builds the `Query` from user input) over the client-side tour search engine in
-`huts/src/tourSearch/`, plus a results list (`TourList.tsx`) and map (`ResultsMap.tsx`). It fetches
-`/data/huts.geojson`, `/data/parking.geojson`, `/data/stations.geojson` and
-`/data/partner_betriebe.geojson` (the last fetched best-effort — 404 degrades to no partner
-businesses) to label/render search results, and loads the routing graph itself via
-`tourSearch/index.ts`'s `loadTourSearchData()`. `hutClass.ts` classifies each hut as AV-run vs.
-other, serviced vs. unserviced, for filtering/badging.
+`huts/src/plannerPage/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
+`usePlannerSearch` runs the whole-graph search, results grouped by start point and drawn as clustered
+count markers) -> Customize (a picked tour becomes a `Trip`; `TripEditor.tsx` swaps/extends/trims huts
+and changes start/exit) -> Plan nights (`TripPanel.tsx`: per-night availability, hand-set booking status,
+start-date answers) -> Take along (share link, `trip/shareLink.ts`). `formState.ts` builds the `Query`;
+`rankTours.ts`/`tourSearch/rankFit.ts` order results; `hutClass.ts` classifies each hut (marker shape =
+operator, fill = service).
+
+`huts/src/search/` runs the heavy search in a Web Worker (`searchWorker.ts`) that owns the large
+overlap tables (`hut-edge-ids`/`start-edge-ids`); the main thread holds only the small routing graph
+(`hutEdges` + `approaches`, `TripGraph`). A newer query terminates and respawns the worker
+(`searchClient.ts`); trip overlap warnings are computed in the worker too.
+
+`huts/src/trip/` is the trip model (`trip.ts`), persistence (`tripStorage.ts`), reducer
+(`tripsReducer.ts`) and share link. A `Trip` stores hut GUIDs and start-point ids only; legs are
+re-derived on every load by `tourSearch/tripLegs.ts`'s `legsFromTrip`, and a night that no longer
+resolves is flagged "changed since saved" rather than substituted. Editor moves live in
+`tourSearch/tripEdit.ts`, overlap warnings in `tourSearch/tripOverlaps.ts`.
 
 `huts/src/tourSearch/` is the client-side tour search engine: `loadHutEdges.ts`/
 `loadApproaches.ts`/`loadHutEdgeIds.ts` fetch and parse the pipeline's binary edge-payload/approach
@@ -49,14 +64,15 @@ against a `Query` (leg count/time bounds, mode, start point); `diversity.ts` ded
 reversed-direction duplicates and suppresses near-identical routes; `adjacency.ts`,
 `legFilters.ts`, `dinDuration.ts`, `overlap.ts`, `resolveVariant.ts`, `reverseLeg.ts` are the
 supporting graph/filtering primitives. (`pipeline/CLAUDE.md`'s "Deferred" note still describes this
-client as not-yet-built — that note is stale.)
+client as not-yet-built — that note is stale.) `groupByStart.ts`, `rankFit.ts`, `limits.ts`
+(`LEG_COUNT_SLIDER_MAX`, measured) and the `trip*.ts` files support the Planner.
 
 `huts/src/adminPage/AdminPage.tsx` (the `#admin` route) is the internal-only, not user-facing
 debugging/sanity-check view of the raw hut-to-hut routing graph: renders `/data/trails.pmtiles` and
 `/data/hut-edges.pmtiles` via `protomaps-leaflet`, plus `/data/huts.geojson` and
 `/data/hut-edge-stats.json`. Its Leaflet layer components (`TrailLayers.tsx`, `HoverInspector.tsx`,
 `EdgeHoverPanel.tsx`) and binary-geometry decoder (`decodeEdgeGeometry.ts`) live alongside it in
-`adminPage/`, mirroring how `tourSearchPage/` decomposes `TourSearchPage.tsx`.
+`adminPage/`, mirroring how `plannerPage/` decomposes `PlannerPage.tsx`.
 
 ## Hut-to-hut routing graph
 
@@ -70,7 +86,7 @@ raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, 
 `tour-match-gaps.json`) are copied into `huts/public/data/` by the
 pipeline's own `copy_public_data` task (a `(source, public name)` table, `PUBLIC_FILES` in `dodo.py`). `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
-`GraphPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
+`adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
 (`huts/src/tourSearch/`, see "App structure" above) that runs entirely in the browser off these
 static files — no query-time backend. The hut-edge payload contract (columns, dtypes, what's
 deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` — see

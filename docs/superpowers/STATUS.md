@@ -34,8 +34,8 @@ new row when a new spec is written.
 | 2026-09-03 | [Approach table: duration/source-type/variant matrix](specs/2026-09-03-approach-table-duration-matrix-design.md) | done |
 | 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | done |
 | 2026-09-04 | [Extend overlap avoidance to approach/exit legs](specs/2026-09-04-approach-exit-overlap-avoidance-design.md) | done |
-| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | **in progress** |
-| 2026-09-04 | [Stable hut/leg references for persistence](specs/2026-09-04-stable-tour-ids-design.md) | **in progress** |
+| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | done |
+| 2026-09-04 | [Stable hut/leg references for persistence](specs/2026-09-04-stable-tour-ids-design.md) | superseded by 2026-09-04-trip-planner-reenvision (trips store hut GUIDs and re-derive legs) |
 | 2026-09-14 | [GPX-only tour matching](specs/2026-09-14-gpx-hut-snap-design.md) | done |
 | 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | done |
 | 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |
