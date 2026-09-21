@@ -1,15 +1,38 @@
 import { createTheme } from '@mui/material/styles'
 
-// Single source of truth for palette/spacing/typography (spec D). No dark-mode requirement
-// today, but nothing here precludes adding a dark palette variant later.
+export const tokens = {
+  paper: '#EDEFE9',
+  ink: '#23272B',
+  signpost: '#F5B700',
+  trailRed: '#C8102E', // medium difficulty only
+  alpineBlue: '#1F5FA8', // alpine difficulty only
+}
+
+export const SIGNPOST_FONT = '"Barlow Semi Condensed", "Barlow", system-ui, sans-serif'
+
+// Light panels in map-paper tones; the signpost yellow is the only accent and is only ever a fill
+// with ink text on it. No shadows, cards or gradients.
 const theme = createTheme({
   palette: {
     mode: 'light',
-    primary: { main: '#1b5e20' }, // matches the existing map header green
-    secondary: { main: '#e65100' }, // matches AdminPage's edge-orange accent
+    primary: { main: tokens.signpost, contrastText: tokens.ink },
+    secondary: { main: tokens.ink, contrastText: tokens.paper },
+    background: { default: tokens.paper, paper: tokens.paper },
+    text: { primary: tokens.ink },
   },
+  shape: { borderRadius: 2 },
   typography: {
-    fontFamily: 'system-ui, sans-serif',
+    fontFamily: '"Barlow", system-ui, sans-serif',
+    h6: { fontFamily: SIGNPOST_FONT, fontWeight: 600 },
+    subtitle2: { fontFamily: SIGNPOST_FONT, fontWeight: 600 },
+  },
+  components: {
+    MuiAppBar: {
+      defaultProps: { color: 'default', elevation: 0 },
+      styleOverrides: { root: { backgroundColor: tokens.paper, color: tokens.ink, borderBottom: `2px solid ${tokens.ink}` } },
+    },
+    MuiPaper: { defaultProps: { elevation: 0 } },
+    MuiTabs: { styleOverrides: { indicator: { backgroundColor: tokens.signpost, height: 4 } } },
   },
 })
 
