@@ -90,7 +90,7 @@ describe('PlannerPage', () => {
     await openFirstResult(container)
     expect(await screen.findByText('Entwurf')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText(/ohne Datum · 1 Pers\./))
+    fireEvent.click(screen.getByText(/· 1 Pers\./))
     const partyFields = screen.getAllByLabelText('Personen')
     const visible = partyFields.find((el) => !el.closest('[hidden]'))!
     fireEvent.change(visible, { target: { value: '4' } })

@@ -36,27 +36,20 @@ describe('FilterBar', () => {
     expect(screen.getByText('Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.')).toBeInTheDocument()
   })
 
-  it('shows a date range when a date is picked, a day-count stepper otherwise', () => {
-    const props = base()
-    render(<FilterBar {...props} />)
-    expect(screen.getByText('3 Tage')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByText('Datum wählen'))
-    expect(props.onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ startDate: expect.any(String), endDate: expect.any(String) }))
+  it('always shows a collapsed date-range summary, no undated option, expanding to the calendar on click', () => {
+    render(<FilterBar {...base()} />)
+    expect(screen.queryByLabelText('Vorheriger Monat')).not.toBeInTheDocument()
+    expect(screen.queryByText('ohne Datum')).not.toBeInTheDocument()
+    expect(screen.queryByText('Datum wählen')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText(/–/))
+    expect(screen.getByLabelText('Vorheriger Monat')).toBeInTheDocument()
   })
 
-  it('the flexibel chip only affects the undated stepper', () => {
+  it('the party stepper reports draft patches', () => {
     const props = base()
     render(<FilterBar {...props} />)
-    fireEvent.click(screen.getByText('flexibel ±1 Tag'))
-    expect(props.onDraftChange).toHaveBeenCalledWith({ flexible: true })
-  })
-
-  it('the day and party steppers report draft patches', () => {
-    const props = base()
-    render(<FilterBar {...props} />)
-    fireEvent.click(screen.getAllByText('+', { selector: 'button' })[0])
-    expect(props.onDraftChange).toHaveBeenCalledWith({ dayCount: 4 })
+    fireEvent.click(screen.getByText('+', { selector: 'button' }))
+    expect(props.onDraftChange).toHaveBeenCalledWith({ partySize: 2 })
   })
 
   it('the leg-time control is three single-select chips defaulting to 7h', () => {
@@ -84,10 +77,10 @@ describe('FilterBar', () => {
     expect(screen.getByText('Unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen.')).toBeInTheDocument()
   })
 
-  it('Verfügbarkeit prüfen only shows when a date is set, and reveals the full-tours chip', () => {
+  it('Verfügbarkeit prüfen is unchecked by default and reveals the full-tours chip when checked', () => {
     const { rerender } = render(<FilterBar {...base()} />)
-    expect(screen.queryByLabelText('Verfügbarkeit prüfen')).not.toBeInTheDocument()
-    rerender(<FilterBar {...base()} draft={{ ...DEFAULT_DRAFT, startDate: '2026-07-10', endDate: '2026-07-12' }} form={{ ...DEFAULT_FORM, onlyAvailable: true }} />)
+    expect(screen.getByLabelText('Verfügbarkeit prüfen')).not.toBeChecked()
+    rerender(<FilterBar {...base()} form={{ ...DEFAULT_FORM, onlyAvailable: true }} />)
     expect(screen.getByText('auch volle Touren zeigen')).toBeInTheDocument()
   })
 

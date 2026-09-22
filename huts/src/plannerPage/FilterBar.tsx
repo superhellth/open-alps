@@ -9,6 +9,7 @@ import type { TourMode } from '../tourSearch/types.js'
 import { isFilterSelectionValid } from './formState.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
+import RangeCalendar from './RangeCalendar.js'
 
 interface FilterBarProps {
   form: FormState
@@ -27,15 +28,6 @@ const SAC_OPTIONS: { value: number | 'any'; label: string; description: string }
 ]
 
 const LEG_TIME_CEILINGS = [5, 7, 9] as const
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
-function addDaysIso(iso: string, days: number): string {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10)
-}
 
 function WegeHuettenSummary({ form }: { form: FormState }) {
   const parts: string[] = []
@@ -67,8 +59,6 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
       control={<Checkbox size="small" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />}
     />
   )
-  const dated = draft.startDate !== '' && draft.endDate !== ''
-
   return (
     <Box component="form" onSubmit={(e) => e.preventDefault()} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
       {disabled && <Typography color="text.secondary">Wegenetz wird geladen …</Typography>}
@@ -85,52 +75,36 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
         </Select>
       </Box>
 
-      <Box>
-        <Typography variant="subtitle2">Wann?</Typography>
-        {dated ? (
-          <>
-            <Box sx={{ display: 'flex', gap: 1 }}>
-              <TextField
-                size="small" type="date" label="Von" value={draft.startDate} disabled={disabled}
-                slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => onDraftChange({ startDate: e.target.value })}
-              />
-              <TextField
-                size="small" type="date" label="Bis" value={draft.endDate} disabled={disabled}
-                slotProps={{ inputLabel: { shrink: true } }} onChange={(e) => onDraftChange({ endDate: e.target.value })}
-              />
-            </Box>
-            <Button size="small" onClick={() => onDraftChange({ startDate: '', endDate: '' })}>ohne Datum</Button>
-          </>
-        ) : (
-          <>
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-              <Typography>{draft.dayCount} Tage</Typography>
-              <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.dayCount <= 2}
-                onClick={() => onDraftChange({ dayCount: draft.dayCount - 1 })}>−</Button>
-              <Button size="small" variant="outlined" color="secondary" disabled={disabled}
-                onClick={() => onDraftChange({ dayCount: draft.dayCount + 1 })}>+</Button>
-              <Chip
-                label="flexibel ±1 Tag" clickable disabled={disabled}
-                color={draft.flexible ? 'primary' : 'default'}
-                onClick={() => onDraftChange({ flexible: !draft.flexible })}
-              />
-            </Box>
-            <Button size="small" onClick={() => onDraftChange({ startDate: todayIso(), endDate: addDaysIso(todayIso(), draft.dayCount - 1) })}>
-              Datum wählen
-            </Button>
-          </>
-        )}
+      <Box sx={{ display: 'flex', gap: 2 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle2">Wann?</Typography>
+          <RangeCalendar
+            startDate={draft.startDate} endDate={draft.endDate} disabled={disabled}
+            onChange={(range) => onDraftChange(range)}
+          />
+        </Box>
+
+        <Box>
+          <Typography variant="subtitle2">Wie viele?</Typography>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Typography>{draft.partySize} Pers.</Typography>
+            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
+              onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
+            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 9}
+              onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
+          </Box>
+        </Box>
       </Box>
 
       <Box>
-        <Typography variant="subtitle2">Wie viele?</Typography>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Typography>{draft.partySize} Pers.</Typography>
-          <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
-            onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
-          <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 9}
-            onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
-        </Box>
+        {check('Verfügbarkeit prüfen', form.onlyAvailable, (onlyAvailable) => onFormChange({ onlyAvailable }))}
+        {form.onlyAvailable && (
+          <Chip
+            label="auch volle Touren zeigen" clickable
+            color={form.showFullToo ? 'primary' : 'default'}
+            onClick={() => onFormChange({ showFullToo: !form.showFullToo })}
+          />
+        )}
       </Box>
 
       <Box>
@@ -192,15 +166,6 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
           )}
         </AccordionDetails>
       </Accordion>
-
-      {dated && check('Verfügbarkeit prüfen', form.onlyAvailable, (onlyAvailable) => onFormChange({ onlyAvailable }))}
-      {dated && form.onlyAvailable && (
-        <Chip
-          label="auch volle Touren zeigen" clickable
-          color={form.showFullToo ? 'primary' : 'default'}
-          onClick={() => onFormChange({ showFullToo: !form.showFullToo })}
-        />
-      )}
 
       <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}>
         <AccordionSummary sx={{ minHeight: 0 }}><ErweitertSummary form={form} /></AccordionSummary>
