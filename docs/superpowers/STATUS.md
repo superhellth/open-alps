@@ -40,3 +40,4 @@ new row when a new spec is written.
 | 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | done |
 | 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |
 | 2026-09-19 | [Derive every spatial extent from the hub range](specs/2026-09-19-derive-extents-from-hub-range-design.md) | done |
+| 2026-09-21 | [Planner UI iteration](specs/2026-09-21-planner-ui-iteration-design.md) | in progress |
