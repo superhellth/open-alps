@@ -1,20 +1,25 @@
-import { memo, useEffect } from 'react'
-import { Box, Button, Typography } from '@mui/material'
+import { memo, useEffect, useState } from 'react'
+import { Box, Button, Collapse, Typography } from '@mui/material'
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { FreeByOffset } from '../availability/types.js'
+import type { TripLegs } from '../tourSearch/tripLegs.js'
 import type { RankTargets } from '../tourSearch/rankFit.js'
 import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
+import HeightProfile from './map/HeightProfile.js'
 import RouteLayer from './map/RouteLayer.js'
 import TripLayer from './map/TripLayer.js'
 import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/TripLayer.js'
 import { ACTIVE_TILES } from './map/tiles.js'
+import { useTripElevation } from './map/useTripElevation.js'
 import type { SortKey } from './rankTours.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from './tours.js'
 import type { Route, StartPoint } from './types.js'
 import './map/map.css'
+
+const EMPTY_TRIP_LEGS: TripLegs = { variantId: -1, hutIndices: [], legs: [], changed: [] }
 
 export interface PlannerMapProps {
   mode: 'discover' | 'trip'
@@ -45,6 +50,9 @@ export interface PlannerMapProps {
   onPickRoute: (tour: PlannerTour) => void
   /** A point to fly to once (e.g. after "N Touren anzeigen" picks an off-screen start). */
   focusStart?: { lat: number; lng: number } | null
+  /** null when no trip is open — the height profile then renders nothing. */
+  tripLegs: TripLegs | null
+  onHoverLeg: (index: number | null) => void
 }
 
 function MapClickWatcher({ onClick }: { onClick?: () => void }) {
@@ -64,37 +72,52 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
     mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
     activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, focusStart,
+    tripLegs, onHoverLeg,
   } = props
+  const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
+  const [profileOpen, setProfileOpen] = useState(true)
   return (
-    <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', position: 'relative' }}>
-      {activeLabel && (
-        <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.5, display: 'flex', gap: 1, alignItems: 'center' }}>
-          <Typography variant="body2">{activeLabel}</Typography>
-          {onCancelEditing && <Button size="small" onClick={onCancelEditing}>Abbrechen</Button>}
+    <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        {activeLabel && (
+          <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+            <Typography variant="body2">{activeLabel}</Typography>
+            {onCancelEditing && <Button size="small" onClick={onCancelEditing}>Abbrechen</Button>}
+          </Box>
+        )}
+        <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>
+          <TileLayer
+            url={ACTIVE_TILES.url} attribution={ACTIVE_TILES.attribution}
+            subdomains={ACTIVE_TILES.subdomains} maxZoom={ACTIVE_TILES.maxZoom}
+          />
+          <MapClickWatcher onClick={onMapClick} />
+          <FlyToStart point={focusStart} />
+          {mode === 'discover' && (
+            <DiscoverLayer
+              groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts}
+              allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
+              hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} onPickRoute={onPickRoute}
+            />
+          )}
+          {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
+          {mode === 'trip' && (
+            <TripLayer
+              tripHuts={tripHuts} tripEnds={tripEnds} candidates={candidates}
+              hutCoordsById={hutCoordsById} candidateStartCoords={candidateStartCoords} onPickCandidate={onPickCandidate}
+            />
+          )}
+        </MapContainer>
+      </Box>
+      {mode === 'trip' && tripLegs && (
+        <Box sx={{ borderTop: '1px solid', borderColor: 'divider' }}>
+          <Button size="small" onClick={() => setProfileOpen((o) => !o)} sx={{ width: '100%', justifyContent: 'space-between' }}>
+            Höhenprofil {profileOpen ? '▾' : '▸'}
+          </Button>
+          <Collapse in={profileOpen}>
+            <HeightProfile elevation={elevation} highlightedLeg={highlightedLeg} onHoverLeg={onHoverLeg} onHoverPosition={() => {}} />
+          </Collapse>
         </Box>
       )}
-      <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>
-        <TileLayer
-          url={ACTIVE_TILES.url} attribution={ACTIVE_TILES.attribution}
-          subdomains={ACTIVE_TILES.subdomains} maxZoom={ACTIVE_TILES.maxZoom}
-        />
-        <MapClickWatcher onClick={onMapClick} />
-        <FlyToStart point={focusStart} />
-        {mode === 'discover' && (
-          <DiscoverLayer
-            groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts}
-            allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
-            hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} onPickRoute={onPickRoute}
-          />
-        )}
-        {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
-        {mode === 'trip' && (
-          <TripLayer
-            tripHuts={tripHuts} tripEnds={tripEnds} candidates={candidates}
-            hutCoordsById={hutCoordsById} candidateStartCoords={candidateStartCoords} onPickCandidate={onPickCandidate}
-          />
-        )}
-      </MapContainer>
     </Box>
   )
 })

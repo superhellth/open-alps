@@ -22,6 +22,7 @@ const base = {
   allTours: [], sortKey: 'fit' as const,
   rankCtx: { targets: { legCountTarget: 2, legCountRange: [2, 4] as [number, number], legTimeRangeH: [1, 8] as [number, number] }, ohrsIdByHutIndex: new Map(), freeByOffset: null },
   routeCtx: null, hoveredTourKey: null, onHoverTour: () => {}, onPickRoute: () => {},
+  tripLegs: null, onHoverLeg: () => {},
 }
 
 describe('PlannerMap discover mode', () => {
@@ -77,6 +78,27 @@ describe('PlannerMap trip mode', () => {
   it('shows no discover markers in trip mode', () => {
     const { container } = render(<PlannerMap {...tripBase} groups={[{ startId: 1, tours: [] }]} />)
     expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
+  })
+})
+
+describe('PlannerMap height profile', () => {
+  const someTripLegs = {
+    variantId: 0, hutIndices: [0],
+    legs: [
+      { startId: 1, sourceType: 1, distanceM: 1000, ascentM: 50, descentM: 0, durationH: 1, edgeId: -1, reversed: false },
+      { startId: 2, sourceType: 1, distanceM: 500, ascentM: 0, descentM: 20, durationH: 0.5, edgeId: -1, reversed: false },
+    ],
+    changed: [false],
+  } as never
+
+  it('renders a collapsible height profile docked at the bottom when a trip is open', () => {
+    render(<PlannerMap {...base} groups={[]} mode="trip" tripLegs={someTripLegs} />)
+    expect(screen.getByRole('button', { name: /Höhenprofil/ })).toBeInTheDocument()
+  })
+
+  it('renders no profile toggle when no trip is open', () => {
+    render(<PlannerMap {...base} groups={[]} mode="discover" tripLegs={null} />)
+    expect(screen.queryByRole('button', { name: /Höhenprofil/ })).not.toBeInTheDocument()
   })
 })
 
