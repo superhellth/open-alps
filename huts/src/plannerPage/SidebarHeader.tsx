@@ -56,7 +56,7 @@ function fingerpost(label: string, active: boolean, index: number, total: number
           padding: isFirst ? '6px 22px 6px 16px' : '6px 22px 6px 25px',
           clipPath: RIGHT_TIP,
           transition: 'color 120ms ease, background-color 120ms ease',
-          '&:hover': active ? undefined : { backgroundColor: 'rgba(35, 39, 43, 0.08)' },
+          '&:hover': active ? undefined : { backgroundColor: tokens.signpost },
         }}
       >
         {label}
