@@ -9,12 +9,15 @@ import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
 import HeightProfile from './map/HeightProfile.js'
 import RouteLayer from './map/RouteLayer.js'
+import SavedTripsLayer from './map/SavedTripsLayer.js'
 import TripLayer from './map/TripLayer.js'
 import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/TripLayer.js'
 import { ACTIVE_TILES } from './map/tiles.js'
 import { useTripElevation } from './map/useTripElevation.js'
 import type { SortKey } from './rankTours.js'
 import type { RouteContext } from './routes.js'
+import type { TripGraph } from '../tourSearch/tripLegs.js'
+import type { Trip } from '../trip/trip.js'
 import type { PlannerTour } from './tours.js'
 import type { Route, StartPoint } from './types.js'
 import './map/map.css'
@@ -22,7 +25,7 @@ import './map/map.css'
 const EMPTY_TRIP_LEGS: TripLegs = { variantId: -1, hutIndices: [], legs: [], changed: [] }
 
 export interface PlannerMapProps {
-  mode: 'discover' | 'trip'
+  mode: 'discover' | 'trip' | 'saved'
   groups: StartGroup<PlannerTour>[]
   /** Discover markers keep their previous counts, dimmed, while a new search runs. */
   dimmed: boolean
@@ -53,6 +56,12 @@ export interface PlannerMapProps {
   /** null when no trip is open — the height profile then renders nothing. */
   tripLegs: TripLegs | null
   onHoverLeg: (index: number | null) => void
+  savedTrips?: Trip[]
+  savedGraph?: TripGraph
+  savedRouteCtx?: RouteContext
+  hoveredTripId?: string | null
+  onHoverTrip?: (id: string | null) => void
+  onOpenSavedTrip?: (id: string) => void
 }
 
 function MapClickWatcher({ onClick }: { onClick?: () => void }) {
@@ -72,7 +81,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
     mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
     activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, focusStart,
-    tripLegs, onHoverLeg,
+    tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
   const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
   const [profileOpen, setProfileOpen] = useState(true)
@@ -104,6 +113,13 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
             <TripLayer
               tripHuts={tripHuts} tripEnds={tripEnds} candidates={candidates}
               hutCoordsById={hutCoordsById} candidateStartCoords={candidateStartCoords} onPickCandidate={onPickCandidate}
+            />
+          )}
+          {mode === 'saved' && savedTrips && savedGraph && savedRouteCtx && (
+            <SavedTripsLayer
+              active={mode === 'saved'} trips={savedTrips} graph={savedGraph} routeCtx={savedRouteCtx}
+              hoveredTripId={hoveredTripId ?? null} onHoverTrip={onHoverTrip ?? (() => {})}
+              onOpen={onOpenSavedTrip ?? (() => {})}
             />
           )}
         </MapContainer>

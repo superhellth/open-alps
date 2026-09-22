@@ -4,6 +4,8 @@ import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/re
 import '@testing-library/jest-dom/vitest'
 import PlannerMap from './PlannerMap.js'
 import type { PlannerTour } from './tours.js'
+import { newTrip } from '../trip/trip.js'
+import type { TripGraph } from '../tourSearch/tripLegs.js'
 
 afterEach(cleanup)
 
@@ -78,6 +80,24 @@ describe('PlannerMap trip mode', () => {
   it('shows no discover markers in trip mode', () => {
     const { container } = render(<PlannerMap {...tripBase} groups={[{ startId: 1, tours: [] }]} />)
     expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
+  })
+})
+
+describe('PlannerMap saved mode', () => {
+  it('renders SavedTripsLayer in saved mode', () => {
+    const savedGraph: TripGraph = { hutEdges: { hutIds: ['{A}'], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } }
+    const savedRouteCtx = { hutCoordsById: new Map([[0, { lat: 47.3, lng: 12 }]]), startById: new Map([[100, { name: 'Start', sourceType: 1 as const, lat: 47.2, lng: 12.1 }]]), officialById: new Map() }
+    const savedTrip = newTrip({ name: 'T', startDate: null, partySize: 1, start: { startId: 100, sourceType: 1 }, huts: ['{A}'], exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false } })
+    const { container: baselineContainer } = render(<PlannerMap {...base} groups={[]} mode="discover" />)
+    const baseline = baselineContainer.querySelectorAll('path').length
+    const { container } = render(
+      <PlannerMap
+        {...base} groups={[]} mode="saved"
+        savedTrips={[savedTrip]} savedGraph={savedGraph} savedRouteCtx={savedRouteCtx}
+        hoveredTripId={null} onHoverTrip={vi.fn()} onOpenSavedTrip={vi.fn()}
+      />,
+    )
+    expect(container.querySelectorAll('path').length).toBeGreaterThan(baseline)
   })
 })
 
