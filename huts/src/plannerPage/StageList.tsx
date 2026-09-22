@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import { Box, Link, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { Box, Link, Typography } from '@mui/material'
 import { addUtcDays } from '../availability/formatDate.js'
 import { buildBookingLink } from '../availability/bookingLink.js'
 import type { HutOhrs } from '../data/buildAppData.js'
 import type { TripLegs } from '../tourSearch/tripLegs.js'
-import type { BookingStatus, Trip } from '../trip/trip.js'
+import type { Trip } from '../trip/trip.js'
 import AvailabilityMark from './AvailabilityMark.js'
 import Signpost from './Signpost.js'
 import type { NightView } from './useTripAvailability.js'
@@ -16,17 +16,15 @@ export interface StageListProps {
   hutOhrsByIndex: Map<number, HutOhrs>
   startLabel: (startId: number) => string
   nightViews: NightView[] | null
-  onStatusChange: (night: number, status: BookingStatus) => void
   onHoverLeg: (index: number | null) => void
   renderStageControls?: (night: number) => ReactNode
   warnings?: string[]
 }
 
-const STATUS_LABEL: Record<BookingStatus, string> = { open: 'offen', requested: 'angefragt', confirmed: '✓ bestätigt' }
 const CHANGED_TEXT = 'Seit dem Speichern geändert – nicht mehr im Wegenetz'
 
 export default function StageList({
-  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, onStatusChange, onHoverLeg, renderStageControls, warnings = [],
+  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, onHoverLeg, renderStageControls, warnings = [],
 }: StageListProps) {
   const firstNight = trip.startDate ? new Date(trip.startDate) : null
   const exitLeg = tripLegs.legs[trip.huts.length]
@@ -39,7 +37,6 @@ export default function StageList({
         const changed = tripLegs.changed[i]
         const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
         const view = nightViews?.[i]
-        const status = trip.nights[i].status
         return (
           <Box key={i} data-stage={i} onMouseEnter={() => onHoverLeg(i)} onMouseLeave={() => onHoverLeg(null)}>
             <Typography variant="caption" color="text.secondary">
@@ -57,14 +54,6 @@ export default function StageList({
               ) : (
                 <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
                   {firstNight && view && (view.loading ? <Typography variant="body2">Verfügbarkeit lädt …</Typography> : <AvailabilityMark availability={view.availability} />)}
-                  <ToggleButtonGroup
-                    size="small" exclusive value={status} aria-label={`Buchungsstatus Etappe ${i + 1}`}
-                    onChange={(_e, next: BookingStatus | null) => { if (next) onStatusChange(i, next) }}
-                  >
-                    {(Object.keys(STATUS_LABEL) as BookingStatus[]).map((s) => (
-                      <ToggleButton key={s} value={s} sx={{ textTransform: 'none', py: 0.25 }}>{STATUS_LABEL[s]}</ToggleButton>
-                    ))}
-                  </ToggleButtonGroup>
                   {ohrs?.ohrsHutId && firstNight ? (
                     <Link href={buildBookingLink(ohrs.ohrsHutId, addUtcDays(firstNight, i))} target="_blank" rel="noreferrer" color="inherit">
                       Auf hut-reservation.org buchen

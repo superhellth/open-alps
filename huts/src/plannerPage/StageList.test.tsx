@@ -19,7 +19,7 @@ const trip = (huts: string[], startDate: string | null = '2026-07-10') => newTri
 function renderList(t = trip(['{D}', '{E}']), overrides: Partial<Parameters<typeof StageList>[0]> = {}) {
   const props = {
     trip: t, tripLegs: legsFromTrip(data.graph, t), hutNameById: data.hutNameById, hutOhrsByIndex: data.hutOhrsByIndex,
-    startLabel: makeStartLabel(data.startById), nightViews: null, onStatusChange: vi.fn(), onHoverLeg: vi.fn(), ...overrides,
+    startLabel: makeStartLabel(data.startById), nightViews: null, onHoverLeg: vi.fn(), ...overrides,
   }
   render(<StageList {...props} />)
   return props
@@ -38,12 +38,9 @@ describe('StageList', () => {
     const outline = document.querySelectorAll('[data-variant="outline"]')
     expect(outline.length).toBeGreaterThanOrEqual(1)
   })
-  it('booking status is a three-step control; confirmed carries a check mark', () => {
-    const props = renderList()
-    expect(screen.getAllByRole('button', { name: 'offen' })[0]).toHaveAttribute('aria-pressed', 'true')
-    fireEvent.click(screen.getAllByRole('button', { name: 'angefragt' })[1])
-    expect(props.onStatusChange).toHaveBeenCalledWith(1, 'requested')
-    expect(screen.getAllByRole('button', { name: /✓ bestätigt/ })).toHaveLength(2)
+  it('renders no booking-status control', () => {
+    renderList()
+    expect(screen.queryByLabelText(/Buchungsstatus/)).not.toBeInTheDocument()
   })
   it('links bookable huts to the booking system for their own night and tells about direct-booking huts', () => {
     renderList(trip(['{A}', '{B}', '{C}', '{D}']))

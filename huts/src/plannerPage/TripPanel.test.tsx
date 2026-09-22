@@ -18,16 +18,16 @@ const trip = newTrip({
   exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
 }, new Date(), 'id')
 
-function renderPanel(onChange = vi.fn(), onBack = vi.fn()) {
+function renderPanel(onChange = vi.fn(), onBack = vi.fn(), isDraft = false, onSave = vi.fn()) {
   vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
   vi.spyOn(detail, 'fetchHutDetail').mockResolvedValue({ hutId: 1, hutName: '', calendarDays: [] })
   render(
     <TripPanel
       trip={trip} tripLegs={legsFromTrip(data.graph, trip)} data={data} startLabel={makeStartLabel(data.startById)}
-      onChange={onChange} onBack={onBack} onHoverLeg={() => {}}
+      isDraft={isDraft} onChange={onChange} onSave={onSave} onBack={onBack} onHoverLeg={() => {}}
     />,
   )
-  return { onChange, onBack }
+  return { onChange, onBack, onSave }
 }
 
 describe('TripPanel', () => {
@@ -43,29 +43,42 @@ describe('TripPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
     expect(onBack).toHaveBeenCalled()
   })
-  it('edits date and party size on the trip', () => {
+  it('edits date and party size on the trip via the date summary popover', () => {
     const { onChange } = renderPanel()
+    fireEvent.click(screen.getByText('10.07.–12.07. · 2 Pers.'))
     fireEvent.change(screen.getByLabelText('Startdatum (erste Nacht)'), { target: { value: '2026-07-12' } })
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, startDate: '2026-07-12' })
     fireEvent.change(screen.getByLabelText('Personen'), { target: { value: '4' } })
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, partySize: 4 })
   })
-  it('renames and stores notes', () => {
+  it('renames a saved trip', () => {
     const { onChange } = renderPanel()
     fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Neu' } })
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
-    fireEvent.change(screen.getByLabelText('Notizen'), { target: { value: 'Seil mitnehmen' } })
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, notes: 'Seil mitnehmen' })
-  })
-  it('a booking status change updates only that night', () => {
-    const { onChange } = renderPanel()
-    fireEvent.click(screen.getAllByRole('button', { name: 'angefragt' })[1])
-    const updated = onChange.mock.calls.at(-1)![0]
-    expect(updated.nights).toEqual([{ status: 'open' }, { status: 'requested' }])
   })
   it('sliding the start date moves the whole trip by a day', () => {
     const { onChange } = renderPanel()
     fireEvent.click(screen.getByRole('button', { name: '+1 Tag' }))
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, startDate: '2026-07-11' })
+  })
+  it('shows an Entwurf badge and Speichern button, no name field, while a draft', () => {
+    renderPanel(vi.fn(), vi.fn(), true)
+    expect(screen.getByText('Entwurf')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Speichern' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Name')).not.toBeInTheDocument()
+  })
+  it('calls onSave when Speichern is clicked', () => {
+    const { onSave } = renderPanel(vi.fn(), vi.fn(), true)
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(onSave).toHaveBeenCalled()
+  })
+  it('shows the editable name field, no badge, for a saved trip', () => {
+    renderPanel(vi.fn(), vi.fn(), false)
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
+  })
+  it('has no Notizen field', () => {
+    renderPanel(vi.fn(), vi.fn(), false)
+    expect(screen.queryByLabelText('Notizen')).not.toBeInTheDocument()
   })
 })
