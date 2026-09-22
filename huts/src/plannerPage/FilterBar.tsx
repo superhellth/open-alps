@@ -98,13 +98,6 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
 
       <Box>
         {check('Verfügbarkeit prüfen', form.onlyAvailable, (onlyAvailable) => onFormChange({ onlyAvailable }))}
-        {form.onlyAvailable && (
-          <Chip
-            label="auch volle Touren zeigen" clickable
-            color={form.showFullToo ? 'primary' : 'default'}
-            onClick={() => onFormChange({ showFullToo: !form.showFullToo })}
-          />
-        )}
       </Box>
 
       <Box>

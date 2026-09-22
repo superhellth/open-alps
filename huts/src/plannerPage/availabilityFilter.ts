@@ -17,11 +17,11 @@ export function tourHasFullNight(
 }
 
 /** The "Verfügbarkeit prüfen" filter: applied client-side to an already-searched tour list, so
- *  toggling "auch volle Touren zeigen" never re-runs the whole-graph search. */
+ *  toggling it never re-runs the whole-graph search. */
 export function filterByAvailability(
-  tours: PlannerTour[], enabled: boolean, showFullToo: boolean,
+  tours: PlannerTour[], enabled: boolean,
   ohrsIdByHutIndex: Map<number, string | null>, freeByOffset: FreeByOffset | null,
 ): PlannerTour[] {
-  if (!enabled || !freeByOffset || showFullToo) return tours
+  if (!enabled || !freeByOffset) return tours
   return tours.filter((t) => !tourHasFullNight(t, ohrsIdByHutIndex, freeByOffset))
 }

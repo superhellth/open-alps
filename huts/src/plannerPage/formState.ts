@@ -14,7 +14,6 @@ export interface FormState {
   allowServiced: boolean
   allowSelfService: boolean
   onlyAvailable: boolean
-  showFullToo: boolean
 }
 
 export const DEFAULT_FORM: FormState = {
@@ -29,7 +28,6 @@ export const DEFAULT_FORM: FormState = {
   allowServiced: true,
   allowSelfService: false,
   onlyAvailable: false,
-  showFullToo: false,
 }
 
 export function legTimeRangeFromCeiling(ceilingH: number): [number, number] {

@@ -34,15 +34,12 @@ describe('filterByAvailability', () => {
   const tours = [tour([0]), tour([1])] // tour([1]) is full at night 1
 
   it('passes everything through when disabled', () => {
-    expect(filterByAvailability(tours, false, false, ohrsIdByHutIndex, freeByOffset)).toBe(tours)
+    expect(filterByAvailability(tours, false, ohrsIdByHutIndex, freeByOffset)).toBe(tours)
   })
   it('passes everything through when there is no freeByOffset yet', () => {
-    expect(filterByAvailability(tours, true, false, ohrsIdByHutIndex, null)).toBe(tours)
+    expect(filterByAvailability(tours, true, ohrsIdByHutIndex, null)).toBe(tours)
   })
-  it('drops full tours when enabled and showFullToo is off', () => {
-    expect(filterByAvailability(tours, true, false, ohrsIdByHutIndex, freeByOffset)).toEqual([tour([0])])
-  })
-  it('keeps full tours (marked, not hidden) when showFullToo is on', () => {
-    expect(filterByAvailability(tours, true, true, ohrsIdByHutIndex, freeByOffset)).toBe(tours)
+  it('drops full tours when enabled', () => {
+    expect(filterByAvailability(tours, true, ohrsIdByHutIndex, freeByOffset)).toEqual([tour([0])])
   })
 })

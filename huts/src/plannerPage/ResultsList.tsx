@@ -12,7 +12,7 @@ const PAGE_SIZE = 25
 
 export default function ResultsList({
   tours, selectionActive, totalMatches, noMatches, sortKey, onSortChange,
-  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest, isFull,
+  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest,
 }: {
   tours: PlannerTour[]
   selectionActive: boolean
@@ -26,7 +26,6 @@ export default function ResultsList({
   onPreview: (tour: PlannerTour | null) => void
   onPick: (tour: PlannerTour) => void
   onShowBest: () => void
-  isFull?: (tour: PlannerTour) => boolean
 }) {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [tours])
@@ -77,7 +76,6 @@ export default function ResultsList({
                 {tour.legs.length} Tage · ↑ {Math.round(tour.totalAscentM).toLocaleString('de-DE')} m · {(tour.totalDistanceM / 1000).toFixed(1)} km · ab {startLabel(tour.startId)}
               </Typography>
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
-                {isFull?.(tour) && <Chip size="small" color="warning" label="voll" />}
                 {tour.official && <Chip size="small" label={`Offiziell: ${tour.official.name}`} />}
                 {tour.huts.map((h) => {
                   const cls = hutClassByIndex.get(h)

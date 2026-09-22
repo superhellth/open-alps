@@ -10,7 +10,7 @@ import type { TripGraph, TripLegs } from '../tourSearch/tripLegs.js'
 import { decodeTripFromHash, shareUrl } from '../trip/shareLink.js'
 import type { Trip } from '../trip/trip.js'
 import { useTrips } from '../trip/TripsProvider.js'
-import { filterByAvailability, tourHasFullNight } from './availabilityFilter.js'
+import { filterByAvailability } from './availabilityFilter.js'
 import DiscardDraftDialog from './DiscardDraftDialog.js'
 import FilterBar from './FilterBar.js'
 import FirstVisitPrompt from './FirstVisitPrompt.js'
@@ -81,8 +81,8 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     () => (data ? [...(search.chains ?? []), ...filterOfficial(officialTours, form, legCountRange, data.startById)] : []),
     [data, search.chains, officialTours, form, legCountRange])
   const visibleTours = useMemo(
-    () => filterByAvailability(tours, form.onlyAvailable, form.showFullToo, ohrsIdByHutIndex, search.freeByOffset),
-    [tours, form.onlyAvailable, form.showFullToo, ohrsIdByHutIndex, search.freeByOffset])
+    () => filterByAvailability(tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset),
+    [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])
   const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
 
   const selectedTours = useMemo(() => {
@@ -201,7 +201,6 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
               sortKey={sortKey} onSortChange={setSortKey}
               hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
               startLabel={startLabel} onPreview={setPreviewTour} onPick={pick} onShowBest={showBest}
-              isFull={(t) => (form.onlyAvailable && form.showFullToo ? tourHasFullNight(t, ohrsIdByHutIndex, search.freeByOffset ?? new Map()) : false)}
             />
           </Box>
           {mode === 'trip' && activeTrip && tripLegs && data && (

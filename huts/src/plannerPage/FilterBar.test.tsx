@@ -77,11 +77,9 @@ describe('FilterBar', () => {
     expect(screen.getByText('Unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen.')).toBeInTheDocument()
   })
 
-  it('Verfügbarkeit prüfen is unchecked by default and reveals the full-tours chip when checked', () => {
-    const { rerender } = render(<FilterBar {...base()} />)
+  it('Verfügbarkeit prüfen is unchecked by default', () => {
+    render(<FilterBar {...base()} />)
     expect(screen.getByLabelText('Verfügbarkeit prüfen')).not.toBeChecked()
-    rerender(<FilterBar {...base()} form={{ ...DEFAULT_FORM, onlyAvailable: true }} />)
-    expect(screen.getByText('auch volle Touren zeigen')).toBeInTheDocument()
   })
 
   it('Erweitert has only Anstiegslimit and Maximalhöhe, no Wunsch-Tageszahl field', () => {
