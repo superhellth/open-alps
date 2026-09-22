@@ -41,4 +41,4 @@ new row when a new spec is written.
 | 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |
 | 2026-09-19 | [Derive every spatial extent from the hub range](specs/2026-09-19-derive-extents-from-hub-range-design.md) | done |
 | 2026-09-21 | [Planner UI iteration](specs/2026-09-21-planner-ui-iteration-design.md) | done |
-| 2026-09-22 | [Sidebar navigation: drop the app bar, fold Meine Touren into the planner](specs/2026-09-22-sidebar-navigation-design.md) | in progress |
+| 2026-09-22 | [Sidebar navigation: drop the app bar, fold Meine Touren into the planner](specs/2026-09-22-sidebar-navigation-design.md) | done |
