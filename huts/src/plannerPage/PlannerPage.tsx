@@ -55,7 +55,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
   const [sortKey, setSortKey] = useState<SortKey>('fit')
-  const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('results')
+  const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
   const [selectedStartIds, setSelectedStartIds] = useState<number[] | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
