@@ -32,8 +32,35 @@ describe('FilterBar', () => {
     expect(props.onFormChange).toHaveBeenCalledWith({ allowViaFerrata: true })
   })
   it('warns when no hut class is selected', () => {
-    render(<FilterBar {...base()} form={{ ...DEFAULT_FORM, allowedOperators: new Set() }} />)
-    expect(screen.getByText('Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.')).toBeInTheDocument()
+    render(<FilterBar {...base()} form={{ ...DEFAULT_FORM, allowedHutClasses: new Set() }} />)
+    expect(screen.getByText('Mindestens eine Hüttenart muss ausgewählt sein.')).toBeInTheDocument()
+  })
+
+  it('turning an operator off drops both its serviced and self-catered huts', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    fireEvent.click(screen.getByLabelText('Alpenverein'))
+    expect(props.onFormChange).toHaveBeenCalledWith({ allowedHutClasses: new Set(['sonstige:serviced']) })
+  })
+
+  it('including self-catered huts adds the self-catered class for every currently enabled operator', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    fireEvent.click(screen.getByLabelText('auch Selbstversorgerhütten einschließen'))
+    expect(props.onFormChange).toHaveBeenCalledWith({
+      allowedHutClasses: new Set(['av:serviced', 'sonstige:serviced', 'av:self', 'sonstige:self']),
+    })
+  })
+
+  it('re-enabling an operator while self-catered huts are included brings its self-catered class back too', () => {
+    const props = base()
+    render(<FilterBar {...props} form={{
+      ...DEFAULT_FORM, allowedHutClasses: new Set(['sonstige:serviced', 'sonstige:self']),
+    }} />)
+    fireEvent.click(screen.getByLabelText('Alpenverein'))
+    expect(props.onFormChange).toHaveBeenCalledWith({
+      allowedHutClasses: new Set(['sonstige:serviced', 'sonstige:self', 'av:serviced', 'av:self']),
+    })
   })
 
   it('always shows a collapsed date-range summary, no undated option, expanding to the calendar on click', () => {
@@ -66,15 +93,16 @@ describe('FilterBar', () => {
     expect(screen.getByText('breite Wege, kaum Absturzgefahr')).toBeInTheDocument()
   })
 
-  it('Wege & Hütten group summarizes non-default values in its header', () => {
+  it('Erweitert group summarizes non-default values in its header', () => {
     render(<FilterBar {...base()} form={{ ...DEFAULT_FORM, allowViaFerrata: true }} />)
-    expect(screen.getByText('Wege & Hütten · Klettersteige an')).toBeInTheDocument()
+    expect(screen.getByText('Erweitert · Klettersteige an')).toBeInTheDocument()
   })
 
-  it('the Selbstversorger help popover shows its explanation text', () => {
+  it('the Hüttenarten help tooltip shows its explanation text on hover', async () => {
     render(<FilterBar {...base()} />)
-    fireEvent.click(screen.getByLabelText('Was ist eine Selbstversorgerhütte?'))
-    expect(screen.getByText('Unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen.')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('Erweitert'))
+    fireEvent.mouseOver(screen.getByLabelText('Was bedeuten die Hüttenarten?'))
+    expect(await screen.findByText(/unbewirtschaftet, meist Selbstverpflegung/)).toBeInTheDocument()
   })
 
   it('Verfügbarkeit prüfen is unchecked by default', () => {

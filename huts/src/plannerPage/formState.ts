@@ -1,5 +1,6 @@
 import type { Query, TourMode } from '../tourSearch/types.js'
-import type { HutClass, HutOperator } from '../hutClass.js'
+import type { HutClass, HutClassKey } from '../hutClass.js'
+import { hutClassKey } from '../hutClass.js'
 import type { RankTargets } from '../tourSearch/rankFit.js'
 
 export interface FormState {
@@ -10,9 +11,7 @@ export interface FormState {
   legAscentCapM: string
   maxEleM: string
   allowViaFerrata: boolean
-  allowedOperators: Set<HutOperator>
-  allowServiced: boolean
-  allowSelfService: boolean
+  allowedHutClasses: Set<HutClassKey>
   onlyAvailable: boolean
 }
 
@@ -24,9 +23,7 @@ export const DEFAULT_FORM: FormState = {
   legAscentCapM: '',
   maxEleM: '',
   allowViaFerrata: false,
-  allowedOperators: new Set(['av', 'sonstige']),
-  allowServiced: true,
-  allowSelfService: false,
+  allowedHutClasses: new Set<HutClassKey>(['av:serviced', 'sonstige:serviced']),
   onlyAvailable: false,
 }
 
@@ -41,13 +38,11 @@ function numberOr(value: string, fallback: number): number {
 }
 
 function hutClassAllowed(c: HutClass, form: FormState): boolean {
-  if (!form.allowedOperators.has(c.operator)) return false
-  return c.serviced ? form.allowServiced : form.allowSelfService
+  return form.allowedHutClasses.has(hutClassKey(c))
 }
 
 export function isFilterSelectionValid(form: FormState): boolean {
-  if (form.allowedOperators.size === 0) return false
-  return form.allowServiced || form.allowSelfService
+  return form.allowedHutClasses.size > 0
 }
 
 export function buildQuery(form: FormState, hutsByIndex: (HutClass | null)[], legCountRange: [number, number]): Query {

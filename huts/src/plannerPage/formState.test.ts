@@ -27,7 +27,8 @@ describe('planner form', () => {
     expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).allowedHutIndices).toEqual(new Set([0, 2]))
     expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).legCountMin).toBe(2)
     expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).legCountMax).toBe(4)
-    expect(buildQuery({ ...DEFAULT_FORM, allowSelfService: true }, huts, [2, 4]).allowedHutIndices).toEqual(new Set([0, 1, 2]))
+    const withSelfService = { ...DEFAULT_FORM, allowedHutClasses: new Set([...DEFAULT_FORM.allowedHutClasses, 'av:self' as const]) }
+    expect(buildQuery(withSelfService, huts, [2, 4]).allowedHutIndices).toEqual(new Set([0, 1, 2]))
   })
   it('rank target is the exact/target day count, clamped into the leg-count range', () => {
     expect(rankTargetsFromForm(DEFAULT_FORM, [2, 4], 3).legCountTarget).toBe(3)
@@ -35,6 +36,6 @@ describe('planner form', () => {
   })
   it('validates the hut class selection', () => {
     expect(isFilterSelectionValid(DEFAULT_FORM)).toBe(true)
-    expect(isFilterSelectionValid({ ...DEFAULT_FORM, allowedOperators: new Set() })).toBe(false)
+    expect(isFilterSelectionValid({ ...DEFAULT_FORM, allowedHutClasses: new Set() })).toBe(false)
   })
 })

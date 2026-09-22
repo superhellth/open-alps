@@ -1,12 +1,14 @@
-import { useState } from 'react'
 import {
   Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, Chip, FormControlLabel,
-  IconButton, LinearProgress, MenuItem, Popover, Select, TextField, Typography,
+  IconButton, LinearProgress, MenuItem, Select, TextField, Tooltip, Typography,
 } from '@mui/material'
-import { OPERATOR_LABEL } from '../hutClass.js'
+import { useState } from 'react'
+import { ALL_HUT_CLASSES, OPERATOR_LABEL, hutClassKey, hutClassLabel } from '../hutClass.js'
 import type { HutOperator } from '../hutClass.js'
+
+const OPERATORS = Object.keys(OPERATOR_LABEL) as HutOperator[]
 import type { TourMode } from '../tourSearch/types.js'
-import { isFilterSelectionValid } from './formState.js'
+import { DEFAULT_FORM, isFilterSelectionValid } from './formState.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
 import RangeCalendar from './RangeCalendar.js'
@@ -29,29 +31,49 @@ const SAC_OPTIONS: { value: number | 'any'; label: string; description: string }
 
 const LEG_TIME_CEILINGS = [5, 7, 9] as const
 
-function WegeHuettenSummary({ form }: { form: FormState }) {
+function ErweitertSummary({ form }: { form: FormState }) {
   const parts: string[] = []
   if (form.allowViaFerrata) parts.push('Klettersteige an')
   if (form.allowUngraded) parts.push('ungeratete Wege an')
-  if (form.allowSelfService) parts.push('Selbstversorger an')
-  return <Typography variant="subtitle2">Wege & Hütten{parts.length ? ` · ${parts.join(', ')}` : ''}</Typography>
-}
-
-function ErweitertSummary({ form }: { form: FormState }) {
-  const parts: string[] = []
+  ALL_HUT_CLASSES.forEach((c) => {
+    const key = hutClassKey(c)
+    const wasDefault = DEFAULT_FORM.allowedHutClasses.has(key)
+    const isNow = form.allowedHutClasses.has(key)
+    if (wasDefault && !isNow) parts.push(`${hutClassLabel(c)} aus`)
+    if (!wasDefault && isNow) parts.push(`${hutClassLabel(c)} an`)
+  })
   if (form.legAscentCapM !== '') parts.push(`Anstieg ≤ ${form.legAscentCapM} m`)
   if (form.maxEleM !== '') parts.push(`Höhe ≤ ${form.maxEleM} m`)
   return <Typography variant="subtitle2">Erweitert{parts.length ? ` · ${parts.join(', ')}` : ''}</Typography>
 }
 
 export default function FilterBar({ form, onFormChange, draft, onDraftChange, disabled, searching }: FilterBarProps) {
-  const [helpAnchor, setHelpAnchor] = useState<HTMLElement | null>(null)
+  const [erweitertOpen, setErweitertOpen] = useState(false)
+  const operatorOn = (op: HutOperator) => form.allowedHutClasses.has(hutClassKey({ operator: op, serviced: true }))
+  const selfIncluded = ALL_HUT_CLASSES.some((c) => !c.serviced && form.allowedHutClasses.has(hutClassKey(c)))
 
   const toggleOperator = (op: HutOperator, on: boolean) => {
-    const next = new Set(form.allowedOperators)
-    if (on) next.add(op)
-    else next.delete(op)
-    onFormChange({ allowedOperators: next })
+    const next = new Set(form.allowedHutClasses)
+    const servicedKey = hutClassKey({ operator: op, serviced: true })
+    const selfKey = hutClassKey({ operator: op, serviced: false })
+    if (on) {
+      next.add(servicedKey)
+      if (selfIncluded) next.add(selfKey)
+    } else {
+      next.delete(servicedKey)
+      next.delete(selfKey)
+    }
+    onFormChange({ allowedHutClasses: next })
+  }
+  const toggleSelfIncluded = (on: boolean) => {
+    const next = new Set(form.allowedHutClasses)
+    OPERATORS.forEach((op) => {
+      if (!operatorOn(op)) return
+      const selfKey = hutClassKey({ operator: op, serviced: false })
+      if (on) next.add(selfKey)
+      else next.delete(selfKey)
+    })
+    onFormChange({ allowedHutClasses: next })
   }
   const check = (label: string, checked: boolean, onChange: (v: boolean) => void) => (
     <FormControlLabel
@@ -131,38 +153,42 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
         </Select>
       </Box>
 
-      <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}>
-        <AccordionSummary sx={{ minHeight: 0 }}><WegeHuettenSummary form={form} /></AccordionSummary>
-        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {check('auch ungeratete Wege erlauben', form.allowUngraded, (allowUngraded) => onFormChange({ allowUngraded }))}
+      <Accordion
+        disableGutters elevation={0} expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitertOpen(isExpanded)}
+        sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}
+      >
+        <AccordionSummary
+          expandIcon={<Typography sx={{ color: 'action.active', fontWeight: 'bold' }} aria-hidden>{erweitertOpen ? '−' : '+'}</Typography>}
+          sx={{
+            minHeight: 0, '&.Mui-expanded': { minHeight: 0 },
+            '& .MuiAccordionSummary-content': { margin: '12px 0 8px', '&.Mui-expanded': { margin: '12px 0 8px' } },
+            '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'none' },
+          }}
+        >
+          <ErweitertSummary form={form} />
+        </AccordionSummary>
+        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0 }}>
           {check('Klettersteige erlauben', form.allowViaFerrata, (allowViaFerrata) => onFormChange({ allowViaFerrata }))}
-          <Typography variant="subtitle2" sx={{ mt: 1 }}>Hüttenarten</Typography>
-          {(Object.keys(OPERATOR_LABEL) as HutOperator[]).map((op) => (
-            <Box key={op}>{check(OPERATOR_LABEL[op], form.allowedOperators.has(op), (on) => toggleOperator(op, on))}</Box>
-          ))}
-          {check('Bewirtschaftete Hütten', form.allowServiced, (allowServiced) => onFormChange({ allowServiced }))}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            {check('Selbstversorgerhütten', form.allowSelfService, (allowSelfService) => onFormChange({ allowSelfService }))}
-            <IconButton size="small" aria-label="Was ist eine Selbstversorgerhütte?" onClick={(e) => setHelpAnchor(e.currentTarget)}>
-              <Typography component="span">?</Typography>
-            </IconButton>
+          {check('auch ungeratete Wege erlauben', form.allowUngraded, (allowUngraded) => onFormChange({ allowUngraded }))}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+            <Typography variant="subtitle2">Hüttenarten</Typography>
+            <Tooltip
+              title="Sonstige: nicht vom Alpenverein betriebene Hütten. Selbstversorgerhütten sind unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen."
+              placement="top" arrow
+            >
+              <IconButton size="small" aria-label="Was bedeuten die Hüttenarten?">
+                <Typography component="span">?</Typography>
+              </IconButton>
+            </Tooltip>
           </Box>
-          <Popover open={helpAnchor !== null} anchorEl={helpAnchor} onClose={() => setHelpAnchor(null)}>
-            <Typography sx={{ p: 1.5, maxWidth: 280 }}>
-              Unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen.
-            </Typography>
-          </Popover>
+          {OPERATORS.map((op) => check(OPERATOR_LABEL[op], operatorOn(op), (on) => toggleOperator(op, on)))}
+          {check('auch Selbstversorgerhütten einschließen', selfIncluded, toggleSelfIncluded)}
           {!isFilterSelectionValid(form) && (
             <Typography variant="caption" color="error">
-              Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.
+              Mindestens eine Hüttenart muss ausgewählt sein.
             </Typography>
           )}
-        </AccordionDetails>
-      </Accordion>
-
-      <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}>
-        <AccordionSummary sx={{ minHeight: 0 }}><ErweitertSummary form={form} /></AccordionSummary>
-        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Typography variant="subtitle2" sx={{ mt: 1 }}>Höhe</Typography>
           <TextField
             size="small" type="number" label="Anstiegslimit pro Etappe (m, leer = unbegrenzt)" disabled={disabled}
             value={form.legAscentCapM} slotProps={{ htmlInput: { min: 0 } }}

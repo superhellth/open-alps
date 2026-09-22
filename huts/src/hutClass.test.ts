@@ -3,16 +3,16 @@ import { hutClassLabel, hutClassBadge, OPERATOR_LABEL, OPERATOR_COLOR, OPERATOR_
 
 describe('hutClassLabel', () => {
   it('labels a serviced AV hut without a Selbstversorger suffix', () => {
-    expect(hutClassLabel({ operator: 'av', serviced: true })).toBe('AV-Hütte')
+    expect(hutClassLabel({ operator: 'av', serviced: true })).toBe('Alpenverein')
   })
   it('labels an AV Selbstversorgerhütte with both facts, not collapsed into a third bucket', () => {
-    expect(hutClassLabel({ operator: 'av', serviced: false })).toBe('AV-Hütte (Selbstversorger)')
+    expect(hutClassLabel({ operator: 'av', serviced: false })).toBe('Alpenverein (Selbstversorger)')
   })
   it('labels a serviced non-AV hut', () => {
-    expect(hutClassLabel({ operator: 'sonstige', serviced: true })).toBe('Sonstige Hütte')
+    expect(hutClassLabel({ operator: 'sonstige', serviced: true })).toBe('Sonstige')
   })
   it('labels a non-AV Selbstversorgerhütte', () => {
-    expect(hutClassLabel({ operator: 'sonstige', serviced: false })).toBe('Sonstige Hütte (Selbstversorger)')
+    expect(hutClassLabel({ operator: 'sonstige', serviced: false })).toBe('Sonstige (Selbstversorger)')
   })
 })
 
@@ -27,8 +27,8 @@ describe('hutClassBadge', () => {
 
 describe('lookups stay label-complete', () => {
   it('OPERATOR_LABEL covers both operators', () => {
-    expect(OPERATOR_LABEL.av).toBe('AV-Hütte')
-    expect(OPERATOR_LABEL.sonstige).toBe('Sonstige Hütte')
+    expect(OPERATOR_LABEL.av).toBe('Alpenverein')
+    expect(OPERATOR_LABEL.sonstige).toBe('Sonstige')
   })
   it('OPERATOR_COLOR gives a distinct, non-empty colour per operator', () => {
     expect(OPERATOR_COLOR.av).toMatch(/^#/)

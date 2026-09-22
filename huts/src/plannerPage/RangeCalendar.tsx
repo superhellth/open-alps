@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { Box, Button, IconButton, Popover, Typography } from '@mui/material'
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
 
 interface RangeCalendarProps {
   startDate: string
@@ -92,7 +93,7 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
         }}
       >
         {summaryLabel(startDate, endDate)}
-        <Box component="span" sx={{ ml: 1, color: 'action.active' }} aria-hidden>▾</Box>
+        <CalendarMonthIcon fontSize="small" sx={{ ml: 1, color: 'action.active' }} aria-hidden />
       </Button>
       <Popover
         open={anchorEl !== null} anchorEl={anchorEl} onClose={() => setAnchorEl(null)}
