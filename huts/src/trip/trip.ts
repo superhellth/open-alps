@@ -77,7 +77,7 @@ export function parseTrip(value: unknown): Trip | null {
   if (typeof id !== 'string' || typeof name !== 'string') return null
   if (typeof createdAt !== 'string' || typeof updatedAt !== 'string') return null
   if (startDate !== null && (typeof startDate !== 'string' || !ISO_DATE.test(startDate))) return null
-  if (typeof partySize !== 'number' || !Number.isInteger(partySize) || partySize < 1 || partySize > 9) return null
+  if (typeof partySize !== 'number' || !Number.isInteger(partySize) || partySize < 1 || partySize > 25) return null
   if (!Array.isArray(huts) || !huts.every((h) => typeof h === 'string')) return null
   if (!Array.isArray(nights) || nights.length !== huts.length) return null
   if (!nights.every((n) => isRecord(n) && BOOKING_STATUSES.includes(n.status as BookingStatus))) return null

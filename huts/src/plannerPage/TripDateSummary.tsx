@@ -31,8 +31,8 @@ export default function TripDateSummary({ trip, onChange }: { trip: Trip; onChan
           />
           <TextField
             size="small" type="number" label="Personen" value={trip.partySize} sx={{ width: 100 }}
-            slotProps={{ htmlInput: { min: 1, max: 9 } }}
-            onChange={(e) => onChange({ ...trip, partySize: Math.min(9, Math.max(1, Number(e.target.value) || 1)) })}
+            slotProps={{ htmlInput: { min: 1, max: 25 } }}
+            onChange={(e) => onChange({ ...trip, partySize: Math.min(25, Math.max(1, Number(e.target.value) || 1)) })}
           />
         </Box>
       </Popover>

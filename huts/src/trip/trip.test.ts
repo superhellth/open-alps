@@ -30,9 +30,9 @@ describe('parseTrip', () => {
     expect(parseTrip({ ...good, nights: [{ status: 'nope' }, { status: 'open' }] })).toBeNull()
     expect(parseTrip({ ...good, start: { startId: 'x', sourceType: 1 } })).toBeNull()
   })
-  it('rejects a party size outside 1-9 and a malformed date', () => {
+  it('rejects a party size outside 1-25 and a malformed date', () => {
     expect(parseTrip({ ...good, partySize: 0 })).toBeNull()
-    expect(parseTrip({ ...good, partySize: 10 })).toBeNull()
+    expect(parseTrip({ ...good, partySize: 26 })).toBeNull()
     expect(parseTrip({ ...good, startDate: '10.07.2026' })).toBeNull()
   })
   it('accepts a null start date', () => {

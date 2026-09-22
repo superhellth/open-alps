@@ -90,7 +90,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
             <Typography>{draft.partySize} Pers.</Typography>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
               onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
-            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 9}
+            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 25}
               onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
           </Box>
         </Box>
