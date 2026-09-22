@@ -29,23 +29,73 @@ describe('FilterBar', () => {
     const props = base()
     render(<FilterBar {...props} />)
     fireEvent.click(screen.getByLabelText('Klettersteige erlauben'))
-    expect(props.onFormChange).toHaveBeenCalledWith({ allowViaFerrata: false })
-  })
-  it('keeps start date and party size on the trip draft, not the form', () => {
-    const props = base()
-    render(<FilterBar {...props} />)
-    fireEvent.change(screen.getByLabelText('Startdatum (erste Nacht)'), { target: { value: '2026-07-10' } })
-    expect(props.onDraftChange).toHaveBeenCalledWith({ startDate: '2026-07-10' })
-  })
-  it('only offers the availability filter once a date is set', () => {
-    const props = base()
-    const { rerender } = render(<FilterBar {...props} />)
-    expect(screen.queryByLabelText('nur Touren mit Verfügbarkeit')).not.toBeInTheDocument()
-    rerender(<FilterBar {...props} draft={{ startDate: '2026-07-10', partySize: 2 }} />)
-    expect(screen.getByLabelText('nur Touren mit Verfügbarkeit')).toBeInTheDocument()
+    expect(props.onFormChange).toHaveBeenCalledWith({ allowViaFerrata: true })
   })
   it('warns when no hut class is selected', () => {
     render(<FilterBar {...base()} form={{ ...DEFAULT_FORM, allowedOperators: new Set() }} />)
     expect(screen.getByText('Mindestens ein Betreiber und eine Betriebsart müssen ausgewählt sein.')).toBeInTheDocument()
+  })
+
+  it('shows a date range when a date is picked, a day-count stepper otherwise', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    expect(screen.getByText('3 Tage')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Von')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Datum wählen'))
+    expect(props.onDraftChange).toHaveBeenCalledWith(expect.objectContaining({ startDate: expect.any(String), endDate: expect.any(String) }))
+  })
+
+  it('the flexibel chip only affects the undated stepper', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    fireEvent.click(screen.getByText('flexibel ±1 Tag'))
+    expect(props.onDraftChange).toHaveBeenCalledWith({ flexible: true })
+  })
+
+  it('the day and party steppers report draft patches', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    fireEvent.click(screen.getAllByText('+', { selector: 'button' })[0])
+    expect(props.onDraftChange).toHaveBeenCalledWith({ dayCount: 4 })
+  })
+
+  it('the leg-time control is three single-select chips defaulting to 7h', () => {
+    const props = base()
+    render(<FilterBar {...props} />)
+    expect(screen.getByRole('button', { name: 'bis 7 h', pressed: true })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'bis 9 h' }))
+    expect(props.onFormChange).toHaveBeenCalledWith({ legTimeCeilingH: 9 })
+  })
+
+  it('difficulty options carry a description', () => {
+    render(<FilterBar {...base()} />)
+    fireEvent.mouseDown(screen.getByLabelText('Schwierigkeit'))
+    expect(screen.getByText('breite Wege, kaum Absturzgefahr')).toBeInTheDocument()
+  })
+
+  it('Wege & Hütten group summarizes non-default values in its header', () => {
+    render(<FilterBar {...base()} form={{ ...DEFAULT_FORM, allowViaFerrata: true }} />)
+    expect(screen.getByText('Wege & Hütten · Klettersteige an')).toBeInTheDocument()
+  })
+
+  it('the Selbstversorger help popover shows its explanation text', () => {
+    render(<FilterBar {...base()} />)
+    fireEvent.click(screen.getByLabelText('Was ist eine Selbstversorgerhütte?'))
+    expect(screen.getByText('Unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen.')).toBeInTheDocument()
+  })
+
+  it('Verfügbarkeit prüfen only shows when a date is set, and reveals the full-tours chip', () => {
+    const { rerender } = render(<FilterBar {...base()} />)
+    expect(screen.queryByLabelText('Verfügbarkeit prüfen')).not.toBeInTheDocument()
+    rerender(<FilterBar {...base()} draft={{ ...DEFAULT_DRAFT, startDate: '2026-07-10', endDate: '2026-07-12' }} form={{ ...DEFAULT_FORM, onlyAvailable: true }} />)
+    expect(screen.getByText('auch volle Touren zeigen')).toBeInTheDocument()
+  })
+
+  it('Erweitert has only Anstiegslimit and Maximalhöhe, no Wunsch-Tageszahl field', () => {
+    render(<FilterBar {...base()} />)
+    fireEvent.click(screen.getByText('Erweitert'))
+    expect(screen.queryByLabelText(/Wunsch-Tageszahl/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Anstiegslimit/)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Maximalhöhe/)).toBeInTheDocument()
   })
 })
