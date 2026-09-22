@@ -10,7 +10,7 @@ import type { StartPoint } from './types.js'
 export type SortKey = 'fit' | 'duration' | 'ascent' | 'distance'
 
 export const SORT_LABEL: Record<SortKey, string> = {
-  fit: 'Passend zu meinen Wünschen',
+  fit: 'Empfehlung',
   duration: 'Gesamtdauer',
   ascent: 'Anstieg',
   distance: 'Distanz',

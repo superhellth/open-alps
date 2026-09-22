@@ -96,12 +96,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])
   const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
 
-  const selectedTours = useMemo(() => {
-    if (!selectedStartIds) return []
-    const wanted = new Set(selectedStartIds)
-    const inArea = groups.filter((g) => wanted.has(g.startId)).flatMap((g) => g.tours)
-    return sortTours(inArea, sortKey, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset })
-  }, [selectedStartIds, groups, sortKey, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
+  const rankedTours = useMemo(
+    () => sortTours(visibleTours, sortKey, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
+    [visibleTours, sortKey, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -269,11 +266,10 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             </Box>
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList
-                tours={selectedTours} selectionActive={selectedStartIds !== null}
+                tours={rankedTours}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sortKey} onSortChange={setSortKey}
-                hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
-                startLabel={startLabel} onPreview={setPreviewTour} onPick={pick}
+                hutNameById={data?.hutNameById ?? new Map()} onPreview={setPreviewTour} onPick={pick}
                 onOpenFilters={() => setDiscoverTab('filters')}
               />
             </Box>

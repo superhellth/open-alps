@@ -11,26 +11,30 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
   huts, startId: 1, exitStartId: 1, totalDurationH: 10.5, totalAscentM: 1800, totalDescentM: 1700, totalDistanceM: 25000,
   legs: huts.concat(0).map(() => ({ durationH: 3.5, ascentM: 600, descentM: 500, distanceM: 8000, edgeId: 0, reversed: false })), ...over,
 })
+const hutNameById = new Map([[0, 'Hut A'], [1, 'Hut B'], [2, 'Hut C'], [3, 'Hut D'], [4, 'Hut E']])
 const props = () => ({
   tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
-  selectionActive: true, noMatches: false, sortKey: 'fit' as const,
+  noMatches: false, sortKey: 'fit' as const,
   onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
-  hutNameById: new Map([[0, 'Hütte A'], [1, 'Hütte B'], [2, 'Hütte C']]),
-  hutClassByIndex: new Map([[0, { operator: 'av' as const, serviced: true }]]),
-  startLabel: (id: number) => `Start ${id}`,
+  hutNameById,
 })
 
 describe('ResultsList', () => {
-  it('lists tours with hut names and signpost-style totals, official ones tagged', () => {
+  it('lists tours by their hut chain and signpost-style totals, official ones tagged', () => {
     render(<ResultsList {...props()} />)
-    expect(screen.getByText(/Hütte A/)).toBeInTheDocument()
-    expect(screen.getAllByText('10½ Std').length).toBe(2)
+    expect(screen.getByText('Hut A – Hut B')).toBeInTheDocument()
+    expect(screen.getAllByText(/10½ Std/).length).toBe(2)
     expect(screen.getByText('Offiziell: Kaisertour')).toBeInTheDocument()
+  })
+  it('folds long hut chains to first – last plus a count chip', () => {
+    render(<ResultsList {...props()} tours={[tour([0, 1, 2, 3, 4])]} />)
+    expect(screen.getByText('Hut A – Hut E')).toBeInTheDocument()
+    expect(screen.getByText('+3 Hütten')).toBeInTheDocument()
   })
   it('previews on hover and on keyboard focus, clears on leave, picks on click', () => {
     const p = props()
     render(<ResultsList {...p} />)
-    const row = screen.getAllByRole('button', { name: /Hütte/ })[0]
+    const row = screen.getAllByRole('button')[0]
     fireEvent.mouseEnter(row)
     expect(p.onPreview).toHaveBeenLastCalledWith(p.tours[0])
     fireEvent.mouseLeave(row)
@@ -47,15 +51,11 @@ describe('ResultsList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter anpassen' }))
     expect(onOpenFilters).toHaveBeenCalled()
   })
-  it('renders nothing before any area is chosen', () => {
-    const { container } = render(<ResultsList {...props()} tours={[]} selectionActive={false} />)
-    expect(container).toBeEmptyDOMElement()
-  })
   it('pages long lists', () => {
-    const many = Array.from({ length: 30 }, (_, i) => tour([0], { startId: i }))
+    const many = Array.from({ length: 30 }, (_, i) => tour([0], { startId: i, exitStartId: i }))
     render(<ResultsList {...props()} tours={many} />)
-    expect(screen.getAllByRole('button', { name: /Hütte A/ })).toHaveLength(25)
+    expect(screen.getAllByRole('button').filter((b) => b.textContent?.includes('Hut A'))).toHaveLength(25)
     fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }))
-    expect(screen.getAllByRole('button', { name: /Hütte A/ })).toHaveLength(5)
+    expect(screen.getAllByRole('button').filter((b) => b.textContent?.includes('Hut A'))).toHaveLength(5)
   })
 })
