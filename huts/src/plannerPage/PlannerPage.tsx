@@ -176,9 +176,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     const id = bestStartId(groups)
     if (id === null) return
     setSelectedStartIds([id])
-    setFocusStart(data?.startById.get(id) ?? null)
-    setDiscoverTab('results')
-  }, [groups, selectedStartIds, data])
+  }, [groups, selectedStartIds])
 
   async function share() {
     if (!activeTrip) return
