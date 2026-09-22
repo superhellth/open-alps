@@ -19,6 +19,7 @@ export type TripsAction =
   | { type: 'delete'; id: string }
   | { type: 'undoDelete' }
   | { type: 'import'; trips: Trip[]; makeId?: () => string }
+  | { type: 'reopenDraft' }
 
 export function initialTripsState(stored: StoredTrips): TripsState {
   return { ...stored, draftBaseline: stored.draft, deleted: null }
@@ -64,6 +65,8 @@ export function tripsReducer(state: TripsState, action: TripsAction): TripsState
       const trip = { ...state.draft, updatedAt }
       return { ...state, trips: [...state.trips, trip], draft: null, draftBaseline: null, activeId: trip.id, activeIsDraft: false }
     }
+    case 'reopenDraft':
+      return state.draft ? { ...state, activeId: null, activeIsDraft: true } : state
     case 'setActive':
       return { ...state, activeId: action.id, activeIsDraft: false }
     case 'closeActive':

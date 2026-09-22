@@ -93,6 +93,21 @@ describe('draft lifecycle', () => {
     expect(next.activeId).toBe(t.id)
     expect(next.activeIsDraft).toBe(false)
   })
+
+  it('reopenDraft makes the existing draft active again', () => {
+    const draftTrip = trip('a')
+    const withDraft = tripsReducer(empty, { type: 'openDraft', trip: draftTrip })
+    const closed = tripsReducer(withDraft, { type: 'closeActive' })
+    expect(closed.activeIsDraft).toBe(false)
+    const reopened = tripsReducer(closed, { type: 'reopenDraft' })
+    expect(reopened.activeIsDraft).toBe(true)
+    expect(reopened.activeId).toBeNull()
+    expect(reopened.draft).toBe(draftTrip)
+  })
+
+  it('reopenDraft is a no-op with no draft', () => {
+    expect(tripsReducer(empty, { type: 'reopenDraft' })).toBe(empty)
+  })
 })
 
 describe('isDraftDirty', () => {
