@@ -179,6 +179,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     if (id === null) return
     setSelectedStartIds([id])
     setFocusStart(data?.startById.get(id) ?? null)
+    setDiscoverTab('results')
   }, [groups, selectedStartIds, data])
 
   async function share() {
@@ -312,7 +313,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
           <PlannerMap
             mode={sidebarView === 'saved' ? 'saved' : mode} groups={groups} dimmed={search.status === 'searching'}
             startById={data?.startById ?? new Map()} hutCoordsById={data?.hutCoordsById ?? new Map()}
-            onSelectStarts={(ids) => { prompt.dismiss(); setSelectedStartIds(ids) }}
+            onSelectStarts={(ids) => { prompt.dismiss(); setSelectedStartIds(ids); setDiscoverTab('results') }}
             onMapClick={prompt.dismiss}
             route={mode === 'trip' ? tripRoute : previewRoute} fitRoute={mode === 'trip'} highlightedLeg={highlightedLeg}
             tripHuts={tripHuts} tripEnds={tripEnds}
