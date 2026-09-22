@@ -111,8 +111,10 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Typography>{draft.partySize} Pers.</Typography>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
+              sx={{ width: 40, height: 40, minWidth: 0, p: 0 }}
               onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 25}
+              sx={{ width: 40, height: 40, minWidth: 0, p: 0 }}
               onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
           </Box>
         </Box>

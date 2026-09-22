@@ -87,7 +87,7 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
       <Button
         size="small" variant="outlined" color="secondary" disabled={disabled} onClick={openCalendar}
         sx={{
-          textTransform: 'none', justifyContent: 'space-between', width: '100%',
+          textTransform: 'none', justifyContent: 'space-between', width: '100%', height: 40,
           fontSize: '1rem', fontWeight: 400, color: 'text.primary', borderColor: 'rgba(0, 0, 0, 0.23)',
           '&:hover': { borderColor: 'text.primary' },
         }}
