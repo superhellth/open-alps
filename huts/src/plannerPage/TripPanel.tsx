@@ -22,14 +22,16 @@ export interface TripPanelProps {
   onBack: () => void
   onHoverLeg: (index: number | null) => void
   renderStageControls?: (night: number) => ReactNode
-  /** Rendered between the header and the stages (start/exit pickers, candidate list). */
-  extra?: ReactNode
+  /** Start/exit pickers, rendered above the stage list. */
+  endpointControls?: ReactNode
+  /** Extend-at-either-end controls, rendered below the stage list. */
+  extendControls?: ReactNode
   warnings?: string[]
   onShare?: () => void
 }
 
 export default function TripPanel({
-  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, onHoverLeg, renderStageControls, extra, warnings, onShare,
+  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, onHoverLeg, renderStageControls, endpointControls, extendControls, warnings, onShare,
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
   const totals = summarizeLegs(tripLegs.legs)
@@ -61,13 +63,15 @@ export default function TripPanel({
         onShift={(days) => onChange(shiftStartDate(trip, days))}
       />
 
-      {extra}
+      {endpointControls}
 
       <StageList
         trip={trip} tripLegs={tripLegs} hutNameById={data.hutNameById} hutOhrsByIndex={data.hutOhrsByIndex}
         startLabel={startLabel} nightViews={nightViews} onHoverLeg={onHoverLeg}
         renderStageControls={renderStageControls} warnings={warnings}
       />
+
+      {extendControls}
     </Box>
   )
 }

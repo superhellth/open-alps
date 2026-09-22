@@ -81,4 +81,18 @@ describe('TripPanel', () => {
     renderPanel(vi.fn(), vi.fn(), false)
     expect(screen.queryByLabelText('Notizen')).not.toBeInTheDocument()
   })
+  it('renders endpointControls above the stage list and extendControls below it', () => {
+    vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+    vi.spyOn(detail, 'fetchHutDetail').mockResolvedValue({ hutId: 1, hutName: '', calendarDays: [] })
+    render(
+      <TripPanel
+        trip={trip} tripLegs={legsFromTrip(data.graph, trip)} data={data} startLabel={makeStartLabel(data.startById)}
+        isDraft={false} onChange={vi.fn()} onSave={vi.fn()} onBack={vi.fn()} onHoverLeg={() => {}}
+        endpointControls={<span data-testid="ep" />} extendControls={<span data-testid="ex" />}
+      />,
+    )
+    const ep = screen.getByTestId('ep')
+    const ex = screen.getByTestId('ex')
+    expect(ep.compareDocumentPosition(ex) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
 })
