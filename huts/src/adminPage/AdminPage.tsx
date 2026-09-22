@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-leaflet'
 import L from 'leaflet'
-import { Box, FormControlLabel, Switch } from '@mui/material'
+import { AppBar, Box, FormControlLabel, Switch, Toolbar, Typography } from '@mui/material'
 import 'leaflet/dist/leaflet.css'
 import './App.css'
-import AppShell from '../AppShell.js'
 import { hutClassBadge, hutClassLabel, OPERATOR_COLOR, OPERATOR_LABEL, PARTNER_COLOR, PARTNER_LABEL, type HutClass, type HutOperator } from '../hutClass.js'
 import { decodeEdgeGeometry } from './decodeEdgeGeometry.js'
 import { decodeEdgeElevation } from './decodeEdgeElevation.js'
@@ -110,116 +109,121 @@ function AdminPage() {
   }
 
   return (
-    <AppShell
-      title="Hütten-Trail-Graph (Admin)"
-      status={
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <span>
-            {error
-              ? `Fehler: ${error}`
-              : `${huts.length} Hütten, ${edges.length} Kanten (${connectedIds.size} verbunden)`}
-          </span>
-          <FormControlLabel
-            control={<Switch size="small" checked={showTrails} onChange={(e) => setShowTrails(e.target.checked)} />}
-            label="OSM-Wege (roh)"
-            sx={{ color: 'inherit', m: 0 }}
-          />
-          {(Object.keys(OPERATOR_LABEL) as HutOperator[]).map((op) => (
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <AppBar position="static">
+        <Toolbar sx={{ gap: 4, minHeight: 64 }}>
+          <Typography variant="h6" component="h1" sx={{ fontSize: '1.35rem', letterSpacing: '0.01em', flexShrink: 0 }}>
+            Hütten-Trail-Graph (Admin)
+          </Typography>
+          <Box sx={{ marginLeft: 'auto', fontSize: '0.8rem', opacity: 0.7, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <span>
+              {error
+                ? `Fehler: ${error}`
+                : `${huts.length} Hütten, ${edges.length} Kanten (${connectedIds.size} verbunden)`}
+            </span>
             <FormControlLabel
-              key={op}
-              control={
-                <Switch
-                  size="small"
-                  checked={allowedOperators.has(op)}
-                  onChange={(e) =>
-                    setAllowedOperators((prev) => {
-                      const next = new Set(prev)
-                      if (e.target.checked) next.add(op)
-                      else next.delete(op)
-                      return next
-                    })
-                  }
-                />
-              }
-              label={OPERATOR_LABEL[op]}
+              control={<Switch size="small" checked={showTrails} onChange={(e) => setShowTrails(e.target.checked)} />}
+              label="OSM-Wege (roh)"
               sx={{ color: 'inherit', m: 0 }}
             />
+            {(Object.keys(OPERATOR_LABEL) as HutOperator[]).map((op) => (
+              <FormControlLabel
+                key={op}
+                control={
+                  <Switch
+                    size="small"
+                    checked={allowedOperators.has(op)}
+                    onChange={(e) =>
+                      setAllowedOperators((prev) => {
+                        const next = new Set(prev)
+                        if (e.target.checked) next.add(op)
+                        else next.delete(op)
+                        return next
+                      })
+                    }
+                  />
+                }
+                label={OPERATOR_LABEL[op]}
+                sx={{ color: 'inherit', m: 0 }}
+              />
+            ))}
+            <FormControlLabel
+              control={<Switch size="small" checked={showServiced} onChange={(e) => setShowServiced(e.target.checked)} />}
+              label="Bewirtschaftet"
+              sx={{ color: 'inherit', m: 0 }}
+            />
+            <FormControlLabel
+              control={<Switch size="small" checked={showSelfService} onChange={(e) => setShowSelfService(e.target.checked)} />}
+              label="Selbstversorger"
+              sx={{ color: 'inherit', m: 0 }}
+            />
+            <FormControlLabel
+              control={<Switch size="small" checked={showPartner} onChange={(e) => setShowPartner(e.target.checked)} />}
+              label={PARTNER_LABEL}
+              sx={{ color: 'inherit', m: 0 }}
+            />
+          </Box>
+        </Toolbar>
+      </AppBar>
+      <Box sx={{ flex: 1, minHeight: 0, display: 'flex' }}>
+        <MapContainer center={[47.3, 12.0]} zoom={7} className="map" style={{ flex: 1 }}>
+          <TileLayer
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Hüttendaten: Alpenverein / ArcGIS'
+          />
+          <TrailTilesLayer visible={showTrails} />
+          <HutEdgeTilesLayer />
+          <HoverInspector edges={edges} onHover={setHover} />
+          {hover?.indices.map((i) => (
+            <Polyline
+              key={`hover-${i}`}
+              positions={edges[i].positions}
+              interactive={false}
+              pathOptions={{ color: '#ff1744', weight: 5, opacity: 1 }}
+            />
           ))}
-          <FormControlLabel
-            control={<Switch size="small" checked={showServiced} onChange={(e) => setShowServiced(e.target.checked)} />}
-            label="Bewirtschaftet"
-            sx={{ color: 'inherit', m: 0 }}
-          />
-          <FormControlLabel
-            control={<Switch size="small" checked={showSelfService} onChange={(e) => setShowSelfService(e.target.checked)} />}
-            label="Selbstversorger"
-            sx={{ color: 'inherit', m: 0 }}
-          />
-          <FormControlLabel
-            control={<Switch size="small" checked={showPartner} onChange={(e) => setShowPartner(e.target.checked)} />}
-            label={PARTNER_LABEL}
-            sx={{ color: 'inherit', m: 0 }}
-          />
-        </Box>
-      }
-    >
-      <MapContainer center={[47.3, 12.0]} zoom={7} className="map" style={{ flex: 1 }}>
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> | Hüttendaten: Alpenverein / ArcGIS'
-        />
-        <TrailTilesLayer visible={showTrails} />
-        <HutEdgeTilesLayer />
-        <HoverInspector edges={edges} onHover={setHover} />
-        {hover?.indices.map((i) => (
-          <Polyline
-            key={`hover-${i}`}
-            positions={edges[i].positions}
-            interactive={false}
-            pathOptions={{ color: '#ff1744', weight: 5, opacity: 1 }}
-          />
-        ))}
-        {huts.map((hut) => {
-          const dim = !matchesFilter(hut)
-          const connected = connectedIds.has(hut.id)
-          const baseFill = hut.hutClass ? OPERATOR_COLOR[hut.hutClass.operator] : '#43a047'
-          return (
-            <CircleMarker
-              key={hut.id}
-              center={[hut.lat, hut.lng]}
-              radius={connected ? 4 : 3}
-              pathOptions={{
-                color: connected ? '#1b5e20' : '#616161',
-                fillColor: baseFill,
-                fillOpacity: dim ? 0.15 : hut.hutClass?.serviced === false ? 0.4 : 0.9,
-                weight: connected ? 1 : 1,
-              }}
-            >
-              <Tooltip direction="top" offset={[0, -6]}>
-                {hut.name}
-                {hut.hutClass ? ` — ${hutClassLabel(hut.hutClass)} (${hutClassBadge(hut.hutClass)})` : ''}
-              </Tooltip>
-            </CircleMarker>
-          )
-        })}
-        {showPartner &&
-          partners.map((p) => (
-            <CircleMarker
-              key={`partner-${p.id}`}
-              center={[p.lat, p.lng]}
-              radius={4}
-              pathOptions={{ color: PARTNER_COLOR, fillColor: PARTNER_COLOR, fillOpacity: 0.9, weight: 1 }}
-            >
-              <Tooltip direction="top" offset={[0, -6]}>
-                {p.name} ({PARTNER_LABEL})
-              </Tooltip>
-            </CircleMarker>
-          ))}
-      </MapContainer>
-      {hover && hover.indices.length > 0 && (
-        <EdgeHoverPanel hover={hover} edges={edges} hutNameById={hutNameById} />
-      )}
-    </AppShell>
+          {huts.map((hut) => {
+            const dim = !matchesFilter(hut)
+            const connected = connectedIds.has(hut.id)
+            const baseFill = hut.hutClass ? OPERATOR_COLOR[hut.hutClass.operator] : '#43a047'
+            return (
+              <CircleMarker
+                key={hut.id}
+                center={[hut.lat, hut.lng]}
+                radius={connected ? 4 : 3}
+                pathOptions={{
+                  color: connected ? '#1b5e20' : '#616161',
+                  fillColor: baseFill,
+                  fillOpacity: dim ? 0.15 : hut.hutClass?.serviced === false ? 0.4 : 0.9,
+                  weight: connected ? 1 : 1,
+                }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {hut.name}
+                  {hut.hutClass ? ` — ${hutClassLabel(hut.hutClass)} (${hutClassBadge(hut.hutClass)})` : ''}
+                </Tooltip>
+              </CircleMarker>
+            )
+          })}
+          {showPartner &&
+            partners.map((p) => (
+              <CircleMarker
+                key={`partner-${p.id}`}
+                center={[p.lat, p.lng]}
+                radius={4}
+                pathOptions={{ color: PARTNER_COLOR, fillColor: PARTNER_COLOR, fillOpacity: 0.9, weight: 1 }}
+              >
+                <Tooltip direction="top" offset={[0, -6]}>
+                  {p.name} ({PARTNER_LABEL})
+                </Tooltip>
+              </CircleMarker>
+            ))}
+        </MapContainer>
+        {hover && hover.indices.length > 0 && (
+          <EdgeHoverPanel hover={hover} edges={edges} hutNameById={hutNameById} />
+        )}
+      </Box>
+    </Box>
   )
 }
 
