@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, rankTargetsFromForm } from './formState.js'
-import { LEG_COUNT_SLIDER_MAX } from '../tourSearch/limits.js'
+import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, legTimeRangeFromCeiling, rankTargetsFromForm } from './formState.js'
 import type { HutClass } from '../hutClass.js'
 
 const huts: (HutClass | null)[] = [
@@ -9,25 +8,30 @@ const huts: (HutClass | null)[] = [
 ]
 
 describe('planner form', () => {
-  it('has no date or party fields (they live on the trip draft)', () => {
+  it('has no date, party, or day-count fields (they live on the trip draft)', () => {
     expect('startDate' in DEFAULT_FORM).toBe(false)
-    expect('numOfPeople' in DEFAULT_FORM).toBe(false)
+    expect('legCountRange' in DEFAULT_FORM).toBe(false)
+    expect('targetLegCount' in DEFAULT_FORM).toBe(false)
   })
-  it('default leg range stays inside the slider ceiling', () => {
-    expect(DEFAULT_FORM.legCountRange[1]).toBeLessThanOrEqual(LEG_COUNT_SLIDER_MAX)
+  it('defaults allowUngraded and allowViaFerrata to off', () => {
+    expect(DEFAULT_FORM.allowUngraded).toBe(false)
+    expect(DEFAULT_FORM.allowViaFerrata).toBe(false)
   })
-  it('buildQuery filters huts by class exactly like the old form', () => {
-    expect(buildQuery(DEFAULT_FORM, huts).allowedHutIndices).toEqual(new Set([0, 2]))
-    expect(buildQuery({ ...DEFAULT_FORM, allowSelfService: true }, huts).allowedHutIndices).toEqual(new Set([0, 1, 2]))
+  it('defaults the leg-time ceiling to 7h, half that as the floor', () => {
+    expect(DEFAULT_FORM.legTimeCeilingH).toBe(7)
+    expect(legTimeRangeFromCeiling(7)).toEqual([3.5, 7])
+    expect(legTimeRangeFromCeiling(5)).toEqual([2.5, 5])
+    expect(legTimeRangeFromCeiling(9)).toEqual([4.5, 9])
   })
-  it('only passes availability when onlyAvailable is set', () => {
-    const availability = { ohrsIdByHutIndex: new Map(), freeByOffset: new Map() }
-    expect(buildQuery(DEFAULT_FORM, huts, availability).availability).toBeUndefined()
-    expect(buildQuery({ ...DEFAULT_FORM, onlyAvailable: true }, huts, availability).availability).toBe(availability)
+  it('buildQuery filters huts by class exactly like before, and takes an explicit leg-count range', () => {
+    expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).allowedHutIndices).toEqual(new Set([0, 2]))
+    expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).legCountMin).toBe(2)
+    expect(buildQuery(DEFAULT_FORM, huts, [2, 4]).legCountMax).toBe(4)
+    expect(buildQuery({ ...DEFAULT_FORM, allowSelfService: true }, huts, [2, 4]).allowedHutIndices).toEqual(new Set([0, 1, 2]))
   })
-  it('rank target defaults to the middle of the leg range and is clamped into it', () => {
-    expect(rankTargetsFromForm({ ...DEFAULT_FORM, legCountRange: [2, 4], targetLegCount: null }).legCountTarget).toBe(3)
-    expect(rankTargetsFromForm({ ...DEFAULT_FORM, legCountRange: [2, 4], targetLegCount: 9 }).legCountTarget).toBe(4)
+  it('rank target is the exact/target day count, clamped into the leg-count range', () => {
+    expect(rankTargetsFromForm(DEFAULT_FORM, [2, 4], 3).legCountTarget).toBe(3)
+    expect(rankTargetsFromForm(DEFAULT_FORM, [2, 4], 9).legCountTarget).toBe(4)
   })
   it('validates the hut class selection', () => {
     expect(isFilterSelectionValid(DEFAULT_FORM)).toBe(true)
