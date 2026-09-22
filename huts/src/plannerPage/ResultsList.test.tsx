@@ -51,23 +51,22 @@ describe('ResultsList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter anpassen' }))
     expect(onOpenFilters).toHaveBeenCalled()
   })
-  it('toggles sort direction via the sort menu, no dir toggle while sorting by fit', () => {
+  it('tapping the active chip flips sort direction, tapping fit chip does not toggle dir', () => {
     const p = props()
     render(<ResultsList {...p} />)
-    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Empfehlung/ }))
-    expect(screen.queryByLabelText('Aufsteigend sortiert')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByText('Empfehlung'))
+    expect(p.onSortDirChange).not.toHaveBeenCalled()
+    expect(p.onSortChange).not.toHaveBeenCalled()
     cleanup()
     const p2 = { ...props(), sortKey: 'duration' as const }
     render(<ResultsList {...p2} />)
-    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Gesamtdauer/ }))
-    fireEvent.click(screen.getByLabelText('Aufsteigend sortiert'))
+    fireEvent.click(screen.getByText('Gesamtdauer'))
     expect(p2.onSortDirChange).toHaveBeenCalledWith('desc')
   })
-  it('picks a different sort key from the menu', () => {
+  it('tapping another chip picks that sort key', () => {
     const p = props()
     render(<ResultsList {...p} />)
-    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Empfehlung/ }))
-    fireEvent.click(screen.getByRole('menuitem', { name: /Gesamtdauer/ }))
+    fireEvent.click(screen.getByText('Gesamtdauer'))
     expect(p.onSortChange).toHaveBeenCalledWith('duration')
   })
   it('pages long lists', () => {

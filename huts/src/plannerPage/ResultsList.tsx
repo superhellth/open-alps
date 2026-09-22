@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { CSSProperties, MouseEvent } from 'react'
-import { Box, Button, Chip, IconButton, List, ListItemButton, Menu, MenuItem, Pagination, Typography } from '@mui/material'
+import type { CSSProperties } from 'react'
+import { Box, Button, Chip, List, ListItemButton, Pagination, Typography } from '@mui/material'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import { formatSignpostTime } from '../format/signpostTime.js'
 import { SIGNPOST_FONT, tokens } from '../theme.js'
 import { SORT_LABEL } from './rankTours.js'
@@ -45,7 +44,6 @@ export default function ResultsList({
 }) {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [tours])
-  const [sortMenuAnchor, setSortMenuAnchor] = useState<HTMLElement | null>(null)
 
   if (noMatches) {
     return (
@@ -61,38 +59,31 @@ export default function ResultsList({
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
-        p: 2, position: 'sticky', top: 0, zIndex: 1,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap',
+        p: 2, gap: 1, position: 'sticky', top: 0, zIndex: 1,
         bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
       }}>
-        <Button
-          size="small" onClick={(e) => setSortMenuAnchor(e.currentTarget)} endIcon={<ArrowDropDownIcon />}
-          sx={{ color: 'inherit', fontFamily: SIGNPOST_FONT, fontWeight: 600, borderBottom: `2px solid ${tokens.signpost}`, borderRadius: 0 }}
-        >
-          Sortieren: {SORT_LABEL[sortKey]}
-          {sortKey !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon fontSize="small" sx={{ ml: 0.5 }} /> : <ArrowDownwardIcon fontSize="small" sx={{ ml: 0.5 }} />)}
-        </Button>
-        <Menu anchorEl={sortMenuAnchor} open={sortMenuAnchor != null} onClose={() => setSortMenuAnchor(null)}>
-          {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
-            <MenuItem
-              key={key} selected={key === sortKey}
-              onClick={() => { onSortChange(key); setSortMenuAnchor(null) }}
-              sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 220 }}
-            >
-              <span style={{ width: 16 }}>{key === sortKey ? '●' : ''}</span>
-              <span style={{ flexGrow: 1 }}>{SORT_LABEL[key]}</span>
-              {key === sortKey && key !== 'fit' && (
-                <IconButton
-                  size="small"
-                  aria-label={sortDir === 'asc' ? 'Aufsteigend sortiert' : 'Absteigend sortiert'}
-                  onClick={(e: MouseEvent) => { e.stopPropagation(); onSortDirChange(sortDir === 'asc' ? 'desc' : 'asc') }}
-                >
-                  {sortDir === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
-                </IconButton>
-              )}
-            </MenuItem>
-          ))}
-        </Menu>
+        {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => {
+          const active = key === sortKey
+          return (
+            <Chip
+              key={key} size="small"
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontFamily: SIGNPOST_FONT, fontWeight: 600 }}>
+                  {SORT_LABEL[key]}
+                  {active && key !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14 }} /> : <ArrowDownwardIcon sx={{ fontSize: 14 }} />)}
+                </Box>
+              }
+              onClick={() => {
+                if (!active) onSortChange(key)
+                else if (key !== 'fit') onSortDirChange(sortDir === 'asc' ? 'desc' : 'asc')
+              }}
+              sx={active
+                ? { bgcolor: tokens.signpost, color: tokens.ink, '&:hover': { bgcolor: tokens.signpost } }
+                : { bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }}
+            />
+          )
+        })}
       </Box>
       <List disablePadding sx={{ px: 2, pb: 2 }}>
         {shown.map((tour, i) => {
