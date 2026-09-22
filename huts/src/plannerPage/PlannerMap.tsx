@@ -1,13 +1,17 @@
 import { memo } from 'react'
-import { Box } from '@mui/material'
+import { Box, Button, Typography } from '@mui/material'
 import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import type { FreeByOffset } from '../availability/types.js'
+import type { RankTargets } from '../tourSearch/rankFit.js'
 import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
 import RouteLayer from './map/RouteLayer.js'
 import TripLayer from './map/TripLayer.js'
 import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/TripLayer.js'
 import { ACTIVE_TILES } from './map/tiles.js'
+import type { SortKey } from './rankTours.js'
+import type { RouteContext } from './routes.js'
 import type { PlannerTour } from './tours.js'
 import type { Route, StartPoint } from './types.js'
 import './map/map.css'
@@ -26,9 +30,19 @@ export interface PlannerMapProps {
   highlightedLeg: number | null
   tripHuts: TripHutMarker[]
   tripEnds: TripEndMarker[]
-  /** Swap/extend candidates of the active edit, drawn as signposts. */
+  /** Swap/extend/start/exit candidates of the active edit, drawn as signposts. */
   candidates: CandidateMapMarker[]
-  onPickCandidate: (hutIndex: number) => void
+  candidateStartCoords: Map<number, { lat: number; lng: number }>
+  onPickCandidate: (arg: { hutIndex?: number; startId?: number }) => void
+  activeLabel: string | null
+  onCancelEditing?: () => void
+  allTours: PlannerTour[]
+  sortKey: SortKey
+  rankCtx: { targets: RankTargets; ohrsIdByHutIndex: Map<number, string | null>; freeByOffset: FreeByOffset | null }
+  routeCtx: RouteContext | null
+  hoveredTourKey: string | null
+  onHoverTour: (key: string | null) => void
+  onPickRoute: (tour: PlannerTour) => void
 }
 
 function MapClickWatcher({ onClick }: { onClick?: () => void }) {
@@ -40,10 +54,17 @@ function MapClickWatcher({ onClick }: { onClick?: () => void }) {
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
     mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
-    tripHuts, tripEnds, candidates, onPickCandidate, onMapClick,
+    tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
+    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute,
   } = props
   return (
-    <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%' }}>
+    <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', position: 'relative' }}>
+      {activeLabel && (
+        <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Typography variant="body2">{activeLabel}</Typography>
+          {onCancelEditing && <Button size="small" onClick={onCancelEditing}>Abbrechen</Button>}
+        </Box>
+      )}
       <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>
         <TileLayer
           url={ACTIVE_TILES.url} attribution={ACTIVE_TILES.attribution}
@@ -51,13 +72,17 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
         />
         <MapClickWatcher onClick={onMapClick} />
         {mode === 'discover' && (
-          <DiscoverLayer groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts} />
+          <DiscoverLayer
+            groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts}
+            allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
+            hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} onPickRoute={onPickRoute}
+          />
         )}
         {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
         {mode === 'trip' && (
           <TripLayer
             tripHuts={tripHuts} tripEnds={tripEnds} candidates={candidates}
-            hutCoordsById={hutCoordsById} onPickCandidate={onPickCandidate}
+            hutCoordsById={hutCoordsById} candidateStartCoords={candidateStartCoords} onPickCandidate={onPickCandidate}
           />
         )}
       </MapContainer>
