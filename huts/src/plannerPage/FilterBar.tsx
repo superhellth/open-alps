@@ -156,20 +156,21 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
       </Box>
 
       <Accordion
-        disableGutters elevation={0} expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitertOpen(isExpanded)}
-        sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}
+        disableGutters elevation={0} square expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitertOpen(isExpanded)}
+        sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
       >
         <AccordionSummary
-          expandIcon={<Typography sx={{ color: 'action.active', fontWeight: 'bold' }} aria-hidden>{erweitertOpen ? '−' : '+'}</Typography>}
+          expandIcon={<Typography sx={{ color: 'primary.main', fontWeight: 'bold' }} aria-hidden>{erweitertOpen ? '−' : '+'}</Typography>}
           sx={{
-            minHeight: 0, '&.Mui-expanded': { minHeight: 0 },
-            '& .MuiAccordionSummary-content': { margin: '12px 0 8px', '&.Mui-expanded': { margin: '12px 0 8px' } },
+            px: 1, mx: -1, borderRadius: 1, minHeight: 0, '&.Mui-expanded': { minHeight: 0 },
+            '&:hover': { bgcolor: 'action.hover' },
+            '& .MuiAccordionSummary-content': { margin: '4px 0', '&.Mui-expanded': { margin: '4px 0' } },
             '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'none' },
           }}
         >
           <ErweitertSummary form={form} />
         </AccordionSummary>
-        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1, pt: 0 }}>
+        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 0, pt: 1 }}>
           {check('Klettersteige erlauben', form.allowViaFerrata, (allowViaFerrata) => onFormChange({ allowViaFerrata }))}
           {check('auch ungeratete Wege erlauben', form.allowUngraded, (allowUngraded) => onFormChange({ allowUngraded }))}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
