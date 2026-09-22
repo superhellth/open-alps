@@ -11,6 +11,8 @@ import type { WorkerLike } from '../search/searchClient.js'
 import type { TourResult } from '../tourSearch/types.js'
 import * as availability from '../availability/fetchAvailability.js'
 import * as detail from '../availability/fetchHutDetail.js'
+import { newTrip } from '../trip/trip.js'
+import { saveTrips } from '../trip/tripStorage.js'
 
 vi.mock('../tourSearch/loadLegElevation.js', () => ({
   loadLegElevation: vi.fn(async () => [1000, 1050, 1020]),
@@ -51,6 +53,29 @@ function renderPlanner() {
     <AppDataProvider load={load}>
       <SearchClientProvider makeWorker={makeWorker}>
         <TripsProvider storage={null}>
+          <PlannerPage importHash={null} />
+        </TripsProvider>
+      </SearchClientProvider>
+    </AppDataProvider>,
+  )
+}
+
+function memoryStorage() {
+  const data: Record<string, string> = {}
+  return { getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => { data[k] = v }, data }
+}
+
+function renderPlannerWithSavedTrip() {
+  const storage = memoryStorage()
+  const trip = newTrip({
+    name: 'Kaiser', startDate: '2026-07-10', partySize: 2, start: { startId: 100, sourceType: 1 }, huts: ['{A}'],
+    exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
+  }, new Date('2026-06-01T00:00:00Z'), 'a')
+  saveTrips({ trips: [trip], activeId: null, draft: null, activeIsDraft: false }, storage)
+  return render(
+    <AppDataProvider load={load}>
+      <SearchClientProvider makeWorker={makeWorker}>
+        <TripsProvider storage={storage}>
           <PlannerPage importHash={null} />
         </TripsProvider>
       </SearchClientProvider>
@@ -189,5 +214,29 @@ describe('PlannerPage', () => {
     expect(await screen.findByText('Aus Link')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'In meine Touren übernehmen' }))
     expect(await screen.findByRole('button', { name: '← Ergebnisse' })).toBeInTheDocument()
+  })
+
+  it('#trips shows the saved-trips list', async () => {
+    window.location.hash = '#trips'
+    renderPlanner()
+    expect(await screen.findByText('Meine Touren')).toBeInTheDocument()
+  })
+
+  it('opening a trip from the saved list back-navigates to Meine Touren', async () => {
+    window.location.hash = '#trips'
+    renderPlannerWithSavedTrip()
+    fireEvent.click(await screen.findByText('Kaiser'))
+    expect(await screen.findByRole('button', { name: '← Meine Touren' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
+    expect(window.location.hash).toBe('#trips')
+    expect(await screen.findByText('Meine Touren')).toBeInTheDocument()
+  })
+
+  it('switching to Meine Touren while a draft trip is open keeps the draft pinned', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    expect(await screen.findByText('Entwurf')).toBeInTheDocument()
+    fireEvent.click(screen.getByText(/Meine Touren/))
+    expect(await screen.findByText('Entwurf · nicht gespeichert')).toBeInTheDocument()
   })
 })

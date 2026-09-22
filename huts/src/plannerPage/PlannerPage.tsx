@@ -1,6 +1,5 @@
-import { useCallback, useMemo, useState } from 'react'
-import { Alert, Badge, Box, Snackbar, Tab, Tabs, TextField } from '@mui/material'
-import AppShell from '../AppShell.js'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
 import { usePlannerSearch } from '../search/usePlannerSearch.js'
@@ -17,6 +16,8 @@ import FirstVisitPrompt from './FirstVisitPrompt.js'
 import ImportTripDialog from './ImportTripDialog.js'
 import PlannerMap from './PlannerMap.js'
 import ResultsList from './ResultsList.js'
+import SavedTripsList from './SavedTripsList.js'
+import SidebarHeader from './SidebarHeader.js'
 import TripPanel from './TripPanel.js'
 import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
 import type { FormState } from './formState.js'
@@ -39,11 +40,16 @@ const EMPTY_GRAPH: TripGraph = { hutEdges: { hutIds: [], variantNames: {}, recor
 const PLACEHOLDER_TRIP: Trip = { id: '', name: '', createdAt: '', updatedAt: '', startDate: null, partySize: 1, start: { startId: 0, sourceType: 1 }, huts: [], exit: { startId: 0, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false }, nights: [] }
 const PLACEHOLDER_LEGS: TripLegs = { variantId: -1, hutIndices: [], legs: [], changed: [] }
 
+function subscribeHash(callback: () => void) {
+  window.addEventListener('hashchange', callback)
+  return () => window.removeEventListener('hashchange', callback)
+}
+
 export default function PlannerPage({ importHash }: { importHash: string | null }) {
   const app = useAppData()
   const data = app.status === 'ready' ? app.data : null
   const client = useSearchClient()
-  const { dispatch, activeTrip, isDraft, draftDirty } = useTrips()
+  const { state, dispatch, activeTrip, isDraft, draftDirty } = useTrips()
   const prompt = useFirstVisitPrompt()
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
@@ -60,6 +66,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [pendingPick, setPendingPick] = useState<Trip | null>(null)
   const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
   const [focusStart, setFocusStart] = useState<{ lat: number; lng: number } | null>(null)
+  const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
+  const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
+  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
@@ -95,6 +104,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
+  const sidebarView: 'discover' | 'saved' | 'trip' = mode === 'trip' ? 'trip' : (hash === '#trips' ? 'saved' : 'discover')
   const overlapWarnings = useTripOverlaps(client, activeTrip ?? PLACEHOLDER_TRIP, tripLegs ?? PLACEHOLDER_LEGS)
 
   const editor = useTripEditor({
@@ -115,16 +125,43 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     })
     if (!trip) return
     if (draftDirty) { setPendingPick(trip); return }
+    setOpenedFrom('results')
     dispatch({ type: 'openDraft', trip })
     setPreviewTour(null)
     setEditing(null)
   }
 
   function confirmDiscardDraft() {
-    if (pendingPick) dispatch({ type: 'openDraft', trip: pendingPick })
+    if (pendingPick) {
+      setOpenedFrom('results')
+      dispatch({ type: 'openDraft', trip: pendingPick })
+    }
     setPendingPick(null)
     setPreviewTour(null)
     setEditing(null)
+  }
+
+  function goPlanen() { window.location.hash = '' }
+  function goMeineTouren() {
+    if (activeTrip) dispatch({ type: 'closeActive' })
+    window.location.hash = '#trips'
+  }
+  function goHome() {
+    dispatch({ type: 'closeActive' })
+    window.location.hash = ''
+  }
+  function openSavedTrip(id: string) {
+    setOpenedFrom('saved')
+    dispatch({ type: 'setActive', id })
+  }
+  function openPinnedDraft() {
+    setOpenedFrom('saved')
+    dispatch({ type: 'reopenDraft' })
+  }
+  function backFromTrip() {
+    setEditing(null)
+    dispatch({ type: 'closeActive' })
+    if (openedFrom === 'saved') window.location.hash = '#trips'
   }
 
   function showBest() {
@@ -184,12 +221,14 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     : []
 
   return (
-    <AppShell title="Hüttentouren">
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+      <SidebarHeader view={sidebarView} savedCount={state.trips.length} onWordmark={goHome} onPlanen={goPlanen} onMeineTouren={goMeineTouren} />
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box sx={{ width: 420, flexShrink: 0, overflowY: 'auto', borderRight: '2px solid', borderColor: 'secondary.main' }}>
           {app.status === 'error' && <Alert severity="error">{app.message}</Alert>}
-          {/* Kept mounted (only hidden) while a trip is open, so "← Ergebnisse" restores the list's scroll position. */}
-          <Box hidden={mode === 'trip'}>
+          {/* Kept mounted (only hidden) while a trip or the saved list is showing, so "← Ergebnisse"
+              restores the list's scroll position. */}
+          <Box hidden={sidebarView !== 'discover'}>
             <Tabs value={discoverTab} onChange={(_e, v) => setDiscoverTab(v)} variant="fullWidth">
               <Tab value="filters" label="Filter" />
               <Tab
@@ -214,12 +253,18 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
               />
             </Box>
           </Box>
-          {mode === 'trip' && activeTrip && tripLegs && data && (
+          {sidebarView === 'saved' && (
+            <SavedTripsList
+              graph={data?.graph ?? EMPTY_GRAPH} onOpen={openSavedTrip} onOpenDraft={openPinnedDraft} onPlanen={goPlanen}
+              hoveredTripId={hoveredTripId} onHoverTrip={setHoveredTripId}
+            />
+          )}
+          {sidebarView === 'trip' && activeTrip && tripLegs && data && (
             <TripPanel
               trip={activeTrip} tripLegs={tripLegs} data={data} startLabel={startLabel}
               isDraft={isDraft} onSave={() => dispatch({ type: 'saveDraft' })}
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
-              onBack={() => { setEditing(null); dispatch({ type: 'closeActive' }) }}
+              onBack={backFromTrip} backLabel={openedFrom === 'saved' ? '← Meine Touren' : '← Ergebnisse'}
               onHoverLeg={setHighlightedLeg}
               renderStageControls={editor.renderRowMenu}
               endpointControls={
@@ -241,7 +286,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
 
         <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
           <PlannerMap
-            mode={mode} groups={groups} dimmed={search.status === 'searching'}
+            mode={sidebarView === 'saved' ? 'saved' : mode} groups={groups} dimmed={search.status === 'searching'}
             startById={data?.startById ?? new Map()} hutCoordsById={data?.hutCoordsById ?? new Map()}
             onSelectStarts={(ids) => { prompt.dismiss(); setSelectedStartIds(ids) }}
             onMapClick={prompt.dismiss}
@@ -253,6 +298,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} onPickRoute={pick}
             focusStart={focusStart}
             tripLegs={mode === 'trip' ? tripLegs : null} onHoverLeg={setHighlightedLeg}
+            savedTrips={state.trips} savedGraph={data?.graph ?? EMPTY_GRAPH}
+            savedRouteCtx={routeCtx ?? { hutCoordsById: new Map(), startById: new Map(), officialById: new Map() }}
+            hoveredTripId={hoveredTripId} onHoverTrip={setHoveredTripId} onOpenSavedTrip={openSavedTrip}
           />
           {mode === 'discover' && prompt.visible && <FirstVisitPrompt />}
         </Box>
@@ -269,6 +317,10 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
         onCancel={() => setPendingPick(null)}
       />
       <Snackbar open={shareNote !== null} autoHideDuration={3000} onClose={() => setShareNote(null)} message={shareNote} />
-    </AppShell>
+      <Snackbar
+        open={state.deleted !== null} message="Tour gelöscht"
+        action={<Button color="inherit" size="small" onClick={() => dispatch({ type: 'undoDelete' })}>Rückgängig</Button>}
+      />
+    </Box>
   )
 }
