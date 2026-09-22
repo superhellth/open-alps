@@ -1,6 +1,6 @@
-import { memo } from 'react'
+import { memo, useEffect } from 'react'
 import { Box, Button, Typography } from '@mui/material'
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet'
+import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import type { FreeByOffset } from '../availability/types.js'
 import type { RankTargets } from '../tourSearch/rankFit.js'
@@ -43,10 +43,18 @@ export interface PlannerMapProps {
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
   onPickRoute: (tour: PlannerTour) => void
+  /** A point to fly to once (e.g. after "N Touren anzeigen" picks an off-screen start). */
+  focusStart?: { lat: number; lng: number } | null
 }
 
 function MapClickWatcher({ onClick }: { onClick?: () => void }) {
   useMapEvents({ click: () => onClick?.() })
+  return null
+}
+
+function FlyToStart({ point }: { point: { lat: number; lng: number } | null | undefined }) {
+  const map = useMap()
+  useEffect(() => { if (point) map.flyTo([point.lat, point.lng], Math.max(map.getZoom(), 12)) }, [map, point])
   return null
 }
 
@@ -55,7 +63,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
     mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
-    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute,
+    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, focusStart,
   } = props
   return (
     <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', position: 'relative' }}>
@@ -71,6 +79,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           subdomains={ACTIVE_TILES.subdomains} maxZoom={ACTIVE_TILES.maxZoom}
         />
         <MapClickWatcher onClick={onMapClick} />
+        <FlyToStart point={focusStart} />
         {mode === 'discover' && (
           <DiscoverLayer
             groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts}

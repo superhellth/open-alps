@@ -83,13 +83,13 @@ describe('PlannerMap trip mode', () => {
 describe('PlannerMap candidate-mode status bar', () => {
   it('shows a status bar with Abbrechen while a candidate mode is active', () => {
     const onCancel = vi.fn()
-    render(<PlannerMap {...base} mode="trip" activeLabel="Neue Hütte für Nacht 2 wählen" onCancelEditing={onCancel} />)
+    render(<PlannerMap {...base} mode="trip" groups={[]} activeLabel="Neue Hütte für Nacht 2 wählen" onCancelEditing={onCancel} />)
     expect(screen.getByText('Neue Hütte für Nacht 2 wählen')).toBeInTheDocument()
     fireEvent.click(screen.getByText('Abbrechen'))
     expect(onCancel).toHaveBeenCalled()
   })
   it('shows no status bar when activeLabel is null', () => {
-    render(<PlannerMap {...base} mode="trip" activeLabel={null} />)
+    render(<PlannerMap {...base} mode="trip" groups={[]} activeLabel={null} />)
     expect(screen.queryByText('Abbrechen')).not.toBeInTheDocument()
   })
 })

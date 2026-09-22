@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import PlannerPage from './PlannerPage.js'
 import { AppDataProvider } from '../data/AppDataProvider.js'
@@ -136,6 +136,24 @@ describe('PlannerPage', () => {
     )
     expect(await screen.findByText('Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.')).toBeInTheDocument()
     expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
+  })
+
+  it('clicking "N Touren anzeigen" selects the best cluster', async () => {
+    const { container } = renderPlanner()
+    await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /Touren anzeigen/ }))
+    expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
+  })
+
+  it('the map status bar cancels the active candidate mode', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 1'))
+    fireEvent.click(screen.getByText('Hütte tauschen'))
+    const label = await screen.findByText('Neue Hütte für Etappe 1 wählen')
+    const statusBar = label.parentElement!
+    fireEvent.click(within(statusBar).getByRole('button', { name: 'Abbrechen' }))
+    await waitFor(() => expect(screen.queryByText('Neue Hütte für Etappe 1 wählen')).not.toBeInTheDocument())
   })
 
   it('offers to import a shared trip from a share link', async () => {
