@@ -12,7 +12,7 @@ const PAGE_SIZE = 25
 
 export default function ResultsList({
   tours, selectionActive, totalMatches, noMatches, sortKey, onSortChange,
-  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest,
+  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest, onOpenFilters,
 }: {
   tours: PlannerTour[]
   selectionActive: boolean
@@ -26,12 +26,18 @@ export default function ResultsList({
   onPreview: (tour: PlannerTour | null) => void
   onPick: (tour: PlannerTour) => void
   onShowBest: () => void
+  onOpenFilters: () => void
 }) {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [tours])
 
   if (noMatches) {
-    return <Typography sx={{ p: 2 }}>Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.</Typography>
+    return (
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
+        <Typography>Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.</Typography>
+        <Button variant="outlined" onClick={onOpenFilters}>Filter anpassen</Button>
+      </Box>
+    )
   }
   if (!selectionActive) {
     return (

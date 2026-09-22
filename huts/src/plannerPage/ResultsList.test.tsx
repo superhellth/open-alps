@@ -14,7 +14,7 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
 const props = () => ({
   tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
   selectionActive: true, totalMatches: 2, noMatches: false, sortKey: 'fit' as const,
-  onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onShowBest: vi.fn(),
+  onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onShowBest: vi.fn(), onOpenFilters: vi.fn(),
   hutNameById: new Map([[0, 'Hütte A'], [1, 'Hütte B'], [2, 'Hütte C']]),
   hutClassByIndex: new Map([[0, { operator: 'av' as const, serviced: true }]]),
   startLabel: (id: number) => `Start ${id}`,
@@ -40,9 +40,12 @@ describe('ResultsList', () => {
     fireEvent.click(row)
     expect(p.onPick).toHaveBeenCalledWith(p.tours[0])
   })
-  it('shows the fixed no-match hint', () => {
-    render(<ResultsList {...props()} tours={[]} noMatches />)
+  it('shows the fixed no-match hint with a button back to filters', () => {
+    const onOpenFilters = vi.fn()
+    render(<ResultsList {...props()} tours={[]} noMatches onOpenFilters={onOpenFilters} />)
     expect(screen.getByText('Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Filter anpassen' }))
+    expect(onOpenFilters).toHaveBeenCalled()
   })
   it('asks for a marker click before any area is chosen', () => {
     render(<ResultsList {...props()} tours={[]} selectionActive={false} totalMatches={12} />)

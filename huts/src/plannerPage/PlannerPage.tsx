@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
-import { Alert, Box, Snackbar, TextField } from '@mui/material'
+import { Alert, Badge, Box, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import AppShell from '../AppShell.js'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
@@ -49,6 +49,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
   const [sortKey, setSortKey] = useState<SortKey>('fit')
+  const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('results')
   const [selectedStartIds, setSelectedStartIds] = useState<number[] | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
@@ -191,17 +192,29 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
           {app.status === 'error' && <Alert severity="error">{app.message}</Alert>}
           {/* Kept mounted (only hidden) while a trip is open, so "← Ergebnisse" restores the list's scroll position. */}
           <Box hidden={mode === 'trip'}>
-            <FilterBar
-              form={form} onFormChange={patchForm} draft={draft} onDraftChange={patchDraft}
-              disabled={!data || !client} searching={search.status === 'searching'}
-            />
-            <ResultsList
-              tours={selectedTours} selectionActive={selectedStartIds !== null} totalMatches={visibleTours.length}
-              noMatches={search.status === 'done' && tours.length === 0}
-              sortKey={sortKey} onSortChange={setSortKey}
-              hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
-              startLabel={startLabel} onPreview={setPreviewTour} onPick={pick} onShowBest={showBest}
-            />
+            <Tabs value={discoverTab} onChange={(_e, v) => setDiscoverTab(v)} variant="fullWidth">
+              <Tab value="filters" label="Filter" />
+              <Tab
+                value="results"
+                label={<Badge color="primary" badgeContent={visibleTours.length} max={99}>Ergebnisse</Badge>}
+              />
+            </Tabs>
+            <Box hidden={discoverTab !== 'filters'}>
+              <FilterBar
+                form={form} onFormChange={patchForm} draft={draft} onDraftChange={patchDraft}
+                disabled={!data || !client} searching={search.status === 'searching'}
+              />
+            </Box>
+            <Box hidden={discoverTab !== 'results'}>
+              <ResultsList
+                tours={selectedTours} selectionActive={selectedStartIds !== null} totalMatches={visibleTours.length}
+                noMatches={search.status === 'done' && tours.length === 0}
+                sortKey={sortKey} onSortChange={setSortKey}
+                hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
+                startLabel={startLabel} onPreview={setPreviewTour} onPick={pick} onShowBest={showBest}
+                onOpenFilters={() => setDiscoverTab('filters')}
+              />
+            </Box>
           </Box>
           {mode === 'trip' && activeTrip && tripLegs && data && (
             <TripPanel
