@@ -183,10 +183,8 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
       })
     : []
 
-  const status = app.status === 'error' ? `Fehler: ${app.message}` : data ? 'Daten geladen' : 'Lade Daten…'
-
   return (
-    <AppShell title="Hüttentouren" status={status}>
+    <AppShell title="Hüttentouren">
       <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
         <Box sx={{ width: 420, flexShrink: 0, overflowY: 'auto', borderRight: '2px solid', borderColor: 'secondary.main' }}>
           {app.status === 'error' && <Alert severity="error">{app.message}</Alert>}
