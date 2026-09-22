@@ -6,9 +6,11 @@ const STORAGE_KEY = 'open-alps.trips.v1'
 export interface StoredTrips {
   trips: Trip[]
   activeId: string | null
+  draft: Trip | null
+  activeIsDraft: boolean
 }
 
-type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
+export type StorageLike = Pick<Storage, 'getItem' | 'setItem'>
 
 export function browserStorage(): StorageLike | null {
   try {
@@ -26,15 +28,17 @@ function normalize(raw: unknown): StoredTrips {
   const activeId = typeof record.activeId === 'string' && trips.some((t) => t.id === record.activeId)
     ? record.activeId
     : null
-  return { trips, activeId }
+  const draft = parseTrip(record.draft)
+  const activeIsDraft = draft !== null && record.activeIsDraft === true
+  return { trips, activeId, draft, activeIsDraft }
 }
 
 export function loadTrips(storage: StorageLike | null = browserStorage()): StoredTrips {
   try {
     const text = storage?.getItem(STORAGE_KEY)
-    return text ? normalize(JSON.parse(text)) : { trips: [], activeId: null }
+    return text ? normalize(JSON.parse(text)) : { trips: [], activeId: null, draft: null, activeIsDraft: false }
   } catch {
-    return { trips: [], activeId: null }
+    return { trips: [], activeId: null, draft: null, activeIsDraft: false }
   }
 }
 

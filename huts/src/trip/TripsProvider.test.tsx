@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
+import { act } from 'react'
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { TripsProvider, useTrips } from './TripsProvider.js'
+import type { TripsContextValue } from './TripsProvider.js'
 import { newTrip } from './trip.js'
 import { saveTrips } from './tripStorage.js'
 
@@ -32,7 +34,7 @@ function Probe() {
 describe('TripsProvider', () => {
   it('starts from what is in storage', () => {
     const storage = memoryStorage()
-    saveTrips({ trips: [trip('alt')], activeId: 'alt' }, storage)
+    saveTrips({ trips: [trip('alt')], activeId: 'alt', draft: null, activeIsDraft: false }, storage)
     render(<TripsProvider storage={storage}><Probe /></TripsProvider>)
     expect(screen.getByText('count:1')).toBeInTheDocument()
     expect(screen.getByText('active:alt')).toBeInTheDocument()
@@ -47,5 +49,25 @@ describe('TripsProvider', () => {
     render(<TripsProvider storage={null}><Probe /></TripsProvider>)
     fireEvent.click(screen.getByText('create'))
     expect(screen.getByText('count:1')).toBeInTheDocument()
+  })
+
+  it('activeTrip resolves the draft when activeIsDraft, else the saved trip', () => {
+    const saved = trip('saved')
+    const draft = trip('draft')
+    let ctx: TripsContextValue | null = null
+    function Capture() {
+      ctx = useTrips()
+      return null
+    }
+    render(<TripsProvider storage={null}><Capture /></TripsProvider>)
+    act(() => ctx!.dispatch({ type: 'create', trip: saved }))
+    expect(ctx!.activeTrip).toEqual(saved)
+    expect(ctx!.isDraft).toBe(false)
+    act(() => ctx!.dispatch({ type: 'openDraft', trip: draft }))
+    expect(ctx!.activeTrip).toEqual(draft)
+    expect(ctx!.isDraft).toBe(true)
+    expect(ctx!.draftDirty).toBe(false)
+    act(() => ctx!.dispatch({ type: 'updateDraft', trip: { ...draft, partySize: 4 } }))
+    expect(ctx!.draftDirty).toBe(true)
   })
 })

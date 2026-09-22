@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { newTrip } from './trip.js'
-import { initialTripsState, tripsReducer } from './tripsReducer.js'
+import { initialTripsState, isDraftDirty, tripsReducer } from './tripsReducer.js'
 
 const trip = (id: string) => newTrip({
   name: id, startDate: null, partySize: 1, start: { startId: 1, sourceType: 1 }, huts: ['{A}'],
   exit: { startId: 1, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
 }, new Date('2026-06-01T00:00:00Z'), id)
 
-const empty = initialTripsState({ trips: [], activeId: null })
+const empty = initialTripsState({ trips: [], activeId: null, draft: null, activeIsDraft: false })
 
 describe('tripsReducer', () => {
   it('create adds the trip and makes it active', () => {
@@ -21,9 +21,9 @@ describe('tripsReducer', () => {
     expect(s1.trips[0].name).toBe('neu')
     expect(s1.trips[0].updatedAt).toBe('2026-07-01T00:00:00.000Z')
   })
-  it('setActive(null) returns to discover with no active trip', () => {
+  it('closeActive returns to discover with no active trip', () => {
     const s0 = tripsReducer(empty, { type: 'create', trip: trip('a') })
-    expect(tripsReducer(s0, { type: 'setActive', id: null }).activeId).toBeNull()
+    expect(tripsReducer(s0, { type: 'closeActive' }).activeId).toBeNull()
   })
   it('delete removes the trip, clears activeId if it was active, and undo restores it at the same index', () => {
     let s = empty
@@ -40,5 +40,80 @@ describe('tripsReducer', () => {
     const s0 = tripsReducer(empty, { type: 'create', trip: trip('a') })
     const s1 = tripsReducer(s0, { type: 'import', trips: [trip('a'), trip('z')], makeId: () => 'fresh' })
     expect(s1.trips.map((t) => t.id)).toEqual(['a', 'fresh', 'z'])
+  })
+})
+
+describe('draft lifecycle', () => {
+  it('openDraft sets the draft, opens it, and takes a baseline snapshot', () => {
+    const next = tripsReducer(empty, { type: 'openDraft', trip: trip('a') })
+    expect(next.draft).toEqual(trip('a'))
+    expect(next.draftBaseline).toEqual(trip('a'))
+    expect(next.activeIsDraft).toBe(true)
+    expect(next.activeId).toBeNull()
+  })
+
+  it('updateDraft replaces the draft in place without touching the baseline', () => {
+    const t = trip('a')
+    let state = tripsReducer(empty, { type: 'openDraft', trip: t })
+    const edited = { ...t, partySize: 3 }
+    state = tripsReducer(state, { type: 'updateDraft', trip: edited, now: new Date('2026-01-01T00:00:00Z') })
+    expect(state.draft?.partySize).toBe(3)
+    expect(state.draft?.updatedAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(state.draftBaseline).toEqual(t)
+  })
+
+  it('saveDraft moves the draft into trips and clears the slot', () => {
+    const t = trip('a')
+    let state = tripsReducer(empty, { type: 'openDraft', trip: t })
+    state = tripsReducer(state, { type: 'saveDraft', now: new Date('2026-01-01T00:00:00Z') })
+    expect(state.trips).toEqual([{ ...t, updatedAt: '2026-01-01T00:00:00.000Z' }])
+    expect(state.draft).toBeNull()
+    expect(state.draftBaseline).toBeNull()
+    expect(state.activeIsDraft).toBe(false)
+    expect(state.activeId).toBe(t.id)
+  })
+
+  it('saveDraft is a no-op when there is no draft', () => {
+    expect(tripsReducer(empty, { type: 'saveDraft' })).toBe(empty)
+  })
+
+  it('closeActive clears activeId/activeIsDraft but keeps the draft', () => {
+    const t = trip('a')
+    let state = tripsReducer(empty, { type: 'openDraft', trip: t })
+    state = tripsReducer(state, { type: 'closeActive' })
+    expect(state.activeId).toBeNull()
+    expect(state.activeIsDraft).toBe(false)
+    expect(state.draft).toEqual(t)
+  })
+
+  it('setActive opens a saved trip and clears activeIsDraft', () => {
+    const t = trip('a')
+    const state = { ...tripsReducer(empty, { type: 'create', trip: t }), activeIsDraft: true, draft: trip('b') }
+    const next = tripsReducer(state, { type: 'setActive', id: t.id })
+    expect(next.activeId).toBe(t.id)
+    expect(next.activeIsDraft).toBe(false)
+  })
+})
+
+describe('isDraftDirty', () => {
+  it('is false with no draft, or an unedited draft', () => {
+    const opened = tripsReducer(empty, { type: 'openDraft', trip: trip('a') })
+    expect(isDraftDirty(empty)).toBe(false)
+    expect(isDraftDirty(opened)).toBe(false)
+  })
+
+  it('is true after huts, dates, party size, start or exit change', () => {
+    const t = trip('a')
+    const opened = tripsReducer(empty, { type: 'openDraft', trip: t })
+    expect(isDraftDirty(tripsReducer(opened, { type: 'updateDraft', trip: { ...t, partySize: 2 } }))).toBe(true)
+    expect(isDraftDirty(tripsReducer(opened, { type: 'updateDraft', trip: { ...t, huts: ['{A}', '{B}'] } }))).toBe(true)
+    expect(isDraftDirty(tripsReducer(opened, { type: 'updateDraft', trip: { ...t, startDate: '2026-07-01' } }))).toBe(true)
+    expect(isDraftDirty(tripsReducer(opened, { type: 'updateDraft', trip: { ...t, exit: { startId: 99, sourceType: 1 } } }))).toBe(true)
+  })
+
+  it('is false when only the name or booking status changes', () => {
+    const t = trip('a')
+    const opened = tripsReducer(empty, { type: 'openDraft', trip: t })
+    expect(isDraftDirty(tripsReducer(opened, { type: 'updateDraft', trip: { ...t, name: 'Renamed' } }))).toBe(false)
   })
 })
