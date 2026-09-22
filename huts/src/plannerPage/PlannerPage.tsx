@@ -56,6 +56,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
   const [sortKey, setSortKey] = useState<SortKey>('fit')
   const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
+  const [erweitertOpen, setErweitertOpen] = useState(false)
   const [selectedStartIds, setSelectedStartIds] = useState<number[] | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
@@ -233,14 +234,26 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
               <Tab value="filters" label="Filter" />
               <Tab
                 value="results"
-                label={<Badge color="primary" badgeContent={visibleTours.length} max={99}>Ergebnisse</Badge>}
+                label={<Badge color="primary" badgeContent={visibleTours.length} max={99} sx={{ pr: 1.2 }}>Ergebnisse</Badge>}
               />
             </Tabs>
-            <Box hidden={discoverTab !== 'filters'}>
+            <Box hidden={discoverTab !== 'filters'} sx={{ position: 'relative' }}>
               <FilterBar
                 form={form} onFormChange={patchForm} draft={draft} onDraftChange={patchDraft}
                 disabled={!data || !client} searching={search.status === 'searching'}
+                onErweitertOpenChange={setErweitertOpen}
               />
+              {search.status === 'done' && visibleTours.length > 0 && (
+                <Box sx={{
+                  position: 'sticky', bottom: 0, zIndex: 1, display: 'flex', justifyContent: 'center', py: 1,
+                  bgcolor: 'background.paper',
+                  ...(erweitertOpen && { borderTop: '1px solid', borderColor: 'divider', boxShadow: '0 -4px 8px -4px rgba(0,0,0,0.15)' }),
+                }}>
+                  <Button variant="text" onClick={() => setDiscoverTab('results')}>
+                    Zu den Ergebnissen ({visibleTours.length}) →
+                  </Button>
+                </Box>
+              )}
             </Box>
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList

@@ -20,6 +20,7 @@ interface FilterBarProps {
   onDraftChange: (patch: Partial<TripDraft>) => void
   disabled: boolean
   searching: boolean
+  onErweitertOpenChange?: (open: boolean) => void
 }
 
 const SAC_OPTIONS: { value: number | 'any'; label: string; description: string }[] = [
@@ -47,8 +48,9 @@ function ErweitertSummary({ form }: { form: FormState }) {
   return <Typography variant="subtitle2">Erweitert{parts.length ? ` · ${parts.join(', ')}` : ''}</Typography>
 }
 
-export default function FilterBar({ form, onFormChange, draft, onDraftChange, disabled, searching }: FilterBarProps) {
+export default function FilterBar({ form, onFormChange, draft, onDraftChange, disabled, searching, onErweitertOpenChange }: FilterBarProps) {
   const [erweitertOpen, setErweitertOpen] = useState(false)
+  const setErweitert = (open: boolean) => { setErweitertOpen(open); onErweitertOpenChange?.(open) }
   const operatorOn = (op: HutOperator) => form.allowedHutClasses.has(hutClassKey({ operator: op, serviced: true }))
   const selfIncluded = ALL_HUT_CLASSES.some((c) => !c.serviced && form.allowedHutClasses.has(hutClassKey(c)))
 
@@ -156,7 +158,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
       </Box>
 
       <Accordion
-        disableGutters elevation={0} square expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitertOpen(isExpanded)}
+        disableGutters elevation={0} square expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitert(isExpanded)}
         sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
       >
         <AccordionSummary
