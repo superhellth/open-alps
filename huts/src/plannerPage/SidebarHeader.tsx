@@ -9,31 +9,58 @@ export interface SidebarHeaderProps {
   onMeineTouren: () => void
 }
 
-function fingerpost(label: string, active: boolean, isFirst: boolean, onClick: () => void) {
+// Flat left edge, pointed right tip — every fingerpost uses this same shape, so all of them
+// point right and none of them.
+const RIGHT_TIP = 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)'
+
+// Each fingerpost after the first overlaps the previous one by the tip depth (marginLeft -9px)
+// and sits underneath it (lower z-index), so the earlier fingerpost's point paints over the
+// later one's flat left corner. Outside that point — above and below it, where the earlier
+// shape's diagonal has already tapered away — the later fingerpost's own flat rectangle shows
+// through and fills the gap, keeping the top/bottom edge one continuous straight line.
+//
+// A border on a clip-path shape only strokes the box's straight edges — clip-path crops the
+// border away along the diagonal cut, leaving the point outline-less. The fix is a second,
+// slightly larger copy of the same shape behind it in ink, acting as a 2px stroke ring.
+function fingerpost(label: string, active: boolean, index: number, total: number, onClick: () => void) {
+  const isFirst = index === 0
   return (
-    <Box
-      component="a"
-      href="#"
-      role="link"
-      aria-current={active ? 'page' : undefined}
-      onClick={(e: React.MouseEvent) => { e.preventDefault(); onClick() }}
-      sx={{
-        fontFamily: SIGNPOST_FONT,
-        fontWeight: 600,
-        fontSize: '0.95rem',
-        textDecoration: 'none',
-        color: active ? tokens.paper : tokens.ink,
-        backgroundColor: active ? tokens.ink : 'transparent',
-        border: `2px solid ${tokens.ink}`,
-        borderLeftWidth: isFirst ? 2 : 0,
-        padding: '6px 22px 6px 16px',
-        clipPath: 'polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%)',
-        marginRight: '-9px',
-        transition: 'color 120ms ease, background-color 120ms ease',
-        '&:hover': active ? undefined : { backgroundColor: 'rgba(35, 39, 43, 0.08)' },
-      }}
-    >
-      {label}
+    <Box sx={{ position: 'relative', marginLeft: isFirst ? 0 : '-9px', zIndex: total - index }}>
+      <Box
+        aria-hidden
+        sx={{
+          position: 'absolute',
+          top: -2,
+          bottom: -2,
+          left: isFirst ? -2 : 0,
+          right: -2,
+          backgroundColor: tokens.ink,
+          clipPath: RIGHT_TIP,
+        }}
+      />
+      <Box
+        component="a"
+        href="#"
+        role="link"
+        aria-current={active ? 'page' : undefined}
+        onClick={(e: React.MouseEvent) => { e.preventDefault(); onClick() }}
+        sx={{
+          position: 'relative',
+          display: 'block',
+          fontFamily: SIGNPOST_FONT,
+          fontWeight: 600,
+          fontSize: '0.95rem',
+          textDecoration: 'none',
+          color: active ? tokens.paper : tokens.ink,
+          backgroundColor: active ? tokens.ink : tokens.paper,
+          padding: isFirst ? '6px 22px 6px 16px' : '6px 22px 6px 25px',
+          clipPath: RIGHT_TIP,
+          transition: 'color 120ms ease, background-color 120ms ease',
+          '&:hover': active ? undefined : { backgroundColor: 'rgba(35, 39, 43, 0.08)' },
+        }}
+      >
+        {label}
+      </Box>
     </Box>
   )
 }
@@ -52,8 +79,8 @@ export default function SidebarHeader({ view, savedCount, onWordmark, onPlanen, 
         Hüttentouren
       </Box>
       <Box component="nav" sx={{ display: 'flex', marginLeft: 'auto' }}>
-        {fingerpost('Planen', planenActive, true, onPlanen)}
-        {fingerpost(`Meine Touren (${savedCount})`, !planenActive, false, onMeineTouren)}
+        {fingerpost('Planen', planenActive, 0, 2, onPlanen)}
+        {fingerpost(`Meine Touren (${savedCount})`, !planenActive, 1, 2, onMeineTouren)}
       </Box>
     </Box>
   )
