@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Chip, List, ListItemButton, MenuItem, Pagination, Select, Typography } from '@mui/material'
+import { Box, Button, Chip, List, ListItemButton, MenuItem, Pagination, Select, Typography } from '@mui/material'
 import { formatSignpostTime } from '../format/signpostTime.js'
 import { hutClassBadge } from '../hutClass.js'
 import type { HutClass } from '../hutClass.js'
@@ -12,7 +12,7 @@ const PAGE_SIZE = 25
 
 export default function ResultsList({
   tours, selectionActive, totalMatches, noMatches, sortKey, onSortChange,
-  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, isFull,
+  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest, isFull,
 }: {
   tours: PlannerTour[]
   selectionActive: boolean
@@ -25,6 +25,7 @@ export default function ResultsList({
   startLabel: (startId: number) => string
   onPreview: (tour: PlannerTour | null) => void
   onPick: (tour: PlannerTour) => void
+  onShowBest: () => void
   isFull?: (tour: PlannerTour) => boolean
 }) {
   const [page, setPage] = useState(1)
@@ -35,9 +36,14 @@ export default function ResultsList({
   }
   if (!selectionActive) {
     return (
-      <Typography sx={{ p: 2 }} color="text.secondary">
-        {totalMatches} Touren gefunden. Marker anklicken, um die Touren dieses Gebiets zu sehen.
-      </Typography>
+      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
+        {totalMatches > 0 && (
+          <Button variant="contained" onClick={onShowBest}>{totalMatches} Touren anzeigen</Button>
+        )}
+        <Typography color="text.secondary">
+          Marker sind Startpunkte, die Zahl ist die Anzahl passender Touren dort. Marker anklicken, um die Touren eines Gebiets zu sehen.
+        </Typography>
+      </Box>
     )
   }
 
