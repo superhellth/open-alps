@@ -54,8 +54,15 @@ function renderPlanner() {
   )
 }
 
+async function openFirstResult(container: HTMLElement) {
+  await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull())
+  fireEvent.click(container.querySelector('.start-count-marker')!)
+  const row = await screen.findByRole('button', { name: /Hütte A/ })
+  fireEvent.click(row)
+}
+
 describe('PlannerPage', () => {
-  it('discover -> pick -> trip -> back, keeping the trip saved', async () => {
+  it('discover -> pick -> trip -> back, opening the pick as a draft', async () => {
     const { container } = renderPlanner()
     expect(screen.getByText('Wegenetz wird geladen …')).toBeInTheDocument()
 
@@ -63,16 +70,53 @@ describe('PlannerPage', () => {
     await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull())
     expect(container.querySelector('.start-count-marker span')?.textContent).toBe('1')
 
-    fireEvent.click(container.querySelector('.start-count-marker')!)
-    const row = await screen.findByRole('button', { name: /Hütte A/ })
-    fireEvent.click(row)
+    await openFirstResult(container)
 
-    // The trip panel replaces the results column.
+    // The trip panel replaces the results column, opened as a draft.
     expect(await screen.findByRole('button', { name: '← Ergebnisse' })).toBeInTheDocument()
     expect(screen.getAllByText('Hütte A').length).toBeGreaterThan(0)
+    expect(screen.getByText('Entwurf')).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
     expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
+  })
+
+  it('asks before replacing a dirty draft, and discards on confirm', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    expect(await screen.findByText('Entwurf')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText(/ohne Datum · 1 Pers\./))
+    const partyFields = screen.getAllByLabelText('Personen')
+    const visible = partyFields.find((el) => !el.closest('[hidden]'))!
+    fireEvent.change(visible, { target: { value: '4' } })
+    fireEvent.keyDown(visible, { key: 'Escape', code: 'Escape' })
+
+    fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
+    const row = await screen.findByRole('button', { name: /Hütte A/ })
+    fireEvent.click(row)
+
+    expect(screen.getByText('Entwurf verwerfen?')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Verwerfen' }))
+    await waitFor(() => expect(screen.queryByText('Entwurf verwerfen?')).not.toBeInTheDocument())
+    expect(screen.getByText('Entwurf')).toBeInTheDocument()
+  })
+
+  it('replaces an unedited draft silently on a new pick', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
+    const row = await screen.findByRole('button', { name: /Hütte A/ })
+    fireEvent.click(row)
+    expect(screen.queryByText('Entwurf verwerfen?')).not.toBeInTheDocument()
+  })
+
+  it('Speichern moves the draft into saved trips and clears the Entwurf badge', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Name')).toBeInTheDocument()
   })
 
   it('shows the fixed no-match hint and no markers when nothing matches', async () => {

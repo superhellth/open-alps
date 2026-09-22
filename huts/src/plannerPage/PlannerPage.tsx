@@ -10,6 +10,7 @@ import type { TripGraph, TripLegs } from '../tourSearch/tripLegs.js'
 import { decodeTripFromHash, shareUrl } from '../trip/shareLink.js'
 import type { Trip } from '../trip/trip.js'
 import { useTrips } from '../trip/TripsProvider.js'
+import DiscardDraftDialog from './DiscardDraftDialog.js'
 import FilterBar from './FilterBar.js'
 import FirstVisitPrompt from './FirstVisitPrompt.js'
 import ImportTripDialog from './ImportTripDialog.js'
@@ -41,7 +42,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const app = useAppData()
   const data = app.status === 'ready' ? app.data : null
   const client = useSearchClient()
-  const { dispatch, activeTrip } = useTrips()
+  const { dispatch, activeTrip, isDraft, draftDirty } = useTrips()
   const prompt = useFirstVisitPrompt()
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
@@ -54,6 +55,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [importDismissed, setImportDismissed] = useState(false)
   const [shareNote, setShareNote] = useState<string | null>(null)
   const [shareFallback, setShareFallback] = useState<string | null>(null)
+  const [pendingPick, setPendingPick] = useState<Trip | null>(null)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
@@ -89,7 +91,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const editor = useTripEditor({
     graph: data?.graph ?? EMPTY_GRAPH, trip: activeTrip ?? PLACEHOLDER_TRIP, tripLegs: tripLegs ?? PLACEHOLDER_LEGS,
     hutNameById: data?.hutNameById ?? new Map(), startLabel, editing, onEditing: setEditing,
-    onChange: (trip) => dispatch({ type: 'update', trip }),
+    onChange: (trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip }),
   })
 
   const previewRoute = useMemo(() => (previewTour && routeCtx ? tourToRoute(previewTour, routeCtx) : null), [previewTour, routeCtx])
@@ -103,7 +105,15 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
       hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, startLabel, form, draft,
     })
     if (!trip) return
-    dispatch({ type: 'create', trip })
+    if (draftDirty) { setPendingPick(trip); return }
+    dispatch({ type: 'openDraft', trip })
+    setPreviewTour(null)
+    setEditing(null)
+  }
+
+  function confirmDiscardDraft() {
+    if (pendingPick) dispatch({ type: 'openDraft', trip: pendingPick })
+    setPendingPick(null)
     setPreviewTour(null)
     setEditing(null)
   }
@@ -165,8 +175,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
           {mode === 'trip' && activeTrip && tripLegs && data && (
             <TripPanel
               trip={activeTrip} tripLegs={tripLegs} data={data} startLabel={startLabel}
-              onChange={(trip) => dispatch({ type: 'update', trip })}
-              onBack={() => { setEditing(null); dispatch({ type: 'setActive', id: null }) }}
+              isDraft={isDraft} onSave={() => dispatch({ type: 'saveDraft' })}
+              onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
+              onBack={() => { setEditing(null); dispatch({ type: 'closeActive' }) }}
               onHoverLeg={setHighlightedLeg}
               renderStageControls={editor.renderStageControls} extra={editor.extra}
               warnings={overlapWarnings} onShare={share}
@@ -196,6 +207,11 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
         trip={importDismissed ? null : importedTrip}
         onImport={() => { if (importedTrip) dispatch({ type: 'create', trip: importedTrip }); closeImport() }}
         onDiscard={closeImport}
+      />
+      <DiscardDraftDialog
+        open={pendingPick !== null}
+        onDiscard={confirmDiscardDraft}
+        onCancel={() => setPendingPick(null)}
       />
       <Snackbar open={shareNote !== null} autoHideDuration={3000} onClose={() => setShareNote(null)} message={shareNote} />
     </AppShell>
