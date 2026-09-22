@@ -18,13 +18,13 @@ const trip = newTrip({
   exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
 }, new Date(), 'id')
 
-function renderPanel(onChange = vi.fn(), onBack = vi.fn(), isDraft = false, onSave = vi.fn()) {
+function renderPanel(onChange = vi.fn(), onBack = vi.fn(), isDraft = false, onSave = vi.fn(), backLabel = '← Ergebnisse', t = trip) {
   vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
   vi.spyOn(detail, 'fetchHutDetail').mockResolvedValue({ hutId: 1, hutName: '', calendarDays: [] })
   render(
     <TripPanel
-      trip={trip} tripLegs={legsFromTrip(data.graph, trip)} data={data} startLabel={makeStartLabel(data.startById)}
-      isDraft={isDraft} onChange={onChange} onSave={onSave} onBack={onBack} onHoverLeg={() => {}}
+      trip={t} tripLegs={legsFromTrip(data.graph, t)} data={data} startLabel={makeStartLabel(data.startById)}
+      isDraft={isDraft} onChange={onChange} onSave={onSave} onBack={onBack} onHoverLeg={() => {}} backLabel={backLabel}
     />,
   )
   return { onChange, onBack, onSave }
@@ -77,22 +77,39 @@ describe('TripPanel', () => {
     expect(screen.getByLabelText('Name')).toBeInTheDocument()
     expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
   })
-  it('has no Notizen field', () => {
-    renderPanel(vi.fn(), vi.fn(), false)
-    expect(screen.queryByLabelText('Notizen')).not.toBeInTheDocument()
-  })
   it('renders endpointControls above the stage list and extendControls below it', () => {
     vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
     vi.spyOn(detail, 'fetchHutDetail').mockResolvedValue({ hutId: 1, hutName: '', calendarDays: [] })
     render(
       <TripPanel
         trip={trip} tripLegs={legsFromTrip(data.graph, trip)} data={data} startLabel={makeStartLabel(data.startById)}
-        isDraft={false} onChange={vi.fn()} onSave={vi.fn()} onBack={vi.fn()} onHoverLeg={() => {}}
+        isDraft={false} onChange={vi.fn()} onSave={vi.fn()} onBack={vi.fn()} onHoverLeg={() => {}} backLabel="← Ergebnisse"
         endpointControls={<span data-testid="ep" />} extendControls={<span data-testid="ex" />}
       />,
     )
     const ep = screen.getByTestId('ep')
     const ex = screen.getByTestId('ex')
     expect(ep.compareDocumentPosition(ex) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+  it('renders the caller-supplied back label', () => {
+    renderPanel(vi.fn(), vi.fn(), false, vi.fn(), '← Meine Touren')
+    expect(screen.getByRole('button', { name: '← Meine Touren' })).toBeInTheDocument()
+  })
+  it('a notes field calls onChange with updated notes', () => {
+    const onChange = vi.fn()
+    renderPanel(onChange)
+    fireEvent.change(screen.getByLabelText('Notizen'), { target: { value: 'Wetter prüfen' } })
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ notes: 'Wetter prüfen' }))
+  })
+  it('the night-status toggle calls onChange with the updated night', () => {
+    const onChange = vi.fn()
+    const oneNightTrip = newTrip({
+      name: 'Eine Nacht', startDate: '2026-07-10', partySize: 2, start: { startId: 100, sourceType: 1 }, huts: ['{D}'],
+      exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
+    }, new Date(), 'id2')
+    renderPanel(onChange, vi.fn(), false, vi.fn(), '← Ergebnisse', oneNightTrip)
+    fireEvent.click(screen.getByLabelText('Buchungsstatus Nacht 1'))
+    fireEvent.click(screen.getByRole('button', { name: 'bestätigt' }))
+    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ nights: expect.arrayContaining([expect.objectContaining({ status: 'confirmed' })]) }))
   })
 })

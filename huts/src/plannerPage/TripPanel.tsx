@@ -5,7 +5,7 @@ import { formatSignpostTime } from '../format/signpostTime.js'
 import { summarizeLegs } from '../tourSearch/tripLegs.js'
 import type { TripLegs } from '../tourSearch/tripLegs.js'
 import { shiftStartDate } from '../trip/trip.js'
-import type { Trip } from '../trip/trip.js'
+import type { BookingStatus, Trip } from '../trip/trip.js'
 import StageList from './StageList.js'
 import StartDateStrip from './StartDateStrip.js'
 import TripDateSummary from './TripDateSummary.js'
@@ -20,6 +20,7 @@ export interface TripPanelProps {
   onChange: (trip: Trip) => void
   onSave: () => void
   onBack: () => void
+  backLabel: string
   onHoverLeg: (index: number | null) => void
   renderStageControls?: (night: number) => ReactNode
   /** Start/exit pickers, rendered above the stage list. */
@@ -31,7 +32,7 @@ export interface TripPanelProps {
 }
 
 export default function TripPanel({
-  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, onHoverLeg, renderStageControls, endpointControls, extendControls, warnings, onShare,
+  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, backLabel, onHoverLeg, renderStageControls, endpointControls, extendControls, warnings, onShare,
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
   const totals = summarizeLegs(tripLegs.legs)
@@ -39,7 +40,7 @@ export default function TripPanel({
   return (
     <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
-        <Button size="small" color="secondary" onClick={onBack}>← Ergebnisse</Button>
+        <Button size="small" color="secondary" onClick={onBack}>{backLabel}</Button>
         {onShare && <Button size="small" color="secondary" onClick={onShare}>Link teilen</Button>}
       </Box>
 
@@ -69,6 +70,13 @@ export default function TripPanel({
         trip={trip} tripLegs={tripLegs} hutNameById={data.hutNameById} hutOhrsByIndex={data.hutOhrsByIndex}
         startLabel={startLabel} nightViews={nightViews} onHoverLeg={onHoverLeg}
         renderStageControls={renderStageControls} warnings={warnings}
+        onNightStatusChange={(night: number, status: BookingStatus) =>
+          onChange({ ...trip, nights: trip.nights.map((n, i) => (i === night ? { status } : n)) })}
+      />
+
+      <TextField
+        size="small" label="Notizen" multiline minRows={2} value={trip.notes ?? ''}
+        onChange={(e) => onChange({ ...trip, notes: e.target.value })}
       />
 
       {extendControls}
