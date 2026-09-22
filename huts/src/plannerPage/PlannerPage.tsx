@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
@@ -173,6 +173,14 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     setFocusStart(data?.startById.get(id) ?? null)
   }
 
+  useEffect(() => {
+    if (selectedStartIds !== null) return
+    const id = bestStartId(groups)
+    if (id === null) return
+    setSelectedStartIds([id])
+    setFocusStart(data?.startById.get(id) ?? null)
+  }, [groups, selectedStartIds, data])
+
   async function share() {
     if (!activeTrip) return
     const url = shareUrl(activeTrip, window.location)
@@ -260,11 +268,11 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             </Box>
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList
-                tours={selectedTours} selectionActive={selectedStartIds !== null} totalMatches={visibleTours.length}
+                tours={selectedTours} selectionActive={selectedStartIds !== null}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sortKey} onSortChange={setSortKey}
                 hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
-                startLabel={startLabel} onPreview={setPreviewTour} onPick={pick} onShowBest={showBest}
+                startLabel={startLabel} onPreview={setPreviewTour} onPick={pick}
                 onOpenFilters={() => setDiscoverTab('filters')}
               />
             </Box>

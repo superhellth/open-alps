@@ -11,12 +11,11 @@ import type { PlannerTour } from './tours.js'
 const PAGE_SIZE = 25
 
 export default function ResultsList({
-  tours, selectionActive, totalMatches, noMatches, sortKey, onSortChange,
-  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onShowBest, onOpenFilters,
+  tours, selectionActive, noMatches, sortKey, onSortChange,
+  hutNameById, hutClassByIndex, startLabel, onPreview, onPick, onOpenFilters,
 }: {
   tours: PlannerTour[]
   selectionActive: boolean
-  totalMatches: number
   noMatches: boolean
   sortKey: SortKey
   onSortChange: (key: SortKey) => void
@@ -25,7 +24,6 @@ export default function ResultsList({
   startLabel: (startId: number) => string
   onPreview: (tour: PlannerTour | null) => void
   onPick: (tour: PlannerTour) => void
-  onShowBest: () => void
   onOpenFilters: () => void
 }) {
   const [page, setPage] = useState(1)
@@ -39,18 +37,7 @@ export default function ResultsList({
       </Box>
     )
   }
-  if (!selectionActive) {
-    return (
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
-        {totalMatches > 0 && (
-          <Button variant="contained" onClick={onShowBest}>{totalMatches} Touren anzeigen</Button>
-        )}
-        <Typography color="text.secondary">
-          Marker sind Startpunkte, die Zahl ist die Anzahl passender Touren dort. Marker anklicken, um die Touren eines Gebiets zu sehen.
-        </Typography>
-      </Box>
-    )
-  }
+  if (!selectionActive) return null
 
   const pageCount = Math.max(1, Math.ceil(tours.length / PAGE_SIZE))
   const shown = tours.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)

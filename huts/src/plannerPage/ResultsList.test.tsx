@@ -13,8 +13,8 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
 })
 const props = () => ({
   tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
-  selectionActive: true, totalMatches: 2, noMatches: false, sortKey: 'fit' as const,
-  onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onShowBest: vi.fn(), onOpenFilters: vi.fn(),
+  selectionActive: true, noMatches: false, sortKey: 'fit' as const,
+  onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
   hutNameById: new Map([[0, 'Hütte A'], [1, 'Hütte B'], [2, 'Hütte C']]),
   hutClassByIndex: new Map([[0, { operator: 'av' as const, serviced: true }]]),
   startLabel: (id: number) => `Start ${id}`,
@@ -47,24 +47,13 @@ describe('ResultsList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Filter anpassen' }))
     expect(onOpenFilters).toHaveBeenCalled()
   })
-  it('asks for a marker click before any area is chosen', () => {
-    render(<ResultsList {...props()} tours={[]} selectionActive={false} totalMatches={12} />)
-    expect(screen.getByText(/Marker/)).toBeInTheDocument()
-  })
-  it('shows a prominent "N Touren anzeigen" button with a hint when nothing is selected', () => {
-    const onShowBest = vi.fn()
-    render(<ResultsList {...props()} tours={[]} selectionActive={false} totalMatches={42} onShowBest={onShowBest} />)
-    fireEvent.click(screen.getByRole('button', { name: '42 Touren anzeigen' }))
-    expect(onShowBest).toHaveBeenCalled()
-    expect(screen.getByText(/Marker sind Startpunkte/)).toBeInTheDocument()
-  })
-  it('omits the button when there are no matches at all', () => {
-    render(<ResultsList {...props()} tours={[]} selectionActive={false} totalMatches={0} noMatches={false} />)
-    expect(screen.queryByRole('button', { name: /Touren anzeigen/ })).not.toBeInTheDocument()
+  it('renders nothing before any area is chosen', () => {
+    const { container } = render(<ResultsList {...props()} tours={[]} selectionActive={false} />)
+    expect(container).toBeEmptyDOMElement()
   })
   it('pages long lists', () => {
     const many = Array.from({ length: 30 }, (_, i) => tour([0], { startId: i }))
-    render(<ResultsList {...props()} tours={many} totalMatches={30} />)
+    render(<ResultsList {...props()} tours={many} />)
     expect(screen.getAllByRole('button', { name: /Hütte A/ })).toHaveLength(25)
     fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }))
     expect(screen.getAllByRole('button', { name: /Hütte A/ })).toHaveLength(5)

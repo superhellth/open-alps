@@ -167,10 +167,8 @@ describe('PlannerPage', () => {
     expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
   })
 
-  it('clicking "N Touren anzeigen" selects the best cluster', async () => {
-    const { container } = renderPlanner()
-    await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull())
-    fireEvent.click(screen.getByRole('button', { name: /Touren anzeigen/ }))
+  it('shows the best cluster\'s tours by default, no click required', async () => {
+    renderPlanner()
     expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
   })
 
