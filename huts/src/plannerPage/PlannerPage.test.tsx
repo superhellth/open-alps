@@ -12,6 +12,10 @@ import type { TourResult } from '../tourSearch/types.js'
 import * as availability from '../availability/fetchAvailability.js'
 import * as detail from '../availability/fetchHutDetail.js'
 
+vi.mock('../tourSearch/loadLegElevation.js', () => ({
+  loadLegElevation: vi.fn(async () => [1000, 1050, 1020]),
+}))
+
 beforeEach(() => {
   localStorage.setItem('open-alps.prompt-seen', '1')
   vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
@@ -154,6 +158,18 @@ describe('PlannerPage', () => {
     const statusBar = label.parentElement!
     fireEvent.click(within(statusBar).getByRole('button', { name: 'Abbrechen' }))
     await waitFor(() => expect(screen.queryByText('Neue Hütte für Etappe 1 wählen')).not.toBeInTheDocument())
+  })
+
+  it('hovering a stage row highlights the matching leg on the height profile', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    const stage = await waitFor(() => {
+      const el = container.querySelector('[data-stage="0"]')
+      if (!el) throw new Error('stage not rendered yet')
+      return el
+    })
+    fireEvent.mouseEnter(stage)
+    await waitFor(() => expect(screen.getByTestId('leg-segment-0')).toHaveAttribute('data-highlighted', 'true'))
   })
 
   it('offers to import a shared trip from a share link', async () => {

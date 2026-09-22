@@ -242,6 +242,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             allTours={tours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
             hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} onPickRoute={pick}
             focusStart={focusStart}
+            tripLegs={mode === 'trip' ? tripLegs : null} onHoverLeg={setHighlightedLeg}
           />
           {mode === 'discover' && prompt.visible && <FirstVisitPrompt />}
         </Box>
