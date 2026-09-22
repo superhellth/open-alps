@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
+import { useState } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, renderHook, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import { useTripEditor } from './TripEditor.js'
-import type { EditingState } from './TripEditor.js'
+import type { EditingState, TripEditorProps } from './TripEditor.js'
 import { makeTestAppData } from './testAppData.js'
 import { legsFromTrip } from '../tourSearch/tripLegs.js'
 import { newTrip } from '../trip/trip.js'
@@ -17,61 +18,80 @@ const trip = newTrip({
   exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
 }, new Date(), 'id')
 
-function Harness({ editing, onEditing, onChange }: { editing: EditingState; onEditing: (e: EditingState) => void; onChange: (t: typeof trip) => void }) {
-  const editor = useTripEditor({
-    graph: data.graph, trip, tripLegs: legsFromTrip(data.graph, trip), hutNameById: data.hutNameById,
-    startLabel: makeStartLabel(data.startById), editing, onEditing, onChange,
-  })
-  return (
-    <div>
-      {trip.huts.map((_, i) => <div key={i}>{editor.renderStageControls(i)}</div>)}
-      {editor.extra}
-      <output data-testid="candidates">{editor.candidates.map((c) => c.hutIndex).join(',')}</output>
-    </div>
-  )
+const defaultProps: TripEditorProps = {
+  graph: data.graph, trip, tripLegs: legsFromTrip(data.graph, trip), hutNameById: data.hutNameById,
+  startLabel: makeStartLabel(data.startById), editing: null, onEditing: () => {}, onChange: () => {},
+}
+
+function RowMenuHarness({ night, editing, onEditing, onChange }: { night: number; editing: EditingState; onEditing: (e: EditingState) => void; onChange: (t: typeof trip) => void }) {
+  const editor = useTripEditor({ ...defaultProps, editing, onEditing, onChange })
+  return <>{editor.renderRowMenu(night)}</>
 }
 
 describe('useTripEditor', () => {
-  it('offers swap and remove per stage; removal is disabled with its reason when the neighbours are not linked', () => {
-    render(<Harness editing={null} onEditing={() => {}} onChange={() => {}} />)
-    expect(screen.getAllByRole('button', { name: 'Hütte tauschen' })).toHaveLength(4)
-    const remove = screen.getAllByRole('button', { name: 'Hütte entfernen' })
-    expect(remove[1]).toBeEnabled() // B: A-C edge exists ... index 1 is hut B
-    expect(remove[2]).toBeDisabled() // C: B-D has no edge
-    expect(screen.getByText('Keine direkte Verbindung zwischen den Nachbarhütten.')).toBeInTheDocument()
+  it('renderRowMenu offers Hütte tauschen and Hütte entfernen (disabled with reason when not allowed)', () => {
+    render(<RowMenuHarness night={2} editing={null} onEditing={() => {}} onChange={() => {}} />)
+    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 3'))
+    expect(screen.getByText('Hütte tauschen')).toBeInTheDocument()
+    // C: B-D has no edge -> disabled with reason appended to the label
+    expect(screen.getByText(/Hütte entfernen/)).toHaveTextContent('Keine direkte Verbindung zwischen den Nachbarhütten.')
   })
-  it('starts a swap for a stage and lists that stage\'s candidates on the map', () => {
-    const onEditing = vi.fn()
-    render(<Harness editing={null} onEditing={onEditing} onChange={() => {}} />)
-    fireEvent.click(screen.getAllByRole('button', { name: 'Hütte tauschen' })[1])
-    expect(onEditing).toHaveBeenCalledWith({ kind: 'swap', index: 1 })
-  })
-  it('with a swap active, candidates are the linked huts and picking one applies the swap', () => {
+
+  it('choosing Hütte tauschen enters swap mode: candidates appear, picking one applies applySwap', () => {
     const onChange = vi.fn()
-    render(<Harness editing={{ kind: 'swap', index: 1 }} onEditing={() => {}} onChange={onChange} />)
-    // Stage 1 (B) in [A,B,C,D]: prev A, next C -> X qualifies (index 5).
-    expect(screen.getByTestId('candidates')).toHaveTextContent('5')
+    function Wrapper() {
+      const [editing, setEditing] = useState<EditingState>(null)
+      return <RowMenuHarness night={1} editing={editing} onEditing={setEditing} onChange={onChange} />
+    }
+    render(<Wrapper />)
+    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 2'))
+    fireEvent.click(screen.getByText('Hütte tauschen'))
+    // Stage 1 (B) in [A,B,C,D]: prev A, next C -> X qualifies.
     fireEvent.click(screen.getByRole('button', { name: /Hütte X/ }))
+    expect(onChange).toHaveBeenCalled()
     expect(onChange.mock.calls[0][0].huts).toEqual(['{A}', '{X}', '{C}', '{D}'])
   })
-  it('offers extending at both ends and lists reachable huts while extending', () => {
-    const onEditing = vi.fn()
-    const { rerender } = render(<Harness editing={null} onEditing={onEditing} onChange={() => {}} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Etappe anhängen' }))
-    expect(onEditing).toHaveBeenCalledWith({ kind: 'extend', side: 'last' })
-    rerender(<Harness editing={{ kind: 'extend', side: 'last' }} onEditing={onEditing} onChange={() => {}} />)
-    expect(screen.getByTestId('candidates')).toHaveTextContent('4') // E follows D
+
+  it('renderEndpointMenu("start") offers Anderen Start wählen and lists candidates as buttons', () => {
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, editing: { kind: 'start' } }))
+    render(<>{result.current.renderEndpointMenu('start')}</>)
+    expect(screen.getByText('Anderen Start wählen')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Bahnhof Y/ })).toBeInTheDocument()
   })
-  it('changes the start point and keeps the exit in transit mode', () => {
+
+  it('renderExtendButtons offers Etappe voranstellen/anhängen only when the trip fully resolves', () => {
+    const { result } = renderHook(() => useTripEditor(defaultProps))
+    render(<>{result.current.renderExtendButtons()}</>)
+    expect(screen.getByText('Etappe anhängen')).toBeInTheDocument()
+    expect(screen.getByText('Etappe voranstellen')).toBeInTheDocument()
+  })
+
+  it('start/exit candidates carry startId/sourceType, not hutIndex', () => {
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, editing: { kind: 'exit' } }))
+    expect(result.current.candidates.length).toBeGreaterThan(0)
+    for (const c of result.current.candidates) {
+      expect(c.startId).toBeDefined()
+      expect(c.hutIndex).toBeUndefined()
+    }
+  })
+
+  it('activeLabel names the current candidate mode for the map status bar', () => {
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, editing: { kind: 'swap', index: 1 } }))
+    expect(result.current.activeLabel).toBe('Neue Hütte für Etappe 2 wählen')
+  })
+
+  it('picking an extend candidate applies applyExtend', () => {
     const onChange = vi.fn()
-    render(<Harness editing={null} onEditing={() => {}} onChange={onChange} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Start: Bahnhof Y wählen' }))
-    expect(onChange.mock.calls[0][0].start.startId).toBe(101)
-    expect(onChange.mock.calls[0][0].exit.startId).toBe(100)
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onChange, editing: { kind: 'extend', side: 'last' } }))
+    expect(result.current.candidates.length).toBeGreaterThan(0)
+    result.current.pickCandidate({ hutIndex: result.current.candidates[0].hutIndex })
+    expect(onChange).toHaveBeenCalled()
   })
+
   it('cancels an active edit', () => {
     const onEditing = vi.fn()
-    render(<Harness editing={{ kind: 'swap', index: 1 }} onEditing={onEditing} onChange={() => {}} />)
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onEditing, editing: { kind: 'swap', index: 1 } }))
+    render(<>{result.current.renderRowMenu(1)}</>)
     fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
     expect(onEditing).toHaveBeenCalledWith(null)
   })
