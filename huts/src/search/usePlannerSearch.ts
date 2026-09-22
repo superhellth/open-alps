@@ -5,6 +5,7 @@ import type { FreeByOffset } from '../availability/types.js'
 import type { AppData } from '../data/buildAppData.js'
 import { buildQuery } from '../plannerPage/formState.js'
 import type { FormState } from '../plannerPage/formState.js'
+import { legCountRangeFromDraft } from '../plannerPage/plannerState.js'
 import type { TripDraft } from '../plannerPage/plannerState.js'
 import type { TourResult } from '../tourSearch/types.js'
 import { SupersededError } from './searchClient.js'
@@ -14,7 +15,8 @@ export interface PlannerSearch {
   status: 'idle' | 'searching' | 'done' | 'error'
   /** The latest finished result; kept while a newer search runs. */
   chains: TourResult[] | null
-  /** Availability of the draft's dates, for ranking; null when no start date is set. */
+  /** Availability of the draft's dates, for ranking and the availability filter; null when no
+   *  start date is set. */
   freeByOffset: FreeByOffset | null
   error: string | null
 }
@@ -25,10 +27,11 @@ export function usePlannerSearch(
 ): PlannerSearch {
   const [state, setState] = useState<Omit<PlannerSearch, 'freeByOffset'>>({ status: 'idle', chains: null, error: null })
   const [freeByOffset, setFreeByOffset] = useState<FreeByOffset | null>(null)
-  const nights = form.legCountRange[1] - 1
+  const legCountRange = legCountRangeFromDraft(draft)
+  const nights = legCountRange[1] - 1
 
   // Availability for ranking and badges. Night j is read at offset j+1, so the base date is one day
-  // before the first night. The fetch is cached per date, shared with the search below.
+  // before the first night.
   useEffect(() => {
     if (!draft.startDate) { setFreeByOffset(null); return }
     let cancelled = false
@@ -37,20 +40,13 @@ export function usePlannerSearch(
     return () => { cancelled = true }
   }, [draft.startDate, draft.partySize, nights])
 
-  // Only the "nur verfügbare" filter makes the availability part of the search input.
-  const availabilityDraft = form.onlyAvailable ? draft : null
-
   useEffect(() => {
     if (!client || !data) return
     let cancelled = false
     setState((s) => ({ ...s, status: 'searching', error: null }))
     const timer = setTimeout(async () => {
       try {
-        const free = availabilityDraft?.startDate
-          ? await fetchAvailabilityByOffset(addUtcDays(new Date(availabilityDraft.startDate), -1), availabilityDraft.partySize, nights)
-          : null
-        const ohrsIdByHutIndex = new Map([...data.hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const))
-        const query = buildQuery(form, data.hutsByIndex, free ? { ohrsIdByHutIndex, freeByOffset: free } : undefined)
+        const query = buildQuery(form, data.hutsByIndex, legCountRange)
         const chains = await client.search(query)
         if (!cancelled) setState({ status: 'done', chains, error: null })
       } catch (e) {
@@ -59,7 +55,7 @@ export function usePlannerSearch(
       }
     }, debounceMs)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [client, data, form, availabilityDraft, nights, debounceMs])
+  }, [client, data, form, legCountRange[0], legCountRange[1], debounceMs])
 
   return useMemo(() => ({ ...state, freeByOffset }), [state, freeByOffset])
 }

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor, cleanup } from '@testing-library/react'
 import { usePlannerSearch } from './usePlannerSearch.js'
 import { DEFAULT_FORM } from '../plannerPage/formState.js'
-import { DEFAULT_DRAFT } from '../plannerPage/plannerState.js'
+import { DEFAULT_DRAFT, legCountRangeFromDraft } from '../plannerPage/plannerState.js'
 import { SupersededError } from './searchClient.js'
 import type { SearchClient } from './searchClient.js'
 import type { AppData } from '../data/buildAppData.js'
@@ -25,7 +25,7 @@ describe('usePlannerSearch', () => {
     const { result } = renderHook(() => usePlannerSearch({ client, data, form: DEFAULT_FORM, draft: DEFAULT_DRAFT, debounceMs: 0 }))
     await waitFor(() => expect(result.current.status).toBe('done'))
     expect(search).toHaveBeenCalledTimes(1)
-    expect(search.mock.calls[0][0]).toMatchObject({ mode: 'transit', legCountMin: 2, legCountMax: 4 })
+    expect(search.mock.calls[0][0]).toMatchObject({ mode: 'transit', legCountMin: 3, legCountMax: 3 })
     expect(result.current.chains).toEqual([chain])
   })
 
@@ -50,12 +50,32 @@ describe('usePlannerSearch', () => {
   it('fetches availability with base date startDate-1 only when a date is set', async () => {
     const fetchSpy = vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
     const client = fakeClient(vi.fn().mockResolvedValue([]))
-    const draft = { startDate: '2026-07-10', partySize: 3 }
+    const draft = { ...DEFAULT_DRAFT, startDate: '2026-07-10', partySize: 3 }
     const { result } = renderHook(() => usePlannerSearch({ client, data, form: DEFAULT_FORM, draft, debounceMs: 0 }))
     await waitFor(() => expect(result.current.freeByOffset).not.toBeNull())
     const [base, party, maxOffset] = fetchSpy.mock.calls[0]
     expect(base.toISOString().slice(0, 10)).toBe('2026-07-09')
     expect(party).toBe(3)
-    expect(maxOffset).toBe(DEFAULT_FORM.legCountRange[1] - 1)
+    expect(maxOffset).toBe(legCountRangeFromDraft(draft)[1] - 1)
+  })
+
+  it('never passes availability into the search query, regardless of onlyAvailable', async () => {
+    vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+    const search = vi.fn().mockResolvedValue([])
+    const client = fakeClient(search)
+    const draft = { ...DEFAULT_DRAFT, startDate: '2026-07-10' }
+    const form = { ...DEFAULT_FORM, onlyAvailable: true }
+    const { result } = renderHook(() => usePlannerSearch({ client, data, form, draft, debounceMs: 0 }))
+    await waitFor(() => expect(result.current.status).toBe('done'))
+    expect(search).toHaveBeenCalledWith(expect.not.objectContaining({ availability: expect.anything() }))
+  })
+
+  it('fetches freeByOffset whenever a start date is set, independent of onlyAvailable', async () => {
+    vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+    const client = fakeClient(vi.fn().mockResolvedValue([]))
+    const draft = { ...DEFAULT_DRAFT, startDate: '2026-07-10' }
+    const form = { ...DEFAULT_FORM, onlyAvailable: false }
+    const { result } = renderHook(() => usePlannerSearch({ client, data, form, draft, debounceMs: 0 }))
+    await waitFor(() => expect(result.current.freeByOffset).not.toBeNull())
   })
 })
