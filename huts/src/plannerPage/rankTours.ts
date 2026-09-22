@@ -48,12 +48,15 @@ export function filterOfficial(
     && startById.get(t.startId)?.sourceType === MODE_SOURCE_TYPE[form.mode])
 }
 
+export type SortDir = 'asc' | 'desc'
+
 export function sortTours(
-  tours: PlannerTour[], key: SortKey,
+  tours: PlannerTour[], key: SortKey, dir: SortDir,
   { targets, ohrsIdByHutIndex, freeByOffset }: { targets: RankTargets; ohrsIdByHutIndex: Map<number, string | null>; freeByOffset: FreeByOffset | null },
 ): PlannerTour[] {
   if (key === 'fit') {
     return rankFit(tours, targets, freeByOffset ? (t, night) => nightStateOf(t, night, ohrsIdByHutIndex, freeByOffset) : undefined)
   }
-  return [...tours].sort((a, b) => TOTAL[key](a) - TOTAL[key](b))
+  const sorted = [...tours].sort((a, b) => TOTAL[key](a) - TOTAL[key](b))
+  return dir === 'desc' ? sorted.reverse() : sorted
 }

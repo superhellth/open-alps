@@ -55,7 +55,7 @@ describe('DiscoverLayer route lines', () => {
       hutCoordsById: new Map(Array.from({ length: 80 }, (_, i) => [i, { lat: 47.3 + i * 0.0001, lng: 12 }] as const)),
       startById, officialById: new Map(),
     }
-    const sorted = sortTours(many, 'duration', { targets: { legCountTarget: 1, legCountRange: [1, 1], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null })
+    const sorted = sortTours(many, 'duration', 'asc', { targets: { legCountTarget: 1, legCountRange: [1, 1], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null })
     expect(sorted.length).toBe(80)
     const { container: capped } = renderLayer({ allTours: many, sortKey: 'duration', routeCtx: routeCtxMany }, 12)
     const { container: uncapped } = renderLayer({ allTours: many.slice(0, 10), sortKey: 'duration', routeCtx: routeCtxMany }, 12)

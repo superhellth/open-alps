@@ -25,7 +25,7 @@ import { makeStartLabel } from './labels.js'
 import { DEFAULT_DRAFT, dayCountFromDraft, legCountRangeFromDraft } from './plannerState.js'
 import type { TripDraft } from './plannerState.js'
 import { filterOfficial, sortTours } from './rankTours.js'
-import type { SortKey } from './rankTours.js'
+import type { SortDir, SortKey } from './rankTours.js'
 import { tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import { officialToTour } from './tours.js'
@@ -55,6 +55,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
   const [sortKey, setSortKey] = useState<SortKey>('fit')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
   const [selectedStartIds, setSelectedStartIds] = useState<number[] | null>(null)
@@ -97,8 +98,8 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
 
   const rankedTours = useMemo(
-    () => sortTours(visibleTours, sortKey, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
-    [visibleTours, sortKey, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
+    () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
+    [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -269,6 +270,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
                 tours={rankedTours}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sortKey} onSortChange={setSortKey}
+                sortDir={sortDir} onSortDirChange={setSortDir}
                 hutNameById={data?.hutNameById ?? new Map()} onPreview={setPreviewTour} onPick={pick}
                 onOpenFilters={() => setDiscoverTab('filters')}
               />

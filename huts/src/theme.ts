@@ -33,6 +33,16 @@ const theme = createTheme({
     },
     MuiPaper: { defaultProps: { elevation: 0 } },
     MuiTabs: { styleOverrides: { indicator: { backgroundColor: tokens.signpost, height: 4 } } },
+    MuiTab: {
+      styleOverrides: {
+        root: {
+          backgroundColor: 'rgba(35, 39, 43, 0.05)',
+          '&:hover': { backgroundColor: 'rgba(35, 39, 43, 0.09)' },
+          '&:not(.Mui-selected)': { color: 'rgba(35, 39, 43, 0.6)' },
+          '&.Mui-selected': { backgroundColor: tokens.paper },
+        },
+      },
+    },
   },
 })
 

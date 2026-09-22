@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { Box, Button, Chip, List, ListItemButton, MenuItem, Pagination, Select, Typography } from '@mui/material'
+import type { CSSProperties, MouseEvent } from 'react'
+import { Box, Button, Chip, IconButton, List, ListItemButton, Menu, MenuItem, Pagination, Typography } from '@mui/material'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import { formatSignpostTime } from '../format/signpostTime.js'
 import { SIGNPOST_FONT, tokens } from '../theme.js'
 import { SORT_LABEL } from './rankTours.js'
-import type { SortKey } from './rankTours.js'
+import type { SortDir, SortKey } from './rankTours.js'
 import type { PlannerTour } from './tours.js'
 
 const PAGE_SIZE = 25
@@ -26,13 +29,15 @@ function statStyle(active: boolean): CSSProperties {
 }
 
 export default function ResultsList({
-  tours, noMatches, sortKey, onSortChange,
+  tours, noMatches, sortKey, onSortChange, sortDir, onSortDirChange,
   hutNameById, onPreview, onPick, onOpenFilters,
 }: {
   tours: PlannerTour[]
   noMatches: boolean
   sortKey: SortKey
   onSortChange: (key: SortKey) => void
+  sortDir: SortDir
+  onSortDirChange: (dir: SortDir) => void
   hutNameById: Map<number, string>
   onPreview: (tour: PlannerTour | null) => void
   onPick: (tour: PlannerTour) => void
@@ -40,6 +45,7 @@ export default function ResultsList({
 }) {
   const [page, setPage] = useState(1)
   useEffect(() => setPage(1), [tours])
+  const [sortMenuAnchor, setSortMenuAnchor] = useState<HTMLElement | null>(null)
 
   if (noMatches) {
     return (
@@ -53,14 +59,42 @@ export default function ResultsList({
   const shown = tours.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1 }}>
-      <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography color="text.secondary">{tours.length} Tour{tours.length === 1 ? '' : 'en'} gefunden</Typography>
-        <Select size="small" value={sortKey} onChange={(e) => onSortChange(e.target.value as SortKey)} inputProps={{ 'aria-label': 'Sortierung' }}>
-          {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => <MenuItem key={key} value={key}>{SORT_LABEL[key]}</MenuItem>)}
-        </Select>
+    <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{
+        display: 'flex', alignItems: 'center', justifyContent: 'flex-end',
+        p: 2, position: 'sticky', top: 0, zIndex: 1,
+        bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
+      }}>
+        <Button
+          size="small" onClick={(e) => setSortMenuAnchor(e.currentTarget)} endIcon={<ArrowDropDownIcon />}
+          sx={{ color: 'inherit', fontFamily: SIGNPOST_FONT, fontWeight: 600, borderBottom: `2px solid ${tokens.signpost}`, borderRadius: 0 }}
+        >
+          Sortieren: {SORT_LABEL[sortKey]}
+          {sortKey !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon fontSize="small" sx={{ ml: 0.5 }} /> : <ArrowDownwardIcon fontSize="small" sx={{ ml: 0.5 }} />)}
+        </Button>
+        <Menu anchorEl={sortMenuAnchor} open={sortMenuAnchor != null} onClose={() => setSortMenuAnchor(null)}>
+          {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => (
+            <MenuItem
+              key={key} selected={key === sortKey}
+              onClick={() => { onSortChange(key); setSortMenuAnchor(null) }}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 220 }}
+            >
+              <span style={{ width: 16 }}>{key === sortKey ? '●' : ''}</span>
+              <span style={{ flexGrow: 1 }}>{SORT_LABEL[key]}</span>
+              {key === sortKey && key !== 'fit' && (
+                <IconButton
+                  size="small"
+                  aria-label={sortDir === 'asc' ? 'Aufsteigend sortiert' : 'Absteigend sortiert'}
+                  onClick={(e: MouseEvent) => { e.stopPropagation(); onSortDirChange(sortDir === 'asc' ? 'desc' : 'asc') }}
+                >
+                  {sortDir === 'asc' ? <ArrowUpwardIcon fontSize="small" /> : <ArrowDownwardIcon fontSize="small" />}
+                </IconButton>
+              )}
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
-      <List disablePadding>
+      <List disablePadding sx={{ px: 2, pb: 2 }}>
         {shown.map((tour, i) => {
           const chain = hutChain(tour, hutNameById)
           return (
@@ -95,7 +129,7 @@ export default function ResultsList({
           )
         })}
       </List>
-      {pageCount > 1 && <Pagination count={pageCount} page={page} onChange={(_e, p) => setPage(p)} size="small" />}
+      {pageCount > 1 && <Pagination sx={{ px: 2, pb: 2 }} count={pageCount} page={page} onChange={(_e, p) => setPage(p)} size="small" />}
     </Box>
   )
 }

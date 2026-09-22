@@ -14,8 +14,8 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
 const hutNameById = new Map([[0, 'Hut A'], [1, 'Hut B'], [2, 'Hut C'], [3, 'Hut D'], [4, 'Hut E']])
 const props = () => ({
   tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
-  noMatches: false, sortKey: 'fit' as const,
-  onSortChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
+  noMatches: false, sortKey: 'fit' as const, sortDir: 'asc' as const,
+  onSortChange: vi.fn(), onSortDirChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
   hutNameById,
 })
 
@@ -34,7 +34,7 @@ describe('ResultsList', () => {
   it('previews on hover and on keyboard focus, clears on leave, picks on click', () => {
     const p = props()
     render(<ResultsList {...p} />)
-    const row = screen.getAllByRole('button')[0]
+    const row = screen.getAllByRole('button').find((b) => b.textContent?.includes('Hut A'))!
     fireEvent.mouseEnter(row)
     expect(p.onPreview).toHaveBeenLastCalledWith(p.tours[0])
     fireEvent.mouseLeave(row)
@@ -50,6 +50,25 @@ describe('ResultsList', () => {
     expect(screen.getByText('Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Filter anpassen' }))
     expect(onOpenFilters).toHaveBeenCalled()
+  })
+  it('toggles sort direction via the sort menu, no dir toggle while sorting by fit', () => {
+    const p = props()
+    render(<ResultsList {...p} />)
+    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Empfehlung/ }))
+    expect(screen.queryByLabelText('Aufsteigend sortiert')).not.toBeInTheDocument()
+    cleanup()
+    const p2 = { ...props(), sortKey: 'duration' as const }
+    render(<ResultsList {...p2} />)
+    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Gesamtdauer/ }))
+    fireEvent.click(screen.getByLabelText('Aufsteigend sortiert'))
+    expect(p2.onSortDirChange).toHaveBeenCalledWith('desc')
+  })
+  it('picks a different sort key from the menu', () => {
+    const p = props()
+    render(<ResultsList {...p} />)
+    fireEvent.click(screen.getByRole('button', { name: /Sortieren: Empfehlung/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Gesamtdauer/ }))
+    expect(p.onSortChange).toHaveBeenCalledWith('duration')
   })
   it('pages long lists', () => {
     const many = Array.from({ length: 30 }, (_, i) => tour([0], { startId: i, exitStartId: i }))
