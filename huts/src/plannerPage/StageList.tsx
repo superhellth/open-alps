@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react'
-import { Box, Link, Typography } from '@mui/material'
+import { Box, Link, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import { addUtcDays } from '../availability/formatDate.js'
 import { buildBookingLink } from '../availability/bookingLink.js'
 import type { HutOhrs } from '../data/buildAppData.js'
 import type { TripLegs } from '../tourSearch/tripLegs.js'
-import type { Trip } from '../trip/trip.js'
+import type { BookingStatus, Trip } from '../trip/trip.js'
 import AvailabilityMark from './AvailabilityMark.js'
 import Signpost from './Signpost.js'
 import type { NightView } from './useTripAvailability.js'
@@ -18,13 +18,15 @@ export interface StageListProps {
   nightViews: NightView[] | null
   onHoverLeg: (index: number | null) => void
   renderStageControls?: (night: number) => ReactNode
+  onNightStatusChange?: (night: number, status: BookingStatus) => void
   warnings?: string[]
 }
 
 const CHANGED_TEXT = 'Seit dem Speichern geändert – nicht mehr im Wegenetz'
+const STATUS_LABEL: Record<BookingStatus, string> = { open: 'offen', requested: 'angefragt', confirmed: 'bestätigt' }
 
 export default function StageList({
-  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, onHoverLeg, renderStageControls, warnings = [],
+  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, onHoverLeg, renderStageControls, onNightStatusChange, warnings = [],
 }: StageListProps) {
   const firstNight = trip.startDate ? new Date(trip.startDate) : null
   const exitLeg = tripLegs.legs[trip.huts.length]
@@ -64,6 +66,17 @@ export default function StageList({
                 </Box>
               )}
             </Signpost>
+            {onNightStatusChange && (
+              <ToggleButtonGroup
+                size="small" exclusive value={trip.nights[i].status} aria-label={`Buchungsstatus Nacht ${i + 1}`}
+                onChange={(_e, next: BookingStatus | null) => { if (next) onNightStatusChange(i, next) }}
+                sx={{ mt: 0.5 }}
+              >
+                {(Object.keys(STATUS_LABEL) as BookingStatus[]).map((s) => (
+                  <ToggleButton key={s} value={s} sx={{ textTransform: 'none', py: 0.25 }}>{STATUS_LABEL[s]}</ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            )}
             {renderStageControls?.(i)}
           </Box>
         )

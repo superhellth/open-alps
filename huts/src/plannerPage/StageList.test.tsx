@@ -64,4 +64,11 @@ describe('StageList', () => {
     fireEvent.mouseEnter(screen.getByText('Hütte E').closest('[data-stage]')!)
     expect(props.onHoverLeg).toHaveBeenCalledWith(1)
   })
+  it('renders a booking-status toggle per night and reports changes', () => {
+    const onNightStatusChange = vi.fn()
+    renderList(trip(['{D}']), { onNightStatusChange })
+    fireEvent.click(screen.getByLabelText('Buchungsstatus Nacht 1'))
+    fireEvent.click(screen.getByRole('button', { name: 'bestätigt' }))
+    expect(onNightStatusChange).toHaveBeenCalledWith(0, 'confirmed')
+  })
 })
