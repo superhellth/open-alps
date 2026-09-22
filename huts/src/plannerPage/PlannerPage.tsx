@@ -230,7 +230,10 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
           {/* Kept mounted (only hidden) while a trip or the saved list is showing, so "← Ergebnisse"
               restores the list's scroll position. */}
           <Box hidden={sidebarView !== 'discover'}>
-            <Tabs value={discoverTab} onChange={(_e, v) => setDiscoverTab(v)} variant="fullWidth">
+            <Tabs
+              value={discoverTab} onChange={(_e, v) => setDiscoverTab(v)} variant="fullWidth"
+              sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper' }}
+            >
               <Tab value="filters" label="Filter" />
               <Tab
                 value="results"
