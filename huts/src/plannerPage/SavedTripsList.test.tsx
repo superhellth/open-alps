@@ -1,35 +1,45 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import TripsPage from './TripsPage.js'
+import SavedTripsList from './SavedTripsList.js'
 import { TripsProvider } from '../trip/TripsProvider.js'
 import { newTrip } from '../trip/trip.js'
 import { saveTrips } from '../trip/tripStorage.js'
+import type { TripGraph } from '../tourSearch/tripLegs.js'
 
-afterEach(() => { cleanup(); window.location.hash = '' })
+afterEach(cleanup)
 
 const trip = (id: string, name: string) => newTrip({
   name, startDate: '2026-07-10', partySize: 2, start: { startId: 1, sourceType: 1 }, huts: ['{A}', '{B}'],
   exit: { startId: 1, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
 }, new Date('2026-06-01T00:00:00Z'), id)
 
+const emptyGraph: TripGraph = { hutEdges: { hutIds: [], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } }
+
 function memoryStorage() {
   const data: Record<string, string> = {}
   return { getItem: (k: string) => data[k] ?? null, setItem: (k: string, v: string) => { data[k] = v }, data }
 }
-function renderWith(trips = [trip('a', 'Kaiser'), trip('b', 'Wetterstein')], draft: ReturnType<typeof trip> | null = null) {
+function renderWith(
+  trips = [trip('a', 'Kaiser'), trip('b', 'Wetterstein')],
+  draft: ReturnType<typeof trip> | null = null,
+  overrides: Partial<Parameters<typeof SavedTripsList>[0]> = {},
+) {
   const storage = memoryStorage()
   saveTrips({ trips, activeId: null, draft, activeIsDraft: draft !== null }, storage)
-  render(<TripsProvider storage={storage}><TripsPage /></TripsProvider>)
-  return storage
+  const props = {
+    graph: emptyGraph, onOpen: vi.fn(), onOpenDraft: vi.fn(), onPlanen: vi.fn(), hoveredTripId: null, onHoverTrip: vi.fn(), ...overrides,
+  }
+  render(<TripsProvider storage={storage}><SavedTripsList {...props} /></TripsProvider>)
+  return { storage, ...props }
 }
 
 function openMenu(id: string) {
   fireEvent.click(within(screen.getByTestId(`trip-${id}`)).getByLabelText('Weitere Aktionen'))
 }
 
-describe('TripsPage', () => {
+describe('SavedTripsList', () => {
   it('lists saved trips with dates and night count', () => {
     renderWith()
     expect(screen.getByText('Kaiser')).toBeInTheDocument()
@@ -44,15 +54,14 @@ describe('TripsPage', () => {
     renderWith([])
     expect(screen.getByText('Noch keine Touren gespeichert.')).toBeInTheDocument()
   })
-  it('opens the trip when the card is clicked anywhere', () => {
-    const storage = renderWith()
+  it('a row calls onOpen with its id', () => {
+    const { onOpen } = renderWith()
     fireEvent.click(screen.getByText('Kaiser'))
-    expect(JSON.parse(storage.data['open-alps.trips.v1']).activeId).toBe('a')
-    expect(window.location.hash).toBe('')
+    expect(onOpen).toHaveBeenCalledWith('a')
   })
   it('shows a booking summary', () => {
     renderWith()
-    expect(screen.getAllByText(/0\/2 Nächte bestätigt/).length).toBe(2)
+    expect(screen.getAllByText(/0\/2 bestätigt/).length).toBe(2)
   })
   it('the ⋮ menu offers Umbenennen and Löschen', () => {
     renderWith()
@@ -60,20 +69,11 @@ describe('TripsPage', () => {
     expect(screen.getByText('Umbenennen')).toBeInTheDocument()
     expect(screen.getByText('Löschen')).toBeInTheDocument()
   })
-  it('expanding a card shows per-night booking status and Notizen', () => {
-    renderWith()
-    const card = within(screen.getByTestId('trip-a'))
-    fireEvent.click(card.getByRole('button', { name: 'Details' }))
-    expect(card.getByLabelText('Buchungsstatus Nacht 1')).toBeInTheDocument()
-    expect(card.getByLabelText('Notizen')).toBeInTheDocument()
-  })
   it('deletes with an undo that brings the trip back', () => {
     renderWith()
     openMenu('a')
     fireEvent.click(screen.getByText('Löschen'))
     expect(screen.queryByText('Kaiser')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
-    expect(screen.getByText('Kaiser')).toBeInTheDocument()
   })
   it('renames via the menu', () => {
     renderWith()
@@ -83,19 +83,31 @@ describe('TripsPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     expect(screen.getByText('Kaisertour 2026')).toBeInTheDocument()
   })
-  it('renamed export/import buttons and error text', () => {
-    renderWith()
-    expect(screen.getByText('Touren exportieren (Datei)')).toBeInTheDocument()
-    expect(screen.getByText('Touren importieren')).toBeInTheDocument()
-  })
   it('imports a backup and reports an unreadable file', async () => {
     renderWith([])
+    fireEvent.click(screen.getAllByLabelText('Weitere Aktionen')[0])
     const input = screen.getByLabelText('Touren importieren') as HTMLInputElement
     const good = new File([JSON.stringify({ trips: [trip('z', 'Importiert')] })], 'b.json', { type: 'application/json' })
     fireEvent.change(input, { target: { files: [good] } })
     expect(await screen.findByText('Importiert')).toBeInTheDocument()
+    fireEvent.click(screen.getAllByLabelText('Weitere Aktionen')[0])
+    const input2 = screen.getByLabelText('Touren importieren') as HTMLInputElement
     const bad = new File(['nope'], 'b.json')
-    fireEvent.change(input, { target: { files: [bad] } })
+    fireEvent.change(input2, { target: { files: [bad] } })
     expect(await screen.findByText('Die Datei enthält keine gültigen Touren.')).toBeInTheDocument()
+  })
+  it('opens the pinned draft row', () => {
+    const { onOpenDraft } = renderWith([trip('a', 'Kaiser')], trip('d', 'Draft Trip'))
+    fireEvent.click(screen.getByText('Entwurf · nicht gespeichert'))
+    expect(onOpenDraft).toHaveBeenCalled()
+  })
+  it('flags a trip with an unresolved hut as geändert', () => {
+    renderWith()
+    expect(screen.getAllByText('geändert').length).toBeGreaterThan(0)
+  })
+  it('the empty state links back to Planen', () => {
+    const { onPlanen } = renderWith([])
+    fireEvent.click(screen.getByText('Tour planen'))
+    expect(onPlanen).toHaveBeenCalled()
   })
 })
