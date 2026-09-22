@@ -10,6 +10,7 @@ import type { TripGraph, TripLegs } from '../tourSearch/tripLegs.js'
 import { decodeTripFromHash, shareUrl } from '../trip/shareLink.js'
 import type { Trip } from '../trip/trip.js'
 import { useTrips } from '../trip/TripsProvider.js'
+import { filterByAvailability, tourHasFullNight } from './availabilityFilter.js'
 import DiscardDraftDialog from './DiscardDraftDialog.js'
 import FilterBar from './FilterBar.js'
 import FirstVisitPrompt from './FirstVisitPrompt.js'
@@ -20,7 +21,7 @@ import TripPanel from './TripPanel.js'
 import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
 import type { FormState } from './formState.js'
 import { makeStartLabel } from './labels.js'
-import { DEFAULT_DRAFT } from './plannerState.js'
+import { DEFAULT_DRAFT, dayCountFromDraft, legCountRangeFromDraft } from './plannerState.js'
 import type { TripDraft } from './plannerState.js'
 import { filterOfficial, sortTours } from './rankTours.js'
 import type { SortKey } from './rankTours.js'
@@ -61,6 +62,8 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
 
   const search = usePlannerSearch({ client, data, form, draft })
+  const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
+  const dayCountTarget = useMemo(() => dayCountFromDraft(draft), [draft])
 
   const startLabel = useMemo(() => makeStartLabel(data?.startById ?? new Map()), [data])
   const routeCtx = useMemo<RouteContext | null>(() => data && ({
@@ -73,16 +76,19 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const officialTours = useMemo(
     () => (data?.officialTours ?? []).map(officialToTour).filter((t): t is PlannerTour => t !== null), [data])
   const tours = useMemo<PlannerTour[]>(
-    () => (data ? [...(search.chains ?? []), ...filterOfficial(officialTours, form, data.startById)] : []),
-    [data, search.chains, officialTours, form])
-  const groups = useMemo(() => groupByStart(tours), [tours])
+    () => (data ? [...(search.chains ?? []), ...filterOfficial(officialTours, form, legCountRange, data.startById)] : []),
+    [data, search.chains, officialTours, form, legCountRange])
+  const visibleTours = useMemo(
+    () => filterByAvailability(tours, form.onlyAvailable, form.showFullToo, ohrsIdByHutIndex, search.freeByOffset),
+    [tours, form.onlyAvailable, form.showFullToo, ohrsIdByHutIndex, search.freeByOffset])
+  const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
 
   const selectedTours = useMemo(() => {
     if (!selectedStartIds) return []
     const wanted = new Set(selectedStartIds)
     const inArea = groups.filter((g) => wanted.has(g.startId)).flatMap((g) => g.tours)
-    return sortTours(inArea, sortKey, { targets: rankTargetsFromForm(form), ohrsIdByHutIndex, freeByOffset: search.freeByOffset })
-  }, [selectedStartIds, groups, sortKey, form, ohrsIdByHutIndex, search.freeByOffset])
+    return sortTours(inArea, sortKey, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset })
+  }, [selectedStartIds, groups, sortKey, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -165,11 +171,12 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
               disabled={!data || !client} searching={search.status === 'searching'}
             />
             <ResultsList
-              tours={selectedTours} selectionActive={selectedStartIds !== null} totalMatches={tours.length}
+              tours={selectedTours} selectionActive={selectedStartIds !== null} totalMatches={visibleTours.length}
               noMatches={search.status === 'done' && tours.length === 0}
               sortKey={sortKey} onSortChange={setSortKey}
               hutNameById={data?.hutNameById ?? new Map()} hutClassByIndex={data?.hutClassByIndex ?? new Map()}
               startLabel={startLabel} onPreview={setPreviewTour} onPick={pick}
+              isFull={(t) => (form.onlyAvailable && form.showFullToo ? tourHasFullNight(t, ohrsIdByHutIndex, search.freeByOffset ?? new Map()) : false)}
             />
           </Box>
           {mode === 'trip' && activeTrip && tripLegs && data && (

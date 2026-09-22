@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import ResultsList from './ResultsList.js'
 import type { PlannerTour } from './tours.js'
@@ -48,6 +48,17 @@ describe('ResultsList', () => {
     render(<ResultsList {...props()} tours={[]} selectionActive={false} totalMatches={12} />)
     expect(screen.getByText(/12 Touren/)).toBeInTheDocument()
     expect(screen.getByText(/Marker/)).toBeInTheDocument()
+  })
+  it('shows a "voll" chip for tours isFull marks, none otherwise', () => {
+    const p = props()
+    render(<ResultsList {...p} isFull={(t) => t === p.tours[1]} />)
+    const rows = screen.getAllByRole('button', { name: /Hütte/ })
+    expect(within(rows[1]).getByText('voll')).toBeInTheDocument()
+    expect(within(rows[0]).queryByText('voll')).not.toBeInTheDocument()
+  })
+  it('shows no "voll" chip when isFull is not provided', () => {
+    render(<ResultsList {...props()} />)
+    expect(screen.queryByText('voll')).not.toBeInTheDocument()
   })
   it('pages long lists', () => {
     const many = Array.from({ length: 30 }, (_, i) => tour([0], { startId: i }))
