@@ -27,23 +27,37 @@ function FitRoute({ positions }: { positions: [number, number][] }) {
 }
 
 /** A route as selected-route styling: signpost yellow over an ink casing. Legs still loading (or
- *  without geometry) are dashed straight lines between their huts. */
-export default function RouteLayer({ route, highlightedLeg = null, fit = false }:
-  { route: Route; highlightedLeg?: number | null; fit?: boolean }) {
+ *  without geometry) are dashed straight lines between their huts. `muted` draws the thin
+ *  Discover-mode candidate style instead of the bold selected-route style; `dimmedOut` fades it
+ *  further while a different route is hovered. */
+export default function RouteLayer({ route, highlightedLeg = null, fit = false, muted = false, dimmedOut = false, onHover, onClick }: {
+  route: Route
+  highlightedLeg?: number | null
+  fit?: boolean
+  muted?: boolean
+  dimmedOut?: boolean
+  onHover?: (hovering: boolean) => void
+  onClick?: () => void
+}) {
   const positions = useMemo(() => route.waypoints.map((w): [number, number] => [w.lat, w.lng]), [route])
   const geometries = useLegGeometries(route)
   const segments = segmentsOf(positions, geometries)
+  const baseWidth = muted ? 2 : 4
+  const opacity = dimmedOut ? 0.35 : 1
 
   return (
     <>
       {fit && <FitRoute positions={positions} />}
       {segments.map((seg, i) => {
-        const width = highlightedLeg === i ? 6 : 4
+        const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
         const dash = seg.isFallback ? '6 8' : undefined
         return (
           <Fragment key={i}>
-            <Polyline positions={seg.positions} pathOptions={{ color: tokens.ink, weight: width + 4, dashArray: dash }} />
-            <Polyline positions={seg.positions} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash }} />
+            <Polyline positions={seg.positions} pathOptions={{ color: tokens.ink, weight: width + (muted ? 2 : 4), dashArray: dash, opacity }} />
+            <Polyline
+              positions={seg.positions} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash, opacity }}
+              eventHandlers={{ mouseover: () => onHover?.(true), mouseout: () => onHover?.(false), click: () => onClick?.() }}
+            />
           </Fragment>
         )
       })}
