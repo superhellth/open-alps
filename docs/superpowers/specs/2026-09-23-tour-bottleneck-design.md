@@ -46,10 +46,16 @@ excluded here too.
 
 ### Stage order
 
-The direction of a tour and the order of its huts are needed to give the offset a sign. The plan
-checks which source is reliable: the order of `Huettenliste`, or the order in which the GPX track
-passes the huts (the pipeline's tour matching gives the hut sequence). If a tour has no reliable
-order, it enters only the offset-0 test.
+The hut order of a tour is the order of its `Huettenliste` in `tourSelection.php`. It is validated
+against the five tours that the pipeline matched (`huts/public/data/tours.json`: Lechquellenrunde,
+Pitztaltour, Tauernhöhenweg, Verwallrunde, Welser Höhenweg). Their leg sequence is the ground truth.
+An API order that equals the pipeline order, or its reverse, counts as valid. The match rate is
+reported. If any of the five disagrees, the plan stops and re-decides the order source.
+
+The stage distance between two huts is the difference of their positions in the order (in nights).
+The direction of a hiker is unknown, and a circular tour (`Rundtour`) has no fixed direction. So the
+offset scheme is direction-free (see Treatment). A tour with no reliable order enters only the
+offset-0 test.
 
 ### Bottleneck per tour
 
@@ -66,18 +72,27 @@ The bottleneck is chosen from capacity only. It is never chosen by the size of i
 `A_full(d)` is 1 on a day d when the tour's bottleneck hut A is sold out (`sold_out`, sensitivity
 `sold_out_near`), else 0.
 
-For a tour hut B (not A) at stage offset k nights from A, the treatment on day d is
-`A_full(d − k)`, with the sign of k given by the stage order. The primary test uses k = 0 and the
-offsets that a stage order allows within one to two nights. A hut shared by two tours takes the
-treatment of each tour as a separate row, and errors cluster by hut.
+For a tour hut B (not A) at stage distance m = |position(B) − position(A)| nights, the treatment on
+day d is 1 if A is sold out on day d − m or on day d + m (either hiking direction), else 0. For a
+circular tour, m is the shorter way round. The primary test uses m ≤ 2, taking each hut's own m. A
+hut shared by two tours takes the treatment of each tour as a separate row, and errors cluster by
+hut.
+
+The direction-free scheme cannot test "the effect is on later nights only". The offset check (see
+Analysis) uses the signed offset instead, for the tours whose order is validated and that are not
+circular.
 
 ### Controls
 
-For every bottleneck A, control huts are non-tour huts within a radius R of A (default 25 km, the
-plan may tune it) that are open in the same season. Matching by elevation band, log capacity and
-operator follows the first study's matching code. A control hut takes the `A_full` series of the
-tour bottleneck nearest to it, and the same offset schedule as the tour huts. A control hut that is
-near two bottlenecks appears once per bottleneck.
+For each tour hut B, the controls are the 3 nearest non-tour huts that are open in the same season,
+within ±500 m elevation of B and of a similar size (log capacity, standardised, as in the first
+study's matching code). There is no distance cap. The distance of every control is reported, and a
+tour hut with no control is counted and dropped. A control hut takes the treatment series of the tour
+that the tour hut B belongs to, with the same m as B. A control hut matched to two tour huts appears
+once per pair.
+
+Sensitivity: the primary run is repeated with a radius cap of 15, 25 and 40 km on the nearest-3
+rule. A tour hut with fewer than 3 controls inside the cap keeps those it has.
 
 Regional demand (weather, weekend, holidays) hits tour huts and controls alike, so it cancels in the
 comparison. The design fails when the controls do not share the region, so the check "no tour
@@ -94,17 +109,19 @@ One row per hut-day-bottleneck pair, for tour huts B and controls C:
   if a bottleneck's dates make it not collinear.
 - The coefficient of `tour × A_full` is the result: the extra occupancy change of tour huts when the
   bottleneck is sold out. The thesis predicts a negative value.
-- OLS with standard errors clustered by hut. With few clusters (fewer than about 40 tour huts)
-  the plan adds a wild cluster bootstrap interval.
+- OLS with standard errors clustered by hut, reported. The primary 95% interval is a pairs cluster
+  bootstrap: resample huts with replacement (a tour hut with its controls counts as one unit), refit,
+  take the 2.5% and 97.5% percentiles of the coefficient (2000 draws, fixed seed). It uses only numpy
+  and statsmodels.
 
 ### Analysis steps
 
 1. **Candidates.** Table of tours, eligible huts, chosen bottleneck, capacity ratio, and whether it
    qualifies.
 2. **Primary.** The DiD coefficient for season 2025, offsets as above, with 95% interval.
-3. **Offsets.** The coefficient per offset k from −3 to +3 nights. The thesis predicts an effect at
-   k = 0 and on the nights after A only. An effect at every offset points to a regional demand
-   confound.
+3. **Offsets.** The coefficient per signed offset k from −3 to +3 nights, for non-circular tours with
+   a validated order. The thesis predicts an effect at k = 0 and at offsets along the hiking
+   direction only. An effect at every offset points to a regional demand confound.
 4. **Per-tour effects.** The coefficient per tour, exploratory, in a table and a forest plot.
 5. **Bottleneck stands out.** For each tour, the effect with each of its huts as A. A permutation
    test asks whether the chosen bottleneck's effect is more negative than that of a random hut of the
@@ -157,10 +174,7 @@ One row per hut-day-bottleneck pair, for tour huts B and controls C:
 - **Small sample.** With 26 tours the result can be "no detectable effect". The power estimate puts
   that into numbers.
 
-## Open items for the plan
+## Out of scope, future
 
-- Which source gives the reliable hut order and direction per tour.
-- Radius R and the elevation band for controls.
-- Whether the wild cluster bootstrap is available in the pixi env, else a plain cluster bootstrap.
 - Future extension: daily calendar snapshots from now on would give booking curves and allow the
   "speed over time" reading. Not part of this study.
