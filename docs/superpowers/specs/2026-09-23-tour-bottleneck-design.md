@@ -47,15 +47,17 @@ excluded here too.
 ### Stage order
 
 The hut order of a tour is the order of its `Huettenliste` in `tourSelection.php`. It is validated
-against the five tours that the pipeline matched (`huts/public/data/tours.json`: Lechquellenrunde,
-Pitztaltour, Tauernhöhenweg, Verwallrunde, Welser Höhenweg). Their leg sequence is the ground truth.
-An API order that equals the pipeline order, or its reverse, counts as valid. The match rate is
-reported. If any of the five disagrees, the plan stops and re-decides the order source.
+against the five tours that the pipeline matched (`huts/public/data/tours.json`:
+Lechquellenrunde, Pitztaltour, Tauernhöhenweg, Verwallrunde, Welser Höhenweg). Their leg sequence is
+the ground truth. The API order is valid for a tour when the huts that both lists contain (at least 3)
+appear in the same relative order, or in exactly the reverse order. Hut membership may differ, because
+the GPX track can skip or swap a hut; each difference is listed in the results. The number of tours
+with an agreeing order is reported. If any of the five has a disagreeing order, the run stops and the
+order source is re-decided. A hut that has no entry in `huts.geojson` keeps its position in the order.
 
 The stage distance between two huts is the difference of their positions in the order (in nights).
 The direction of a hiker is unknown, and a circular tour (`Rundtour`) has no fixed direction. So the
-offset scheme is direction-free (see Treatment). A tour with no reliable order enters only the
-offset-0 test.
+offset scheme is direction-free (see Treatment). Every tour has an API order; there is no fallback for a tour without one.
 
 ### Bottleneck per tour
 
