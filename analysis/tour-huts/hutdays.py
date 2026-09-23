@@ -11,8 +11,8 @@ SOLD_OUT_NEAR = 0.05
 
 CUTS = {
     "season": None,
-    "jul_aug": lambda d: d.map(lambda x: x.month in (7, 8)),
-    "fri_sun": lambda d: d.map(lambda x: x.weekday() >= 4),
+    "jul_aug": lambda d: d.map(lambda x: x.month in (7, 8)).astype(bool),
+    "fri_sun": lambda d: d.map(lambda x: x.weekday() >= 4).astype(bool),
 }
 
 DAY_COLUMNS = ["ohrs_id", "date", "status", "open", "free_place", "capacity",

@@ -85,3 +85,14 @@ def test_season_table_excludes_errors_and_shapes_columns():
     t = hutdays.season_table(huts, days, 2025)
     assert list(t.ohrs_id) == [1] and t.tour.iloc[0] == 1 and t.season.iloc[0] == 2025
     assert t.occupancy.iloc[0] == 0.5
+
+
+def test_unserviced_day_is_not_open():
+    d = days_of([10, 3], status="UNSERVICED")
+    assert not d.open.any() and d.occupancy.isna().all()
+
+
+def test_cut_on_hut_with_no_open_days_yields_empty_outcome():
+    s = hutdays.hut_season(days_of([5] * 5, status="CLOSED"), "jul_aug")
+    assert s["open_days"] == 0 and s["eligible"] is False and s["cut_open_days"] == 0
+    assert pd.isna(s["occupancy"]) and s["sold_out_days"] == 0
