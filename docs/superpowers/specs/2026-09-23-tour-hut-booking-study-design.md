@@ -56,7 +56,7 @@ Tracked code in `analysis/tour-huts/`, run in this order:
 | --- | --- | --- |
 | `fetch_tours.py` | `tourSelection.php` | `raw/tours.json` |
 | `fetch_capacity.py` | `hutInfo/{id}` per hut | `raw/hut-info/{ohrsHutId}.json` |
-| `fetch_calendars.py` | `availabilityCalendar/{id}` per hut and season | `raw/calendar-{season}.json` |
+| `fetch_calendars.py` | `availabilityCalendar/{id}` per hut and season | `raw/calendar-{season}/{ohrsHutId}.json` |
 | `link_huts.py` | the three raw sets and `huts/public/data/huts.geojson` | `huts.json` |
 | `build_hut_days.py` | `huts.json` and the calendars | `hut-days.parquet` or `hut-days.csv` |
 | `analyze.py` | `hut-days` and `huts.json` | `results.json`, plots |
@@ -80,6 +80,8 @@ Existing exploratory scripts in `data/analysis/` (`fetch_hut_availability.py`,
 - **Calendars.** One `availabilityCalendar` call per hut and season. Season 2025 is 01.05.2025 to
   31.10.2025 and season 2026 is 01.05.2026 to 23.09.2026, both for `numberOfPeople: 1`. The number of
   calls is about 480.
+  The 2026 request runs to 10.10.2026; the analysis clips at 23.09.2026, and the extra days feed the
+  past-data consistency check.
 - **Load.** Requests are spaced by 0.3 s, retried up to three times with backoff, and run one at a
   time. A failed request is stored as an error record with the message, never skipped.
 
