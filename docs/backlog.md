@@ -9,7 +9,7 @@ under `docs/superpowers/`.
 
 ### Avoid zoom-in without rendering legs in ui (zoomed-in too much)
 
-### Frontend refactor
+### Frontend refactor (incl. dedicate style files)
 
 ### Integrate official tours into frontend
 

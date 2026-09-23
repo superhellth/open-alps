@@ -167,8 +167,9 @@ describe('PlannerPage', () => {
     expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
   })
 
-  it('shows the best cluster\'s tours by default, no click required', async () => {
+  it('lists the matching tours on the Ergebnisse tab without picking a marker', async () => {
     renderPlanner()
+    fireEvent.click(await screen.findByRole('tab', { name: /Ergebnisse/ }))
     expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
   })
 
