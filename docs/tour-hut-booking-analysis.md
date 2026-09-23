@@ -104,3 +104,71 @@ method and is not settled.
 - Past calendars show the state now for a past date. Cancellations are in, bookings outside OHRS are not.
 - One season is primary; 2026 runs only to 23.09.2026 and replicates the direction, not the exact size.
 - The catalogue tags huts as on-tour or not, without weighing how many tours share a hut.
+
+## Bottleneck huts
+
+Question: on the days the smallest hut of an official tour is sold out, are the other huts of that tour
+less occupied than similar non-tour huts? Spec: `docs/superpowers/specs/2026-09-23-tour-bottleneck-design.md`.
+Code: `analysis/tour-huts/run_bottleneck.py`. No new fetch.
+
+### Pre-defined test (2025, stage-aligned treatment)
+
+The interaction of "tour hut" and "bottleneck sold out d ± m nights away" (m ≤ 2) on occupancy, with hut
+and date fixed effects: **−0.015** occupancy points (bootstrap 95% interval −0.046 to +0.022; cluster-SE
+interval −0.051 to +0.022; p = 0.43). It rests on 5 tours, 11 tour-hut units (clusters) and 408 treated
+tour hut-days. The minimum detectable effect at 80% power is 0.041, so the interval excludes drops larger
+than about 5 points but the study cannot tell an effect of 1–4 points from zero. The sign is negative, the
+direction the thesis predicts, but there is no detectable effect.
+
+### Most tours have a bottleneck?
+
+No. 5 of 24 tours qualify (smallest hut at most 0.7 × the median capacity, at least 3 eligible huts):
+Karnischer Höhenweg, Inntaler Höhenweg, Berliner Höhenweg, Stubaier Höhenweg, Welser Höhenweg. Order
+validation: the API order agrees with the pipeline order for 5 of 5 matched tours. Membership differs for
+two: Tauernhöhenweg (the API lists one more hut than the GPX track) and Welser Höhenweg (the API has
+Wildensee-Hütte where the GPX track has Albert-Appel-Haus).
+
+### Validity checks
+
+- Placebo A (a non-tour hut of similar size takes the bottleneck's role): 2025 −0.013 (−0.034 to +0.009);
+  2026 +0.037 (+0.002 to +0.071). The 2025 placebo is as large as the main estimate; the 2026 placebo is
+  positive and nominally significant, so noise of this size occurs without a tour bottleneck.
+- Placebo dates (A's sold-out series shuffled within weekday and month, 200 draws): p = 0.88 (2025) and
+  0.60 (2026). The observed coefficient is not unusual against shuffled dates.
+- Sold-out-near instead of sold-out: −0.009 (2025), +0.019 (2026).
+- Ceiling (own hut sold out): tour huts are sold out on 9.8% (2025) and 15.4% (2026) of treated rows.
+  Dropping those rows: −0.012 and −0.008.
+- Control radius, 2025: no controls within 15 km for any unit (fit skipped); 25 km −0.060 (4 clusters);
+  40 km −0.024 (10 clusters). 2026: 15 km −0.021 (3), 25 km +0.017 (6), 40 km −0.007 (12).
+- Control distance in the primary run (no cap): median 34 km, maximum 47 km (2025); 31 and 43 km (2026).
+  Controls are not local; regional weather and holiday effects are only partly removed.
+
+### Exploratory results (not evidence)
+
+- Offset profile, 2025 (treatment = A sold out on d − k), k = −3…3: −0.043, −0.022, −0.016, +0.008,
+  +0.018, −0.012, −0.012. No peak at k = 0. 2026: −0.022, +0.007, −0.005, −0.018, −0.019, −0.022, +0.008.
+  No offset stands out.
+- Per tour, 2025: Berliner −0.039 (−0.083 to +0.004), Inntaler −0.067 (−0.091 to −0.043), Karnischer
+  +0.009 (−0.054 to +0.073); Stubaier and Welser have one unit and are not fitted. 2026: Berliner +0.015,
+  Inntaler −0.007, Karnischer −0.049 (−0.070 to −0.028), Stubaier +0.005. The tours that show a drop in
+  one season do not show it in the other.
+- Rank test (is the chosen bottleneck the hut with the most negative effect among the tour's huts?):
+  2025 0 of 3 tours against 22.5% expected by chance; 2026 1 of 4 (25%) against 16.9%. Too few tours to
+  say anything.
+- Cuts, 2025: Fri–Sun −0.019 (−0.062 to +0.025), July–August −0.032 (−0.055 to −0.008). 2026: Fri–Sun
+  −0.046 (−0.080 to −0.011), July–August +0.006 (−0.024 to +0.036). The nominally significant cells
+  switch season, which is what chance across many cuts looks like.
+
+### Replication (2026)
+
+Same sign and overlapping bootstrap intervals: yes. 2026 coefficient −0.007 (bootstrap −0.033 to +0.025),
+12 units, 415 treated tour hut-days, MDE 0.038.
+
+### Limits
+
+- The calendar shows the final state for a past date. It contains no booking timeline, so "falls off
+  quicker" cannot be measured.
+- Cancellations are included, offline bookings are not.
+- Capacity is the current capacity.
+- Only 26 tours exist, 5 with a bottleneck; tours share huts, so units are not independent beyond the
+  clustering by tour hut.
