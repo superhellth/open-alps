@@ -7,10 +7,10 @@ huts/start points instead of the trail geometry.
 
 ## What draws a dashed line
 
-`RouteLayer` draws a leg dashed when `useLegGeometries` returns `null` for it. That happens when:
+`RouteLayer` draws a leg dashed when `useLegGeometries` returns `null` for it (`undefined` means still loading). That happens when:
 
-1. The geometry fetch is still in flight (transient).
-2. `loadLegGeometry` rejected — the error is swallowed (`() => {}`), so failures are invisible.
+1. ~~The geometry fetch is still in flight~~ — no longer drawn dashed; a loading leg is skipped.
+2. `loadLegGeometry` rejected — the error is swallowed, so failures are invisible.
 3. The leg has `edgeId < 0` and is never fetched (`straightRoute`, `tripToRoute` with an
    unresolved leg, or a payload without `edge_id`).
 4. `legLayer` picks the wrong layer: it assumes the first/last leg is a `start_edges` edge.

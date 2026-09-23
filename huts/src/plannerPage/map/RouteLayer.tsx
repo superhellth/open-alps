@@ -32,9 +32,11 @@ function ensurePanes(map: L.Map) {
   }
 }
 
-function segmentsOf(positions: [number, number][], geometries: ([number, number][] | null)[]): Segment[] {
+/** One segment per leg; a leg whose geometry is still loading yields null and is not drawn. */
+function segmentsOf(positions: [number, number][], geometries: ([number, number][] | null | undefined)[]): (Segment | null)[] {
   return positions.slice(0, -1).map((from, i) => {
     const real = geometries[i]
+    if (real === undefined) return null
     return real && real.length >= 2
       ? { positions: real, isFallback: false }
       : { positions: [from, positions[i + 1]], isFallback: true }
@@ -78,6 +80,7 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
     <>
       {fit && <FitRoute positions={positions} />}
       {segments.map((seg, i) => {
+        if (!seg) return null
         const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
         const dash = seg.isFallback ? '6 8' : undefined
         return (

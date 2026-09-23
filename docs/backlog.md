@@ -9,6 +9,10 @@ under `docs/superpowers/`.
 
 ### Avoid zoom-in without rendering legs in ui (zoomed-in too much)
 
+### distinguish clickable from non-clickable bubbles
+
+### clicking bubble should zoom in to that area
+
 ### Investigate dashed geometry-less legs on Discover route previews
 
 Some muted route previews show dashed straight lines between huts. Cause unknown: legs with
