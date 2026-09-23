@@ -21,7 +21,7 @@ function segmentsOf(positions: [number, number][], geometries: ([number, number]
 function FitRoute({ positions }: { positions: [number, number][] }) {
   const map = useMap()
   useEffect(() => {
-    if (positions.length >= 2) map.fitBounds(positions, { padding: [40, 40] })
+    if (positions.length >= 2) map.flyToBounds(positions, { padding: [40, 40], duration: 1 })
   }, [map, positions])
   return null
 }
