@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { FreeByOffset } from '../../availability/types.js'
@@ -13,33 +13,24 @@ import type { PlannerTour } from '../tours.js'
 import type { StartPoint } from '../types.js'
 import RouteLayer from './RouteLayer.js'
 import { createStartClusterer, markerRadius } from './clusterStarts.js'
+import { currentView, inBbox } from './viewport.js'
+import type { View } from './viewport.js'
 import './map.css'
 
-const ROUTE_ZOOM_MIN = 11
 const MAX_ROUTES = 50
 
-interface View {
-  bbox: [number, number, number, number]
-  zoom: number
-}
-
-// The bounds are padded by half a tile-width so markers just outside the viewport (and a
-// zero-size map, as in jsdom) still resolve.
-function currentView(map: L.Map): View {
-  const b = map.getBounds()
-  const zoom = Math.round(map.getZoom())
-  const pad = (0.5 * 360) / 2 ** zoom
-  return { bbox: [b.getWest() - pad, b.getSouth() - pad, b.getEast() + pad, b.getNorth() + pad], zoom }
-}
+/** Below this zoom, routes stay hidden and only count-markers show — tuned lower than the
+ *  clusterer's own maxZoom (14) so routes appear before markers finish separating one-per-start. */
+export const ROUTE_REVEAL_ZOOM = 10
 
 const iconCache = new Map<string, L.DivIcon>()
-function countIcon(count: number, dimmed: boolean): L.DivIcon {
-  const key = `${count}|${dimmed}`
+function countIcon(count: number, dimmed: boolean, highlighted: boolean): L.DivIcon {
+  const key = `${count}|${dimmed}|${highlighted}`
   let icon = iconCache.get(key)
   if (!icon) {
     const size = Math.round(markerRadius(count) * 2)
     icon = L.divIcon({
-      className: `start-count-marker${dimmed ? ' dimmed' : ''}`,
+      className: `start-count-marker${dimmed ? ' dimmed' : ''}${highlighted ? ' highlighted' : ''}`,
       html: `<span>${count}</span>`,
       iconSize: [size, size],
     })
@@ -53,44 +44,47 @@ export function tourKey(tour: PlannerTour): string {
   return `${tour.startId}-${tour.official?.tourId ?? ''}-${tour.huts.join('.')}`
 }
 
-function inViewport(startId: number, startById: Map<number, StartPoint>, bbox: View['bbox']): boolean {
-  const p = startById.get(startId)
-  if (!p) return false
-  const [w, s, e, n] = bbox
-  return p.lng >= w && p.lng <= e && p.lat >= s && p.lat <= n
-}
-
 /** One marker per start point with matching tours, clustered by zoom; a cluster shows the sum of
- *  its members' match counts. Panning and zooming only re-cluster, they never re-search. From
- *  zoom 11, also draws thin route lines for the best-sorted, viewport-visible, capped-at-50 tours,
- *  so results are reachable without hunting for the right marker. */
+ *  its members' match counts. Panning and zooming only re-cluster, they never re-search. Past
+ *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose start point is in the current
+ *  viewport (capped at 50, ranked by the active sort) — the same set the results list shows, so
+ *  the map never shows more than what's on screen and already listed. Markers no longer "select":
+ *  clicking one only flies/zooms the map there. */
 export default function DiscoverLayer({
-  groups, startById, dimmed, onSelectStarts, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute,
+  groups, startById, dimmed, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
   dimmed: boolean
-  onSelectStarts: (startIds: number[]) => void
   allTours: PlannerTour[]
   sortKey: SortKey
   rankCtx: { targets: RankTargets; ohrsIdByHutIndex: Map<number, string | null>; freeByOffset: FreeByOffset | null }
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
+  /** Start point of the tour hovered in the results list; the marker covering it is highlighted. */
+  previewStartId?: number | null
   onPickRoute: (tour: PlannerTour) => void
+  onNavigate?: () => void
+  onViewChange?: (view: View) => void
 }) {
   const map = useMap()
-  const [view, setView] = useState(() => currentView(map))
+  const [view, setView] = useState<View>(() => currentView(map))
   useMapEvents({ moveend: () => setView(currentView(map)), zoomend: () => setView(currentView(map)) })
+  useEffect(() => { onViewChange?.(view) }, [view, onViewChange])
 
   const clusterer = useMemo(() => createStartClusterer(groups.flatMap((g) => {
     const s = startById.get(g.startId)
     return s ? [{ startId: g.startId, count: g.tours.length, lat: s.lat, lng: s.lng }] : []
   })), [groups, startById])
 
+  const routeReveal = view.zoom >= ROUTE_REVEAL_ZOOM
   const routedTours = useMemo(() => {
-    if (view.zoom < ROUTE_ZOOM_MIN || !routeCtx) return []
-    const inView = allTours.filter((t) => inViewport(t.startId, startById, view.bbox))
+    if (!routeCtx || !routeReveal) return []
+    const inView = allTours.filter((t) => {
+      const s = startById.get(t.startId)
+      return s !== undefined && inBbox(s, view.bbox)
+    })
     const sorted = sortKey === 'fit'
       ? rankFit(inView, rankCtx.targets, rankCtx.freeByOffset ? (t, night) => nightStateOf(t, night, rankCtx.ohrsIdByHutIndex, rankCtx.freeByOffset) : undefined)
       : [...inView].sort((a, b) => {
@@ -98,20 +92,25 @@ export default function DiscoverLayer({
           return (total[sortKey as 'duration' | 'ascent' | 'distance']?.(a) ?? 0) - (total[sortKey as 'duration' | 'ascent' | 'distance']?.(b) ?? 0)
         })
     return sorted.slice(0, MAX_ROUTES)
-  }, [allTours, view, routeCtx, sortKey, rankCtx, startById])
+  }, [allTours, routeCtx, routeReveal, view.bbox, startById, sortKey, rankCtx])
+
+  const markers = clusterer.clustersFor(view.bbox, view.zoom)
+  const highlightedMarker = useMemo(() => {
+    if (previewStartId == null) return null
+    return markers.find((m) => m.kind === 'start' ? m.startId === previewStartId : clusterer.startIdsOf(m.clusterId).includes(previewStartId)) ?? null
+  }, [markers, clusterer, previewStartId])
 
   return (
     <>
-      {clusterer.clustersFor(view.bbox, view.zoom).map((m) => (
+      {markers.map((m) => (
         <Marker
           key={m.kind === 'start' ? `s${m.startId}` : `c${m.clusterId}`}
           position={[m.lat, m.lng]}
-          icon={countIcon(m.count, dimmed)}
+          icon={countIcon(m.count, dimmed, m === highlightedMarker)}
           eventHandlers={{
             click: () => {
-              if (m.kind === 'start') { onSelectStarts([m.startId]); return }
-              map.flyTo([m.lat, m.lng], Math.min(clusterer.expansionZoom(m.clusterId), map.getMaxZoom()))
-              onSelectStarts(clusterer.startIdsOf(m.clusterId))
+              onNavigate?.()
+              if (m.kind === 'cluster') map.setView([m.lat, m.lng], Math.min(clusterer.expansionZoom(m.clusterId), map.getMaxZoom()))
             },
           }}
         />
@@ -121,10 +120,9 @@ export default function DiscoverLayer({
         if (!route) return null
         const key = tourKey(tour)
         const isHovered = hoveredTourKey === key
-        const isDimmed = hoveredTourKey !== null && !isHovered
         return (
           <RouteLayer
-            key={key} route={route} muted={!isHovered} dimmedOut={isDimmed}
+            key={key} route={route} muted dimmedOut={!isHovered}
             onHover={(hovering) => onHoverTour(hovering ? key : null)}
             onClick={() => onPickRoute(tour)}
           />

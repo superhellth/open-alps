@@ -13,6 +13,7 @@ import SavedTripsLayer from './map/SavedTripsLayer.js'
 import TripLayer from './map/TripLayer.js'
 import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/TripLayer.js'
 import { ACTIVE_TILES } from './map/tiles.js'
+import type { View } from './map/viewport.js'
 import { useTripElevation } from './map/useTripElevation.js'
 import type { SortKey } from './rankTours.js'
 import type { RouteContext } from './routes.js'
@@ -31,7 +32,10 @@ export interface PlannerMapProps {
   dimmed: boolean
   startById: Map<number, StartPoint>
   hutCoordsById: Map<number, { lat: number; lng: number }>
-  onSelectStarts: (startIds: number[]) => void
+  /** Called when a Discover marker is clicked — navigation only, no filtering. */
+  onNavigate?: () => void
+  /** Called whenever the map's bbox/zoom changes in Discover mode, so the list can mirror it. */
+  onViewChange?: (view: View) => void
   onMapClick?: () => void
   route: Route | null
   fitRoute: boolean
@@ -50,9 +54,11 @@ export interface PlannerMapProps {
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
+  previewStartId?: number | null
   onPickRoute: (tour: PlannerTour) => void
   /** A point to fly to once (e.g. after "N Touren anzeigen" picks an off-screen start). */
-  focusStart?: { lat: number; lng: number } | null
+  /** Set once to jump the map back to Discover's viewport from before a tour was picked. */
+  restoreView?: { lat: number; lng: number; zoom: number } | null
   /** null when no trip is open — the height profile then renders nothing. */
   tripLegs: TripLegs | null
   onHoverLeg: (index: number | null) => void
@@ -69,18 +75,20 @@ function MapClickWatcher({ onClick }: { onClick?: () => void }) {
   return null
 }
 
-function FlyToStart({ point }: { point: { lat: number; lng: number } | null | undefined }) {
+/** Commands the map back to a remembered view (e.g. Discover's viewport from before a tour was
+ *  picked) — an immediate jump, not an animated flight, so it's deterministic and instant. */
+function RestoreView({ view }: { view: { lat: number; lng: number; zoom: number } | null | undefined }) {
   const map = useMap()
-  useEffect(() => { if (point) map.flyTo([point.lat, point.lng], Math.max(map.getZoom(), 12)) }, [map, point])
+  useEffect(() => { if (view) map.setView([view.lat, view.lng], view.zoom) }, [map, view])
   return null
 }
 
 // One MapContainer stays mounted across discover <-> trip so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
-    mode, groups, dimmed, startById, hutCoordsById, onSelectStarts, route, fitRoute, highlightedLeg,
+    mode, groups, dimmed, startById, hutCoordsById, onNavigate, onViewChange, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
-    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, focusStart,
+    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
   const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
@@ -100,14 +108,16 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
             subdomains={ACTIVE_TILES.subdomains} maxZoom={ACTIVE_TILES.maxZoom}
           />
           <MapClickWatcher onClick={onMapClick} />
-          <FlyToStart point={focusStart} />
           {mode === 'discover' && (
             <DiscoverLayer
-              groups={groups} startById={startById} dimmed={dimmed} onSelectStarts={onSelectStarts}
+              groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onViewChange={onViewChange}
               allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
-              hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} onPickRoute={onPickRoute}
+              hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} previewStartId={previewStartId} onPickRoute={onPickRoute}
             />
           )}
+          {/* Rendered after DiscoverLayer so its own moveend/zoomend listeners are already
+              subscribed once this fires the map back to the pre-pick view. */}
+          <RestoreView view={restoreView} />
           {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
           {mode === 'trip' && (
             <TripLayer

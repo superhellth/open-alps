@@ -20,9 +20,27 @@
   border: 2px solid #23272b;
   font: 700 0.9rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
   font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+}
+.start-count-marker:hover span {
+  transform: scale(1.12);
+  box-shadow: 0 2px 6px rgba(35, 39, 43, 0.45);
+}
+.start-count-marker.highlighted {
+  z-index: 1000 !important;
+}
+.start-count-marker.highlighted span {
+  background: #fff;
+  transform: scale(1.2);
+  box-shadow: 0 0 0 3px #f5b700, 0 2px 8px rgba(35, 39, 43, 0.55);
 }
 .start-count-marker.dimmed span {
   opacity: 0.45;
+}
+.start-count-marker.dimmed:hover span {
+  transform: none;
+  box-shadow: none;
 }
 
 .start-symbol {

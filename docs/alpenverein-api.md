@@ -167,6 +167,31 @@ call (2b) can tell them apart.
 
 ---
 
+## 2c. OHRS direct API — availability calendar and hut info
+
+Host `https://www.hut-reservation.org`, no auth, OpenAPI at `/v3/api-docs`. Python's default
+`User-Agent` gets HTTP 403 (`curl` does not) — send an explicit one.
+
+```
+POST /api/v1/reservation/availabilityCalendar/{ohrsHutId}
+{"arrivalDate":"DD.MM.YYYY","departureDate":"DD.MM.YYYY","nextPossibleReservations":false,"numberOfPeople":1}
+```
+
+Returns one row per day: `{"date","dayOfWeek","freePlace","hutStatus"}`; `hutStatus` is `SERVICED` or
+`CLOSED`. Unlike the proxy in §2, it accepts past dates and a whole year in one request. History
+shows the state now for a past date: cancellations are included, bookings made outside OHRS are not.
+Summers before 2025 show maximum free places on every day (no bookings recorded).
+
+```
+GET /api/v1/reservation/hutInfo/{ohrsHutId}
+```
+
+Returns `totalBedsInfo` (string, current total beds), `hutBedCategories[].totalSleepingPlaces`,
+`altitude`, `coordinates` (`"lat, lon"`), `tenantCode` (a string such as `OEAV`, not the numeric
+`verein_nr`). Capacity is current only.
+
+---
+
 ## 3. Other endpoints seen in the capture (unused here)
 
 - `server/tourSelection.php` — POST with null body, returns the tour catalogue used by "Tourensuche".
