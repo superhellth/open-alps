@@ -1,0 +1,18 @@
+[workspace]
+name = "tour-huts-analysis"
+version = "0.1.0"
+description = "Tour-hut booking study (docs/superpowers/specs/2026-09-23-tour-hut-booking-study-design.md)"
+channels = ["conda-forge"]
+platforms = ["linux-64", "osx-64", "osx-arm64"]
+
+[dependencies]
+python = "3.11.*"
+pandas = "*"
+numpy = "*"
+scipy = "*"
+statsmodels = "*"
+matplotlib = "*"
+pytest = "*"
+
+[tasks]
+test = "pytest"
