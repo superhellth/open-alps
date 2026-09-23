@@ -8,7 +8,7 @@ import type { PlannerTour } from '../tours.js'
 import type { StartPoint } from '../types.js'
 import RouteLayer from './RouteLayer.js'
 import { createStartClusterer, markerRadius } from './clusterStarts.js'
-import { currentView, inBbox } from './viewport.js'
+import { currentView, routeTouchesBbox } from './viewport.js'
 import type { View } from './viewport.js'
 import './map.css'
 
@@ -39,9 +39,8 @@ export function tourKey(tour: PlannerTour): string {
 
 /** One marker per start point with matching tours, clustered by zoom; a cluster shows the sum of
  *  its members' match counts. Panning and zooming only re-cluster, they never re-search. Past
- *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose start point is in the current
- *  viewport — the same set the results list shows, so
- *  the map never shows more than what's on screen and already listed. Markers no longer "select":
+ *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose waypoints' bounding box
+ *  overlaps the current viewport, so a tour stays drawn while any part of it is on screen. Markers no longer "select":
  *  clicking one only flies/zooms the map there. */
 export default function DiscoverLayer({
   groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onViewChange,
@@ -72,11 +71,11 @@ export default function DiscoverLayer({
   const routeReveal = view.zoom >= ROUTE_REVEAL_ZOOM
   const routedTours = useMemo(() => {
     if (!routeCtx || !routeReveal) return []
-    return allTours.filter((t) => {
-      const s = startById.get(t.startId)
-      return s !== undefined && inBbox(s, view.bbox)
+    return allTours.flatMap((tour) => {
+      const route = tourToRoute(tour, routeCtx)
+      return route && routeTouchesBbox(route.waypoints, view.bbox) ? [{ tour, route }] : []
     })
-  }, [allTours, routeCtx, routeReveal, view.bbox, startById])
+  }, [allTours, routeCtx, routeReveal, view.bbox])
 
   const markers = clusterer.clustersFor(view.bbox, view.zoom)
   const highlightedMarker = useMemo(() => {
@@ -99,9 +98,7 @@ export default function DiscoverLayer({
           }}
         />
       ))}
-      {routeCtx && routedTours.map((tour) => {
-        const route = tourToRoute(tour, routeCtx)
-        if (!route) return null
+      {routedTours.map(({ tour, route }) => {
         const key = tourKey(tour)
         const isHovered = hoveredTourKey === key
         return (

@@ -18,3 +18,15 @@ export function inBbox(pt: { lat: number; lng: number }, bbox: [number, number, 
   const [w, s, e, n] = bbox
   return pt.lng >= w && pt.lng <= e && pt.lat >= s && pt.lat <= n
 }
+
+/** True when the bounding box of the waypoints overlaps the bbox — a route crossing the viewport
+ *  between two off-screen waypoints still counts. */
+export function routeTouchesBbox(waypoints: { lat: number; lng: number }[], bbox: [number, number, number, number]): boolean {
+  const [w, s, e, n] = bbox
+  let minLng = Infinity, maxLng = -Infinity, minLat = Infinity, maxLat = -Infinity
+  for (const p of waypoints) {
+    minLng = Math.min(minLng, p.lng); maxLng = Math.max(maxLng, p.lng)
+    minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat)
+  }
+  return minLng <= e && maxLng >= w && minLat <= n && maxLat >= s
+}
