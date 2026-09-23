@@ -31,6 +31,7 @@ import type { RouteContext } from './routes.js'
 import { officialToTour } from './tours.js'
 import type { PlannerTour } from './tours.js'
 import { inBbox } from './map/viewport.js'
+import { ROUTE_REVEAL_ZOOM } from './map/DiscoverLayer.js'
 import type { View } from './map/viewport.js'
 import { tripFromTour } from './tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
@@ -122,7 +123,12 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     onChange: (trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip }),
   })
 
-  const previewRoute = useMemo(() => (previewTour && routeCtx ? tourToRoute(previewTour, routeCtx) : null), [previewTour, routeCtx])
+  // Below ROUTE_REVEAL_ZOOM the map shows only count markers, so a hovered tour highlights its bubble instead of drawing a route.
+  const routesVisible = mapView !== null && mapView.zoom >= ROUTE_REVEAL_ZOOM
+  const previewRoute = useMemo(
+    () => (previewTour && routeCtx && routesVisible ? tourToRoute(previewTour, routeCtx) : null),
+    [previewTour, routeCtx, routesVisible],
+  )
   const tripRoute = useMemo(
     () => (mode === 'trip' && activeTrip && tripLegs && routeCtx ? tripToRoute(activeTrip, tripLegs, routeCtx) : null),
     [mode, activeTrip, tripLegs, routeCtx])
@@ -319,7 +325,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             candidates={candidateMarkers} candidateStartCoords={candidateStartCoords} onPickCandidate={editor.pickCandidate}
             activeLabel={editor.activeLabel} onCancelEditing={() => setEditing(null)}
             allTours={tours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
-            hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} onPickRoute={pick}
+            hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} previewStartId={previewTour?.startId ?? null} onPickRoute={pick}
             tripLegs={mode === 'trip' ? tripLegs : null} onHoverLeg={setHighlightedLeg}
             savedTrips={state.trips} savedGraph={data?.graph ?? EMPTY_GRAPH}
             savedRouteCtx={routeCtx ?? { hutCoordsById: new Map(), startById: new Map(), officialById: new Map() }}

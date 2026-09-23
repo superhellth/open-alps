@@ -54,6 +54,7 @@ export interface PlannerMapProps {
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
+  previewStartId?: number | null
   onPickRoute: (tour: PlannerTour) => void
   /** A point to fly to once (e.g. after "N Touren anzeigen" picks an off-screen start). */
   /** Set once to jump the map back to Discover's viewport from before a tour was picked. */
@@ -87,7 +88,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
     mode, groups, dimmed, startById, hutCoordsById, onNavigate, onViewChange, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
-    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, restoreView,
+    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
   const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
@@ -111,7 +112,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
             <DiscoverLayer
               groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onViewChange={onViewChange}
               allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
-              hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} onPickRoute={onPickRoute}
+              hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} previewStartId={previewStartId} onPickRoute={onPickRoute}
             />
           )}
           {/* Rendered after DiscoverLayer so its own moveend/zoomend listeners are already

@@ -24,6 +24,8 @@ per-leg/per-route quality signals, revisit whether/how the frontend should surfa
 
 ## Low
 
+### Same hut booking analysis for Die 7 schönsten AV-Hüttentouren
+
 ### Try to reintroduce a signpost feel to resultslist cards
 
 ### GPX export and print view for trips

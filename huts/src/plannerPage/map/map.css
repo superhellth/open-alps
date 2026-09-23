@@ -27,6 +27,14 @@
   transform: scale(1.12);
   box-shadow: 0 2px 6px rgba(35, 39, 43, 0.45);
 }
+.start-count-marker.highlighted {
+  z-index: 1000 !important;
+}
+.start-count-marker.highlighted span {
+  background: #fff;
+  transform: scale(1.2);
+  box-shadow: 0 0 0 3px #f5b700, 0 2px 8px rgba(35, 39, 43, 0.55);
+}
 .start-count-marker.dimmed span {
   opacity: 0.45;
 }
