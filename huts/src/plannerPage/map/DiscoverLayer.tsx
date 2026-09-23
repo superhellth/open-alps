@@ -1,12 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
-import type { FreeByOffset } from '../../availability/types.js'
-import { rankFit } from '../../tourSearch/rankFit.js'
-import type { RankTargets } from '../../tourSearch/rankFit.js'
 import type { StartGroup } from '../../tourSearch/groupByStart.js'
-import { nightStateOf } from '../rankTours.js'
-import type { SortKey } from '../rankTours.js'
 import { tourToRoute } from '../routes.js'
 import type { RouteContext } from '../routes.js'
 import type { PlannerTour } from '../tours.js'
@@ -16,8 +11,6 @@ import { createStartClusterer, markerRadius } from './clusterStarts.js'
 import { currentView, inBbox } from './viewport.js'
 import type { View } from './viewport.js'
 import './map.css'
-
-const MAX_ROUTES = 50
 
 /** Below this zoom, routes stay hidden and only count-markers show — tuned lower than the
  *  clusterer's own maxZoom (14) so routes appear before markers finish separating one-per-start. */
@@ -47,18 +40,16 @@ export function tourKey(tour: PlannerTour): string {
 /** One marker per start point with matching tours, clustered by zoom; a cluster shows the sum of
  *  its members' match counts. Panning and zooming only re-cluster, they never re-search. Past
  *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose start point is in the current
- *  viewport (capped at 50, ranked by the active sort) — the same set the results list shows, so
+ *  viewport — the same set the results list shows, so
  *  the map never shows more than what's on screen and already listed. Markers no longer "select":
  *  clicking one only flies/zooms the map there. */
 export default function DiscoverLayer({
-  groups, startById, dimmed, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onViewChange,
+  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
   dimmed: boolean
   allTours: PlannerTour[]
-  sortKey: SortKey
-  rankCtx: { targets: RankTargets; ohrsIdByHutIndex: Map<number, string | null>; freeByOffset: FreeByOffset | null }
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
@@ -81,18 +72,11 @@ export default function DiscoverLayer({
   const routeReveal = view.zoom >= ROUTE_REVEAL_ZOOM
   const routedTours = useMemo(() => {
     if (!routeCtx || !routeReveal) return []
-    const inView = allTours.filter((t) => {
+    return allTours.filter((t) => {
       const s = startById.get(t.startId)
       return s !== undefined && inBbox(s, view.bbox)
     })
-    const sorted = sortKey === 'fit'
-      ? rankFit(inView, rankCtx.targets, rankCtx.freeByOffset ? (t, night) => nightStateOf(t, night, rankCtx.ohrsIdByHutIndex, rankCtx.freeByOffset) : undefined)
-      : [...inView].sort((a, b) => {
-          const total = { duration: (t: PlannerTour) => t.totalDurationH, ascent: (t: PlannerTour) => t.totalAscentM, distance: (t: PlannerTour) => t.totalDistanceM }
-          return (total[sortKey as 'duration' | 'ascent' | 'distance']?.(a) ?? 0) - (total[sortKey as 'duration' | 'ascent' | 'distance']?.(b) ?? 0)
-        })
-    return sorted.slice(0, MAX_ROUTES)
-  }, [allTours, routeCtx, routeReveal, view.bbox, startById, sortKey, rankCtx])
+  }, [allTours, routeCtx, routeReveal, view.bbox, startById])
 
   const markers = clusterer.clustersFor(view.bbox, view.zoom)
   const highlightedMarker = useMemo(() => {

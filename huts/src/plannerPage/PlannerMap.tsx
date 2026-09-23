@@ -2,9 +2,7 @@ import { memo, useEffect, useState } from 'react'
 import { Box, Button, Collapse, Typography } from '@mui/material'
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
-import type { FreeByOffset } from '../availability/types.js'
 import type { TripLegs } from '../tourSearch/tripLegs.js'
-import type { RankTargets } from '../tourSearch/rankFit.js'
 import type { StartGroup } from '../tourSearch/groupByStart.js'
 import DiscoverLayer from './map/DiscoverLayer.js'
 import HeightProfile from './map/HeightProfile.js'
@@ -15,7 +13,6 @@ import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './map/Tri
 import { ACTIVE_TILES } from './map/tiles.js'
 import type { View } from './map/viewport.js'
 import { useTripElevation } from './map/useTripElevation.js'
-import type { SortKey } from './rankTours.js'
 import type { RouteContext } from './routes.js'
 import type { TripGraph } from '../tourSearch/tripLegs.js'
 import type { Trip } from '../trip/trip.js'
@@ -49,8 +46,6 @@ export interface PlannerMapProps {
   activeLabel: string | null
   onCancelEditing?: () => void
   allTours: PlannerTour[]
-  sortKey: SortKey
-  rankCtx: { targets: RankTargets; ohrsIdByHutIndex: Map<number, string | null>; freeByOffset: FreeByOffset | null }
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
@@ -88,7 +83,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
     mode, groups, dimmed, startById, hutCoordsById, onNavigate, onViewChange, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
-    activeLabel, onCancelEditing, allTours, sortKey, rankCtx, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
+    activeLabel, onCancelEditing, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
   const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
@@ -111,7 +106,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           {mode === 'discover' && (
             <DiscoverLayer
               groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onViewChange={onViewChange}
-              allTours={allTours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
+              allTours={allTours} routeCtx={routeCtx}
               hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} previewStartId={previewStartId} onPickRoute={onPickRoute}
             />
           )}

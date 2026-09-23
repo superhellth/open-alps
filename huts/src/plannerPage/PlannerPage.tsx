@@ -216,10 +216,6 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
         return []
       })
     : []
-  const rankCtx = useMemo(() => ({
-    targets: rankTargetsFromForm(form, legCountRange, dayCountTarget),
-    ohrsIdByHutIndex, freeByOffset: search.freeByOffset,
-  }), [form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
   const tripHuts = data && tripLegs
     ? tripLegs.hutIndices.flatMap((i) => {
         const cls = i === null ? undefined : data.hutClassByIndex.get(i)
@@ -324,7 +320,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             tripHuts={tripHuts} tripEnds={tripEnds}
             candidates={candidateMarkers} candidateStartCoords={candidateStartCoords} onPickCandidate={editor.pickCandidate}
             activeLabel={editor.activeLabel} onCancelEditing={() => setEditing(null)}
-            allTours={tours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
+            allTours={tours} routeCtx={routeCtx}
             hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} previewStartId={previewTour?.startId ?? null} onPickRoute={pick}
             tripLegs={mode === 'trip' ? tripLegs : null} onHoverLeg={setHighlightedLeg}
             savedTrips={state.trips} savedGraph={data?.graph ?? EMPTY_GRAPH}

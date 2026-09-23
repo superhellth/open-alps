@@ -3,7 +3,6 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { MapContainer } from 'react-leaflet'
 import DiscoverLayer from './DiscoverLayer.js'
-import { sortTours } from '../rankTours.js'
 import type { PlannerTour } from '../tours.js'
 
 afterEach(cleanup)
@@ -27,8 +26,7 @@ function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, z
     <MapContainer center={[47.3, 12]} zoom={zoom} style={{ height: 400, width: 400 }}>
       <DiscoverLayer
         groups={[]} startById={startById}
-        dimmed={false} allTours={[tour(1, [10, 11])]} sortKey="fit"
-        rankCtx={{ targets: { legCountTarget: 2, legCountRange: [2, 2], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null }}
+        dimmed={false} allTours={[tour(1, [10, 11])]}
         routeCtx={routeCtx}
         hoveredTourKey={null} onHoverTour={() => {}} onPickRoute={() => {}}
         {...props}
@@ -53,18 +51,15 @@ describe('DiscoverLayer route lines', () => {
     expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(0)
   })
 
-  it('caps route lines at 50, keeping the current sort order', () => {
+  it('draws every in-view tour, with no cap', () => {
     const many = Array.from({ length: 80 }, (_, i) => tour(1, [i]))
     const routeCtxMany = {
-      hutCoordsById: new Map(Array.from({ length: 80 }, (_, i) => [i, { lat: 47.3 + i * 0.0001, lng: 12 }] as const)),
+      hutCoordsById: new Map(many.map((t, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
       startById, officialById: new Map(),
     }
-    const sorted = sortTours(many, 'duration', 'asc', { targets: { legCountTarget: 1, legCountRange: [1, 1], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null })
-    expect(sorted.length).toBe(80)
-    const { container: capped } = renderLayer({ allTours: many, sortKey: 'duration', routeCtx: routeCtxMany }, 13)
-    const { container: uncapped } = renderLayer({ allTours: many.slice(0, 10), sortKey: 'duration', routeCtx: routeCtxMany }, 13)
-    const pathsPerTour = uncapped.querySelectorAll('path.leaflet-interactive').length / 10
-    // With 80 candidate tours in view, the rendered path count must reflect the 50-tour cap, not all 80.
-    expect(capped.querySelectorAll('path.leaflet-interactive').length).toBe(50 * pathsPerTour)
+    const { container: all } = renderLayer({ allTours: many, routeCtx: routeCtxMany }, 13)
+    const { container: few } = renderLayer({ allTours: many.slice(0, 10), routeCtx: routeCtxMany }, 13)
+    const pathsPerTour = few.querySelectorAll('path.leaflet-interactive').length / 10
+    expect(all.querySelectorAll('path.leaflet-interactive').length).toBe(80 * pathsPerTour)
   })
 })

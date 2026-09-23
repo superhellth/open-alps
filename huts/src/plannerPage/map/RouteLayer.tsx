@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useMemo } from 'react'
-import { CircleMarker, Polyline, useMap } from 'react-leaflet'
+import { Fragment, useEffect, useMemo, useRef } from 'react'
+import type L from 'leaflet'
+import { CircleMarker, FeatureGroup, Polyline, useMap } from 'react-leaflet'
 import { tokens } from '../../theme.js'
 import type { Route } from '../types.js'
 import { useLegGeometries } from './useLegGeometries.js'
@@ -8,6 +9,10 @@ interface Segment {
   positions: [number, number][]
   isFallback: boolean
 }
+
+/** Above every route line (overlayPane is 400), below the marker pane, so hut dots are never
+ *  covered by another route's line. */
+const HUT_DOT_PANE = 'route-hut-dots'
 
 function segmentsOf(positions: [number, number][], geometries: ([number, number][] | null)[]): Segment[] {
   return positions.slice(0, -1).map((from, i) => {
@@ -44,10 +49,18 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
   const segments = segmentsOf(positions, geometries)
   const baseWidth = muted ? 2 : 4
   const opacity = dimmedOut ? 0.35 : 1
+  const map = useMap()
+  if (!map.getPane(HUT_DOT_PANE)) map.createPane(HUT_DOT_PANE).style.zIndex = '450'
+  const linesRef = useRef<L.FeatureGroup>(null)
+  // A full-opacity route drawn beneath dimmed ones would be darkened by their translucent casings.
+  useEffect(() => {
+    if (!dimmedOut) linesRef.current?.bringToFront()
+  }, [dimmedOut, segments.length, geometries])
 
   return (
     <>
       {fit && <FitRoute positions={positions} />}
+      <FeatureGroup ref={linesRef}>
       {segments.map((seg, i) => {
         const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
         const dash = seg.isFallback ? '6 8' : undefined
@@ -61,9 +74,10 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
           </Fragment>
         )
       })}
+      </FeatureGroup>
       {positions.map((pos, i) => (
         <CircleMarker
-          key={i} center={pos} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
+          key={i} center={pos} pane={HUT_DOT_PANE} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
           pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: opacity, opacity, weight: 2 }}
         />
       ))}
