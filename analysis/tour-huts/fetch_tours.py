@@ -8,12 +8,13 @@ import common
 
 
 def parse_tours(payload: dict) -> list[dict]:
-    """Tours as {name, guids}; GUIDs keep their braces and are upper-cased."""
+    """Tours as {name, guids, circular}; GUIDs keep their braces and are upper-cased, in the catalogue's order."""
     tours = []
     for feat in payload.get("features", []):
         a = feat["attributes"]
         guids = [g.upper() for g in re.findall(r"\{[^}]+\}", a.get("Huettenliste") or "")]
-        tours.append({"name": a.get("Bezeichnung") or None, "guids": guids})
+        tours.append({"name": a.get("Bezeichnung") or None, "guids": guids,
+                      "circular": bool(a.get("Rundtour"))})
     return tours
 
 

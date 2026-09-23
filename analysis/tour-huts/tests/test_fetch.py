@@ -7,14 +7,14 @@ import fetch_tours
 
 def test_parse_tours_handles_empty_list_missing_name_and_case():
     payload = {"features": [
-        {"attributes": {"Bezeichnung": "A", "Huettenliste": "{abc-1},{DEF-2}"}},
-        {"attributes": {"Bezeichnung": "B", "Huettenliste": ""}},
+        {"attributes": {"Bezeichnung": "A", "Huettenliste": "{abc-1},{DEF-2}", "Rundtour": 1}},
+        {"attributes": {"Bezeichnung": "B", "Huettenliste": "", "Rundtour": 0}},
         {"attributes": {"Bezeichnung": None, "Huettenliste": None}},
     ]}
     tours = fetch_tours.parse_tours(payload)
-    assert tours[0] == {"name": "A", "guids": ["{ABC-1}", "{DEF-2}"]}
-    assert tours[1]["guids"] == []
-    assert tours[2] == {"name": None, "guids": []}
+    assert tours[0] == {"name": "A", "guids": ["{ABC-1}", "{DEF-2}"], "circular": True}
+    assert tours[1]["guids"] == [] and tours[1]["circular"] is False
+    assert tours[2] == {"name": None, "guids": [], "circular": False}
 
 
 def test_calendar_body_and_urls():
