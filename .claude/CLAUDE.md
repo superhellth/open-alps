@@ -109,6 +109,11 @@ level. Public file names in `huts/public/data/` are set by `dodo.py`'s `PUBLIC_F
 from `tours.json`. The dev-only GPX editor (`npm run dev` in `huts/`, then `/gpx-editor.html`;
 `docs/gpx-editor.md`) edits those GPX files.
 
+`analysis/tour-huts/` (tracked, own pixi env, not part of the doit DAG) holds the tour-hut booking study
+(`docs/superpowers/specs/2026-09-23-tour-hut-booking-study-design.md`); outputs go to gitignored
+`data/analysis/tour-huts/`. Its fetch scripts call the public OHRS API (~700 requests), so run them only
+with the user's go-ahead.
+
 **Never run any `pipeline/` task (individually via `doit <task>`, or the full `doit` DAG) without
 first asking the user and getting explicit confirmation.** Claude must never execute doit tasks
 itself, even after a freshness check or for tasks that look cheap or read-only: a stale dependency
