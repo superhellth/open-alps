@@ -18,7 +18,7 @@ const startById = new Map([
 ])
 const base = {
   mode: 'discover' as const, dimmed: false, startById, hutCoordsById: new Map(),
-  onSelectStarts: () => {}, route: null, fitRoute: false, highlightedLeg: null,
+  route: null, fitRoute: false, highlightedLeg: null,
   tripHuts: [], tripEnds: [], candidates: [], candidateStartCoords: new Map(), onPickCandidate: () => {},
   activeLabel: null, onCancelEditing: undefined,
   allTours: [], sortKey: 'fit' as const,
@@ -28,15 +28,23 @@ const base = {
 }
 
 describe('PlannerMap discover mode', () => {
-  it('shows one count marker per start point and reports the clicked start', async () => {
-    const onSelectStarts = vi.fn()
+  it('shows one count marker per start point and reports a click as navigation', async () => {
+    const onNavigate = vi.fn()
     const groups = [{ startId: 1, tours: [tour(1), tour(1), tour(1)] }, { startId: 2, tours: [tour(2)] }]
-    const { container } = render(<PlannerMap {...base} groups={groups} onSelectStarts={onSelectStarts} />)
+    const { container } = render(<PlannerMap {...base} groups={groups} onNavigate={onNavigate} />)
     await waitFor(() => expect(container.querySelectorAll('.start-count-marker').length).toBeGreaterThan(0))
     const labels = [...container.querySelectorAll('.start-count-marker span')].map((n) => n.textContent)
     expect(labels).toContain('3')
     fireEvent.click(container.querySelector('.start-count-marker')!)
-    expect(onSelectStarts).toHaveBeenCalled()
+    expect(onNavigate).toHaveBeenCalled()
+  })
+  it('reports the current bbox/zoom as the map settles', async () => {
+    const onViewChange = vi.fn()
+    render(<PlannerMap {...base} groups={[]} onViewChange={onViewChange} />)
+    await waitFor(() => expect(onViewChange).toHaveBeenCalled())
+    const view = onViewChange.mock.calls[0][0]
+    expect(view.bbox).toHaveLength(4)
+    expect(typeof view.zoom).toBe('number')
   })
   it('renders no markers without matches', () => {
     const { container } = render(<PlannerMap {...base} groups={[]} />)

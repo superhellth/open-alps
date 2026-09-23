@@ -22,13 +22,12 @@ const routeCtx = {
   startById, officialById: new Map(),
 }
 
-function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 12) {
+function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13) {
   return render(
     <MapContainer center={[47.3, 12]} zoom={zoom} style={{ height: 400, width: 400 }}>
       <DiscoverLayer
         groups={[]} startById={startById}
-        dimmed={false} onSelectStarts={() => {}}
-        allTours={[tour(1, [10, 11])]} sortKey="fit"
+        dimmed={false} allTours={[tour(1, [10, 11])]} sortKey="fit"
         rankCtx={{ targets: { legCountTarget: 2, legCountRange: [2, 2], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null }}
         routeCtx={routeCtx}
         hoveredTourKey={null} onHoverTour={() => {}} onPickRoute={() => {}}
@@ -39,14 +38,19 @@ function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, z
 }
 
 describe('DiscoverLayer route lines', () => {
-  it('draws no route lines below zoom 11', () => {
-    const { container } = renderLayer({}, 10)
+  it('draws no route lines below the reveal zoom', () => {
+    const { container } = renderLayer({}, 9)
     expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(0)
   })
 
-  it('draws a route line for a matching tour at zoom 11+', () => {
-    const { container } = renderLayer({}, 12)
+  it('draws a route line for a tour whose start is in view, past the reveal zoom', () => {
+    const { container } = renderLayer({}, 13)
     expect(container.querySelectorAll('path.leaflet-interactive').length).toBeGreaterThan(0)
+  })
+
+  it('draws no route lines for tours whose start is far outside the viewport', () => {
+    const { container } = renderLayer({ allTours: [tour(2, [10, 11])], startById: new Map([...startById, [2, { name: null, sourceType: 1, lat: 10, lng: 10 }]]) }, 13)
+    expect(container.querySelectorAll('path.leaflet-interactive')).toHaveLength(0)
   })
 
   it('caps route lines at 50, keeping the current sort order', () => {
@@ -57,8 +61,8 @@ describe('DiscoverLayer route lines', () => {
     }
     const sorted = sortTours(many, 'duration', 'asc', { targets: { legCountTarget: 1, legCountRange: [1, 1], legTimeRangeH: [1, 8] }, ohrsIdByHutIndex: new Map(), freeByOffset: null })
     expect(sorted.length).toBe(80)
-    const { container: capped } = renderLayer({ allTours: many, sortKey: 'duration', routeCtx: routeCtxMany }, 12)
-    const { container: uncapped } = renderLayer({ allTours: many.slice(0, 10), sortKey: 'duration', routeCtx: routeCtxMany }, 12)
+    const { container: capped } = renderLayer({ allTours: many, sortKey: 'duration', routeCtx: routeCtxMany }, 13)
+    const { container: uncapped } = renderLayer({ allTours: many.slice(0, 10), sortKey: 'duration', routeCtx: routeCtxMany }, 13)
     const pathsPerTour = uncapped.querySelectorAll('path.leaflet-interactive').length / 10
     // With 80 candidate tours in view, the rendered path count must reflect the 50-tour cap, not all 80.
     expect(capped.querySelectorAll('path.leaflet-interactive').length).toBe(50 * pathsPerTour)

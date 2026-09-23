@@ -5,6 +5,14 @@ explanation, evidence and pointers live in the dedicated file under `docs/backlo
 priority first within each section. An item graduates out of here when it gets its own spec or plan
 under `docs/superpowers/`.
 
+## High
+
+### Avoid zoom-in without rendering legs in ui (zoomed-in too much)
+
+### Frontend refactor
+
+### Integrate official tours into frontend
+
 ## Medium
 
 ### Surface data-quality signals to the frontend
@@ -15,6 +23,8 @@ feature — the real fix is in the pipeline/data-quality-monitoring work. Once t
 per-leg/per-route quality signals, revisit whether/how the frontend should surface them.
 
 ## Low
+
+### Try to reintroduce a signpost feel to resultslist cards
 
 ### GPX export and print view for trips
 

@@ -64,7 +64,7 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
       {positions.map((pos, i) => (
         <CircleMarker
           key={i} center={pos} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
-          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: 1, weight: 2 }}
+          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: opacity, opacity, weight: 2 }}
         />
       ))}
     </>

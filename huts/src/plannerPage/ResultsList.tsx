@@ -85,6 +85,11 @@ export default function ResultsList({
           )
         })}
       </Box>
+      {shown.length === 0 && (
+        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+          Keine Touren im aktuellen Kartenausschnitt. Karte verschieben oder herauszoomen.
+        </Typography>
+      )}
       <List disablePadding sx={{ px: 2, pb: 2 }}>
         {shown.map((tour, i) => {
           const chain = hutChain(tour, hutNameById)

@@ -43,3 +43,4 @@ new row when a new spec is written.
 | 2026-09-21 | [Planner UI iteration](specs/2026-09-21-planner-ui-iteration-design.md) | done |
 | 2026-09-22 | [Sidebar navigation: drop the app bar, fold Meine Touren into the planner](specs/2026-09-22-sidebar-navigation-design.md) | done |
 | 2026-09-23 | [Tour-hut booking study](specs/2026-09-23-tour-hut-booking-study-design.md) | done |
+| 2026-09-23 | [Tour bottleneck-hut study](specs/2026-09-23-tour-bottleneck-design.md) | in progress |

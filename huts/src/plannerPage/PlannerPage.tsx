@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
 import { usePlannerSearch } from '../search/usePlannerSearch.js'
-import { bestStartId, groupByStart } from '../tourSearch/groupByStart.js'
+import { groupByStart } from '../tourSearch/groupByStart.js'
 import { legsFromTrip } from '../tourSearch/tripLegs.js'
 import type { TripGraph, TripLegs } from '../tourSearch/tripLegs.js'
 import { decodeTripFromHash, shareUrl } from '../trip/shareLink.js'
@@ -30,6 +30,8 @@ import { tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import { officialToTour } from './tours.js'
 import type { PlannerTour } from './tours.js'
+import { inBbox } from './map/viewport.js'
+import type { View } from './map/viewport.js'
 import { tripFromTour } from './tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripEditor } from './TripEditor.js'
@@ -58,7 +60,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
-  const [selectedStartIds, setSelectedStartIds] = useState<number[] | null>(null)
+  const [mapView, setMapView] = useState<View | null>(null)
+  const [restoreView, setRestoreView] = useState<{ lat: number; lng: number; zoom: number } | null>(null)
+  const preTripView = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
   const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
@@ -67,7 +71,6 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [shareFallback, setShareFallback] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<Trip | null>(null)
   const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
-  const [focusStart, setFocusStart] = useState<{ lat: number; lng: number } | null>(null)
   const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
@@ -100,6 +103,13 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const rankedTours = useMemo(
     () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
     [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
+  const viewTours = useMemo(() => {
+    if (!mapView || !data) return rankedTours
+    return rankedTours.filter((t) => {
+      const s = data.startById.get(t.startId)
+      return s !== undefined && inBbox(s, mapView.bbox)
+    })
+  }, [rankedTours, mapView, data])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -119,6 +129,11 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
 
   function pick(tour: PlannerTour) {
     if (!data) return
+    if (mapView) {
+      preTripView.current = {
+        lat: (mapView.bbox[1] + mapView.bbox[3]) / 2, lng: (mapView.bbox[0] + mapView.bbox[2]) / 2, zoom: mapView.zoom,
+      }
+    }
     const trip = tripFromTour(tour, {
       hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, startLabel, form, draft,
     })
@@ -160,23 +175,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   function backFromTrip() {
     setEditing(null)
     dispatch({ type: 'closeActive' })
+    if (preTripView.current) setRestoreView({ ...preTripView.current })
     if (openedFrom === 'saved') window.location.hash = '#trips'
   }
-
-  function showBest() {
-    const id = bestStartId(groups)
-    if (id === null) return
-    prompt.dismiss()
-    setSelectedStartIds([id])
-    setFocusStart(data?.startById.get(id) ?? null)
-  }
-
-  useEffect(() => {
-    if (selectedStartIds !== null) return
-    const id = bestStartId(groups)
-    if (id === null) return
-    setSelectedStartIds([id])
-  }, [groups, selectedStartIds])
 
   async function share() {
     if (!activeTrip) return
@@ -265,7 +266,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             </Box>
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList
-                tours={rankedTours}
+                tours={viewTours}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sortKey} onSortChange={setSortKey}
                 sortDir={sortDir} onSortDirChange={setSortDir}
@@ -309,7 +310,9 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
           <PlannerMap
             mode={sidebarView === 'saved' ? 'saved' : mode} groups={groups} dimmed={search.status === 'searching'}
             startById={data?.startById ?? new Map()} hutCoordsById={data?.hutCoordsById ?? new Map()}
-            onSelectStarts={(ids) => { prompt.dismiss(); setSelectedStartIds(ids); setDiscoverTab('results') }}
+            onNavigate={() => { prompt.dismiss(); setDiscoverTab('results') }}
+            onViewChange={setMapView}
+            restoreView={restoreView}
             onMapClick={prompt.dismiss}
             route={mode === 'trip' ? tripRoute : previewRoute} fitRoute={mode === 'trip'} highlightedLeg={highlightedLeg}
             tripHuts={tripHuts} tripEnds={tripEnds}
@@ -317,7 +320,6 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             activeLabel={editor.activeLabel} onCancelEditing={() => setEditing(null)}
             allTours={tours} sortKey={sortKey} rankCtx={rankCtx} routeCtx={routeCtx}
             hoveredTourKey={hoveredTourKey} onHoverTour={setHoveredTourKey} onPickRoute={pick}
-            focusStart={focusStart}
             tripLegs={mode === 'trip' ? tripLegs : null} onHoverLeg={setHighlightedLeg}
             savedTrips={state.trips} savedGraph={data?.graph ?? EMPTY_GRAPH}
             savedRouteCtx={routeCtx ?? { hutCoordsById: new Map(), startById: new Map(), officialById: new Map() }}
