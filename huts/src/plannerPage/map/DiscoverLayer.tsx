@@ -77,6 +77,8 @@ export default function DiscoverLayer({
     })
   }, [allTours, routeCtx, routeReveal, view.bbox])
 
+  const hoveredRoute = useMemo(() => routedTours.find(({ tour }) => tourKey(tour) === hoveredTourKey)?.route ?? null, [routedTours, hoveredTourKey])
+
   const markers = clusterer.clustersFor(view.bbox, view.zoom)
   const highlightedMarker = useMemo(() => {
     if (previewStartId == null) return null
@@ -100,15 +102,17 @@ export default function DiscoverLayer({
       ))}
       {routedTours.map(({ tour, route }) => {
         const key = tourKey(tour)
-        const isHovered = hoveredTourKey === key
         return (
           <RouteLayer
-            key={key} route={route} muted dimmedOut={!isHovered}
+            key={key} route={route} muted dimmedOut
             onHover={(hovering) => onHoverTour(hovering ? key : null)}
             onClick={() => onPickRoute(tour)}
           />
         )
       })}
+      {/* The hover highlight is a display-only copy above the dimmed routes; the interactive
+          layers underneath never change, so their mouseout always fires. */}
+      {hoveredRoute && <RouteLayer route={hoveredRoute} muted interactive={false} />}
     </>
   )
 }

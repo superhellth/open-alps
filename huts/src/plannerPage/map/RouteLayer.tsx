@@ -53,12 +53,14 @@ function FitRoute({ positions }: { positions: [number, number][] }) {
  *  without geometry) are dashed straight lines between their huts. `muted` draws the thin
  *  Discover-mode candidate style instead of the bold selected-route style; `dimmedOut` fades it
  *  further while a different route is hovered. */
-export default function RouteLayer({ route, highlightedLeg = null, fit = false, muted = false, dimmedOut = false, onHover, onClick }: {
+export default function RouteLayer({ route, highlightedLeg = null, fit = false, muted = false, dimmedOut = false, interactive = true, onHover, onClick }: {
   route: Route
   highlightedLeg?: number | null
   fit?: boolean
   muted?: boolean
   dimmedOut?: boolean
+  /** false draws a display-only copy that never receives pointer events. */
+  interactive?: boolean
   onHover?: (hovering: boolean) => void
   onClick?: () => void
 }) {
@@ -79,11 +81,10 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
         const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
         const dash = seg.isFallback ? '6 8' : undefined
         return (
-          // Leaflet fixes a layer's pane at creation, so a pane change remounts the polylines.
-          <Fragment key={`${i}${casingPane}`}>
-            <Polyline positions={seg.positions} pane={casingPane} pathOptions={{ color: tokens.ink, weight: width + (muted ? 2 : 4), dashArray: dash }} />
+          <Fragment key={i}>
+            <Polyline positions={seg.positions} pane={casingPane} pathOptions={{ color: tokens.ink, weight: width + (muted ? 2 : 4), dashArray: dash, interactive: false }} />
             <Polyline
-              positions={seg.positions} pane={linePane} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash }}
+              positions={seg.positions} pane={linePane} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash, interactive }}
               eventHandlers={{ mouseover: () => onHover?.(true), mouseout: () => onHover?.(false), click: () => onClick?.() }}
             />
           </Fragment>
@@ -91,8 +92,8 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
       })}
       {positions.map((pos, i) => (
         <CircleMarker
-          key={`${i}${dotPane}`} center={pos} pane={dotPane} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
-          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: 1, weight: 2 }}
+          key={i} center={pos} pane={dotPane} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
+          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: 1, weight: 2, interactive: false }}
         />
       ))}
     </>
