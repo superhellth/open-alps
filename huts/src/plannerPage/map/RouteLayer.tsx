@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { Fragment, useEffect, useMemo } from 'react'
 import type L from 'leaflet'
-import { CircleMarker, FeatureGroup, Polyline, useMap } from 'react-leaflet'
+import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import { tokens } from '../../theme.js'
 import type { Route } from '../types.js'
 import { useLegGeometries } from './useLegGeometries.js'
@@ -10,9 +10,27 @@ interface Segment {
   isFallback: boolean
 }
 
-/** Above every route line (overlayPane is 400), below the marker pane, so hut dots are never
- *  covered by another route's line. */
-const HUT_DOT_PANE = 'route-hut-dots'
+/** Route panes, bottom to top (overlayPane is 400, markerPane 600): every dimmed casing, every
+ *  dimmed line, the dimmed hut dots, then the same three at full strength. Dimming is the pane's
+ *  own CSS opacity rather than per-path alpha, so overlapping dimmed routes stay one flat colour
+ *  instead of compounding, and no route's casing ever covers another route's line or dots. */
+const PANES = {
+  dimCasing: { name: 'route-dim-casing', z: 410, opacity: 0.35 },
+  dimLine: { name: 'route-dim-line', z: 420, opacity: 0.35 },
+  dimDot: { name: 'route-dim-dot', z: 430, opacity: 0.35 },
+  casing: { name: 'route-casing', z: 440, opacity: 1 },
+  line: { name: 'route-line', z: 450, opacity: 1 },
+  dot: { name: 'route-dot', z: 460, opacity: 1 },
+}
+
+function ensurePanes(map: L.Map) {
+  for (const { name, z, opacity } of Object.values(PANES)) {
+    if (map.getPane(name)) continue
+    const pane = map.createPane(name)
+    pane.style.zIndex = String(z)
+    pane.style.opacity = String(opacity)
+  }
+}
 
 function segmentsOf(positions: [number, number][], geometries: ([number, number][] | null)[]): Segment[] {
   return positions.slice(0, -1).map((from, i) => {
@@ -48,37 +66,33 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
   const geometries = useLegGeometries(route)
   const segments = segmentsOf(positions, geometries)
   const baseWidth = muted ? 2 : 4
-  const opacity = dimmedOut ? 0.35 : 1
   const map = useMap()
-  if (!map.getPane(HUT_DOT_PANE)) map.createPane(HUT_DOT_PANE).style.zIndex = '450'
-  const linesRef = useRef<L.FeatureGroup>(null)
-  // A full-opacity route drawn beneath dimmed ones would be darkened by their translucent casings.
-  useEffect(() => {
-    if (!dimmedOut) linesRef.current?.bringToFront()
-  }, [dimmedOut, segments.length, geometries])
+  ensurePanes(map)
+  const casingPane = (dimmedOut ? PANES.dimCasing : PANES.casing).name
+  const linePane = (dimmedOut ? PANES.dimLine : PANES.line).name
+  const dotPane = (dimmedOut ? PANES.dimDot : PANES.dot).name
 
   return (
     <>
       {fit && <FitRoute positions={positions} />}
-      <FeatureGroup ref={linesRef}>
       {segments.map((seg, i) => {
         const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
         const dash = seg.isFallback ? '6 8' : undefined
         return (
-          <Fragment key={i}>
-            <Polyline positions={seg.positions} pathOptions={{ color: tokens.ink, weight: width + (muted ? 2 : 4), dashArray: dash, opacity }} />
+          // Leaflet fixes a layer's pane at creation, so a pane change remounts the polylines.
+          <Fragment key={`${i}${casingPane}`}>
+            <Polyline positions={seg.positions} pane={casingPane} pathOptions={{ color: tokens.ink, weight: width + (muted ? 2 : 4), dashArray: dash }} />
             <Polyline
-              positions={seg.positions} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash, opacity }}
+              positions={seg.positions} pane={linePane} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash }}
               eventHandlers={{ mouseover: () => onHover?.(true), mouseout: () => onHover?.(false), click: () => onClick?.() }}
             />
           </Fragment>
         )
       })}
-      </FeatureGroup>
       {positions.map((pos, i) => (
         <CircleMarker
-          key={i} center={pos} pane={HUT_DOT_PANE} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
-          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: opacity, opacity, weight: 2 }}
+          key={`${i}${dotPane}`} center={pos} pane={dotPane} radius={i === 0 || i === positions.length - 1 ? 6 : 4}
+          pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: 1, weight: 2 }}
         />
       ))}
     </>
