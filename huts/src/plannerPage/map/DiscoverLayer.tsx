@@ -8,6 +8,7 @@ import type { PlannerTour } from '../tours.js'
 import type { StartPoint } from '../types.js'
 import RouteLayer from './RouteLayer.js'
 import { createStartClusterer, markerRadius } from './clusterStarts.js'
+import type { MapMarker } from './clusterStarts.js'
 import { currentView, routeTouchesBbox } from './viewport.js'
 import type { View } from './viewport.js'
 import './map.css'
@@ -44,7 +45,7 @@ export function tourKey(tour: PlannerTour): string {
  *  clicking one flies the map to the bounds of the tours it stands for and focuses the results
  *  list on them. Cluster bubbles (several start points) carry a ring; single start points do not. */
 export default function DiscoverLayer({
-  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onFocusStarts, onViewChange,
+  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onFocusStarts, onHoverStarts, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
@@ -59,6 +60,8 @@ export default function DiscoverLayer({
   onNavigate?: () => void
   /** Start points whose tours the results list should be limited to; null lifts the limit. */
   onFocusStarts?: (startIds: number[] | null) => void
+  /** Start points of the bubble under the pointer; null when none. */
+  onHoverStarts?: (startIds: Set<number> | null) => void
   onViewChange?: (view: View) => void
 }) {
   const map = useMap()
@@ -84,7 +87,11 @@ export default function DiscoverLayer({
     })
   }, [allTours, routeCtx, routeReveal, view.bbox])
 
-  const hoveredRoute = useMemo(() => routedTours.find(({ tour }) => tourKey(tour) === hoveredTourKey)?.route ?? null, [routedTours, hoveredTourKey])
+  const [hoveredStartIds, setHoveredStartIds] = useState<Set<number> | null>(null)
+  const hoverStarts = (ids: Set<number> | null) => { setHoveredStartIds(ids); onHoverStarts?.(ids) }
+  const highlightedRoutes = useMemo(() => routedTours.flatMap(({ tour, route }) =>
+    tourKey(tour) === hoveredTourKey || hoveredStartIds?.has(tour.startId) ? [{ key: tourKey(tour), route }] : []),
+  [routedTours, hoveredTourKey, hoveredStartIds])
 
   /** Bounds of every waypoint of every tour starting at one of the given start points. */
   const tourBounds = (startIds: number[]): L.LatLngBounds | null => {
@@ -101,6 +108,8 @@ export default function DiscoverLayer({
     return bounds.isValid() ? bounds : null
   }
 
+  const startIdsOf = (m: MapMarker) => (m.kind === 'cluster' ? clusterer.startIdsOf(m.clusterId) : [m.startId])
+
   const markers = clusterer.clustersFor(view.bbox, view.zoom)
   const highlightedMarker = useMemo(() => {
     if (previewStartId == null) return null
@@ -115,9 +124,11 @@ export default function DiscoverLayer({
           position={[m.lat, m.lng]}
           icon={countIcon(m.count, m.kind === 'cluster', dimmed, m === highlightedMarker)}
           eventHandlers={{
+            mouseover: () => hoverStarts(new Set(startIdsOf(m))),
+            mouseout: () => hoverStarts(null),
             click: () => {
               onNavigate?.()
-              const startIds = m.kind === 'cluster' ? clusterer.startIdsOf(m.clusterId) : [m.startId]
+              const startIds = startIdsOf(m)
               onFocusStarts?.(startIds)
               const bounds = tourBounds(startIds)
               if (bounds) map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 })
@@ -138,7 +149,7 @@ export default function DiscoverLayer({
       })}
       {/* The hover highlight is a display-only copy above the dimmed routes; the interactive
           layers underneath never change, so their mouseout always fires. */}
-      {hoveredRoute && <RouteLayer route={hoveredRoute} muted interactive={false} />}
+      {highlightedRoutes.map(({ key, route }) => <RouteLayer key={key} route={route} muted interactive={false} />)}
     </>
   )
 }

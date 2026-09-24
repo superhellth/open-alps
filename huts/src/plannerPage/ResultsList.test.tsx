@@ -14,7 +14,7 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
 const hutNameById = new Map([[0, 'Hut A'], [1, 'Hut B'], [2, 'Hut C'], [3, 'Hut D'], [4, 'Hut E']])
 const props = () => ({
   tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
-  noMatches: false, sortKey: 'fit' as const, sortDir: 'asc' as const,
+  totalCount: 2, onShowAll: vi.fn(), isHighlighted: () => false, noMatches: false, sortKey: 'fit' as const, sortDir: 'asc' as const,
   onSortChange: vi.fn(), onSortDirChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
   hutNameById,
 })
@@ -75,5 +75,14 @@ describe('ResultsList', () => {
     expect(screen.getAllByRole('button').filter((b) => b.textContent?.includes('Hut A'))).toHaveLength(25)
     fireEvent.click(screen.getByRole('button', { name: 'Go to page 2' }))
     expect(screen.getAllByRole('button').filter((b) => b.textContent?.includes('Hut A'))).toHaveLength(5)
+  })
+
+  it('offers a show-all button only when fewer tours than the total are listed', () => {
+    const p = props()
+    const { rerender } = render(<ResultsList {...p} />)
+    expect(screen.queryByText(/Touren anzeigen/)).toBeNull()
+    rerender(<ResultsList {...p} tours={[p.tours[0]]} />)
+    fireEvent.click(screen.getByText('← Alle 2 Touren anzeigen'))
+    expect(p.onShowAll).toHaveBeenCalled()
   })
 })

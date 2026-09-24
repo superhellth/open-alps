@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import L from 'leaflet'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
@@ -31,7 +32,7 @@ import type { RouteContext } from './routes.js'
 import { officialToTour } from './tours.js'
 import type { PlannerTour } from './tours.js'
 import { inBbox } from './map/viewport.js'
-import { ROUTE_REVEAL_ZOOM } from './map/DiscoverLayer.js'
+import { ROUTE_REVEAL_ZOOM, tourKey } from './map/DiscoverLayer.js'
 import type { View } from './map/viewport.js'
 import { tripFromTour } from './tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
@@ -64,6 +65,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
   const [mapView, setMapView] = useState<View | null>(null)
   const [restoreView, setRestoreView] = useState<{ lat: number; lng: number; zoom: number } | null>(null)
+  const [fitBounds, setFitBounds] = useState<[[number, number], [number, number]] | null>(null)
   const preTripView = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
@@ -73,6 +75,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [shareFallback, setShareFallback] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<Trip | null>(null)
   const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
+  const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
   const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
   const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
@@ -114,6 +117,16 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
       return s !== undefined && inBbox(s, mapView.bbox)
     })
   }, [rankedTours, mapView, data, focusStarts])
+
+  const showAllTours = useCallback(() => {
+    setFocusStarts(null)
+    const bounds = L.latLngBounds([])
+    for (const g of groups) {
+      const s = data?.startById.get(g.startId)
+      if (s) bounds.extend([s.lat, s.lng])
+    }
+    if (bounds.isValid()) setFitBounds([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]])
+  }, [groups, data])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -271,7 +284,8 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             </Box>
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList
-                tours={viewTours}
+                tours={viewTours} totalCount={visibleTours.length} onShowAll={showAllTours}
+                isHighlighted={(t) => tourKey(t) === hoveredTourKey || (hoveredStarts?.has(t.startId) ?? false)}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sortKey} onSortChange={setSortKey}
                 sortDir={sortDir} onSortDirChange={setSortDir}
@@ -316,9 +330,10 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             mode={sidebarView === 'saved' ? 'saved' : mode} groups={groups} dimmed={search.status === 'searching'}
             startById={data?.startById ?? new Map()} hutCoordsById={data?.hutCoordsById ?? new Map()}
             onNavigate={() => { prompt.dismiss(); setDiscoverTab('results') }}
+            onHoverStarts={setHoveredStarts}
             onFocusStarts={(ids) => setFocusStarts(ids && new Set(ids))}
             onViewChange={setMapView}
-            restoreView={restoreView}
+            restoreView={restoreView} fitBounds={fitBounds}
             onMapClick={() => { prompt.dismiss(); setFocusStarts(null) }}
             route={mode === 'trip' ? tripRoute : previewRoute} fitRoute={mode === 'trip'} highlightedLeg={highlightedLeg}
             tripHuts={tripHuts} tripEnds={tripEnds}

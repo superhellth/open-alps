@@ -32,6 +32,7 @@ export interface PlannerMapProps {
   /** Called when a Discover marker is clicked — navigation only, no filtering. */
   onNavigate?: () => void
   onFocusStarts?: (startIds: number[] | null) => void
+  onHoverStarts?: (startIds: Set<number> | null) => void
   /** Called whenever the map's bbox/zoom changes in Discover mode, so the list can mirror it. */
   onViewChange?: (view: View) => void
   onMapClick?: () => void
@@ -55,6 +56,8 @@ export interface PlannerMapProps {
   /** A point to fly to once (e.g. after "N Touren anzeigen" picks an off-screen start). */
   /** Set once to jump the map back to Discover's viewport from before a tour was picked. */
   restoreView?: { lat: number; lng: number; zoom: number } | null
+  /** Set to a fresh value to fly the map to these bounds ([south, west], [north, east]). */
+  fitBounds?: [[number, number], [number, number]] | null
   /** null when no trip is open — the height profile then renders nothing. */
   tripLegs: TripLegs | null
   onHoverLeg: (index: number | null) => void
@@ -79,12 +82,19 @@ function RestoreView({ view }: { view: { lat: number; lng: number; zoom: number 
   return null
 }
 
+/** Flies the map to the given bounds each time a new bounds value arrives. */
+function FitBoundsCommand({ bounds }: { bounds: [[number, number], [number, number]] | null | undefined }) {
+  const map = useMap()
+  useEffect(() => { if (bounds) map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 }) }, [map, bounds])
+  return null
+}
+
 // One MapContainer stays mounted across discover <-> trip so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
-    mode, groups, dimmed, startById, hutCoordsById, onNavigate, onFocusStarts, onViewChange, route, fitRoute, highlightedLeg,
+    mode, groups, dimmed, startById, hutCoordsById, onNavigate, onFocusStarts, onHoverStarts, onViewChange, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
-    activeLabel, onCancelEditing, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
+    activeLabel, onCancelEditing, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView, fitBounds,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
   const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
@@ -106,7 +116,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           <MapClickWatcher onClick={onMapClick} />
           {mode === 'discover' && (
             <DiscoverLayer
-              groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onFocusStarts={onFocusStarts} onViewChange={onViewChange}
+              groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onFocusStarts={onFocusStarts} onHoverStarts={onHoverStarts} onViewChange={onViewChange}
               allTours={allTours} routeCtx={routeCtx}
               hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} previewStartId={previewStartId} onPickRoute={onPickRoute}
             />
@@ -114,6 +124,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           {/* Rendered after DiscoverLayer so its own moveend/zoomend listeners are already
               subscribed once this fires the map back to the pre-pick view. */}
           <RestoreView view={restoreView} />
+          <FitBoundsCommand bounds={fitBounds} />
           {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
           {mode === 'trip' && (
             <TripLayer

@@ -28,10 +28,16 @@ function statStyle(active: boolean): CSSProperties {
 }
 
 export default function ResultsList({
-  tours, noMatches, sortKey, onSortChange, sortDir, onSortDirChange,
+  tours, totalCount, onShowAll, isHighlighted, noMatches, sortKey, onSortChange, sortDir, onSortDirChange,
   hutNameById, onPreview, onPick, onOpenFilters,
 }: {
   tours: PlannerTour[]
+  /** All tours matching the filters, regardless of map zoom or focus. */
+  totalCount: number
+  /** Lifts the map-based limit and zooms the map out to every tour. */
+  onShowAll: () => void
+  /** True for tours highlighted on the map (hovered route or hovered start bubble). */
+  isHighlighted: (tour: PlannerTour) => boolean
   noMatches: boolean
   sortKey: SortKey
   onSortChange: (key: SortKey) => void
@@ -85,6 +91,13 @@ export default function ResultsList({
           )
         })}
       </Box>
+      {tours.length < totalCount && (
+        <Box sx={{ px: 1, pt: 1 }}>
+          <Button size="small" color="inherit" onClick={onShowAll} sx={{ color: 'text.secondary' }}>
+            ← Alle {totalCount} Touren anzeigen
+          </Button>
+        </Box>
+      )}
       {shown.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
           Keine Touren im aktuellen Kartenausschnitt. Karte verschieben oder herauszoomen.
@@ -99,7 +112,10 @@ export default function ResultsList({
               onMouseEnter={() => onPreview(tour)} onMouseLeave={() => onPreview(null)}
               onFocus={() => onPreview(tour)} onBlur={() => onPreview(null)}
               onClick={() => onPick(tour)}
-              sx={{ display: 'block', borderBottom: '1px solid', borderColor: 'divider' }}
+              sx={{
+                display: 'block', borderBottom: '1px solid', borderColor: 'divider',
+                ...(isHighlighted(tour) && { bgcolor: 'action.hover', boxShadow: `inset 4px 0 0 ${tokens.signpost}` }),
+              }}
             >
               <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, fontFamily: SIGNPOST_FONT, fontWeight: 600 }}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
