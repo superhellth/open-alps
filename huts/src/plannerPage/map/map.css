@@ -23,9 +23,15 @@
   cursor: pointer;
   transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
 }
+.start-count-marker.cluster span {
+  box-shadow: 0 0 0 3px rgba(245, 183, 0, 0.5);
+}
 .start-count-marker:hover span {
   transform: scale(1.12);
   box-shadow: 0 2px 6px rgba(35, 39, 43, 0.45);
+}
+.start-count-marker.cluster:hover span {
+  box-shadow: 0 0 0 3px rgba(245, 183, 0, 0.5), 0 2px 6px rgba(35, 39, 43, 0.45);
 }
 .start-count-marker.highlighted {
   z-index: 1000 !important;

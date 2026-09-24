@@ -31,6 +31,7 @@ export interface PlannerMapProps {
   hutCoordsById: Map<number, { lat: number; lng: number }>
   /** Called when a Discover marker is clicked — navigation only, no filtering. */
   onNavigate?: () => void
+  onFocusStarts?: (startIds: number[] | null) => void
   /** Called whenever the map's bbox/zoom changes in Discover mode, so the list can mirror it. */
   onViewChange?: (view: View) => void
   onMapClick?: () => void
@@ -81,7 +82,7 @@ function RestoreView({ view }: { view: { lat: number; lng: number; zoom: number 
 // One MapContainer stays mounted across discover <-> trip so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
   const {
-    mode, groups, dimmed, startById, hutCoordsById, onNavigate, onViewChange, route, fitRoute, highlightedLeg,
+    mode, groups, dimmed, startById, hutCoordsById, onNavigate, onFocusStarts, onViewChange, route, fitRoute, highlightedLeg,
     tripHuts, tripEnds, candidates, candidateStartCoords, onPickCandidate, onMapClick,
     activeLabel, onCancelEditing, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
@@ -105,7 +106,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
           <MapClickWatcher onClick={onMapClick} />
           {mode === 'discover' && (
             <DiscoverLayer
-              groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onViewChange={onViewChange}
+              groups={groups} startById={startById} dimmed={dimmed} onNavigate={onNavigate} onFocusStarts={onFocusStarts} onViewChange={onViewChange}
               allTours={allTours} routeCtx={routeCtx}
               hoveredTourKey={hoveredTourKey} onHoverTour={onHoverTour} previewStartId={previewStartId} onPickRoute={onPickRoute}
             />

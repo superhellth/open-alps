@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
 import { useSearchClient } from '../search/SearchClientProvider.js'
@@ -61,6 +61,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
+  const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
   const [mapView, setMapView] = useState<View | null>(null)
   const [restoreView, setRestoreView] = useState<{ lat: number; lng: number; zoom: number } | null>(null)
   const preTripView = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
@@ -80,6 +81,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
 
   const search = usePlannerSearch({ client, data, form, draft })
+  useEffect(() => { setFocusStarts(null) }, [form, draft])
   const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
   const dayCountTarget = useMemo(() => dayCountFromDraft(draft), [draft])
 
@@ -105,12 +107,13 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
     () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
     [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
   const viewTours = useMemo(() => {
+    if (focusStarts) return rankedTours.filter((t) => focusStarts.has(t.startId))
     if (!mapView || !data) return rankedTours
     return rankedTours.filter((t) => {
       const s = data.startById.get(t.startId)
       return s !== undefined && inBbox(s, mapView.bbox)
     })
-  }, [rankedTours, mapView, data])
+  }, [rankedTours, mapView, data, focusStarts])
 
   const tripLegs = useMemo(() => (activeTrip && data ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && data && tripLegs ? 'trip' : 'discover'
@@ -313,9 +316,10 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
             mode={sidebarView === 'saved' ? 'saved' : mode} groups={groups} dimmed={search.status === 'searching'}
             startById={data?.startById ?? new Map()} hutCoordsById={data?.hutCoordsById ?? new Map()}
             onNavigate={() => { prompt.dismiss(); setDiscoverTab('results') }}
+            onFocusStarts={(ids) => setFocusStarts(ids && new Set(ids))}
             onViewChange={setMapView}
             restoreView={restoreView}
-            onMapClick={prompt.dismiss}
+            onMapClick={() => { prompt.dismiss(); setFocusStarts(null) }}
             route={mode === 'trip' ? tripRoute : previewRoute} fitRoute={mode === 'trip'} highlightedLeg={highlightedLeg}
             tripHuts={tripHuts} tripEnds={tripEnds}
             candidates={candidateMarkers} candidateStartCoords={candidateStartCoords} onPickCandidate={editor.pickCandidate}
