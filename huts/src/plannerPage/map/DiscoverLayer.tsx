@@ -42,7 +42,7 @@ export function tourKey(tour: PlannerTour): string {
  *  its members' match counts. Panning and zooming only re-cluster, they never re-search. Past
  *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose waypoints' bounding box
  *  overlaps the current viewport, so a tour stays drawn while any part of it is on screen. Markers no longer "select":
- *  clicking one flies the map to the bounds of the tours it stands for and focuses the results
+ *  clicking one that stands for a single tour picks it; otherwise it flies the map to the bounds of the tours it stands for and focuses the results
  *  list on them. Cluster bubbles (several start points) carry a ring; single start points do not. */
 export default function DiscoverLayer({
   groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onFocusStarts, onHoverStarts, onViewChange,
@@ -127,6 +127,8 @@ export default function DiscoverLayer({
             mouseover: () => hoverStarts(new Set(startIdsOf(m))),
             mouseout: () => hoverStarts(null),
             click: () => {
+              const only = m.kind === 'start' && m.count === 1 ? groups.find((g) => g.startId === m.startId)?.tours[0] : undefined
+              if (only) { onPickRoute(only); return }
               onNavigate?.()
               const startIds = startIdsOf(m)
               onFocusStarts?.(startIds)
