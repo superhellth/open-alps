@@ -83,11 +83,10 @@ function renderPlannerWithSavedTrip() {
   )
 }
 
+/** Clicking a start marker that stands for a single tour picks that tour. */
 async function openFirstResult(container: HTMLElement) {
   await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull())
   fireEvent.click(container.querySelector('.start-count-marker')!)
-  const row = await screen.findByRole('button', { name: /Hütte A/ })
-  fireEvent.click(row)
 }
 
 describe('PlannerPage', () => {

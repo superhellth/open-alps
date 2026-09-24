@@ -25,5 +25,6 @@ describe('startSymbolSvg', () => {
     const [station, parking, village] = [1, 2, 3].map((t) => startSymbolSvg(t))
     expect(new Set([station, parking, village]).size).toBe(3)
     expect(parking).toContain('>P<')
+    expect(station).toContain('<path')
   })
 })

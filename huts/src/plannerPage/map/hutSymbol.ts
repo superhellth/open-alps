@@ -1,9 +1,15 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import DirectionsTransitIcon from '@mui/icons-material/DirectionsTransit'
 import { OPERATOR_SHAPE } from '../../hutClass.js'
 import type { HutOperator } from '../../hutClass.js'
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER } from '../../tourSearch/types.js'
 import { tokens } from '../../theme.js'
 
 const { ink, paper, signpost } = tokens
+
+/** Inner paths of the MUI transit pictogram (24x24 viewBox), scaled into the 16px start frame. */
+const TRANSIT_PATHS = renderToStaticMarkup(createElement(DirectionsTransitIcon)).replace(/^<svg[^>]*>|<\/svg>$/g, '')
 
 /** Hut marker as inline SVG for a Leaflet divIcon: house = AV, circle = other; ink fill = serviced,
  *  ink outline = self-catering; selected = signpost-yellow fill with ink outline (shape kept). */
@@ -17,7 +23,7 @@ export function hutSymbolSvg({ operator, serviced, selected = false, size = 18 }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 18 18">${shape}</svg>`
 }
 
-/** Small start/exit symbols shown on a trip: train / P / village. */
+/** Small start/exit symbols shown on a trip: transit stop / P / village. */
 export function startSymbolSvg(sourceType: number, size = 16): string {
   const frame = `<rect x="0.75" y="0.75" width="14.5" height="14.5" rx="2" fill="${paper}" stroke="${ink}" stroke-width="1.5"/>`
   let glyph: string
@@ -26,7 +32,7 @@ export function startSymbolSvg(sourceType: number, size = 16): string {
   } else if (sourceType === SOURCE_TYPE_PARTNER) {
     glyph = `<polygon points="8,3.5 12.5,7.5 11.5,7.5 11.5,12.5 4.5,12.5 4.5,7.5 3.5,7.5" fill="${ink}"/>`
   } else {
-    glyph = `<rect x="4" y="3.5" width="8" height="7" rx="1.5" fill="${ink}"/><circle cx="6" cy="12.5" r="1" fill="${ink}"/><circle cx="10" cy="12.5" r="1" fill="${ink}"/>`
+    glyph = `<g transform="translate(2 2) scale(0.5)" fill="${ink}">${TRANSIT_PATHS}</g>`
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 16 16">${frame}${glyph}</svg>`
 }

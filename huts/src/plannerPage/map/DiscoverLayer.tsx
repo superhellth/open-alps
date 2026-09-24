@@ -128,8 +128,8 @@ export default function DiscoverLayer({
             mouseout: () => hoverStarts(null),
             click: () => {
               const only = m.kind === 'start' && m.count === 1 ? groups.find((g) => g.startId === m.startId)?.tours[0] : undefined
-              if (only) { onPickRoute(only); return }
               onNavigate?.()
+              if (only) { onPickRoute(only); return }
               const startIds = startIdsOf(m)
               onFocusStarts?.(startIds)
               const bounds = tourBounds(startIds)
