@@ -15,7 +15,7 @@ export const styles = {
     : { bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }),
   row: (highlighted: boolean): SxProps<Theme> => ({
     display: 'block', borderBottom: '1px solid', borderColor: 'divider',
-    ...(highlighted && { bgcolor: 'action.hover', boxShadow: `inset 4px 0 0 ${tokens.signpost}` }),
+    ...(highlighted && { bgcolor: `color-mix(in srgb, ${tokens.signpost} 25%, transparent)`, boxShadow: `inset 4px 0 0 ${tokens.signpost}` }),
   }),
   chainRow: { display: 'flex', alignItems: 'baseline', gap: 1, fontFamily: SIGNPOST_FONT, fontWeight: 600 },
   statRow: { display: 'flex', flexWrap: 'nowrap', gap: 2, mt: 0.5, color: 'text.secondary' },

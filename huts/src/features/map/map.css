@@ -23,19 +23,11 @@
   cursor: pointer;
   transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
 }
-.start-count-marker.cluster span {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-signpost) 50%, transparent);
-}
-.start-count-marker:hover span {
-  transform: scale(1.12);
-  box-shadow: 0 2px 6px color-mix(in srgb, var(--color-ink) 45%, transparent);
-}
-.start-count-marker.cluster:hover span {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-signpost) 50%, transparent), 0 2px 6px color-mix(in srgb, var(--color-ink) 45%, transparent);
-}
+.start-count-marker:not(.dimmed):hover,
 .start-count-marker.highlighted {
   z-index: 1000 !important;
 }
+.start-count-marker:not(.dimmed):hover span,
 .start-count-marker.highlighted span {
   background: #fff;
   transform: scale(1.2);
