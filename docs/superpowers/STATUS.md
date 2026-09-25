@@ -45,4 +45,4 @@ new row when a new spec is written.
 | 2026-09-23 | [Tour-hut booking study](specs/2026-09-23-tour-hut-booking-study-design.md) | done |
 | 2026-09-23 | [Tour bottleneck-hut study](specs/2026-09-23-tour-bottleneck-design.md) | done |
 | 2026-09-25 | [Frontend refactor: layered structure, feature folders, one styling system](specs/2026-09-25-frontend-refactor-design.md) | done |
-| 2026-09-25 | [Discover map: signpost markers, real symbols, emphasis tiers](specs/2026-09-25-discover-map-signposts-design.md) | in progress |
+| 2026-09-25 | [Discover map: signpost markers, real symbols, emphasis tiers](specs/2026-09-25-discover-map-signposts-design.md) | done |

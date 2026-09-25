@@ -70,6 +70,9 @@ confirmation), `features/map/useMapView` (live viewport, pre-trip view to restor
 `features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
+Discover draws signpost markers (`SignpostMarker`: single board, a stack that spreads on hover, or a cluster), waypoint symbols from
+`WaypointLayer` and three route emphasis tiers (`routePanes.ts`). Discover focus is a set of tour keys (`useDiscover`'s
+`focusTours`) and hover is a set of tour keys (`hoveredTourKeys`); `tourKey` lives in `tourSearch/tourKey.ts`.
 
 Imports point downward: lib/ui/format/availability/tourSearch < trip < data/search < features/adminPage/gpxEditor < app;
 enforced by `huts/src/architecture.test.ts`.
