@@ -11,6 +11,7 @@ import type { TripLegs } from '@/trip/tripLegs.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 import type { SourceType } from '@/tourSearch/types.js'
 import type { Trip } from '@/trip/trip.js'
+import { styles } from './TripEditor.styles.js'
 
 export type EditingState =
   | { kind: 'swap'; index: number }
@@ -116,12 +117,12 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
           </MenuItem>
         </Menu>
         {editing?.kind === 'swap' && editing.index === night && (
-          <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Box sx={styles.swapCandidates}>
             {candidates.length === 0 && <Typography variant="body2">Keine passende Hütte im Wegenetz.</Typography>}
             {candidates.map((c) => (
               <Button
                 key={c.hutIndex} size="small" variant="outlined" color="secondary"
-                sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+                sx={styles.candidateButton}
                 onClick={() => pickCandidate({ hutIndex: c.hutIndex })}
               >
                 <span>{name(c.hutIndex!)}</span>
@@ -147,12 +148,12 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
           {which === 'start' ? 'Anderen Start wählen' : 'Anderes Ziel wählen'}
         </Button>
         {editing?.kind === which && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, width: '100%' }}>
+          <Box sx={styles.endpointCandidates}>
             {candidates.length === 0 && <Typography variant="body2">Keine Alternative im Wegenetz.</Typography>}
             {candidates.map((c) => (
               <Button
                 key={c.startId} size="small" variant="outlined" color="secondary"
-                sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+                sx={styles.candidateButton}
                 onClick={() => pickCandidate({ startId: c.startId })}
               >
                 <span>{startLabel(c.startId!)}</span>
@@ -180,7 +181,7 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
             {candidates.map((c) => (
               <Button
                 key={c.hutIndex} size="small" variant="outlined" color="secondary"
-                sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+                sx={styles.candidateButton}
                 onClick={() => pickCandidate({ hutIndex: c.hutIndex })}
               >
                 <span>{name(c.hutIndex!)}</span>
