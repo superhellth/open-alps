@@ -8,9 +8,9 @@ import type { HutOperator } from '@/data/hutClass.js'
 
 const OPERATORS = Object.keys(OPERATOR_LABEL) as HutOperator[]
 import type { TourMode } from '../tourSearch/types.js'
-import { DEFAULT_FORM, isFilterSelectionValid } from './formState.js'
-import type { FormState } from './formState.js'
-import type { TripDraft } from './plannerState.js'
+import { DEFAULT_FORM, isFilterSelectionValid } from '@/features/discover/formState.js'
+import type { FormState } from '@/features/discover/formState.js'
+import type { TripDraft } from '@/features/discover/plannerState.js'
 import RangeCalendar from './RangeCalendar.js'
 
 interface FilterBarProps {

@@ -1,7 +1,7 @@
-import type { Query, TourMode } from '../tourSearch/types.js'
+import type { Query, TourMode } from '@/tourSearch/types.js'
 import type { HutClass, HutClassKey } from '@/data/hutClass.js'
 import { hutClassKey } from '@/data/hutClass.js'
-import type { RankTargets } from '../tourSearch/rankFit.js'
+import type { RankTargets } from '@/tourSearch/rankFit.js'
 
 export interface FormState {
   mode: TourMode

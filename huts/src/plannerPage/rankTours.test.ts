@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { filterOfficial, nightStateOf, sortTours } from './rankTours.js'
-import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
+import { DEFAULT_FORM, rankTargetsFromForm } from '@/features/discover/formState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { FreeByOffset } from '../availability/types.js'
 

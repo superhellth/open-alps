@@ -2,13 +2,13 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor, cleanup } from '@testing-library/react'
 import { usePlannerSearch } from './usePlannerSearch.js'
-import { DEFAULT_FORM } from '../plannerPage/formState.js'
-import { DEFAULT_DRAFT, legCountRangeFromDraft } from '../plannerPage/plannerState.js'
-import { SupersededError } from './searchClient.js'
-import type { SearchClient } from './searchClient.js'
-import type { AppData } from '../data/buildAppData.js'
-import type { TourResult } from '../tourSearch/types.js'
-import * as availability from '../availability/fetchAvailability.js'
+import { DEFAULT_FORM } from './formState.js'
+import { DEFAULT_DRAFT, legCountRangeFromDraft } from './plannerState.js'
+import { SupersededError } from '@/search/searchClient.js'
+import type { SearchClient } from '@/search/searchClient.js'
+import type { AppData } from '@/data/buildAppData.js'
+import type { TourResult } from '@/tourSearch/types.js'
+import * as availability from '@/availability/fetchAvailability.js'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

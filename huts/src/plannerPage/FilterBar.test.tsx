@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import FilterBar from './FilterBar.js'
-import { DEFAULT_FORM } from './formState.js'
-import { DEFAULT_DRAFT } from './plannerState.js'
+import { DEFAULT_FORM } from '@/features/discover/formState.js'
+import { DEFAULT_DRAFT } from '@/features/discover/plannerState.js'
 
 afterEach(cleanup)
 
