@@ -66,8 +66,12 @@
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .signpost-marker .km { opacity: 0.75; }
 
-/* Single tour: the board's left edge sits on the start point. */
-.signpost-marker.single .sign { left: -8px; top: calc(var(--board-h) / -2); }
+/* Single tour: the arrow tip sits on the start point. */
+.signpost-marker.single .sign { left: 0; top: calc(var(--board-h) / -2); transform: translateX(-100%); }
+/* A tour heading west: the board lies east of the start and its arrow points west. */
+.signpost-marker.single .sign.heads-west { transform: none; padding: 0 8px 0 16px; }
+.signpost-marker.single .sign.heads-west,
+.signpost-marker.single .sign.heads-west::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
 /* Stack: the count sign is centred on the point. */
 .signpost-marker.stack .stack-sign {
   left: 0;

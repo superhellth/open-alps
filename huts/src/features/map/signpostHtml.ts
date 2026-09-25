@@ -1,4 +1,3 @@
-import { startSymbolSvg } from './hutSymbol.js'
 import type { TourBoardLabel } from './tourBoard.js'
 
 /** A stack spreads into at most this many tour boards, plus one overflow board. */
@@ -14,12 +13,16 @@ export function escapeHtml(text: string): string {
 }
 
 function boardBody({ label }: BoardTour): string {
-  return `<span class="sym">${startSymbolSvg(label.sourceType, 14)}</span><span class="txt">${escapeHtml(label.text)}</span><span class="km">${escapeHtml(label.distance)}</span>`
+  return `<span class="txt">${escapeHtml(label.text)}</span><span class="km">${escapeHtml(label.distance)}</span>`
 }
 
-/** One start point, one tour: the tour board itself is the marker. */
-export function singleHtml(tour: BoardTour): string {
-  return `<div class="sign" tabindex="0" role="button" data-tour-key="${escapeHtml(tour.key)}" title="${escapeHtml(tour.label.title)}">${boardBody(tour)}</div>`
+/** Side of the start point a tour heads to. */
+export type Heading = 'east' | 'west'
+
+/** One start point, one tour: the tour board itself is the marker. Its arrow tip sits on the start point and
+ *  points toward `heading` (default east: the board lies west of the start, out of the tour's way). */
+export function singleHtml(tour: BoardTour, heading: Heading = 'east'): string {
+  return `<div class="sign${heading === 'west' ? ' heads-west' : ''}" tabindex="0" role="button" data-tour-key="${escapeHtml(tour.key)}" title="${escapeHtml(tour.label.title)}">${boardBody(tour)}</div>`
 }
 
 /** One start point, several tours: a count sign plus every board and a backdrop, hidden until the marker

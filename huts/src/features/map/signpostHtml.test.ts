@@ -4,7 +4,7 @@ import { SPREAD_CAP, escapeHtml, singleHtml, stackHtml } from './signpostHtml.js
 import type { BoardTour } from './signpostHtml.js'
 
 const bt = (i: number, text = `Ziel ${i}`): BoardTour => ({
-  key: `k${i}`, label: { text, distance: `${i}.0 km`, title: `Ziel ${i} (Parkplatz), ${i}.0 km`, sourceType: 2 },
+  key: `k${i}`, label: { text, distance: `${i}.0 km`, title: `Ziel ${i} (Parkplatz), ${i}.0 km` },
 })
 const doc = (html: string) => { const d = document.createElement('div'); d.innerHTML = html; return d }
 
@@ -16,7 +16,7 @@ describe('singleHtml', () => {
     expect(sign.getAttribute('title')).toBe('Ziel 1 (Parkplatz), 1.0 km')
     expect(sign.textContent).toContain('Ziel 1')
     expect(sign.textContent).toContain('1.0 km')
-    expect(sign.querySelector('svg')).not.toBeNull()
+    expect(sign.querySelector('svg')).toBeNull()
   })
   it('escapes the end point name', () => {
     expect(singleHtml(bt(1, '<b>&"'))).not.toContain('<b>')
@@ -47,5 +47,12 @@ describe('stackHtml', () => {
   it('adds no overflow board at exactly the cap', () => {
     const d = doc(stackHtml(Array.from({ length: SPREAD_CAP }, (_, i) => bt(i))))
     expect(d.querySelector('[data-overflow]')).toBeNull()
+  })
+})
+
+describe('singleHtml heading', () => {
+  it('flips the board only for a tour heading west', () => {
+    expect(doc(singleHtml(bt(1))).querySelector('.heads-west')).toBeNull()
+    expect(doc(singleHtml(bt(1), 'west')).querySelector('.sign.heads-west')).not.toBeNull()
   })
 })

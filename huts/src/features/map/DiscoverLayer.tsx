@@ -17,6 +17,7 @@ import type { Activation } from './SignpostMarker.js'
 import { createStartClusterer, markerKind, markerRadius } from './clusterStarts.js'
 import type { MapMarker } from './clusterStarts.js'
 import { escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
+import type { Heading } from './signpostHtml.js'
 import { tourBoardLabel } from './tourBoard.js'
 import { indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
 import './map.css'
@@ -39,6 +40,12 @@ function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.Div
     iconCache.set(key, icon)
   }
   return icon
+}
+
+/** The side of its start the tour's first leg leaves to, judged by the first waypoint after the start. */
+function headingOf(tour: PlannerTour, ctx: RouteContext | null): Heading {
+  const w = ctx ? tourToRoute(tour, ctx)?.waypoints : undefined
+  return w && w.length > 1 && w[1].lng < w[0].lng ? 'west' : 'east'
 }
 
 const toursText = (n: number) => `In ${n} Touren`
@@ -155,14 +162,18 @@ export default function DiscoverLayer({
     if (m.kind === 'cluster' || !routeReveal) return []
     const boards = (groupOfStart.get(m.startId)?.tours ?? [])
       .map((t) => ({ key: tourKey(t), label: tourBoardLabel(t, startById) }))
-    return [[markerKey(m), markerKind(m) === 'single' && boards[0] ? singleHtml(boards[0]) : stackHtml(boards)] as const]
-  })), [markers, groupOfStart, startById, routeReveal])
+    const tour = groupOfStart.get(m.startId)?.tours[0]
+    const single = markerKind(m) === 'single' && boards[0] && tour
+    return [[markerKey(m), single ? singleHtml(boards[0], headingOf(tour, routeCtx)) : stackHtml(boards)] as const]
+  })), [markers, groupOfStart, startById, routeReveal, routeCtx])
 
   const highlightedStarts = useMemo(() => {
     const ids = new Set<number>()
     for (const key of hoveredTourKeys) { const t = tourByKey.get(key); if (t) ids.add(t.startId) }
     return ids
   }, [hoveredTourKeys, tourByKey])
+
+  const hoverActive = hoveredTourKeys.size > 0 || (hoveredStartIds?.size ?? 0) > 0
 
   const activate = (m: MapMarker, a: Activation) => {
     onNavigate?.()
@@ -190,8 +201,9 @@ export default function DiscoverLayer({
       {markers.map((m) => {
         const ids = startIdsOf(m)
         const outsideFocus = focusTours != null && !keysOfStarts(ids).some((k) => focusTours.has(k))
-        const dimmedMarker = dimmed || outsideFocus
         const highlighted = ids.some((id) => highlightedStarts.has(id))
+        const hovered = highlighted || ids.some((id) => hoveredStartIds?.has(id))
+        const dimmedMarker = dimmed || outsideFocus || (hoverActive && !hovered)
         if (m.kind === 'cluster' || !routeReveal) {
           return (
             <Marker

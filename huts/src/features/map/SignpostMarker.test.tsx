@@ -7,7 +7,7 @@ import SignpostMarker, { CLOSE_DELAY_MS, OPEN_DELAY_MS } from './SignpostMarker.
 import { stackHtml, singleHtml } from './signpostHtml.js'
 import type { BoardTour } from './signpostHtml.js'
 
-const bt = (i: number): BoardTour => ({ key: `k${i}`, label: { text: `Z${i}`, distance: '1.0 km', title: `t${i}`, sourceType: 1 } })
+const bt = (i: number): BoardTour => ({ key: `k${i}`, label: { text: `Z${i}`, distance: '1.0 km', title: `t${i}` } })
 let map: L.Map
 function CaptureMap() { map = useMap(); return null }
 

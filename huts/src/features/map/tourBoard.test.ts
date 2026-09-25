@@ -16,7 +16,6 @@ describe('tourBoardLabel', () => {
     const l = tourBoardLabel(tour(), startById)
     expect(l.text).toBe('Kaunertal')
     expect(l.distance).toBe('42.3 km')
-    expect(l.sourceType).toBe(2)
     expect(l.title).toContain('Kaunertal (Parkplatz)')
   })
   it('reads Rundtour when the exit is the start', () => {
