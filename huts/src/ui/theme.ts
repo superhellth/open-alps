@@ -1,14 +1,7 @@
-import { createTheme } from '@mui/material/styles'
+import { alpha, createTheme } from '@mui/material/styles'
+import { SIGNPOST_FONT, tokens } from './tokens.js'
 
-export const tokens = {
-  paper: '#EDEFE9',
-  ink: '#23272B',
-  signpost: '#F5B700',
-  trailRed: '#C8102E', // medium difficulty only
-  alpineBlue: '#1F5FA8', // alpine difficulty only
-}
-
-export const SIGNPOST_FONT = '"Barlow Semi Condensed", "Barlow", system-ui, sans-serif'
+export { tokens, SIGNPOST_FONT }
 
 // Light panels in map-paper tones; the signpost yellow is the only accent and is only ever a fill
 // with ink text on it. No shadows, cards or gradients.
@@ -36,9 +29,9 @@ const theme = createTheme({
     MuiTab: {
       styleOverrides: {
         root: {
-          backgroundColor: 'rgba(35, 39, 43, 0.05)',
-          '&:hover': { backgroundColor: 'rgba(35, 39, 43, 0.09)' },
-          '&:not(.Mui-selected)': { color: 'rgba(35, 39, 43, 0.6)' },
+          backgroundColor: alpha(tokens.ink, 0.05),
+          '&:hover': { backgroundColor: alpha(tokens.ink, 0.09) },
+          '&:not(.Mui-selected)': { color: alpha(tokens.ink, 0.6) },
           '&.Mui-selected': { backgroundColor: tokens.paper },
         },
       },
