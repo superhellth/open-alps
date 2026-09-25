@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Box } from '@mui/material'
-import { formatSignpostTime } from '../format/signpostTime.js'
+import { formatSignpostTime } from '@/format/signpostTime.js'
 import { SIGNPOST_FONT, tokens } from '@/ui/theme.js'
 
 export interface SignpostProps {

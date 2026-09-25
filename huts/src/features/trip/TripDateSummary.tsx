@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { Box, Button, Popover, TextField } from '@mui/material'
-import type { Trip } from '../trip/trip.js'
+import type { Trip } from '@/trip/trip.js'
 
 function summaryText(trip: Trip): string {
   const party = `${trip.partySize} Pers.`

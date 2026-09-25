@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Box, Button, Typography } from '@mui/material'
-import { fetchAvailabilityByOffset } from '../availability/fetchAvailability.js'
-import { addUtcDays } from '../availability/formatDate.js'
-import { answerWindow, shiftAnswers } from '../availability/startDateAnswer.js'
-import type { ShiftAnswer } from '../availability/startDateAnswer.js'
-import type { HutOhrs } from '../data/buildAppData.js'
-import type { Trip } from '../trip/trip.js'
+import { fetchAvailabilityByOffset } from '@/availability/fetchAvailability.js'
+import { addUtcDays } from '@/availability/formatDate.js'
+import { answerWindow, shiftAnswers } from '@/availability/startDateAnswer.js'
+import type { ShiftAnswer } from '@/availability/startDateAnswer.js'
+import type { HutOhrs } from '@/data/buildAppData.js'
+import type { Trip } from '@/trip/trip.js'
 
 const MAX_SHIFT = 3
 const VERDICT_TEXT = { bookable: '● alles frei', blocked: '✕ belegt', unclear: '? unklar' } as const

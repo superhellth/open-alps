@@ -2,9 +2,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor, cleanup } from '@testing-library/react'
 import { useTripAvailability } from './useTripAvailability.js'
-import * as detail from '../availability/fetchHutDetail.js'
-import { newTrip } from '../trip/trip.js'
-import type { HutDetail } from '../availability/types.js'
+import * as detail from '@/availability/fetchHutDetail.js'
+import { newTrip } from '@/trip/trip.js'
+import type { HutDetail } from '@/availability/types.js'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

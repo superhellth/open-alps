@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import StartDateStrip from './StartDateStrip.js'
-import * as availability from '../availability/fetchAvailability.js'
-import { newTrip } from '../trip/trip.js'
+import * as availability from '@/availability/fetchAvailability.js'
+import { newTrip } from '@/trip/trip.js'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

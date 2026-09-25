@@ -5,10 +5,10 @@ import '@testing-library/jest-dom/vitest'
 import TripPanel from './TripPanel.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from '@/trip/trip.js'
 import { makeStartLabel } from '@/data/labels.js'
-import * as availability from '../availability/fetchAvailability.js'
-import * as detail from '../availability/fetchHutDetail.js'
+import * as availability from '@/availability/fetchAvailability.js'
+import * as detail from '@/availability/fetchHutDetail.js'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

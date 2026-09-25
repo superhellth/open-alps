@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { fetchHutDetail } from '../availability/fetchHutDetail.js'
-import { addUtcDays } from '../availability/formatDate.js'
-import { classifyNight } from '../availability/nightState.js'
-import type { NightAvailability } from '../availability/nightState.js'
-import type { HutOhrs } from '../data/buildAppData.js'
-import type { Trip } from '../trip/trip.js'
+import { fetchHutDetail } from '@/availability/fetchHutDetail.js'
+import { addUtcDays } from '@/availability/formatDate.js'
+import { classifyNight } from '@/availability/nightState.js'
+import type { NightAvailability } from '@/availability/nightState.js'
+import type { HutOhrs } from '@/data/buildAppData.js'
+import type { Trip } from '@/trip/trip.js'
 
 export type NightView = { loading: true } | { loading: false; availability: NightAvailability }
 
