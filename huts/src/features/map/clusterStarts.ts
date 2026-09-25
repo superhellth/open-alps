@@ -49,12 +49,8 @@ export function createStartClusterer(markers: StartMarker[]): StartClusterer {
   }
 }
 
+/** single = one tour; stack = several. */
 export type MarkerKind = 'single' | 'stack'
-
-/** single = one start point with one tour; stack = one start point with several. */
-export function markerKind(m: Extract<MapMarker, { kind: 'start' }>): MarkerKind {
-  return m.count === 1 ? 'single' : 'stack'
-}
 
 export interface AnchorPoint { tourKey: string; lat: number; lng: number }
 

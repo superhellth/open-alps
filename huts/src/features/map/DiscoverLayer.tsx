@@ -1,23 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
+import type { TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { StartGroup } from '@/tourSearch/groupByStart.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 import { currentView, routeTouchesBbox } from '@/lib/viewport.js'
 import type { View } from '@/lib/viewport.js'
-import { tourToRoute, tourWaypoints } from './routes.js'
+import { tourAnchorOf, tourToRoute, tourWaypoints } from './routes.js'
 import type { RouteContext } from './routes.js'
 import RouteLayer from './RouteLayer.js'
 import WaypointLayer, { collectSymbols } from './WaypointLayer.js'
 import HoverTooltip from './HoverTooltip.js'
 import SignpostMarker from './SignpostMarker.js'
 import type { Activation } from './SignpostMarker.js'
-import { createStartClusterer, markerKind, markerRadius } from './clusterStarts.js'
-import type { MapMarker } from './clusterStarts.js'
+import { anchorMarkerKind, createAnchorClusterer, createStartClusterer, markerRadius } from './clusterStarts.js'
+import type { AnchorMarker, MapMarker } from './clusterStarts.js'
 import { escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
-import type { Heading } from './signpostHtml.js'
 import { tourBoardLabel } from './tourBoard.js'
 import { indexToursByEnd, indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
 import { makeStartLabel } from '@/data/labels.js'
@@ -44,25 +44,20 @@ function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.Div
   return icon
 }
 
-/** The side of its start the tour's first leg leaves to, judged by the first waypoint after the start. */
-function headingOf(tour: PlannerTour, ctx: RouteContext | null): Heading {
-  const w = ctx ? tourToRoute(tour, ctx)?.waypoints : undefined
-  return w && w.length > 1 && w[1].lng < w[0].lng ? 'west' : 'east'
-}
-
 const toursText = (n: number) => `In ${n} Touren`
 
-/** One marker per start point with matching tours or per cluster of start points, clustered by zoom. Below
- *  `ROUTE_REVEAL_ZOOM` every marker is a round yellow bubble with the summed count, and a click always focuses and zooms in; from there
- *  on a start point becomes a signpost (a single tour board, or a stack of boards with the tour count) and a cluster stays a bubble.
+/** Below `ROUTE_REVEAL_ZOOM` one round yellow bubble per start point or cluster of start points carries the summed count; a click
+ *  focuses the results list on those tours and zooms in. From `ROUTE_REVEAL_ZOOM` on each tour's board stands on a mast planted
+ *  on its route's mid-route anchor (`tourAnchorOf`), and tours whose anchors cluster share one stack signpost with the tour count.
  *  Panning and zooming only re-cluster, they never re-search. A single board and every board of a spread stack
- *  pick their tour on click; a stack or cluster click flies the map to the bounds of its tours, focuses the results list on them
+ *  pick their tour on click; a stack click flies the map to the bounds of its tours, focuses the results list on them
  *  and draws them at the focused tier until the focus is dropped (show all tours, a map click, or zooming out
  *  past the zoom the click flew to); markers outside the focus fade like the search-running state.
  *  Past `ROUTE_REVEAL_ZOOM`, routes draw for every tour whose waypoints' bounding box overlaps the viewport,
  *  in three tiers (rest, focused, hovered); the focused and hovered tiers are display-only copies above the
  *  interactive rest lines, so mouseout always fires. Hovering a leg or hut hovers every visible tour containing
- *  it; clicking one focuses the list on those tours (a leg or hut in a single tour picks it). */
+ *  it; clicking one focuses the list on those tours (a leg or hut in a single tour picks it). A board fades while its tour is
+ *  hovered from anywhere but the signpost itself. */
 export default function DiscoverLayer({
   groups, startById, dimmed, allTours, routeCtx, hutNameById, hoveredTourKeys, onHoverTours, onPickRoute, onNavigate,
   focusTours, onFocusTours, onHoverStarts, onViewChange,
@@ -115,6 +110,27 @@ export default function DiscoverLayer({
       return route && routeTouchesBbox(route.waypoints, view.bbox) ? [{ key: tourKey(tour), tour, route }] : []
     })
   }, [allTours, routeCtx, routeReveal, view.bbox])
+  const anchoredTours = useMemo(() => routedTours.flatMap(({ key, tour, route }) => {
+    const anchor = routeCtx ? tourAnchorOf(tour, route, routeCtx, view.bbox) : null
+    return anchor ? [{ key, tour, anchor }] : []
+  }), [routedTours, routeCtx, view.bbox])
+  const anchorByKey = useMemo(() => new Map<string, TourAnchor>(anchoredTours.map((t) => [t.key, t.anchor])), [anchoredTours])
+  const anchorClusterer = useMemo(
+    () => createAnchorClusterer(anchoredTours.map(({ key, anchor }) => ({ tourKey: key, lat: anchor.lat, lng: anchor.lng }))),
+    [anchoredTours],
+  )
+  const signposts = useMemo(() => (routeReveal ? anchorClusterer.markersFor(view.bbox, view.zoom) : []), [anchorClusterer, routeReveal, view])
+  const htmlOfSignpost = (m: AnchorMarker) => {
+    const boards = m.tourKeys.flatMap((k) => {
+      const t = tourByKey.get(k)
+      return t ? [{ key: k, label: tourBoardLabel(t, startById) }] : []
+    })
+    return anchorMarkerKind(m) === 'single' && boards[0]
+      ? singleHtml(boards[0], anchorByKey.get(m.tourKeys[0])?.heading ?? 'east')
+      : stackHtml(boards)
+  }
+  /** The pointer is on a signpost: its own board keeps full opacity. */
+  const [pointerOnSignpost, setPointerOnSignpost] = useState(false)
   const toursByLeg = useMemo(() => indexToursByLeg(routedTours), [routedTours])
   const toursByHut = useMemo(() => indexToursByHut(routedTours), [routedTours])
   const toursByEnd = useMemo(() => indexToursByEnd(routedTours), [routedTours])
@@ -172,14 +188,6 @@ export default function DiscoverLayer({
   const markerKey = (m: MapMarker) => (m.kind === 'start' ? `s${m.startId}` : `c${m.clusterId}`)
 
   const markers = useMemo(() => clusterer.clustersFor(view.bbox, view.zoom), [clusterer, view])
-  const htmlByMarker = useMemo(() => new Map(markers.flatMap((m) => {
-    if (m.kind === 'cluster' || !routeReveal) return []
-    const boards = (groupOfStart.get(m.startId)?.tours ?? [])
-      .map((t) => ({ key: tourKey(t), label: tourBoardLabel(t, startById) }))
-    const tour = groupOfStart.get(m.startId)?.tours[0]
-    const single = markerKind(m) === 'single' && boards[0] && tour
-    return [[markerKey(m), single ? singleHtml(boards[0], headingOf(tour, routeCtx)) : stackHtml(boards)] as const]
-  })), [markers, groupOfStart, startById, routeReveal, routeCtx])
 
   const highlightedStarts = useMemo(() => {
     const ids = new Set<number>()
@@ -189,16 +197,18 @@ export default function DiscoverLayer({
 
   const hoverActive = hoveredTourKeys.size > 0 || (hoveredStartIds?.size ?? 0) > 0
 
-  const activate = (m: MapMarker, a: Activation) => {
+  const activateSignpost = (m: AnchorMarker, a: Activation) => {
     onNavigate?.()
-    if (a.kind === 'tour') {
-      const tour = tourByKey.get(a.tourKey)
-      if (tour) onPickRoute(tour)
-      return
-    }
-    const startIds = startIdsOf(m)
-    const only = routeReveal && m.kind === 'start' && m.count === 1 ? groupOfStart.get(m.startId)?.tours[0] : undefined
+    const only = a.kind === 'tour' ? tourByKey.get(a.tourKey) : m.tourKeys.length === 1 ? tourByKey.get(m.tourKeys[0]) : undefined
     if (only) { onPickRoute(only); return }
+    onFocusTours?.(m.tourKeys)
+    const bounds = boundsOfTours(m.tourKeys.flatMap((k) => tourByKey.get(k) ?? []))
+    if (bounds) zoomToBounds(bounds)
+  }
+
+  const activate = (m: MapMarker) => {
+    onNavigate?.()
+    const startIds = startIdsOf(m)
     onFocusTours?.(keysOfStarts(startIds))
     const bounds = tourBounds(startIds)
     if (bounds) {
@@ -211,31 +221,37 @@ export default function DiscoverLayer({
 
   return (
     <>
-      {markers.map((m) => {
+      {!routeReveal && markers.map((m) => {
         const ids = startIdsOf(m)
         const outsideFocus = focusTours != null && !keysOfStarts(ids).some((k) => focusTours.has(k))
         const highlighted = ids.some((id) => highlightedStarts.has(id))
         const hovered = highlighted || ids.some((id) => hoveredStartIds?.has(id))
         const dimmedMarker = dimmed || outsideFocus || (hoverActive && !hovered)
-        if (m.kind === 'cluster' || !routeReveal) {
-          return (
-            <Marker
-              key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
-              eventHandlers={{
-                mouseover: () => hoverStarts(new Set(ids)),
-                mouseout: () => hoverStarts(null),
-                click: () => activate(m, { kind: 'body' }),
-              }}
-            />
-          )
-        }
+        return (
+          <Marker
+            key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
+            eventHandlers={{
+              mouseover: () => hoverStarts(new Set(ids)),
+              mouseout: () => hoverStarts(null),
+              click: () => activate(m),
+            }}
+          />
+        )
+      })}
+      {signposts.map((m) => {
+        const outsideFocus = focusTours != null && !m.tourKeys.some((k) => focusTours.has(k))
+        const highlighted = m.tourKeys.some((k) => hoveredTourKeys.has(k))
+        const startHovered = m.tourKeys.some((k) => hoveredStartIds?.has(tourByKey.get(k)?.startId ?? -1))
+        const dimmedMarker = dimmed || outsideFocus || (hoverActive && !(highlighted || startHovered))
         return (
           <SignpostMarker
-            key={markerKey(m)} position={[m.lat, m.lng]} kind={markerKind(m)} html={htmlByMarker.get(markerKey(m)) ?? ''}
-            dimmed={dimmedMarker} highlighted={highlighted}
-            onHoverMarker={(hovering) => hoverStarts(hovering ? new Set(ids) : null)}
+            key={m.id} position={[m.lat, m.lng]} kind={anchorMarkerKind(m)} html={htmlOfSignpost(m)}
+            heading={anchorByKey.get(m.tourKeys[0])?.heading ?? 'east'}
+            dimmed={dimmedMarker} highlighted={highlighted || startHovered}
+            fadedKeys={pointerOnSignpost ? NO_TOURS : hoveredTourKeys}
+            onHoverMarker={(hovering) => { setPointerOnSignpost(hovering); onHoverTours(hovering ? new Set(m.tourKeys) : NO_TOURS) }}
             onHoverTour={(key) => onHoverTours(key ? new Set([key]) : NO_TOURS)}
-            onActivate={(a) => activate(m, a)}
+            onActivate={(a) => activateSignpost(m, a)}
           />
         )
       })}

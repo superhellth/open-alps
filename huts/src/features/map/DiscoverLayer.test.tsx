@@ -9,6 +9,7 @@ import { OPEN_DELAY_MS } from './SignpostMarker.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import * as geometry from '@/tourSearch/loadLegGeometry.js'
+import * as routes from './routes.js'
 
 afterEach(cleanup)
 beforeEach(() => {
@@ -174,13 +175,14 @@ describe('DiscoverLayer rest tier', () => {
 
 describe('DiscoverLayer marker focus', () => {
   const two = new Map([...startById, [2, { name: null, sourceType: 1, lat: 47.3, lng: 12.015 }]])
-  const tours = [tour(1, [10, 11]), tour(2, [10, 11])]
-  const groups = [{ startId: 1, tours: [tours[0], tours[0]] }, { startId: 2, tours: [tours[1], tours[1]] }] as never
+  const tours = [tour(1, [10, 11]), tour(1, [10, 11, 12]), tour(2, [10, 11]), tour(2, [10, 11, 12])]
+  const groups = [{ startId: 1, tours: tours.slice(0, 2) }, { startId: 2, tours: tours.slice(2) }] as never
   const routeCtx2 = { ...routeCtx, startById: two }
 
   beforeEach(() => {
     vi.spyOn(L.Map.prototype, 'flyToBounds').mockReturnThis()
-    vi.spyOn(L.Map.prototype, 'getSize').mockReturnValue(L.point(400, 400))
+    vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(400, 400))
+    vi.spyOn(routes, 'tourAnchorOf').mockImplementation((t) => ({ lat: 47.3, lng: t.startId === 1 ? 12 : 12.015, heading: 'east' }))
   })
   afterEach(() => { vi.restoreAllMocks() })
 
@@ -225,7 +227,7 @@ describe('DiscoverLayer marker focus', () => {
 describe('DiscoverLayer signposts', () => {
   beforeEach(() => {
     vi.useFakeTimers()
-    vi.spyOn(L.Map.prototype, 'getSize').mockReturnValue(L.point(400, 400))
+    vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(400, 400))
   })
   afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
 
@@ -233,11 +235,12 @@ describe('DiscoverLayer signposts', () => {
     [1, { name: 'Kaprun', sourceType: 1, lat: 47.3, lng: 12 }],
     [2, { name: 'Kaunertal', sourceType: 2, lat: 47.301, lng: 12 }],
   ])
-  const exiting = (i: number) => tour(1, [i], { exitStartId: 2, totalDistanceM: 42_300 } as never)
+  const exiting = (i: number) => tour(1, [100 + i], { exitStartId: 2, totalDistanceM: 42_300 } as never)
+  const signpostHuts = new Map(Array.from({ length: 12 }, (_, i) => [100 + i, { lat: 47.31, lng: 12.01 }] as const))
   const stackTours = (n: number) => Array.from({ length: n }, (_, i) => exiting(i))
   const group = (tours: PlannerTour[]) => [{ startId: 1, tours }] as never
   const render1 = (tours: PlannerTour[], props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13) =>
-    renderLayer({ groups: group(tours), allTours: tours, startById: withExit, routeCtx: { ...routeCtx, startById: withExit }, ...props }, zoom)
+    renderLayer({ groups: group(tours), allTours: tours, startById: withExit, routeCtx: { ...routeCtx, startById: withExit, hutCoordsById: signpostHuts }, ...props }, zoom)
   const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
 
   it('renders a single tour as one board labelled end point and distance; click picks the tour', () => {
@@ -330,5 +333,59 @@ describe('DiscoverLayer signposts', () => {
     const tours = stackTours(2)
     const { container } = render1(tours, { hoveredTourKeys: new Set([tourKey(tours[0])]) })
     expect(container.querySelector('.signpost-marker')!.classList.contains('highlighted')).toBe(true)
+  })
+})
+
+describe('DiscoverLayer signposts on the route', () => {
+  beforeEach(() => {
+    vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(400, 400))
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  const signposts = (c: HTMLElement) => c.querySelectorAll('.signpost-marker')
+  const anchor = { lat: 47.305, lng: 12.005, heading: 'east' as const }
+
+  it('draws no signposts below the reveal zoom, only count bubbles', () => {
+    const t = tour(1, [10, 11])
+    const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never }, 9)
+    expect(signposts(container)).toHaveLength(0)
+    expect(container.querySelectorAll('.start-count-marker')).toHaveLength(1)
+  })
+
+  it('stands a tour\'s board on its anchor, not on its start point', async () => {
+    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+    const t = tour(1, [10, 11])
+    const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never }, 13)
+    await waitFor(() => expect(signposts(container)).toHaveLength(1))
+    const el = container.querySelector<HTMLElement>('.signpost-marker')!
+    const expected = map.latLngToLayerPoint(L.latLng(anchor.lat, anchor.lng))
+    expect(L.DomUtil.getPosition(el).x).toBeCloseTo(expected.x, 0)
+    expect(L.DomUtil.getPosition(el).y).toBeCloseTo(expected.y, 0)
+    expect(container.querySelector('.start-count-marker')).toBeNull()
+  })
+
+  it('draws no signpost for a tour with no anchor in view', () => {
+    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(null)
+    const t = tour(1, [10, 11])
+    const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never }, 13)
+    expect(signposts(container)).toHaveLength(0)
+  })
+
+  it('stacks tours whose anchors coincide into one signpost with a count', async () => {
+    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+    const a = tour(1, [10, 11])
+    const b = tour(1, [10, 11, 12])
+    const { container } = renderLayer({ ...focusOn(a, b), groups: [{ startId: 1, tours: [a, b] }] as never }, 13)
+    await waitFor(() => expect(container.querySelectorAll('.signpost-marker.stack')).toHaveLength(1))
+    expect(container.querySelector('.stack-sign')!.textContent).toBe('2')
+  })
+
+  it('fades a board while its tour is hovered from elsewhere, not while the board itself is hovered', async () => {
+    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+    const t = tour(1, [10, 11])
+    const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never, hoveredTourKeys: new Set([tourKey(t)]) }, 13)
+    await waitFor(() => expect(container.querySelector('.sign.faded')).not.toBeNull())
+    fireEvent.mouseOver(container.querySelector('.sign')!)
+    await waitFor(() => expect(container.querySelector('.sign.faded')).toBeNull())
   })
 })

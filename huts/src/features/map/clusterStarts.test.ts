@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { anchorMarkerKind, createAnchorClusterer, createStartClusterer, markerKind, markerRadius } from './clusterStarts.js'
-import type { AnchorMarker, MapMarker } from './clusterStarts.js'
+import { anchorMarkerKind, createAnchorClusterer, createStartClusterer, markerRadius } from './clusterStarts.js'
+import type { AnchorMarker } from './clusterStarts.js'
 
 const WORLD: [number, number, number, number] = [-180, -85, 180, 85]
 const markers = [
@@ -44,12 +44,6 @@ describe('markerRadius', () => {
     expect(markerRadius(1)).toBeGreaterThanOrEqual(12)
     expect(markerRadius(1_000_000)).toBeLessThanOrEqual(34)
   })
-})
-
-describe('markerKind', () => {
-  const start = (count: number): Extract<MapMarker, { kind: 'start' }> => ({ kind: 'start', startId: 1, count, lat: 0, lng: 0 })
-  it('is single for one start point with one tour', () => { expect(markerKind(start(1))).toBe('single') })
-  it('is stack for one start point with several tours', () => { expect(markerKind(start(3))).toBe('stack') })
 })
 
 describe('createAnchorClusterer', () => {
