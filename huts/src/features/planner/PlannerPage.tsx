@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
+import { alpha } from '@mui/material/styles'
 import { useAppData } from '@/data/appDataContext.js'
 import type { AppData } from '@/data/buildAppData.js'
 import { useSearchClient } from '@/search/searchClientContext.js'
@@ -152,7 +153,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
                 <Box sx={{
                   position: 'sticky', bottom: 0, zIndex: 1, display: 'flex', justifyContent: 'center', py: 1,
                   bgcolor: 'background.paper',
-                  ...(erweitertOpen && { borderTop: '1px solid', borderColor: 'divider', boxShadow: '0 -4px 8px -4px rgba(0,0,0,0.15)' }),
+                  ...(erweitertOpen && { borderTop: '1px solid', borderColor: 'divider', boxShadow: `0 -4px 8px -4px ${alpha('#000', 0.15)}` }),
                 }}>
                   <Button variant="text" onClick={() => setDiscoverTab('results')}>
                     Zu den Ergebnissen ({visibleTours.length}) →
