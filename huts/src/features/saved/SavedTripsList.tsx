@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Alert, Box, Button, IconButton, Menu, MenuItem, TextField, Typography } from '@mui/material'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import type { TripGraph } from '@/tourSearch/types.js'
-import { useTrips } from '@/trip/TripsProvider.js'
+import { useTrips } from '@/trip/tripsContext.js'
 import { exportTripsJson, parseTripsJson } from '@/trip/tripStorage.js'
 import type { Trip } from '@/trip/trip.js'
 

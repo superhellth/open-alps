@@ -2,7 +2,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, screen, waitFor, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
-import { AppDataProvider, useAppData } from './AppDataProvider.js'
+import { AppDataProvider } from './AppDataProvider.js'
+import { useAppData } from './appDataContext.js'
 import type { AppData } from './buildAppData.js'
 
 afterEach(cleanup)
