@@ -15,6 +15,8 @@ export interface ApproachRecord {
   descentM: number
   access: string | null
   edgeId: number
+  /** Flat `[dlat, dlng, ...]` anchor offsets (1e-4° from the hut), null when the payload ships none. */
+  anchorOffsets?: number[] | null
 }
 
 export interface HutEdgeRecord {
@@ -32,6 +34,8 @@ export interface HutEdgeRecord {
   inferredM: number
   snapM: number
   edgeId: number
+  /** Flat `[dlat, dlng, ...]` anchor offsets (1e-4° from the from-hut), null when the payload ships none. */
+  anchorOffsets?: number[] | null
 }
 
 /** Fields legFilters.legPasses needs, present on every leg shape (hut-hut, approach, exit). */

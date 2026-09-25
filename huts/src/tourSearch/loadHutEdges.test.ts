@@ -38,4 +38,30 @@ describe('loadHutEdgesData', () => {
       edgeId: 0,
     })
   })
+
+  it('exposes anchor offsets when the payload carries anchor columns, null otherwise', async () => {
+    const base = {
+      from_id: 'u2', to_id: 'u2', variant: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4',
+      max_ele_m: 'f4', sac_rank: 'i1', via_ferrata: 'u1', road_m: 'f4', ungraded_m: 'f4',
+      inferred_m: 'f4', snap_m: 'f4',
+    } as const
+    const vals = {
+      from_id: [0], to_id: [1], variant: [0], distance_m: [1], ascent_m: [0], descent_m: [0],
+      max_ele_m: [0], sac_rank: [0], via_ferrata: [0], road_m: [0], ungraded_m: [0], inferred_m: [0], snap_m: [0],
+    }
+    const withAnchors = packColumns(
+      { ...base, a25_dlat: 'i2', a25_dlng: 'i2', a50_dlat: 'i2', a50_dlng: 'i2', a75_dlat: 'i2', a75_dlng: 'i2' },
+      { ...vals, a25_dlat: [1], a25_dlng: [-2], a50_dlat: [3], a50_dlng: [4], a75_dlat: [5], a75_dlng: [6] },
+      1,
+    )
+    const plain = packColumns(base, vals, 1)
+    const run = async (p: typeof plain) => {
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ ...p.manifest, variants: {}, hut_ids: ['a', 'b'] }) })
+        .mockResolvedValueOnce({ arrayBuffer: () => Promise.resolve(p.buffer) }))
+      return (await loadHutEdgesData('/data')).records[0]
+    }
+    expect((await run(withAnchors)).anchorOffsets).toEqual([1, -2, 3, 4, 5, 6])
+    expect((await run(plain)).anchorOffsets).toBeNull()
+  })
 })

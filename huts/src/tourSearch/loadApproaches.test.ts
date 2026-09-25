@@ -30,4 +30,19 @@ describe('loadApproachesData', () => {
     })
     expect(data.reverseIndex).toBe(reverseIndex)
   })
+
+  it('exposes anchor offsets from a lone 50 % anchor pair, null when none', async () => {
+    const base = { hut_id: 'u2', start_id: 'u8', source_type: 'u1', variant: 'u1', edge_id: 'u4', access_unknown: 'u1', distance_m: 'f4', ascent_m: 'f4', descent_m: 'f4' } as const
+    const vals = { hut_id: [1], start_id: [2], source_type: [1], variant: [0], edge_id: [3], access_unknown: [0], distance_m: [1], ascent_m: [0], descent_m: [0] }
+    const withAnchor = packColumns({ ...base, a50_dlat: 'i2', a50_dlng: 'i2' }, { ...vals, a50_dlat: [-7], a50_dlng: [9] }, 1)
+    const plain = packColumns(base, vals, 1)
+    const run = async (p: typeof plain) => {
+      vi.stubGlobal('fetch', vi.fn()
+        .mockResolvedValueOnce({ json: () => Promise.resolve({ ...p.manifest, reverse_index: { hut_to_starts: {}, start_to_huts: {} } }) })
+        .mockResolvedValueOnce({ arrayBuffer: () => Promise.resolve(p.buffer) }))
+      return (await loadApproachesData('/data')).records[0]
+    }
+    expect((await run(withAnchor)).anchorOffsets).toEqual([-7, 9])
+    expect((await run(plain)).anchorOffsets).toBeNull()
+  })
 })

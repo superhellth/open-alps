@@ -42,4 +42,9 @@ describe('binaryColumns', () => {
     expect(columns.b[0]).toBeCloseTo(1.25, 5)
     expect(columns.b[1]).toBeCloseTo(-2.5, 5)
   })
+
+  it('round-trips signed i2 columns', () => {
+    const { manifest, buffer } = packColumns({ d: 'i2' }, { d: [-3, 0, 32767, -32768] }, 4)
+    expect(readColumns(buffer, manifest).d).toEqual([-3, 0, 32767, -32768])
+  })
 })

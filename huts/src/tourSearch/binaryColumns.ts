@@ -4,7 +4,7 @@
  * byte offset, NOT interleaved (docs/tour-suggestion-payload.md §1) — that layout is what
  * the pipeline's gzip-size measurements assume, so columns must be read independently.
  */
-export type Dtype = 'u1' | 'i1' | 'u2' | 'u4' | 'u8' | 'f4'
+export type Dtype = 'u1' | 'i1' | 'u2' | 'i2' | 'u4' | 'u8' | 'f4'
 
 export interface ColumnManifest {
   rows: number
@@ -22,6 +22,7 @@ const DTYPES: Record<Dtype, DtypeOps> = {
   u1: { bytes: 1, get: (v, o) => v.getUint8(o), set: (v, o, x) => v.setUint8(o, x) },
   i1: { bytes: 1, get: (v, o) => v.getInt8(o), set: (v, o, x) => v.setInt8(o, x) },
   u2: { bytes: 2, get: (v, o) => v.getUint16(o, true), set: (v, o, x) => v.setUint16(o, x, true) },
+  i2: { bytes: 2, get: (v, o) => v.getInt16(o, true), set: (v, o, x) => v.setInt16(o, x, true) },
   u4: { bytes: 4, get: (v, o) => v.getUint32(o, true), set: (v, o, x) => v.setUint32(o, x, true) },
   u8: {
     bytes: 8,

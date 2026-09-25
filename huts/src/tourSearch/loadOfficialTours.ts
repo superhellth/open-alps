@@ -15,6 +15,8 @@ export interface RawTourLeg {
   maxEleM: number
   from: RawTourEndpoint
   to: RawTourEndpoint
+  /** `[lat, lng]` at 25/50/75 % of the leg in walking order. */
+  anchors?: [number, number][]
 }
 
 export interface RawTour {
