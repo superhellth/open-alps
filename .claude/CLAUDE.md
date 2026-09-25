@@ -29,7 +29,7 @@ not be called in a loop over the whole hut list.
 
 `huts/src/app/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
 (`ui/theme.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: every hash except `#admin`
-renders `plannerPage/PlannerPage.tsx` (`#trips` selects its `saved` sidebar view, `#trip=<payload>`
+renders `features/planner/PlannerPage.tsx` (`#trips` selects its `saved` sidebar view, `#trip=<payload>`
 is a share link that opens the planner with an import offer), and `#admin` renders
 `adminPage/AdminPage.tsx` outside the providers (it needs none of the planner's data or the
 search worker) with its own minimal title bar. There is no app bar on the planner — the map fills
@@ -38,15 +38,20 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 (`buildAppData.ts` joins huts/stations/parking/partner geojson, the routing graph and official tours),
 `search/SearchClientProvider.tsx` and `trip/TripsProvider.tsx` (autosave to `localStorage`).
 
-`huts/src/plannerPage/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
+`huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
 `features/discover/usePlannerSearch` runs the whole-graph search, results grouped by start point and drawn as clustered
-count markers) -> Customize (a picked tour becomes a `Trip`; `TripEditor.tsx` swaps/extends/trims huts
-and changes start/exit) -> Plan nights (`TripPanel.tsx`: per-night availability, hand-set booking status,
+count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx` swaps/extends/trims huts
+and changes start/exit) -> Plan nights (`features/trip/TripPanel.tsx`: per-night availability, hand-set booking status,
 start-date answers) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
-`saved` (`SavedTripsList.tsx`) lists saved trips and draws them on the map (`map/SavedTripsLayer.tsx`).
-`features/discover/formState.ts` builds the `Query`; `rankTours.ts`/`tourSearch/rankFit.ts` order results;
+`saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).
+`features/discover/formState.ts` builds the `Query`; `features/discover/rankTours.ts`/`tourSearch/rankFit.ts` order results;
 `data/hutClass.ts` classifies each hut (marker shape = operator, fill = service).
+
+The planner UI is split into feature folders under `huts/src/features/`: `planner/` (page shell, sidebar,
+dialogs; composes the others), `discover/` (filter bar, search, results), `trip/` (trip panel and editor),
+`saved/` (saved-trips list) and `map/` (Leaflet map and layers). `features/X` never imports `features/Y`
+except `planner`; code two features share moves down into `data/`, `tourSearch/` or `ui/`.
 
 `huts/src/search/` runs the heavy search in a Web Worker (`searchWorker.ts`) that owns the large
 overlap tables (`hut-edge-ids`/`start-edge-ids`); the main thread holds only the small routing graph
@@ -78,7 +83,7 @@ debugging/sanity-check view of the raw hut-to-hut routing graph: renders `/data/
 `/data/hut-edges.pmtiles` via `protomaps-leaflet`, plus `/data/huts.geojson` and
 `/data/hut-edge-stats.json`. Its Leaflet layer components (`TrailLayers.tsx`, `HoverInspector.tsx`,
 `EdgeHoverPanel.tsx`) and binary-geometry decoder (`decodeEdgeGeometry.ts`) live alongside it in
-`adminPage/`, mirroring how `plannerPage/` decomposes `PlannerPage.tsx`.
+`adminPage/`, mirroring how `features/*` decomposes `PlannerPage.tsx`.
 
 ## Hut-to-hut routing graph
 
