@@ -3,7 +3,7 @@ import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { MapContainer } from 'react-leaflet'
 import DiscoverLayer from './DiscoverLayer.js'
-import type { PlannerTour } from '../tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 
 afterEach(cleanup)
 

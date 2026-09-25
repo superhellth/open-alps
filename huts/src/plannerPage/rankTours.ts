@@ -4,7 +4,7 @@ import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '.
 import type { FreeByOffset } from '../availability/types.js'
 import { legTimeRangeFromCeiling } from './formState.js'
 import type { FormState } from './formState.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from './types.js'
 
 export type SortKey = 'fit' | 'duration' | 'ascent' | 'distance'

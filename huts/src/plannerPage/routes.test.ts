@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { legLayer, straightRoute, tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
 import { newTrip } from '../trip/trip.js'

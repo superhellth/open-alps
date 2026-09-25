@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { tripFromTour } from './tripFromTour.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 
 const ctx = {
   hutIds: ['{A}', '{B}', '{C}'],

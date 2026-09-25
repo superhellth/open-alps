@@ -3,7 +3,7 @@ import type { Trip } from '../trip/trip.js'
 import type { SourceType } from '../tourSearch/types.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from './types.js'
 
 export function tripFromTour(tour: PlannerTour, ctx: {

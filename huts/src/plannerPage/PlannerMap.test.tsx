@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import PlannerMap from './PlannerMap.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { newTrip } from '../trip/trip.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 

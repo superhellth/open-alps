@@ -1,5 +1,5 @@
-import type { OfficialTourView } from '../tourSearch/officialTours.js'
-import type { TourResult } from '../tourSearch/types.js'
+import type { OfficialTourView } from './officialTours.js'
+import type { TourResult } from './types.js'
 
 /** A search chain or an official tour, in the one shape lists, ranking and the map consume. For an
  *  official tour every leg's edgeId indexes the tour-edge layer instead of hut/start edges. */

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { officialToTour } from './tours.js'
-import type { OfficialTourView } from '../tourSearch/officialTours.js'
+import { officialToTour } from './plannerTour.js'
+import type { OfficialTourView } from './officialTours.js'
 
 const leg = (legIndex: number, from: [string, number], to: [string, number], durationH: number) => ({
   legIndex, from: { type: from[0], id: from[1] }, to: { type: to[0], id: to[1] }, edgeId: legIndex, reversed: false as const,

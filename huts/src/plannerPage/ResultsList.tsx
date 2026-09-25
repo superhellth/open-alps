@@ -7,7 +7,7 @@ import { formatSignpostTime } from '../format/signpostTime.js'
 import { SIGNPOST_FONT, tokens } from '@/ui/theme.js'
 import { SORT_LABEL } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 
 const PAGE_SIZE = 25
 const CHAIN_SPELLED_OUT_MAX = 3

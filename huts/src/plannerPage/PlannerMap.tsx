@@ -16,7 +16,7 @@ import { useTripElevation } from './map/useTripElevation.js'
 import type { RouteContext } from './routes.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 import type { Trip } from '../trip/trip.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { Route, StartPoint } from './types.js'
 import './map/map.css'
 

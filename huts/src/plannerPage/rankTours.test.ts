@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { filterOfficial, nightStateOf, sortTours } from './rankTours.js'
 import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
-import type { PlannerTour } from './tours.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { FreeByOffset } from '../availability/types.js'
 
 const tour = (huts: number[], durations: number[], over: Partial<PlannerTour> = {}): PlannerTour => ({
