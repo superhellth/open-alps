@@ -5,9 +5,7 @@ import type { AppData } from '@/data/buildAppData.js'
 import { useSearchClient } from '@/search/searchClientContext.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import { useDiscover } from '@/features/discover/useDiscover.js'
-import { legsFromTrip } from '@/trip/tripLegs.js'
-import { decodeTripFromHash, shareUrl } from '@/trip/shareLink.js'
-import type { Trip } from '@/trip/trip.js'
+import { decodeTripFromHash } from '@/trip/shareLink.js'
 import { useTrips } from '@/trip/tripsContext.js'
 import DiscardDraftDialog from './DiscardDraftDialog.js'
 import FilterBar from '@/features/discover/FilterBar.js'
@@ -27,9 +25,7 @@ import { useMapView } from '@/features/map/useMapView.js'
 import { tourKey } from '@/features/map/tourKey.js'
 import { tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
-import { useTripEditor } from '@/features/trip/TripEditor.js'
-import type { EditingState } from '@/features/trip/TripEditor.js'
-import { useTripOverlaps } from '@/features/trip/useTripOverlaps.js'
+import { useTripSession } from '@/features/trip/useTripSession.js'
 import { useHash } from '@/lib/useHash.js'
 
 export default function PlannerPage({ importHash }: { importHash: string | null }) {
@@ -41,17 +37,11 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
 }
 
 function Planner({ data, client, importHash }: { data: AppData; client: SearchClient; importHash: string | null }) {
-  const { state, dispatch, activeTrip, isDraft, draftDirty } = useTrips()
+  const { state, dispatch } = useTrips()
   const prompt = useFirstVisitPrompt()
   const { mapView, setMapView, routesVisible, restoreView, fitBounds, rememberViewBeforeTrip, restoreViewAfterTrip, fitToPoints } = useMapView()
 
-  const [editing, setEditing] = useState<EditingState>(null)
-  const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
   const [importDismissed, setImportDismissed] = useState(false)
-  const [shareNote, setShareNote] = useState<string | null>(null)
-  const [shareFallback, setShareFallback] = useState<string | null>(null)
-  const [pendingPick, setPendingPick] = useState<Trip | null>(null)
-  const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
   const hash = useHash()
 
@@ -72,16 +62,12 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     fitToPoints(groupStartPoints)
   }, [groupStartPoints, setFocusStarts, fitToPoints])
 
-  const tripLegs = useMemo(() => (activeTrip ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
-  const mode = activeTrip && tripLegs ? 'trip' : 'discover'
+  const {
+    activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editor, highlightedLeg, setHighlightedLeg,
+    shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
+    openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds,
+  } = useTripSession({ data, client, startLabel })
   const sidebarView: 'discover' | 'saved' | 'trip' = mode === 'trip' ? 'trip' : (hash === '#trips' ? 'saved' : 'discover')
-  const overlapWarnings = useTripOverlaps(client, activeTrip, tripLegs)
-
-  const editor = useTripEditor({
-    graph: data.graph, trip: activeTrip, tripLegs,
-    hutNameById: data.hutNameById, startLabel, editing, onEditing: setEditing,
-    onChange: (trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip }),
-  })
 
   const previewRoute = useMemo(
     () => (previewTour && routesVisible ? tourToRoute(previewTour, routeCtx) : null),
@@ -97,21 +83,12 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, startLabel, form, draft,
     })
     if (!trip) return
-    if (draftDirty) { setPendingPick(trip); return }
-    setOpenedFrom('results')
-    dispatch({ type: 'openDraft', trip })
-    setPreviewTour(null)
-    setEditing(null)
+    if (openDraft(trip)) setPreviewTour(null)
   }
 
-  function confirmDiscardDraft() {
-    if (pendingPick) {
-      setOpenedFrom('results')
-      dispatch({ type: 'openDraft', trip: pendingPick })
-    }
-    setPendingPick(null)
+  function confirmDiscard() {
+    confirmDiscardDraft()
     setPreviewTour(null)
-    setEditing(null)
   }
 
   function goPlanen() { window.location.hash = '' }
@@ -138,45 +115,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     if (openedFrom === 'saved') window.location.hash = '#trips'
   }
 
-  async function share() {
-    if (!activeTrip) return
-    const url = shareUrl(activeTrip, window.location)
-    try {
-      await navigator.clipboard.writeText(url)
-      setShareNote('Link kopiert')
-    } catch {
-      setShareFallback(url)
-    }
-  }
-
   const importedTrip = useMemo(() => (importHash ? decodeTripFromHash(importHash) : null), [importHash])
   const closeImport = () => { setImportDismissed(true); window.location.hash = '' }
-
-  const candidateStartCoords = useMemo(() => new Map(editor.candidates.flatMap((c) => {
-    if (c.startId === undefined) return []
-    const p = data.startById.get(c.startId)
-    return p ? [[c.startId, { lat: p.lat, lng: p.lng }] as const] : []
-  })), [data, editor.candidates])
-  const candidateMarkers = editor.candidates.flatMap((c) => {
-    if (c.hutIndex !== undefined) {
-      const p = data.hutCoordsById.get(c.hutIndex)
-      return p ? [{ ...c, name: data.hutNameById.get(c.hutIndex) ?? String(c.hutIndex) }] : []
-    }
-    if (c.startId !== undefined) return [{ ...c, name: startLabel(c.startId) }]
-    return []
-  })
-  const tripHuts = tripLegs
-    ? tripLegs.hutIndices.flatMap((i) => {
-        const cls = i === null ? undefined : data.hutClassByIndex.get(i)
-        return i !== null && cls ? [{ hutIndex: i, name: data.hutNameById.get(i) ?? String(i), operator: cls.operator, serviced: cls.serviced }] : []
-      })
-    : []
-  const tripEnds = activeTrip
-    ? [activeTrip.start, activeTrip.exit].flatMap((e) => {
-        const p = data.startById.get(e.startId)
-        return p ? [{ lat: p.lat, lng: p.lng, sourceType: e.sourceType as number }] : []
-      })
-    : []
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
@@ -289,8 +229,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       />
       <DiscardDraftDialog
         open={pendingPick !== null}
-        onDiscard={confirmDiscardDraft}
-        onCancel={() => setPendingPick(null)}
+        onDiscard={confirmDiscard}
+        onCancel={cancelPendingPick}
       />
       <Snackbar open={shareNote !== null} autoHideDuration={3000} onClose={() => setShareNote(null)} message={shareNote} />
       <Snackbar
