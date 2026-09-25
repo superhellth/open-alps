@@ -37,8 +37,8 @@
 }
 /* Mast and foot: the foot dot sits on the anchor (the marker origin), the mast rises from it. */
 .signpost-marker .mast {
-  position: absolute; left: -0.75px; top: calc(var(--mast-h) * -1);
-  width: 1.5px; height: var(--mast-h); background: var(--color-ink); pointer-events: none;
+  position: absolute; left: -1px; top: calc(var(--mast-h) * -1);
+  width: 2px; height: var(--mast-h); background: var(--color-ink); pointer-events: none;
 }
 .signpost-marker .foot {
   position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px;
@@ -76,13 +76,13 @@
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .signpost-marker .km { opacity: 0.75; }
 
-/* Single: the board hangs from the mast top by its tail. Arrow direction is the heading (`.heads-west` = arrow on the left);
-   the side of the mast is `side-right`/`side-left`, set by SignpostMarker so a board never leaves the viewport. */
-.signpost-marker.single .sign { left: 0; }
-.signpost-marker.single.side-left .sign { transform: translateX(-100%); }
-.signpost-marker.single .sign.heads-west { padding: 0 8px 0 16px; }
-.signpost-marker.single .sign.heads-west,
-.signpost-marker.single .sign.heads-west::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
+/* Single: the board sits on top of the mast, its flat tail edge flush with the mast's outer edge, so the post continues straight down from the tail. The arrow points away from
+   the mast, so the shape follows the side of the mast (`side-right`/`side-left`, set by SignpostMarker so a board never
+   leaves the viewport), not the heading. */
+.signpost-marker.single .sign { left: -1px; top: calc((var(--mast-h) + var(--board-h)) * -1); }
+.signpost-marker.single.side-left .sign { left: 1px; transform: translateX(-100%); padding: 0 8px 0 16px; }
+.signpost-marker.single.side-left .sign,
+.signpost-marker.single.side-left .sign::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
 /* Stack: the count sign is centred on the point. */
 .signpost-marker.stack .stack-sign {
   left: 0;
