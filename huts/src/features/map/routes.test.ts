@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { legLayer, straightRoute, tourToRoute, tripToRoute } from './routes.js'
+import { legLayer, straightRoute, tourAnchorOf, tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
@@ -11,6 +11,7 @@ const ctx: RouteContext = {
   startById: new Map([[100, { name: 'S', sourceType: 1, lat: 47.0, lng: 11.0 }]]),
   officialById: new Map(),
   hutClassByIndex: new Map([[0, { operator: 'av', serviced: true }]]),
+  legAnchors: () => null,
 }
 const chain = (over: Partial<PlannerTour> = {}): PlannerTour => ({
   huts: [0, 1], startId: 100, exitStartId: 100, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0,
@@ -33,6 +34,12 @@ describe('tourToRoute', () => {
     const view = { tourId: 9, legs: [] } as never
     const r = tourToRoute(chain({ official: { tourId: 9, name: 'x' } }), { ...ctx, officialById: new Map([[9, view]]) })!
     expect(r.legs.every((l) => l.layer === 'tour_edges')).toBe(true)
+  })
+  it('tourAnchorOf runs the anchor choice over the route with the tour leg distances', () => {
+    const tour = chain()
+    const route = tourToRoute({ ...tour, legs: tour.legs.map((l) => ({ ...l, distanceM: 1000 })) }, ctx)!
+    const a = tourAnchorOf({ ...tour, legs: tour.legs.map((l) => ({ ...l, distanceM: 1000 })) }, route, ctx, [-180, -90, 180, 90])
+    expect(a).not.toBeNull()
   })
   it('is null when a waypoint cannot be placed', () => {
     expect(tourToRoute(chain({ huts: [0, 99] }), ctx)).toBeNull()

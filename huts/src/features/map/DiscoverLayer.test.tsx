@@ -28,7 +28,7 @@ const startById = new Map([[1, { name: null, sourceType: 1, lat: 47.3, lng: 12 }
 const hutClassByIndex = new Map([[10, { operator: 'av' as const, serviced: true }], [11, { operator: 'sonstige' as const, serviced: false }], [12, { operator: 'av' as const, serviced: true }]])
 const routeCtx = {
   hutCoordsById: new Map([[10, { lat: 47.3, lng: 12 }], [11, { lat: 47.31, lng: 12.01 }], [12, { lat: 47.32, lng: 12.02 }]]),
-  startById, officialById: new Map(), hutClassByIndex,
+  startById, officialById: new Map(), hutClassByIndex, legAnchors: () => null,
 }
 
 let map: L.Map
@@ -83,7 +83,7 @@ describe('DiscoverLayer route lines', () => {
     const many = Array.from({ length: 80 }, (_, i) => tour(1, [i]))
     const routeCtxMany = {
       hutCoordsById: new Map(many.map((t, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
-      startById, officialById: new Map(), hutClassByIndex: new Map(),
+      startById, officialById: new Map(), hutClassByIndex: new Map(), legAnchors: () => null,
     }
     const { container: all } = renderLayer({ ...focusOn(...many), routeCtx: routeCtxMany }, 13)
     const { container: few } = renderLayer({ ...focusOn(...many.slice(0, 10)), routeCtx: routeCtxMany }, 13)

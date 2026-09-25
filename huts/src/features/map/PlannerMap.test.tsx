@@ -106,7 +106,7 @@ describe('PlannerMap trip mode', () => {
 describe('PlannerMap saved mode', () => {
   it('renders SavedTripsLayer in saved mode', () => {
     const savedGraph: TripGraph = { hutEdges: { hutIds: ['{A}'], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } }
-    const savedRouteCtx = { hutCoordsById: new Map([[0, { lat: 47.3, lng: 12 }]]), startById: new Map([[100, { name: 'Start', sourceType: 1 as const, lat: 47.2, lng: 12.1 }]]), officialById: new Map(), hutClassByIndex: new Map() }
+    const savedRouteCtx = { hutCoordsById: new Map([[0, { lat: 47.3, lng: 12 }]]), startById: new Map([[100, { name: 'Start', sourceType: 1 as const, lat: 47.2, lng: 12.1 }]]), officialById: new Map(), hutClassByIndex: new Map(), legAnchors: () => null }
     const savedTrip = newTrip({ name: 'T', startDate: null, partySize: 1, start: { startId: 100, sourceType: 1 }, huts: ['{A}'], exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false } })
     const { container: baselineContainer } = render(<PlannerMap mode={discover()} commands={commands} />)
     const baseline = baselineContainer.querySelectorAll('path').length

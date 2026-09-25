@@ -24,6 +24,7 @@ import type { RouteContext } from '@/features/map/routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { useMapView } from '@/features/map/useMapView.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
+import { createLegAnchorLookup } from '@/tourSearch/legAnchors.js'
 import { tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripSession } from '@/features/trip/useTripSession.js'
@@ -58,6 +59,10 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     hutCoordsById: data.hutCoordsById, startById: data.startById,
     officialById: new Map(data.officialTours.map((t) => [t.tourId, t])),
     hutClassByIndex: data.hutClassByIndex,
+    legAnchors: createLegAnchorLookup({
+      hutEdges: data.graph.hutEdges, approaches: data.graph.approaches,
+      hutCoordsById: data.hutCoordsById, officialTours: data.officialTours,
+    }),
   }), [data])
 
   const showAllTours = useCallback(() => {

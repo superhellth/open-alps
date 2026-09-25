@@ -1,3 +1,6 @@
+import { tourAnchor } from '@/tourSearch/tourAnchor.js'
+import type { Bbox, TourAnchor } from '@/tourSearch/tourAnchor.js'
+import type { LegAnchorLookup } from '@/tourSearch/legAnchors.js'
 import type { GeometryLayer } from '@/tourSearch/loadLegGeometry.js'
 import type { OfficialTourView } from '@/tourSearch/officialTours.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
@@ -12,6 +15,8 @@ export interface RouteContext {
   startById: Map<number, StartPoint>
   officialById: Map<number, OfficialTourView>
   hutClassByIndex: Map<number, HutClass>
+  /** Anchor points of a leg's edge, for placing a tour's signpost on its route. */
+  legAnchors: LegAnchorLookup
 }
 
 export function legLayer(legIndex: number, legCount: number): GeometryLayer {
@@ -55,6 +60,14 @@ export function tourToRoute(tour: PlannerTour, ctx: RouteContext): Route | null 
       layer: official ? ('tour_edges' as const) : legLayer(i, tour.legs.length),
     })),
   }
+}
+
+/** Where the tour's signpost stands on its route, or null when no anchor of the tour is in `bbox`. */
+export function tourAnchorOf(tour: PlannerTour, route: Route, ctx: RouteContext, bbox: Bbox): TourAnchor | null {
+  return tourAnchor({
+    waypoints: route.waypoints,
+    legs: route.legs.map((l, i) => ({ layer: l.layer, edgeId: l.edgeId, reversed: l.reversed, distanceM: tour.legs[i].distanceM })),
+  }, ctx.legAnchors, bbox)
 }
 
 /** Every waypoint (start, huts, exit) of the given tours; tours that fail to resolve are skipped. */
