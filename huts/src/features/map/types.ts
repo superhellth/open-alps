@@ -15,3 +15,5 @@ export interface Route {
   waypoints: RouteWaypoint[]
   legs: RouteLeg[]
 }
+
+export type EmphasisTier = 'rest' | 'focused' | 'hovered'
