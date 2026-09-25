@@ -70,7 +70,7 @@ confirmation), `features/map/useMapView` (live viewport, pre-trip view to restor
 `features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
-Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), grouped by `createAnchorClusterer` into a single board or a stack that spreads on hover (`SignpostMarker`), with round count bubbles grouped by start point below `ROUTE_REVEAL_ZOOM`; waypoint symbols from
+Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), placed by `features/map/placeSignposts.ts` (greedy in rank order: a colliding tour moves to its next anchor candidate, `tourSearch/tourAnchor.ts`'s `anchorCandidates`; a tour that fits nowhere is a foot dot whose hover shows its board, `SignpostMarker`), with round count bubbles grouped by start point below `ROUTE_REVEAL_ZOOM`; waypoint symbols from
 `WaypointLayer` and three route emphasis tiers (`routePanes.ts`). Discover focus is a set of tour keys (`useDiscover`'s
 `focusTours`) and hover is a set of tour keys (`hoveredTourKeys`); `tourKey` lives in `tourSearch/tourKey.ts`.
 
