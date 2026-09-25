@@ -45,6 +45,6 @@ new row when a new spec is written.
 | 2026-09-23 | [Tour-hut booking study](specs/2026-09-23-tour-hut-booking-study-design.md) | done |
 | 2026-09-23 | [Tour bottleneck-hut study](specs/2026-09-23-tour-bottleneck-design.md) | done |
 | 2026-09-25 | [Frontend refactor: layered structure, feature folders, one styling system](specs/2026-09-25-frontend-refactor-design.md) | done |
-| 2026-09-25 | [Discover map: signpost markers, real symbols, emphasis tiers](specs/2026-09-25-discover-map-signposts-design.md) || done (stacks/spread superseded by 2026-09-26 signpost placement) |
-| 2026-09-26 | [Discover map: signposts stand on their tour](specs/2026-09-26-signpost-route-anchors-design.md) || done (§4 stacks superseded by 2026-09-26 signpost placement) |
+| 2026-09-25 | [Discover map: signpost markers, real symbols, emphasis tiers](specs/2026-09-25-discover-map-signposts-design.md) | done (stacks/spread superseded by 2026-09-26 signpost placement) |
+| 2026-09-26 | [Discover map: signposts stand on their tour](specs/2026-09-26-signpost-route-anchors-design.md) | done (§4 stacks superseded by 2026-09-26 signpost placement) |
 | 2026-09-26 | [Discover map: signpost placement instead of stacks](specs/2026-09-26-signpost-placement-design.md) | in progress |
