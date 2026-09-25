@@ -49,49 +49,6 @@ export function createStartClusterer(markers: StartMarker[]): StartClusterer {
   }
 }
 
-/** single = one tour; stack = several. */
-export type MarkerKind = 'single' | 'stack'
-
-export interface AnchorPoint { tourKey: string; lat: number; lng: number }
-
-/** One signpost: the tours whose anchors cluster together, best-ranked first. The foot stands on the
- *  best-ranked tour's own anchor, never on a cluster centroid. */
-export interface AnchorMarker { id: string; lat: number; lng: number; tourKeys: string[] }
-
-export interface AnchorClusterer {
-  markersFor(bbox: [number, number, number, number], zoom: number): AnchorMarker[]
-}
-
-/** Screen radius (px) within which anchors share one signpost; boards are wider than count bubbles. */
-const ANCHOR_CLUSTER_RADIUS = 70
-const ANCHOR_CLUSTER_MAX_ZOOM = 16
-
-/** `points` are in rank order, best first; that order decides each marker's foot and board order. */
-export function createAnchorClusterer(points: AnchorPoint[]): AnchorClusterer {
-  const index = new Supercluster<{ rank: number }>({ radius: ANCHOR_CLUSTER_RADIUS, maxZoom: ANCHOR_CLUSTER_MAX_ZOOM })
-  index.load(points.map((p, rank) => ({
-    type: 'Feature' as const,
-    properties: { rank },
-    geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
-  })))
-  return {
-    markersFor(bbox, zoom) {
-      return index.getClusters(bbox, Math.round(zoom)).map((f): AnchorMarker => {
-        const props = f.properties as { cluster?: boolean; cluster_id?: number; rank?: number }
-        const ranks = props.cluster
-          ? index.getLeaves(props.cluster_id!, Infinity).map((leaf) => (leaf.properties as { rank: number }).rank).sort((a, b) => a - b)
-          : [props.rank!]
-        const foot = points[ranks[0]]
-        return { id: foot.tourKey, lat: foot.lat, lng: foot.lng, tourKeys: ranks.map((r) => points[r].tourKey) }
-      })
-    },
-  }
-}
-
-export function anchorMarkerKind(m: AnchorMarker): MarkerKind {
-  return m.tourKeys.length === 1 ? 'single' : 'stack'
-}
-
 const MIN_RADIUS = 12
 const MAX_RADIUS = 34
 

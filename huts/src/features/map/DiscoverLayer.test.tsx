@@ -5,7 +5,6 @@ import L from 'leaflet'
 import { render, cleanup, fireEvent, act, waitFor } from '@testing-library/react'
 import { MapContainer, useMap, useMapEvents } from 'react-leaflet'
 import DiscoverLayer from './DiscoverLayer.js'
-import { OPEN_DELAY_MS } from './SignpostMarker.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import * as geometry from '@/tourSearch/loadLegGeometry.js'
@@ -61,7 +60,8 @@ function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, z
 /** Owns the focus the way the planner does, so the layer's own focus changes feed back into its props. */
 function FocusedLayer(props: Parameters<typeof DiscoverLayer>[0]) {
   const [focus, setFocus] = useState<Set<string> | null>(null)
-  return <DiscoverLayer {...props} focusTours={focus} onFocusTours={(keys) => setFocus(keys && new Set(keys))} />
+  const [hovered, setHovered] = useState<ReadonlySet<string>>(NO_TOURS)
+  return <DiscoverLayer {...props} focusTours={focus} onFocusTours={(keys) => setFocus(keys && new Set(keys))} hoveredTourKeys={hovered} onHoverTours={setHovered} />
 }
 
 describe('DiscoverLayer route lines', () => {
@@ -175,14 +175,26 @@ describe('DiscoverLayer rest tier', () => {
 
 describe('DiscoverLayer marker focus', () => {
   const two = new Map([...startById, [2, { name: null, sourceType: 1, lat: 47.3, lng: 12.015 }]])
-  const tours = [tour(1, [10, 11]), tour(1, [10, 11, 12]), tour(2, [10, 11]), tour(2, [10, 11, 12])]
+  /** Legs are shared only within a start, so a leg click focuses one start's tours. */
+  const ownLegs = (startId: number, huts: number[]) => tour(startId, huts, {
+    legs: [...huts, 0].map(() => ({ durationH: 4, ascentM: 0, descentM: 0, distanceM: 0, edgeId: startId, reversed: false })),
+  } as never)
+  const tours = [ownLegs(1, [10, 11]), ownLegs(1, [10, 11, 12]), ownLegs(2, [10, 11]), ownLegs(2, [10, 11, 12])]
+  /** Hovering a board draws its tour's interactive line; a click on that line focuses the start's tours. */
+  const focusViaBoard = async (c: HTMLElement) => {
+    const board = c.querySelector('.signpost-marker.board .sign')!
+    fireEvent.mouseOver(board)
+    await waitFor(() => expect(c.querySelector('.leaflet-route-rest-line-pane path.leaflet-interactive')).not.toBeNull())
+    fireEvent.click(c.querySelector('.leaflet-route-rest-line-pane path.leaflet-interactive')!)
+    fireEvent.mouseOut(board, { relatedTarget: document.body })
+  }
   const groups = [{ startId: 1, tours: tours.slice(0, 2) }, { startId: 2, tours: tours.slice(2) }] as never
   const routeCtx2 = { ...routeCtx, startById: two }
 
   beforeEach(() => {
     vi.spyOn(L.Map.prototype, 'flyToBounds').mockReturnThis()
     vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(400, 400))
-    vi.spyOn(routes, 'tourAnchorOf').mockImplementation((t) => ({ lat: 47.3, lng: t.startId === 1 ? 12 : 12.015, heading: 'east' }))
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockImplementation((t) => [{ lat: 47.3, lng: t.startId === 1 ? 12 : 12.015, heading: 'east' }])
   })
   afterEach(() => { vi.restoreAllMocks() })
 
@@ -199,19 +211,19 @@ describe('DiscoverLayer marker focus', () => {
     const { container } = renderFocused()
     const focused = () => container.querySelectorAll('.leaflet-route-focused-line-pane path').length
     expect(focused()).toBe(0)
-    fireEvent.click(container.querySelector('.signpost-marker .sign') as HTMLElement)
+    await focusViaBoard(container)
     await waitFor(() => expect(focused()).toBeGreaterThan(0))
     expect(container.querySelectorAll('.leaflet-route-rest-line-pane path').length).toBeGreaterThan(0)
     const markers = container.querySelectorAll('.signpost-marker')
     expect(markers[0].classList.contains('dimmed')).toBe(false)
-    expect(markers[1].classList.contains('dimmed')).toBe(true)
+    expect(container.querySelector('.signpost-marker.dimmed')).not.toBeNull()
   })
 
   it('keeps the focus through a drag and through zooming that stays at or above the click zoom, drops it below', async () => {
     vi.spyOn(L.Map.prototype, 'getBoundsZoom').mockReturnValue(13)
     const { container } = renderFocused()
     const focused = () => container.querySelectorAll('.leaflet-route-focused-line-pane path').length > 0
-    fireEvent.click(container.querySelector('.signpost-marker .sign') as HTMLElement)
+    await focusViaBoard(container)
     await waitFor(() => expect(focused()).toBe(true))
     act(() => { map.fire('dragstart') })
     await waitFor(() => expect(focused()).toBe(true))
@@ -226,10 +238,9 @@ describe('DiscoverLayer marker focus', () => {
 
 describe('DiscoverLayer signposts', () => {
   beforeEach(() => {
-    vi.useFakeTimers()
     vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(400, 400))
   })
-  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks() })
+  afterEach(() => { vi.restoreAllMocks() })
 
   const withExit = new Map([
     [1, { name: 'Kaprun', sourceType: 1, lat: 47.3, lng: 12 }],
@@ -239,60 +250,76 @@ describe('DiscoverLayer signposts', () => {
   const signpostHuts = new Map(Array.from({ length: 12 }, (_, i) => [100 + i, { lat: 47.31, lng: 12.01 }] as const))
   const stackTours = (n: number) => Array.from({ length: n }, (_, i) => exiting(i))
   const group = (tours: PlannerTour[]) => [{ startId: 1, tours }] as never
+  const c1 = { lat: 47.31, lng: 11.98, heading: 'east' as const }
+  const c2 = { lat: 47.29, lng: 12.02, heading: 'east' as const }
+  /** Deterministic projection: 1° lng = 5000 px, 1° lat = 8000 px, viewport centre (47.3, 12) at (200, 200). */
+  const linearProjection = () => vi.spyOn(L.Map.prototype, 'latLngToContainerPoint').mockImplementation(((p: L.LatLngExpression) => {
+    const ll = L.latLng(p)
+    return L.point(200 + (ll.lng - 12) * 5000, 200 - (ll.lat - 47.3) * 8000)
+  }) as never)
+  const twoCandidates = () => { vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([c1, c2]); linearProjection() }
   const render1 = (tours: PlannerTour[], props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13) =>
     renderLayer({ groups: group(tours), allTours: tours, startById: withExit, routeCtx: { ...routeCtx, startById: withExit, hutCoordsById: signpostHuts }, ...props }, zoom)
-  const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
 
   it('renders a single tour as one board labelled end point and distance; click picks the tour', () => {
     const t = exiting(0)
     const onPickRoute = vi.fn()
     const { container } = render1([t], { onPickRoute })
-    const sign = container.querySelector('.signpost-marker.single .sign') as HTMLElement
+    const sign = container.querySelector('.signpost-marker.board .sign') as HTMLElement
     expect(sign.textContent).toContain('Kaunertal')
     expect(sign.textContent).toContain('42.3 km')
     fireEvent.click(sign)
     expect(onPickRoute).toHaveBeenCalledWith(t)
   })
 
-  it('renders several tours from one start as a stack with the count', () => {
-    const { container } = render1(stackTours(3))
-    expect(container.querySelector('.signpost-marker.stack .stack-sign')!.textContent).toBe('3')
+  it('gives tours with the same route their own boards on distinct anchors and drops the rest to dots', () => {
+    twoCandidates()
+    const tours = stackTours(3)
+    const { container } = render1(tours)
+    const markers = [...container.querySelectorAll('.signpost-marker')]
+    expect(markers.map((m) => m.classList.contains('board') ? 'board' : 'dot')).toEqual(['board', 'board', 'dot'])
+    expect(container.querySelector('.stack-sign')).toBeNull()
   })
 
-  it('spreads a stack on hover into one board per tour and picks a board\'s tour on click', () => {
+  it('hovering a board hovers just its tour; clicking a board picks it', () => {
+    twoCandidates()
     const tours = stackTours(3)
+    const onHoverTours = vi.fn()
     const onPickRoute = vi.fn()
-    const { container } = render1(tours, { onPickRoute })
-    fireEvent.mouseOver(container.querySelector('.signpost-marker .sign')!)
-    advance(OPEN_DELAY_MS)
-    expect(container.querySelector('.signpost-marker')!.classList.contains('spread')).toBe(true)
-    const boards = container.querySelectorAll('.board[data-tour-key]')
-    expect(boards).toHaveLength(3)
-    fireEvent.click(boards[1])
+    const { container } = render1(tours, { onHoverTours, onPickRoute })
+    const second = container.querySelectorAll('.signpost-marker.board .sign')[1]
+    fireEvent.mouseOver(second)
+    expect([...onHoverTours.mock.calls.at(-1)![0]]).toEqual([tourKey(tours[1])])
+    fireEvent.click(second)
     expect(onPickRoute).toHaveBeenCalledWith(tours[1])
   })
 
-  it('hovering a spread board hovers just that tour', () => {
+  it('a click on a dot picks its tour and hovering it hovers just that tour', () => {
+    twoCandidates()
     const tours = stackTours(3)
     const onHoverTours = vi.fn()
-    const { container } = render1(tours, { onHoverTours })
-    fireEvent.mouseOver(container.querySelector('.signpost-marker .sign')!)
-    advance(OPEN_DELAY_MS)
-    fireEvent.mouseOver(container.querySelectorAll('.board[data-tour-key]')[2])
+    const onPickRoute = vi.fn()
+    const { container } = render1(tours, { onHoverTours, onPickRoute })
+    const dot = container.querySelector('.signpost-marker.dot .dot')!
+    fireEvent.mouseOver(dot)
     expect([...onHoverTours.mock.calls.at(-1)![0]]).toEqual([tourKey(tours[2])])
+    fireEvent.click(dot)
+    expect(onPickRoute).toHaveBeenCalledWith(tours[2])
   })
 
-  it('caps a spread at 8 boards plus an overflow board whose click focuses that start\'s tours', () => {
-    const tours = stackTours(11)
-    const onPickRoute = vi.fn()
-    const onFocusTours = vi.fn()
-    const { container } = render1(tours, { onPickRoute, onFocusTours })
-    expect(container.querySelectorAll('.board[data-tour-key]')).toHaveLength(8)
-    const overflow = container.querySelector('.board.overflow')!
-    expect(overflow.textContent).toBe('+3')
-    fireEvent.click(overflow)
-    expect(onFocusTours).toHaveBeenCalledWith(tours.map(tourKey))
-    expect(onPickRoute).not.toHaveBeenCalled()
+  it('shows a dot\'s board as a preview while its tour is hovered from the results list', () => {
+    twoCandidates()
+    const tours = stackTours(3)
+    const { container } = render1(tours, { hoveredTourKeys: new Set([tourKey(tours[2])]) })
+    const dot = container.querySelector('.signpost-marker.dot')!
+    expect(dot.classList.contains('previewing')).toBe(true)
+    expect(dot.querySelector('.preview .sign')!.textContent).toContain('Kaunertal')
+  })
+
+  it('draws no signpost for a tour without any anchor candidate in view', () => {
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([])
+    const { container } = render1(stackTours(2))
+    expect(container.querySelector('.signpost-marker')).toBeNull()
   })
 
   it('renders a cluster as a round count bubble, not a signpost, and highlights it like the old bubbles', () => {
@@ -353,7 +380,7 @@ describe('DiscoverLayer signposts on the route', () => {
   })
 
   it('stands a tour\'s board on its anchor, not on its start point', async () => {
-    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([anchor])
     const t = tour(1, [10, 11])
     const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never }, 13)
     await waitFor(() => expect(signposts(container)).toHaveLength(1))
@@ -365,23 +392,24 @@ describe('DiscoverLayer signposts on the route', () => {
   })
 
   it('draws no signpost for a tour with no anchor in view', () => {
-    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(null)
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([])
     const t = tour(1, [10, 11])
     const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never }, 13)
     expect(signposts(container)).toHaveLength(0)
   })
 
-  it('stacks tours whose anchors coincide into one signpost with a count', async () => {
-    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+  it('gives tours whose anchors coincide one board and one dot instead of a stack', async () => {
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([anchor])
     const a = tour(1, [10, 11])
     const b = tour(1, [10, 11, 12])
     const { container } = renderLayer({ ...focusOn(a, b), groups: [{ startId: 1, tours: [a, b] }] as never }, 13)
-    await waitFor(() => expect(container.querySelectorAll('.signpost-marker.stack')).toHaveLength(1))
-    expect(container.querySelector('.stack-sign')!.textContent).toBe('2')
+    await waitFor(() => expect(signposts(container)).toHaveLength(2))
+    expect(container.querySelectorAll('.signpost-marker.board')).toHaveLength(1)
+    expect(container.querySelectorAll('.signpost-marker.dot')).toHaveLength(1)
   })
 
   it('fades a board while its tour is hovered from elsewhere, not while the board itself is hovered', async () => {
-    vi.spyOn(routes, 'tourAnchorOf').mockReturnValue(anchor)
+    vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([anchor])
     const t = tour(1, [10, 11])
     const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never, hoveredTourKeys: new Set([tourKey(t)]) }, 13)
     await waitFor(() => expect(container.querySelector('.sign.faded')).not.toBeNull())

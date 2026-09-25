@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { anchorMarkerKind, createAnchorClusterer, createStartClusterer, markerRadius } from './clusterStarts.js'
-import type { AnchorMarker } from './clusterStarts.js'
+import { createStartClusterer, markerRadius } from './clusterStarts.js'
 
 const WORLD: [number, number, number, number] = [-180, -85, 180, 85]
 const markers = [
@@ -43,47 +42,5 @@ describe('markerRadius', () => {
     expect(markerRadius(100)).toBeLessThan(10 * markerRadius(10))
     expect(markerRadius(1)).toBeGreaterThanOrEqual(12)
     expect(markerRadius(1_000_000)).toBeLessThanOrEqual(34)
-  })
-})
-
-describe('createAnchorClusterer', () => {
-  const points = [
-    { tourKey: 'best', lat: 47.0, lng: 11.0 },
-    { tourKey: 'near', lat: 47.0001, lng: 11.0001 },
-    { tourKey: 'far', lat: 48.5, lng: 13.0 },
-  ]
-  const clusterer = createAnchorClusterer(points)
-
-  it('groups nearby anchors into one marker whose foot is the best-ranked tour\'s own anchor', () => {
-    const markers = clusterer.markersFor(WORLD, 13)
-    const stack = markers.find((m) => m.tourKeys.length === 2)!
-    expect(stack.tourKeys).toEqual(['best', 'near'])
-    expect(stack.lat).toBe(47.0)
-    expect(stack.lng).toBe(11.0)
-    expect(stack.id).toBe('best')
-  })
-
-  it('keeps distant anchors as single markers', () => {
-    const markers = clusterer.markersFor(WORLD, 13)
-    expect(markers.find((m) => m.tourKeys[0] === 'far')!.tourKeys).toEqual(['far'])
-  })
-
-  it('ranks by input order even when the cluster tree returns members differently', () => {
-    const reversed = createAnchorClusterer([...points.slice(0, 2)].reverse())
-    expect(reversed.markersFor(WORLD, 13).find((m) => m.tourKeys.length === 2)!.tourKeys).toEqual(['near', 'best'])
-  })
-
-  it('separates every anchor past the clusterer\'s max zoom', () => {
-    expect(clusterer.markersFor(WORLD, 20).map((m) => m.tourKeys.length)).toEqual([1, 1, 1])
-  })
-
-  it('handles no points', () => { expect(createAnchorClusterer([]).markersFor(WORLD, 13)).toEqual([]) })
-})
-
-describe('anchorMarkerKind', () => {
-  const m = (n: number): AnchorMarker => ({ id: 'a', lat: 0, lng: 0, tourKeys: Array.from({ length: n }, (_, i) => `k${i}`) })
-  it('is single for one tour and stack for several', () => {
-    expect(anchorMarkerKind(m(1))).toBe('single')
-    expect(anchorMarkerKind(m(3))).toBe('stack')
   })
 })

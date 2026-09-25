@@ -11,7 +11,7 @@ const project = (p: { lat: number; lng: number }) => ({ x: p.lng, y: p.lat })
 const at = (x: number, y: number, heading: 'east' | 'west' = 'east'): TourAnchor => ({ lat: y, lng: x, heading })
 const tour = (key: string, candidates: TourAnchor[], text = 'x'): PlaceTour => ({ key, label: label(text), candidates })
 const VIEWPORT = { width: 1000, height: 1000 }
-const fixed = (w: number) => () => w
+const fixed = (w: number) => (_label: TourBoardLabel) => w
 // A board is 100 px wide, 26 px + 24 px mast tall: an east board on foot (x, y) covers x-1..x+99, y-50..y.
 
 const place = (tours: PlaceTour[], measure = fixed(100)) => placeSignposts(tours, project, measure, VIEWPORT)
