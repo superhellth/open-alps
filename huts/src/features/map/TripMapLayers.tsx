@@ -5,6 +5,7 @@ import HeightProfile from './HeightProfile.js'
 import TripLayer from './TripLayer.js'
 import type { CandidateMapMarker, TripEndMarker, TripHutMarker } from './TripLayer.js'
 import { useTripElevation } from './useTripElevation.js'
+import { styles } from './TripMapLayers.styles.js'
 
 export interface TripMapMode {
   kind: 'trip'
@@ -36,7 +37,7 @@ export function TripMapLayers({ mode }: { mode: TripMapMode }) {
 export function TripMapStatusBar({ mode }: { mode: TripMapMode }) {
   if (!mode.activeLabel) return null
   return (
-    <Box sx={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', zIndex: 1000, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 1, px: 1.5, py: 0.5, display: 'flex', gap: 1, alignItems: 'center' }}>
+    <Box sx={styles.statusBar}>
       <Typography variant="body2">{mode.activeLabel}</Typography>
       <Button size="small" onClick={mode.onCancelEditing}>Abbrechen</Button>
     </Box>

@@ -8,6 +8,7 @@ import type { BookingStatus, Trip } from '@/trip/trip.js'
 import AvailabilityMark from './AvailabilityMark.js'
 import Signpost from './Signpost.js'
 import type { NightView } from './useTripAvailability.js'
+import { styles } from './StageList.styles.js'
 
 export interface StageListProps {
   trip: Trip
@@ -54,7 +55,7 @@ export default function StageList({
               {changed ? (
                 <Typography variant="body2" sx={{ mt: 0.5 }}>{CHANGED_TEXT}</Typography>
               ) : (
-                <Box sx={{ mt: 0.75, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+                <Box sx={styles.nightDetails}>
                   {firstNight && view && (view.loading ? <Typography variant="body2">Verfügbarkeit lädt …</Typography> : <AvailabilityMark availability={view.availability} />)}
                   {ohrs?.ohrsHutId && firstNight ? (
                     <Link href={buildBookingLink(ohrs.ohrsHutId, addUtcDays(firstNight, i))} target="_blank" rel="noreferrer" color="inherit">

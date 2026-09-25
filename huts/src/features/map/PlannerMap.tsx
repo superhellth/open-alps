@@ -13,6 +13,7 @@ import { ACTIVE_TILES } from './tiles.js'
 import type { Bounds, ViewTarget } from './useMapView.js'
 import type { Route } from './types.js'
 import './map.css'
+import { styles } from './PlannerMap.styles.js'
 
 export interface MapCommands {
   route: Route | null
@@ -56,7 +57,7 @@ function FitBoundsCommand({ bounds }: { bounds: Bounds | null }) {
 const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps) {
   const { route, fitRoute, highlightedLeg, restoreView, fitBounds, onMapClick } = commands
   return (
-    <Box className={mode.kind === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
+    <Box className={mode.kind === 'discover' ? 'map-muted' : undefined} sx={styles.root}>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
         {mode.kind === 'trip' && <TripMapStatusBar mode={mode} />}
         <MapContainer center={[47.3, 12.0]} zoom={7} style={{ height: '100%', width: '100%' }}>

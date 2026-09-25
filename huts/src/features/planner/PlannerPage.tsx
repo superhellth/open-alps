@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import { useAppData } from '@/data/appDataContext.js'
 import type { AppData } from '@/data/buildAppData.js'
 import { useSearchClient } from '@/search/searchClientContext.js'
@@ -29,6 +28,7 @@ import { tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripSession } from '@/features/trip/useTripSession.js'
 import { useSidebarNavigation } from './useSidebarNavigation.js'
+import { styles } from './PlannerPage.styles.js'
 
 export default function PlannerPage({ importHash }: { importHash: string | null }) {
   const app = useAppData()
@@ -126,16 +126,16 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const closeImport = () => { setImportDismissed(true); window.location.hash = '' }
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+    <Box sx={styles.root}>
       <SidebarHeader view={sidebarView} savedCount={state.trips.length} onWordmark={goHome} onPlanen={goPlanen} onMeineTouren={goMeineTouren} />
-      <Box sx={{ display: 'flex', flex: 1, minHeight: 0 }}>
-        <Box sx={{ width: 420, flexShrink: 0, overflowY: 'auto', borderRight: '2px solid', borderColor: 'secondary.main' }}>
+      <Box sx={styles.body}>
+        <Box sx={styles.sidebar}>
           {/* Kept mounted (only hidden) while a trip or the saved list is showing, so "← Ergebnisse"
               restores the list's scroll position. */}
           <Box hidden={sidebarView !== 'discover'}>
             <Tabs
               value={discoverTab} onChange={(_e, v) => setDiscoverTab(v)} variant="fullWidth"
-              sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper' }}
+              sx={styles.discoverTabs}
             >
               <Tab value="filters" label="Filter" />
               <Tab
@@ -150,11 +150,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
                 onErweitertOpenChange={setErweitertOpen}
               />
               {search.status === 'done' && visibleTours.length > 0 && (
-                <Box sx={{
-                  position: 'sticky', bottom: 0, zIndex: 1, display: 'flex', justifyContent: 'center', py: 1,
-                  bgcolor: 'background.paper',
-                  ...(erweitertOpen && { borderTop: '1px solid', borderColor: 'divider', boxShadow: `0 -4px 8px -4px ${alpha('#000', 0.15)}` }),
-                }}>
+                <Box sx={styles.resultsBar(erweitertOpen)}>
                   <Button variant="text" onClick={() => setDiscoverTab('results')}>
                     Zu den Ergebnissen ({visibleTours.length}) →
                   </Button>
@@ -204,7 +200,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
           )}
         </Box>
 
-        <Box sx={{ flex: 1, minWidth: 0, position: 'relative' }}>
+        <Box sx={styles.mapPane}>
           <PlannerMap mode={mapMode} commands={mapCommands} />
           {mode === 'discover' && prompt.visible && <FirstVisitPrompt />}
         </Box>

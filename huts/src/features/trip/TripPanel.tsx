@@ -10,6 +10,7 @@ import StageList from './StageList.js'
 import StartDateStrip from './StartDateStrip.js'
 import TripDateSummary from './TripDateSummary.js'
 import { useTripAvailability } from './useTripAvailability.js'
+import { styles } from './TripPanel.styles.js'
 
 export interface TripPanelProps {
   trip: Trip
@@ -38,7 +39,7 @@ export default function TripPanel({
   const totals = summarizeLegs(tripLegs.legs)
 
   return (
-    <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+    <Box sx={styles.root}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
         <Button size="small" color="secondary" onClick={onBack}>{backLabel}</Button>
         {onShare && <Button size="small" color="secondary" onClick={onShare}>Link teilen</Button>}
