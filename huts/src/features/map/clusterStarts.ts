@@ -49,6 +49,14 @@ export function createStartClusterer(markers: StartMarker[]): StartClusterer {
   }
 }
 
+export type MarkerKind = 'single' | 'stack' | 'cluster'
+
+/** single = one start point with one tour; stack = one start point with several; cluster = several start points. */
+export function markerKind(m: MapMarker): MarkerKind {
+  if (m.kind === 'cluster') return 'cluster'
+  return m.count === 1 ? 'single' : 'stack'
+}
+
 const MIN_RADIUS = 12
 const MAX_RADIUS = 34
 
