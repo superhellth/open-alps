@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { Box, Button, IconButton, Popover, Typography } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
+import { styles } from './RangeCalendar.styles.js'
 
 interface RangeCalendarProps {
   startDate: string
@@ -87,11 +87,7 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
     <>
       <Button
         size="small" variant="outlined" color="secondary" disabled={disabled} onClick={openCalendar}
-        sx={{
-          textTransform: 'none', justifyContent: 'space-between', width: '100%', height: 40,
-          fontSize: '1rem', fontWeight: 400, color: 'text.primary', borderColor: alpha('#000', 0.23),
-          '&:hover': { borderColor: 'text.primary' },
-        }}
+        sx={styles.trigger}
       >
         {summaryLabel(startDate, endDate)}
         <CalendarMonthIcon fontSize="small" sx={{ ml: 1, color: 'action.active' }} aria-hidden />
@@ -101,7 +97,7 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
         <Box sx={{ width: 280, p: 1.5 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={styles.monthHeader}>
             <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(-1)} aria-label="Vorheriger Monat">‹</IconButton>
             <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{monthLabel(view.y, view.m)}</Typography>
             <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(1)} aria-label="Nächster Monat">›</IconButton>
@@ -121,15 +117,7 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
                 <Box
                   key={iso} role="button" aria-label={iso} aria-pressed={isEndpoint}
                   onClick={() => !disabled && pickDay(iso)}
-                  sx={{
-                    textAlign: 'center', py: 0.5, borderRadius: 1, cursor: disabled ? 'default' : 'pointer',
-                    bgcolor: isEndpoint ? 'primary.main' : inRange ? 'primary.light' : 'transparent',
-                    color: isEndpoint ? 'primary.contrastText' : 'text.primary',
-                    outline: isToday && !isEndpoint ? '1px solid' : 'none',
-                    outlineColor: 'primary.main',
-                    opacity: disabled ? 0.5 : 1,
-                    '&:hover': disabled ? undefined : { bgcolor: isEndpoint ? 'primary.main' : 'action.hover' },
-                  }}
+                  sx={styles.day({ disabled, isEndpoint, inRange, isToday })}
                 >
                   <Typography variant="body2">{Number(iso.slice(-2))}</Typography>
                 </Box>
