@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { SPREAD_CAP, clusterHtml, escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
+import { SPREAD_CAP, escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
 import type { BoardTour } from './signpostHtml.js'
 
 const bt = (i: number, text = `Ziel ${i}`): BoardTour => ({
@@ -47,13 +47,5 @@ describe('stackHtml', () => {
   it('adds no overflow board at exactly the cap', () => {
     const d = doc(stackHtml(Array.from({ length: SPREAD_CAP }, (_, i) => bt(i))))
     expect(d.querySelector('[data-overflow]')).toBeNull()
-  })
-})
-
-describe('clusterHtml', () => {
-  it('is a two-arm sign with the summed count', () => {
-    const d = doc(clusterHtml(214))
-    expect(d.querySelector('.sign.cluster-sign')!.textContent).toBe('214')
-    expect(d.querySelectorAll('.arm')).toHaveLength(2)
   })
 })

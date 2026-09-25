@@ -271,19 +271,18 @@ describe('DiscoverLayer signposts', () => {
     expect(onPickRoute).not.toHaveBeenCalled()
   })
 
-  it('renders a cluster as a two-arm sign with the summed count and never spreads it', () => {
+  it('renders a cluster as a round count bubble, not a signpost, and highlights it like the old bubbles', () => {
     const close = new Map([
       [1, { name: null, sourceType: 1, lat: 47.3, lng: 12 }],
       [2, { name: null, sourceType: 1, lat: 47.31, lng: 12.01 }],
     ])
-    const groups = [{ startId: 1, tours: [tour(1, [10]), tour(1, [11])] }, { startId: 2, tours: [tour(2, [10]), tour(2, [11]), tour(2, [12])] }] as never
-    const { container } = renderLayer({ groups, startById: close }, 9)
-    const cluster = container.querySelector('.signpost-marker.cluster') as HTMLElement
-    expect(cluster.textContent).toBe('5')
-    expect(cluster.querySelectorAll('.arm')).toHaveLength(2)
-    fireEvent.mouseOver(cluster.querySelector('.sign')!)
-    advance(300)
-    expect(cluster.classList.contains('spread')).toBe(false)
+    const hovered = tour(1, [10])
+    const groups = [{ startId: 1, tours: [hovered, tour(1, [11])] }, { startId: 2, tours: [tour(2, [10]), tour(2, [11]), tour(2, [12])] }] as never
+    const { container } = renderLayer({ groups, startById: close, allTours: [hovered], hoveredTourKeys: new Set([tourKey(hovered)]) }, 9)
+    expect(container.querySelector('.signpost-marker')).toBeNull()
+    const bubble = container.querySelector('.start-count-marker.cluster') as HTMLElement
+    expect(bubble.textContent).toBe('5')
+    expect(bubble.classList.contains('highlighted')).toBe(true)
   })
 
   it('highlights the marker of a start whose tour is hovered from the list', () => {

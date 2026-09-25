@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
-import { useMap, useMapEvents } from 'react-leaflet'
+import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { StartGroup } from '@/tourSearch/groupByStart.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
@@ -14,9 +14,9 @@ import WaypointLayer, { collectSymbols } from './WaypointLayer.js'
 import HoverTooltip from './HoverTooltip.js'
 import SignpostMarker from './SignpostMarker.js'
 import type { Activation } from './SignpostMarker.js'
-import { createStartClusterer, markerKind } from './clusterStarts.js'
+import { createStartClusterer, markerKind, markerRadius } from './clusterStarts.js'
 import type { MapMarker } from './clusterStarts.js'
-import { clusterHtml, escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
+import { escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
 import { tourBoardLabel } from './tourBoard.js'
 import { indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
 import './map.css'
@@ -25,10 +25,26 @@ import './map.css'
  *  clusterer's own maxZoom (14) so routes appear before markers finish separating one-per-start. */
 export const ROUTE_REVEAL_ZOOM = 11
 
+const iconCache = new Map<string, L.DivIcon>()
+function clusterIcon(count: number, dimmed: boolean, highlighted: boolean): L.DivIcon {
+  const key = `${count}|${dimmed}|${highlighted}`
+  let icon = iconCache.get(key)
+  if (!icon) {
+    const size = Math.round(markerRadius(count) * 2)
+    icon = L.divIcon({
+      className: `start-count-marker cluster${dimmed ? ' dimmed' : ''}${highlighted ? ' highlighted' : ''}`,
+      html: `<span>${count}</span>`,
+      iconSize: [size, size],
+    })
+    iconCache.set(key, icon)
+  }
+  return icon
+}
+
 const toursText = (n: number) => `In ${n} Touren`
 
 /** One signpost marker per start point with matching tours (a single tour board, or a stack of boards with
- *  the tour count) or per cluster of start points (a two-arm sign with the summed count), clustered by zoom.
+ *  the tour count) or per cluster of start points (a round yellow bubble with the summed count), clustered by zoom.
  *  Panning and zooming only re-cluster, they never re-search. A single board and every board of a spread stack
  *  pick their tour on click; a stack or cluster click flies the map to the bounds of its tours, focuses the results list on them
  *  and draws them at the focused tier until the focus is dropped (show all tours, a map click, or zooming out
@@ -134,12 +150,11 @@ export default function DiscoverLayer({
   const markerKey = (m: MapMarker) => (m.kind === 'start' ? `s${m.startId}` : `c${m.clusterId}`)
 
   const markers = useMemo(() => clusterer.clustersFor(view.bbox, view.zoom), [clusterer, view])
-  const htmlByMarker = useMemo(() => new Map(markers.map((m) => {
-    const kind = markerKind(m)
-    if (m.kind === 'cluster') return [markerKey(m), clusterHtml(m.count)] as const
+  const htmlByMarker = useMemo(() => new Map(markers.flatMap((m) => {
+    if (m.kind === 'cluster') return []
     const boards = (groupOfStart.get(m.startId)?.tours ?? [])
       .map((t) => ({ key: tourKey(t), label: tourBoardLabel(t, startById) }))
-    return [markerKey(m), kind === 'single' && boards[0] ? singleHtml(boards[0]) : stackHtml(boards)] as const
+    return [[markerKey(m), markerKind(m) === 'single' && boards[0] ? singleHtml(boards[0]) : stackHtml(boards)] as const]
   })), [markers, groupOfStart, startById])
 
   const highlightedStarts = useMemo(() => {
@@ -174,10 +189,24 @@ export default function DiscoverLayer({
       {markers.map((m) => {
         const ids = startIdsOf(m)
         const outsideFocus = focusTours != null && !keysOfStarts(ids).some((k) => focusTours.has(k))
+        const dimmedMarker = dimmed || outsideFocus
+        const highlighted = ids.some((id) => highlightedStarts.has(id))
+        if (m.kind === 'cluster') {
+          return (
+            <Marker
+              key={markerKey(m)} position={[m.lat, m.lng]} icon={clusterIcon(m.count, dimmedMarker, highlighted)}
+              eventHandlers={{
+                mouseover: () => hoverStarts(new Set(ids)),
+                mouseout: () => hoverStarts(null),
+                click: () => activate(m, { kind: 'body' }),
+              }}
+            />
+          )
+        }
         return (
           <SignpostMarker
             key={markerKey(m)} position={[m.lat, m.lng]} kind={markerKind(m)} html={htmlByMarker.get(markerKey(m)) ?? ''}
-            dimmed={dimmed || outsideFocus} highlighted={ids.some((id) => highlightedStarts.has(id))}
+            dimmed={dimmedMarker} highlighted={highlighted}
             onHoverMarker={(hovering) => hoverStarts(hovering ? new Set(ids) : null)}
             onHoverTour={(key) => onHoverTours(key ? new Set([key]) : NO_TOURS)}
             onActivate={(a) => activate(m, a)}

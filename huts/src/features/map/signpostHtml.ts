@@ -35,8 +35,3 @@ export function stackHtml(tours: BoardTour[]): string {
   }
   return `<div class="sign stack-sign" tabindex="0" role="button" aria-label="${tours.length} Touren">${tours.length}</div><div class="spread-backdrop"></div>${boards.join('')}`
 }
-
-/** Several start points: two arms pointing opposite ways, the top one carrying the summed count. */
-export function clusterHtml(count: number): string {
-  return `<div class="sign cluster-sign" tabindex="0" role="button" aria-label="${count} Touren an mehreren Startpunkten"><span class="arm right">${count}</span><span class="arm left"></span></div>`
-}

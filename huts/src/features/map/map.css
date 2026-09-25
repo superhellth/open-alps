@@ -3,6 +3,7 @@
   filter: grayscale(0.75) brightness(1.08) contrast(0.9);
 }
 .hut-marker,
+.start-count-marker,
 .signpost-marker,
 .swap-marker {
   background: none;
@@ -67,9 +68,8 @@
 
 /* Single tour: the board's left edge sits on the start point. */
 .signpost-marker.single .sign { left: -8px; top: calc(var(--board-h) / -2); }
-/* Stack and cluster: the count sign is centred on the point. */
-.signpost-marker.stack .stack-sign,
-.signpost-marker.cluster .cluster-sign {
+/* Stack: the count sign is centred on the point. */
+.signpost-marker.stack .stack-sign {
   left: 0;
   top: calc(var(--board-h) / -2);
   min-width: 34px;
@@ -78,10 +78,6 @@
   font-size: 0.9rem;
   font-weight: 700;
 }
-.signpost-marker.cluster .cluster-sign { height: calc(var(--board-h) * 1.6); top: calc(var(--board-h) * -0.8); padding: 0; }
-.signpost-marker .arm { position: absolute; left: 0; right: 0; height: 50%; display: flex; align-items: center; justify-content: center; }
-.signpost-marker .arm.right { top: 0; }
-.signpost-marker .arm.left { bottom: 0; transform: scaleX(-1); }
 
 /* Spread: boards start folded onto the sign and hidden, and move up the pole. */
 .signpost-marker .board {
@@ -127,4 +123,38 @@
 @media (prefers-reduced-motion: reduce) {
   .signpost-marker .board,
   .signpost-marker.spread .board { transition: none; }
+}
+
+/* Cluster bubble: several start points under one count. */
+.start-count-marker span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--color-signpost);
+  color: var(--color-ink);
+  border: 2px solid var(--color-ink);
+  font: 700 0.9rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
+}
+.start-count-marker:not(.dimmed):hover,
+.start-count-marker.highlighted {
+  z-index: 1000 !important;
+}
+.start-count-marker:not(.dimmed):hover span,
+.start-count-marker.highlighted span {
+  background: #fff;
+  transform: scale(1.2);
+  box-shadow: 0 0 0 3px var(--color-signpost), 0 2px 8px color-mix(in srgb, var(--color-ink) 55%, transparent);
+}
+.start-count-marker.dimmed span {
+  opacity: 0.45;
+}
+.start-count-marker.dimmed:hover span {
+  transform: none;
+  box-shadow: none;
 }

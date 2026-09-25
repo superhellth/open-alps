@@ -49,10 +49,17 @@ export function createStartClusterer(markers: StartMarker[]): StartClusterer {
   }
 }
 
-export type MarkerKind = 'single' | 'stack' | 'cluster'
+export type MarkerKind = 'single' | 'stack'
 
-/** single = one start point with one tour; stack = one start point with several; cluster = several start points. */
-export function markerKind(m: MapMarker): MarkerKind {
-  if (m.kind === 'cluster') return 'cluster'
+/** single = one start point with one tour; stack = one start point with several. */
+export function markerKind(m: Extract<MapMarker, { kind: 'start' }>): MarkerKind {
   return m.count === 1 ? 'single' : 'stack'
+}
+
+const MIN_RADIUS = 12
+const MAX_RADIUS = 34
+
+/** Cluster bubble radius in px: sqrt of the match count with fixed bounds, so large clusters do not cover the map. */
+export function markerRadius(count: number): number {
+  return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, 9 + 3.5 * Math.sqrt(count)))
 }
