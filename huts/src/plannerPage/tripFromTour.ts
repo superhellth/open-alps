@@ -4,7 +4,7 @@ import type { SourceType } from '../tourSearch/types.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { StartPoint } from './types.js'
+import type { StartPoint } from '@/data/types.js'
 
 export function tripFromTour(tour: PlannerTour, ctx: {
   hutIds: readonly string[]

@@ -4,8 +4,8 @@ import type { OfficialTourView } from '../tourSearch/officialTours.js'
 import type { RawTour } from '../tourSearch/loadOfficialTours.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 import type { HutClass } from './hutClass.js'
-import { idFromOsmFeatureId } from '../plannerPage/labels.js'
-import type { StartPoint } from '../plannerPage/types.js'
+import { idFromOsmFeatureId } from './labels.js'
+import type { StartPoint } from './types.js'
 
 export interface HutOhrs {
   ohrsHutId: string | null

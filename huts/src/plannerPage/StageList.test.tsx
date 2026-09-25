@@ -6,7 +6,7 @@ import StageList from './StageList.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import { newTrip } from '../trip/trip.js'
-import { makeStartLabel } from './labels.js'
+import { makeStartLabel } from '@/data/labels.js'
 
 afterEach(cleanup)
 

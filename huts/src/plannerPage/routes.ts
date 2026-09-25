@@ -3,7 +3,8 @@ import type { OfficialTourView } from '../tourSearch/officialTours.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '../trip/trip.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { Route, RouteWaypoint, StartPoint } from './types.js'
+import type { Route, RouteWaypoint } from './types.js'
+import type { StartPoint } from '@/data/types.js'
 
 export interface RouteContext {
   hutCoordsById: Map<number, { lat: number; lng: number }>

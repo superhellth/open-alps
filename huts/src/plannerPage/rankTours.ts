@@ -5,7 +5,7 @@ import type { FreeByOffset } from '../availability/types.js'
 import { legTimeRangeFromCeiling } from './formState.js'
 import type { FormState } from './formState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { StartPoint } from './types.js'
+import type { StartPoint } from '@/data/types.js'
 
 export type SortKey = 'fit' | 'duration' | 'ascent' | 'distance'
 

@@ -1,4 +1,4 @@
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '@/tourSearch/types.js'
 import type { StartPoint } from './types.js'
 
 export const SOURCE_TYPE_LABEL: Record<number, string> = {
