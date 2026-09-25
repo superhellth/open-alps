@@ -1,5 +1,5 @@
 import type { ApproachRecord, HutEdgeRecord, ReverseIndexEntry } from '@/tourSearch/types.js'
-import type { TripGraph } from '@/tourSearch/tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 
 // Huts: A0 B1 C2 D3 E4 X5. Hut-hut edges (variant 0): A-B, B-C, C-D, A-C, D-E, A-X, X-C.
 // Start 100 / 101 are stations, 200 / 201 parking. Approaches to A and D (+ E from 100), exits from A, D, E.

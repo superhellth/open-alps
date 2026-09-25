@@ -1,5 +1,5 @@
 import type { Query, TourResult } from '../tourSearch/types.js'
-import type { OverlapLeg } from '../tourSearch/tripOverlaps.js'
+import type { OverlapLeg } from '@/trip/tripOverlaps.js'
 
 export type WorkerRequest =
   | { type: 'search'; id: number; query: Query }

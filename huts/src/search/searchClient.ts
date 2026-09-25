@@ -1,5 +1,5 @@
 import type { Query, TourResult } from '../tourSearch/types.js'
-import type { OverlapLeg } from '../tourSearch/tripOverlaps.js'
+import type { OverlapLeg } from '@/trip/tripOverlaps.js'
 import type { WorkerRequest, WorkerResponse } from './protocol.js'
 
 export class SupersededError extends Error {

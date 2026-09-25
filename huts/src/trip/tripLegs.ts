@@ -1,15 +1,9 @@
-import { getAdjacency } from './adjacency.js'
-import { getApproachLegs, getExitLegs } from './approaches.js'
-import { resolveHutGuids } from './hutIdentity.js'
-import { resolveVariant } from './resolveVariant.js'
-import type { ApproachesData, HutEdgesData, HutLeg, Leg, SourceType, StartLeg } from './types.js'
-import type { Trip, TripVariant } from '../trip/trip.js'
-
-/** The slice of the routing graph trip derivation and editing need; the overlap tables stay in the worker. */
-export interface TripGraph {
-  hutEdges: HutEdgesData
-  approaches: ApproachesData
-}
+import { getAdjacency } from '@/tourSearch/adjacency.js'
+import { getApproachLegs, getExitLegs } from '@/tourSearch/approaches.js'
+import { resolveHutGuids } from '@/tourSearch/hutIdentity.js'
+import { resolveVariant } from '@/tourSearch/resolveVariant.js'
+import type { HutLeg, Leg, SourceType, StartLeg, TripGraph } from '@/tourSearch/types.js'
+import type { Trip, TripVariant } from './trip.js'
 
 export type Endpoint =
   | { kind: 'start'; startId: number; sourceType: SourceType }

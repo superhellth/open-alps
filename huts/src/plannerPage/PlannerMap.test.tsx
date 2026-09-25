@@ -5,7 +5,7 @@ import '@testing-library/jest-dom/vitest'
 import PlannerMap from './PlannerMap.js'
 import type { PlannerTour } from './tours.js'
 import { newTrip } from '../trip/trip.js'
-import type { TripGraph } from '../tourSearch/tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { SearchClient } from '../search/searchClient.js'
-import { overlapLegsOf } from '../tourSearch/tripOverlaps.js'
-import type { TripLegs } from '../tourSearch/tripLegs.js'
+import { overlapLegsOf } from '@/trip/tripOverlaps.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '../trip/trip.js'
 
 /** Overlap between an edited trip's legs is a warning, not a block; the tables live in the worker. */

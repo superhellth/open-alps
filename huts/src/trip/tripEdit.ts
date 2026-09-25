@@ -1,10 +1,10 @@
-import { getAdjacency } from './adjacency.js'
-import { resolveHutGuids } from './hutIdentity.js'
+import { getAdjacency } from '@/tourSearch/adjacency.js'
+import { resolveHutGuids } from '@/tourSearch/hutIdentity.js'
 import { bestStartLegs, linkLeg, variantOf } from './tripLegs.js'
-import type { Endpoint, TripGraph } from './tripLegs.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER } from './types.js'
-import type { SourceType, TourMode } from './types.js'
-import type { Trip, TripEndpoint } from '../trip/trip.js'
+import type { Endpoint } from './tripLegs.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER } from '@/tourSearch/types.js'
+import type { SourceType, TourMode, TripGraph } from '@/tourSearch/types.js'
+import type { Trip, TripEndpoint } from './trip.js'
 
 export function modeOfTrip(trip: Trip): TourMode {
   if (trip.start.sourceType === SOURCE_TYPE_PARKING) return 'car'

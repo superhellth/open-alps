@@ -4,7 +4,7 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import StageList from './StageList.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
-import { legsFromTrip } from '../tourSearch/tripLegs.js'
+import { legsFromTrip } from '@/trip/tripLegs.js'
 import { newTrip } from '../trip/trip.js'
 import { makeStartLabel } from './labels.js'
 

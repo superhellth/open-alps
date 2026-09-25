@@ -1,6 +1,6 @@
 import type { GeometryLayer } from '../tourSearch/loadLegGeometry.js'
 import type { OfficialTourView } from '../tourSearch/officialTours.js'
-import type { TripLegs } from '../tourSearch/tripLegs.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '../trip/trip.js'
 import type { PlannerTour } from './tours.js'
 import type { Route, RouteWaypoint, StartPoint } from './types.js'

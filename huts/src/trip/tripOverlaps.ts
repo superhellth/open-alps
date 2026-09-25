@@ -1,5 +1,5 @@
-import { hasOverlap, nearHubIds, trimSharedHubIds } from './overlap.js'
-import type { EdgeIdTables, EdgeKind } from './overlap.js'
+import { hasOverlap, nearHubIds, trimSharedHubIds } from '@/tourSearch/overlap.js'
+import type { EdgeIdTables, EdgeKind } from '@/tourSearch/overlap.js'
 import type { TripLegs } from './tripLegs.js'
 
 export interface OverlapLeg {

@@ -2,7 +2,7 @@ import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '.
 import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
 import type { OfficialTourView } from '../tourSearch/officialTours.js'
 import type { RawTour } from '../tourSearch/loadOfficialTours.js'
-import type { TripGraph } from '../tourSearch/tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 import type { HutClass } from './hutClass.js'
 import { idFromOsmFeatureId } from '../plannerPage/labels.js'
 import type { StartPoint } from '../plannerPage/types.js'

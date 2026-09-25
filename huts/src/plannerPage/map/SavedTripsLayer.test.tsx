@@ -5,7 +5,7 @@ import { MapContainer, TileLayer } from 'react-leaflet'
 import SavedTripsLayer from './SavedTripsLayer.js'
 import { newTrip } from '../../trip/trip.js'
 import type { RouteContext } from '../routes.js'
-import type { TripGraph } from '../../tourSearch/tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)
 

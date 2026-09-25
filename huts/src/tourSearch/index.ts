@@ -4,7 +4,7 @@ import { loadHutEdgeIdsData, loadStartEdgeIdsData } from './loadHutEdgeIds.js'
 import { searchChains } from './search.js'
 import { dedupeReversePairs, suppressSimilar } from './diversity.js'
 import type { GraphData, Query, SearchResult } from './types.js'
-import type { TripGraph } from './tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 
 export async function loadTourSearchData(baseUrl = '/data'): Promise<GraphData> {
   const [hutEdges, approaches, hutEdgeIds, startEdgeIds] = await Promise.all([

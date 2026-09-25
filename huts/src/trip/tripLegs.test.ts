@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from './trip.js'
 import { legsFromTrip, linkLeg, summarizeLegs, variantOf } from './tripLegs.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
 

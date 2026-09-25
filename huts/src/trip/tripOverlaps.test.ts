@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { overlapLegsOf, tripOverlaps } from './tripOverlaps.js'
-import type { EdgeIdTables } from './overlap.js'
-import type { HutEdgeIdsData } from './types.js'
+import type { EdgeIdTables } from '@/tourSearch/overlap.js'
+import type { HutEdgeIdsData } from '@/tourSearch/types.js'
 import { legsFromTrip } from './tripLegs.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from './trip.js'
 
 function table(rows: { sorted: number[]; prefix: number[]; suffix: number[] }[]): HutEdgeIdsData {
   return {

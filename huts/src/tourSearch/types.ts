@@ -179,3 +179,9 @@ export interface SearchResult {
   chains: TourResult[]
   killCounters: KillCounters
 }
+
+/** The slice of the routing graph trip derivation and editing need; the overlap tables stay in the worker. */
+export interface TripGraph {
+  hutEdges: HutEdgesData
+  approaches: ApproachesData
+}

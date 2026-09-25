@@ -3,7 +3,7 @@ import { Box, Link, ToggleButton, ToggleButtonGroup, Typography } from '@mui/mat
 import { addUtcDays } from '../availability/formatDate.js'
 import { buildBookingLink } from '../availability/bookingLink.js'
 import type { HutOhrs } from '../data/buildAppData.js'
-import type { TripLegs } from '../tourSearch/tripLegs.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import type { BookingStatus, Trip } from '../trip/trip.js'
 import AvailabilityMark from './AvailabilityMark.js'
 import Signpost from './Signpost.js'

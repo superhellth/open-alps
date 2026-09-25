@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { renderHook, waitFor, cleanup } from '@testing-library/react'
 import { useTripOverlaps } from './useTripOverlaps.js'
-import { legsFromTrip } from '../tourSearch/tripLegs.js'
+import { legsFromTrip } from '@/trip/tripLegs.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
 import { newTrip } from '../trip/trip.js'
 import type { SearchClient } from '../search/searchClient.js'

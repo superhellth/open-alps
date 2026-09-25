@@ -5,9 +5,10 @@ import { formatSignpostTime } from '../format/signpostTime.js'
 import {
   applyEndpoint, applyExtend, applySwap, applyTrim, endpointCandidates, extendCandidates,
   modeOfTrip, swapCandidates, trimAllowed,
-} from '../tourSearch/tripEdit.js'
-import type { EndpointCandidate } from '../tourSearch/tripEdit.js'
-import type { TripGraph, TripLegs } from '../tourSearch/tripLegs.js'
+} from '@/trip/tripEdit.js'
+import type { EndpointCandidate } from '@/trip/tripEdit.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
+import type { TripGraph } from '@/tourSearch/types.js'
 import type { SourceType } from '../tourSearch/types.js'
 import type { Trip } from '../trip/trip.js'
 

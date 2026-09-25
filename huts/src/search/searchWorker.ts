@@ -1,5 +1,5 @@
 import { findTours, loadTourSearchData } from '../tourSearch/index.js'
-import { tripOverlaps } from '../tourSearch/tripOverlaps.js'
+import { tripOverlaps } from '@/trip/tripOverlaps.js'
 import type { WorkerRequest, WorkerResponse } from './protocol.js'
 
 const scope = self as unknown as {

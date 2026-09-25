@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useTripElevation } from './useTripElevation.js'
-import type { TripLegs } from '../../tourSearch/tripLegs.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 
 vi.mock('../../tourSearch/loadLegElevation.js', () => ({
   loadLegElevation: vi.fn(async (_layer: string, edgeId: number) => {

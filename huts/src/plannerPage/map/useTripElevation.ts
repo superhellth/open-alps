@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { loadLegElevation } from '../../tourSearch/loadLegElevation.js'
-import type { TripLegs } from '../../tourSearch/tripLegs.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import { legLayer } from '../routes.js'
 
 export interface ElevationPoint {
