@@ -4,10 +4,11 @@ import { Box, Button, Chip, List, ListItemButton, Pagination, Typography } from 
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import { formatSignpostTime } from '@/format/signpostTime.js'
-import { SIGNPOST_FONT, tokens } from '@/ui/theme.js'
+import { tokens } from '@/ui/tokens.js'
 import { SORT_LABEL } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
+import { styles } from './ResultsList.styles.js'
 
 const PAGE_SIZE = 25
 const CHAIN_SPELLED_OUT_MAX = 3
@@ -53,7 +54,7 @@ export default function ResultsList({
 
   if (noMatches) {
     return (
-      <Box sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1, alignItems: 'flex-start' }}>
+      <Box sx={styles.noMatches}>
         <Typography>Keine Touren für diese Filter. Mehr Tage oder längere Gehzeit pro Tag zulassen.</Typography>
         <Button variant="outlined" onClick={onOpenFilters}>Filter anpassen</Button>
       </Box>
@@ -64,18 +65,14 @@ export default function ResultsList({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{
-        display: 'flex', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap',
-        p: 2, gap: 1, position: 'sticky', top: 0, zIndex: 1,
-        bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider',
-      }}>
+      <Box sx={styles.sortBar}>
         {(Object.keys(SORT_LABEL) as SortKey[]).map((key) => {
           const active = key === sortKey
           return (
             <Chip
               key={key} size="small"
               label={
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, fontFamily: SIGNPOST_FONT, fontWeight: 600 }}>
+                <Box sx={styles.sortChipLabel}>
                   {SORT_LABEL[key]}
                   {active && key !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14 }} /> : <ArrowDownwardIcon sx={{ fontSize: 14 }} />)}
                 </Box>
@@ -84,9 +81,7 @@ export default function ResultsList({
                 if (!active) onSortChange(key)
                 else if (key !== 'fit') onSortDirChange(sortDir === 'asc' ? 'desc' : 'asc')
               }}
-              sx={active
-                ? { bgcolor: tokens.signpost, color: tokens.ink, '&:hover': { bgcolor: tokens.signpost } }
-                : { bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }}
+              sx={styles.sortChip(active)}
             />
           )
         })}
@@ -112,18 +107,15 @@ export default function ResultsList({
               onMouseEnter={() => onPreview(tour)} onMouseLeave={() => onPreview(null)}
               onFocus={() => onPreview(tour)} onBlur={() => onPreview(null)}
               onClick={() => onPick(tour)}
-              sx={{
-                display: 'block', borderBottom: '1px solid', borderColor: 'divider',
-                ...(isHighlighted(tour) && { bgcolor: 'action.hover', boxShadow: `inset 4px 0 0 ${tokens.signpost}` }),
-              }}
+              sx={styles.row(isHighlighted(tour))}
             >
-              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, fontFamily: SIGNPOST_FONT, fontWeight: 600 }}>
+              <Box sx={styles.chainRow}>
                 <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
                   {chain.text}
                 </span>
                 {chain.foldedCount > 0 && <Chip size="small" label={`+${chain.foldedCount} Hütten`} sx={{ flexShrink: 0 }} />}
               </Box>
-              <Box sx={{ display: 'flex', flexWrap: 'nowrap', gap: 2, mt: 0.5, color: 'text.secondary' }}>
+              <Box sx={styles.statRow}>
                 <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'duration') }}>{formatSignpostTime(tour.totalDurationH)}</span>
                 <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'distance') }}>{(tour.totalDistanceM / 1000).toFixed(1)} km</span>
               </Box>
@@ -133,7 +125,7 @@ export default function ResultsList({
                 {' '}· ↓ {Math.round(tour.totalDescentM).toLocaleString('de-DE')} m
               </Typography>
               {tour.official && (
-                <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
+                <Box sx={styles.officialRow}>
                   <Chip size="small" label={`Offiziell: ${tour.official.name}`} />
                 </Box>
               )}
