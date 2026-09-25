@@ -3,7 +3,7 @@ import { MapContainer, TileLayer, CircleMarker, Polyline, Tooltip } from 'react-
 import L from 'leaflet'
 import { AppBar, Box, FormControlLabel, Switch, Toolbar, Typography } from '@mui/material'
 import 'leaflet/dist/leaflet.css'
-import './App.css'
+import './adminPage.css'
 import { hutClassBadge, hutClassLabel, OPERATOR_COLOR, OPERATOR_LABEL, PARTNER_COLOR, PARTNER_LABEL, type HutClass, type HutOperator } from '@/data/hutClass.js'
 import { decodeEdgeGeometry } from './decodeEdgeGeometry.js'
 import { decodeEdgeElevation } from './decodeEdgeElevation.js'
