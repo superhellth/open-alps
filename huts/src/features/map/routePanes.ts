@@ -8,7 +8,7 @@ export type PaneRole = 'casing' | 'line' | 'symbol'
  *  than per-path alpha, so overlapping routes of one tier stay one flat colour instead of compounding,
  *  and no route's casing ever covers another route's line or symbols. */
 const TIERS: Record<EmphasisTier, { base: number; opacity: number }> = {
-  rest: { base: 410, opacity: 0.35 },
+  rest: { base: 410, opacity: 0.65 },
   focused: { base: 440, opacity: 0.7 },
   hovered: { base: 470, opacity: 1 },
 }

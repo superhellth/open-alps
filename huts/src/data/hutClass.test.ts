@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hutClassLabel, hutClassBadge, OPERATOR_LABEL, OPERATOR_COLOR, OPERATOR_SHAPE, hutFill, PARTNER_LABEL, PARTNER_COLOR } from './hutClass.js'
+import { hutClassLabel, hutClassBadge, OPERATOR_LABEL, OPERATOR_COLOR, hutFill, PARTNER_LABEL, PARTNER_COLOR } from './hutClass.js'
 
 describe('hutClassLabel', () => {
   it('labels a serviced AV hut without a Selbstversorger suffix', () => {
@@ -46,9 +46,8 @@ describe('lookups stay label-complete', () => {
   })
 })
 
-describe('marker shape/fill axes', () => {
-  it('shape = operator, fill = service', () => {
-    expect(OPERATOR_SHAPE).toEqual({ av: 'house', sonstige: 'circle' })
+describe('marker fill axis', () => {
+  it('fill = service', () => {
     expect(hutFill({ operator: 'av', serviced: true })).toBe('filled')
     expect(hutFill({ operator: 'sonstige', serviced: false })).toBe('outline')
   })

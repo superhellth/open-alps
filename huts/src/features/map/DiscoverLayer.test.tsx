@@ -35,6 +35,8 @@ let map: L.Map
 function CaptureMap() { map = useMap(); return null }
 function MapClick({ onClick }: { onClick: () => void }) { useMapEvents({ click: onClick }); return null }
 
+const focusOn = (...tours: PlannerTour[]) => ({ allTours: tours, focusTours: new Set(tours.map(tourKey)) })
+
 const layerProps = {
   hutNameById: new Map<number, string>(), hoveredTourKeys: NO_TOURS, onHoverTours: () => {}, onPickRoute: () => {},
 }
@@ -68,7 +70,7 @@ describe('DiscoverLayer route lines', () => {
   })
 
   it('draws a route line for a tour whose start is in view, past the reveal zoom', async () => {
-    const { container } = renderLayer({}, 13)
+    const { container } = renderLayer(focusOn(tour(1, [10, 11])), 13)
     await waitFor(() => expect(container.querySelectorAll('path.leaflet-interactive').length).toBeGreaterThan(0))
   })
 
@@ -83,8 +85,8 @@ describe('DiscoverLayer route lines', () => {
       hutCoordsById: new Map(many.map((t, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
       startById, officialById: new Map(), hutClassByIndex: new Map(),
     }
-    const { container: all } = renderLayer({ allTours: many, routeCtx: routeCtxMany }, 13)
-    const { container: few } = renderLayer({ allTours: many.slice(0, 10), routeCtx: routeCtxMany }, 13)
+    const { container: all } = renderLayer({ ...focusOn(...many), routeCtx: routeCtxMany }, 13)
+    const { container: few } = renderLayer({ ...focusOn(...many.slice(0, 10)), routeCtx: routeCtxMany }, 13)
     const count = (c: HTMLElement) => c.querySelectorAll('path.leaflet-interactive').length
     await waitFor(() => expect(count(few)).toBeGreaterThan(0))
     const pathsPerTour = count(few) / 10
@@ -104,7 +106,7 @@ describe('DiscoverLayer shared legs and huts', () => {
 
   it('hovering a shared leg hovers every tour containing it, with a count tooltip', async () => {
     const onHoverTours = vi.fn()
-    const { container } = renderLayer({ allTours: [a, b], onHoverTours })
+    const { container } = renderLayer({ ...focusOn(a, b), onHoverTours })
     fireEvent.mouseOver(await firstRestPath(container))
     expect([...onHoverTours.mock.calls.at(-1)![0]].sort()).toEqual([tourKey(a), tourKey(b)].sort())
     expect(document.querySelector('.leaflet-tooltip')!.textContent).toBe('In 2 Touren')
@@ -115,7 +117,7 @@ describe('DiscoverLayer shared legs and huts', () => {
     vi.spyOn(L.Map.prototype, 'getBoundsZoom').mockReturnValue(13)
     const onFocusTours = vi.fn()
     const onMapClick = vi.fn()
-    const { container } = renderLayer({ allTours: [a, b], onFocusTours }, 13, <MapClick onClick={onMapClick} />)
+    const { container } = renderLayer({ ...focusOn(a, b), onFocusTours }, 13, <MapClick onClick={onMapClick} />)
     fireEvent.click(await firstRestPath(container))
     expect(onFocusTours).toHaveBeenCalledWith(expect.arrayContaining([tourKey(a), tourKey(b)]))
     expect(fly).toHaveBeenCalledTimes(1)
@@ -125,7 +127,7 @@ describe('DiscoverLayer shared legs and huts', () => {
   it('a leg in a single tour picks it on click', async () => {
     const onPickRoute = vi.fn()
     const onFocusTours = vi.fn()
-    const { container } = renderLayer({ allTours: [c], onPickRoute, onFocusTours })
+    const { container } = renderLayer({ ...focusOn(c), onPickRoute, onFocusTours })
     fireEvent.click(await firstRestPath(container))
     expect(onPickRoute).toHaveBeenCalledWith(c)
     expect(onFocusTours).not.toHaveBeenCalled()
@@ -133,7 +135,7 @@ describe('DiscoverLayer shared legs and huts', () => {
 
   it('hovering a hut hit target hovers every tour stopping there; the tooltip names the hut', async () => {
     const onHoverTours = vi.fn()
-    const { container } = renderLayer({ allTours: [a, b], onHoverTours, hutNameById: new Map([[10, 'Hütte Eins']]) })
+    const { container } = renderLayer({ ...focusOn(a, b), onHoverTours, hutNameById: new Map([[10, 'Hütte Eins']]) })
     const hits = container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon')
     expect(hits.length).toBeGreaterThan(0)
     fireEvent.mouseOver(hits[0])
@@ -151,6 +153,14 @@ describe('DiscoverLayer shared legs and huts', () => {
     const { container } = renderLayer({ focusTours: new Set([tourKey(a)]) })
     await waitFor(() => expect(container.querySelectorAll('.leaflet-route-focused-line-pane path').length).toBeGreaterThan(0))
     expect(container.querySelectorAll('.leaflet-route-rest-symbol-pane path.leaflet-interactive, .leaflet-route-focused-symbol-pane path.leaflet-interactive, .leaflet-route-hovered-symbol-pane path.leaflet-interactive')).toHaveLength(0)
+  })
+})
+
+describe('DiscoverLayer rest tier', () => {
+  it('draws no route line but still the hut symbols of a tour that is neither focused nor hovered', async () => {
+    const { container } = renderLayer({ allTours: [tour(1, [10, 11])] })
+    await waitFor(() => expect(container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon').length).toBeGreaterThan(0))
+    expect(container.querySelectorAll('[class*="leaflet-route-"] path.leaflet-interactive')).toHaveLength(0)
   })
 })
 

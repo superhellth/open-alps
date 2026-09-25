@@ -121,6 +121,7 @@ export default function DiscoverLayer({
   const tiered = useMemo(() => routedTours.map((r) => ({
     ...r, tier: tierOf({ key: r.key, startId: r.tour.startId }, { hoveredKeys: hoveredTourKeys, hoveredStarts: hoveredStartIds, focus: focusTours ?? null }),
   })), [routedTours, hoveredTourKeys, hoveredStartIds, focusTours])
+  const drawn = useMemo(() => tiered.filter((t) => t.tier !== 'rest'), [tiered])
   const symbols = useMemo(() => collectSymbols(tiered), [tiered])
 
   const [tip, setTip] = useState<{ at: L.LatLng; html: string } | null>(null)
@@ -232,7 +233,7 @@ export default function DiscoverLayer({
           />
         )
       })}
-      {tiered.map(({ key, route }) => (
+      {drawn.map(({ key, route }) => (
         <RouteLayer
           key={key} route={route} emphasis="rest" dots={false}
           onHover={(hovering, i, at) => {

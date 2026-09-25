@@ -55,7 +55,7 @@ export default function TripLayer({ tripHuts, tripEnds, candidates, hutCoordsByI
         if (!p) return []
         const icon = L.divIcon({
           className: 'hut-marker',
-          html: hutSymbolSvg({ operator: h.operator, serviced: h.serviced, selected: true, size: 22 }),
+          html: hutSymbolSvg({ serviced: h.serviced, selected: true, size: 22 }),
           iconSize: [22, 22], iconAnchor: [11, 11],
         })
         return [<Marker key={`h${h.hutIndex}`} position={[p.lat, p.lng]} icon={icon}><Tooltip direction="top">{h.name}</Tooltip></Marker>]

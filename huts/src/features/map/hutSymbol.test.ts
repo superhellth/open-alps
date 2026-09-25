@@ -2,19 +2,18 @@ import { describe, it, expect } from 'vitest'
 import { hutSymbolSvg, startSymbolSvg } from './hutSymbol.js'
 
 describe('hutSymbolSvg', () => {
-  it('uses a house polygon for AV huts and a circle for others', () => {
-    expect(hutSymbolSvg({ operator: 'av', serviced: true })).toContain('<polygon')
-    expect(hutSymbolSvg({ operator: 'sonstige', serviced: true })).toContain('<circle')
+  it('uses a house polygon for every hut', () => {
+    expect(hutSymbolSvg({ serviced: true })).toContain('<polygon')
   })
   it('serviced = ink fill, self-catering = ink outline on paper', () => {
-    expect(hutSymbolSvg({ operator: 'av', serviced: true })).toContain('fill="#23272B"')
-    const outline = hutSymbolSvg({ operator: 'av', serviced: false })
+    expect(hutSymbolSvg({ serviced: true })).toContain('fill="#23272B"')
+    const outline = hutSymbolSvg({ serviced: false })
     expect(outline).toContain('fill="#EDEFE9"')
     expect(outline).toContain('stroke="#23272B"')
   })
-  it('a selected hut keeps its shape, signpost-yellow fill, ink outline', () => {
-    const s = hutSymbolSvg({ operator: 'sonstige', serviced: false, selected: true })
-    expect(s).toContain('<circle')
+  it('a selected hut is a house, signpost-yellow fill, ink outline', () => {
+    const s = hutSymbolSvg({ serviced: false, selected: true })
+    expect(s).toContain('<polygon')
     expect(s).toContain('fill="#F5B700"')
     expect(s).toContain('stroke="#23272B"')
   })

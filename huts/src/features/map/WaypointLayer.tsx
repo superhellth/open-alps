@@ -34,15 +34,15 @@ const HUT_SIZE = 18
 const END_SIZE = 16
 const iconCache = new Map<string, L.DivIcon>()
 
-function symbolIcon(stop: WaypointStop, selected: boolean): L.DivIcon {
-  const key = stop.type === 'hut' ? `h|${stop.operator}|${stop.serviced}|${selected}` : `e|${stop.sourceType}`
+function symbolIcon(stop: WaypointStop): L.DivIcon {
+  const key = stop.type === 'hut' ? `h|${stop.operator}|${stop.serviced}` : `e|${stop.sourceType}`
   let icon = iconCache.get(key)
   if (!icon) {
     const size = stop.type === 'hut' ? HUT_SIZE : END_SIZE
     icon = L.divIcon({
       className: stop.type === 'hut' ? 'hut-marker' : 'start-symbol',
       html: stop.type === 'hut'
-        ? hutSymbolSvg({ operator: stop.operator, serviced: stop.serviced, selected, size })
+        ? hutSymbolSvg({ serviced: stop.serviced, selected: true, size })
         : startSymbolSvg(stop.sourceType, size),
       iconSize: [size, size], iconAnchor: [size / 2, size / 2],
     })
@@ -67,7 +67,7 @@ export default function WaypointLayer({ symbols, onHoverHut, onClickHut }: {
       {symbols.map((s) => (
         <Marker
           key={`${s.id}-${s.tier}`} position={[s.lat, s.lng]} pane={paneName(s.tier, 'symbol')}
-          icon={symbolIcon(s.stop, s.tier === 'hovered' && s.stop.type === 'hut')} interactive={false} keyboard={false}
+          icon={symbolIcon(s.stop)} interactive={false} keyboard={false}
         />
       ))}
       {symbols.flatMap((s) => {
