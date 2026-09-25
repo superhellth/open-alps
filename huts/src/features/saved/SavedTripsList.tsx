@@ -5,6 +5,7 @@ import type { TripGraph } from '@/tourSearch/types.js'
 import { useTrips } from '@/trip/tripsContext.js'
 import { exportTripsJson, parseTripsJson } from '@/trip/tripStorage.js'
 import type { Trip } from '@/trip/trip.js'
+import { styles } from './SavedTripsList.styles.js'
 
 function dateRange(trip: Trip): string {
   if (!trip.startDate) return 'ohne Datum'
@@ -58,7 +59,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
         <Typography variant="h6" component="h2" sx={{ flex: 1 }}>Meine Touren</Typography>
         <IconButton aria-label="Weitere Aktionen" onClick={(e) => setHeaderMenuAnchor(e.currentTarget)}>
-          <Typography component="span" sx={{ fontWeight: 700 }}>⋮</Typography>
+          <Typography component="span" sx={styles.menuGlyph}>⋮</Typography>
         </IconButton>
         <Menu open={headerMenuAnchor !== null} anchorEl={headerMenuAnchor} onClose={() => setHeaderMenuAnchor(null)}>
           <MenuItem disabled={state.trips.length === 0} onClick={() => { exportBackup(); setHeaderMenuAnchor(null) }}>
@@ -78,9 +79,9 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
       {state.draft && (
         <Box
           role="button" tabIndex={0} onClick={onOpenDraft} onKeyDown={(e) => { if (e.key === 'Enter') onOpenDraft() }}
-          sx={{ py: 1.5, borderBottom: '1px solid', borderColor: 'divider', cursor: 'pointer' }}
+          sx={styles.draftRow}
         >
-          <Typography sx={{ fontWeight: 600 }}>Entwurf · nicht gespeichert</Typography>
+          <Typography sx={styles.strong}>Entwurf · nicht gespeichert</Typography>
         </Box>
       )}
 
@@ -97,7 +98,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
           <Box
             key={trip.id} data-testid={`trip-${trip.id}`}
             onMouseEnter={() => onHoverTrip(trip.id)} onMouseLeave={() => onHoverTrip(null)}
-            sx={{ borderBottom: '1px solid', borderColor: 'divider', backgroundColor: hoveredTripId === trip.id ? 'action.hover' : undefined }}
+            sx={styles.tripCard(hoveredTripId === trip.id)}
           >
             <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', py: 1.5 }}>
               <Box
@@ -118,8 +119,8 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
                 ) : (
                   <>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                      <Typography sx={{ fontWeight: 600 }}>{trip.name}</Typography>
-                      {changed && <Typography variant="caption" sx={{ fontWeight: 600 }}>geändert</Typography>}
+                      <Typography sx={styles.strong}>{trip.name}</Typography>
+                      {changed && <Typography variant="caption" sx={styles.strong}>geändert</Typography>}
                     </Box>
                     <Typography variant="caption" color="text.secondary">
                       {trip.huts.length} Nächte · {dateRange(trip)} · {trip.partySize} Pers. · {bookingSummary(trip)}
@@ -128,7 +129,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
                 )}
               </Box>
               <IconButton aria-label="Weitere Aktionen" onClick={(e) => setMenuFor({ id: trip.id, anchor: e.currentTarget })}>
-                <Typography component="span" sx={{ fontWeight: 700 }}>⋮</Typography>
+                <Typography component="span" sx={styles.menuGlyph}>⋮</Typography>
               </IconButton>
             </Box>
           </Box>
