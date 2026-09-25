@@ -3,9 +3,9 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import SavedTripsList from './SavedTripsList.js'
-import { TripsProvider } from '../trip/TripsProvider.js'
-import { newTrip } from '../trip/trip.js'
-import { saveTrips } from '../trip/tripStorage.js'
+import { TripsProvider } from '@/trip/TripsProvider.js'
+import { newTrip } from '@/trip/trip.js'
+import { saveTrips } from '@/trip/tripStorage.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)

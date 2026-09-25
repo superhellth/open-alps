@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { Alert, Box, Button, IconButton, Menu, MenuItem, TextField, Typography } from '@mui/material'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import type { TripGraph } from '@/tourSearch/types.js'
-import { useTrips } from '../trip/TripsProvider.js'
-import { exportTripsJson, parseTripsJson } from '../trip/tripStorage.js'
-import type { Trip } from '../trip/trip.js'
+import { useTrips } from '@/trip/TripsProvider.js'
+import { exportTripsJson, parseTripsJson } from '@/trip/tripStorage.js'
+import type { Trip } from '@/trip/trip.js'
 
 function dateRange(trip: Trip): string {
   if (!trip.startDate) return 'ohne Datum'
