@@ -19,8 +19,6 @@ Some muted route previews show dashed straight lines between huts. Cause unknown
 `edgeId < 0`, rejected geometry fetches (errors swallowed in `useLegGeometries`) or slow loads.
 Details and how to triage in `docs/backlog/dashed-legs-without-geometry.md`.
 
-### Frontend refactor (incl. dedicate style files)
-
 ### Integrate official tours into frontend
 
 ## Medium

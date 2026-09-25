@@ -32,3 +32,9 @@ the browser bundle.
 `public/data/` holds the pipeline's generated outputs (pmtiles, geojson, binary payloads) that
 `src/adminPage/` and `src/tourSearch/` fetch at runtime — these are copied in by the pipeline's
 `copy_public_data` doit task, not committed as source; do not hand-edit them.
+
+## Styling
+
+- Brand colors come from `src/ui/tokens.ts`; CSS reads `var(--color-*)` (emitted onto `:root` from `tokens` in `app/main.tsx`), TS reads `tokens`.
+- MUI components use `sx`; blocks with more than 3 keys, nested selectors/conditionals, or reuse live in `<Component>.styles.ts` (`satisfies StyleMap` from `ui/styleMap.ts`).
+- Plain CSS only for Leaflet DOM and the admin view (`features/map/map.css`, `adminPage/adminPage.css`); no SCSS, no CSS modules.

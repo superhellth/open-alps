@@ -28,7 +28,7 @@ not be called in a loop over the whole hut list.
 ## App structure
 
 `huts/src/app/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
-(`ui/theme.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: every hash except `#admin`
+(`ui/theme.ts`, brand colors in `ui/tokens.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: every hash except `#admin`
 renders `features/planner/PlannerPage.tsx` (`#trips` selects its `saved` sidebar view, `#trip=<payload>`
 is a share link that opens the planner with an import offer), and `#admin` renders
 `adminPage/AdminPage.tsx` outside the providers (it needs none of the planner's data or the
