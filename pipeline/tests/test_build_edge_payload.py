@@ -99,7 +99,7 @@ def test_anchor_columns_are_appended_as_i2_after_the_scalar_columns():
         assert manifest["columns"][name]["dtype"] == "i2"
     cols = {n: np.frombuffer(payload, dtype="i2", count=1, offset=s["offset"])
             for n, s in manifest["columns"].items() if n in anchors}
-    assert decode_row(cols, 0, hut_lonlat[0])[1] == pytest.approx([11.2, 47.0], abs=1e-4)
+    assert decode_row(cols, 0, hut_lonlat[0])[0] == pytest.approx([11.2, 47.0], abs=1e-4)
 
 
 def test_pack_edges_without_anchors_is_unchanged():

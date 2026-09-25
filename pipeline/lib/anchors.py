@@ -8,7 +8,7 @@ import numpy as np
 
 from lib.geo import haversine_m_vec_pairs
 
-ANCHOR_FRACTIONS = (0.25, 0.5, 0.75)
+ANCHOR_FRACTIONS = (0.5,)
 ANCHOR_UNIT_DEG = 1e-4
 _I2_MAX = 32767
 _M_PER_DEG = 111_320.0

@@ -196,7 +196,7 @@ def test_main_writes_records_geometry_profiles_tours_and_gaps(tmp_path, monkeypa
     assert len(tours[0]["legs"]) == 2
     assert tours[0]["legs"][0]["from"]["type"] == "hut"
     assert "distanceM" in tours[0]["legs"][0]
-    assert all(len(leg["anchors"]) == 3 for leg in tours[0]["legs"])
+    assert all(len(leg["anchors"]) == 1 for leg in tours[0]["legs"])
 
     with open(out / "tour-match-gaps.json", encoding="utf-8") as f:
         gaps = json.load(f)
@@ -250,11 +250,10 @@ def test_main_records_a_gap_for_an_unresolvable_interior_endpoint(tmp_path, monk
         assert json.load(f) == []
 
 
-def test_leg_anchors_json_is_lat_lng_pairs_in_walking_order():
+def test_leg_anchors_json_is_the_midpoint_as_a_lat_lng_pair():
     anchors = mte.leg_anchors_json([(11.0, 47.0), (11.4, 47.0)])
-    assert len(anchors) == 3
-    assert anchors[0] == pytest.approx([47.0, 11.1], abs=1e-4)
-    assert anchors[2] == pytest.approx([47.0, 11.3], abs=1e-4)
+    assert len(anchors) == 1
+    assert anchors[0] == pytest.approx([47.0, 11.2], abs=1e-4)
 
 
 def test_write_hubs_json_matches_hub_list(tmp_path):

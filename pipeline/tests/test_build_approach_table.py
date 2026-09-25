@@ -282,5 +282,4 @@ def test_approach_anchors_are_offsets_from_the_rows_hut_along_the_start_edge():
     cols = approach_anchor_columns([{"edge_id": 0, "hut_id": 0}], records, geometry, hut_lonlat)
 
     anchors = decode_row(cols, 0, hut_lonlat[0])
-    assert anchors[0, 0] == pytest.approx(11.3, abs=1e-4)  # 25 % is near the parking end
-    assert anchors[2, 0] == pytest.approx(11.1, abs=1e-4)
+    assert anchors[0, 0] == pytest.approx(11.2, abs=1e-4)

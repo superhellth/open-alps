@@ -12,14 +12,17 @@ from lib.anchors import (  # noqa: E402
     edge_anchor_columns, points_at_fractions, quantise_offsets,
 )
 
+QUARTERS = (0.25, 0.5, 0.75)
+
 
 def test_column_names_follow_fraction_order():
-    assert anchor_column_names() == ["a25_dlat", "a25_dlng", "a50_dlat", "a50_dlng", "a75_dlat", "a75_dlng"]
+    assert anchor_column_names() == ["a50_dlat", "a50_dlng"]
+    assert anchor_column_names(QUARTERS) == ["a25_dlat", "a25_dlng", "a50_dlat", "a50_dlng", "a75_dlat", "a75_dlng"]
     assert anchor_column_names((0.5,)) == ["a50_dlat", "a50_dlng"]
 
 
 def test_straight_line_quarters_are_evenly_spaced():
-    pts = points_at_fractions([11.0, 11.4], [47.0, 47.0])
+    pts = points_at_fractions([11.0, 11.4], [47.0, 47.0], QUARTERS)
     assert pts[:, 1] == pytest.approx([47.0] * 3)
     assert pts[:, 0] == pytest.approx([11.1, 11.2, 11.3], abs=1e-4)
 
@@ -29,19 +32,19 @@ def test_l_shape_puts_the_midpoint_on_the_corner():
     lat = 47.0
     dlon = 0.01
     dlat = dlon * np.cos(np.radians(lat))
-    pts = points_at_fractions([11.0, 11.0 + dlon, 11.0 + dlon], [lat, lat, lat + dlat])
+    pts = points_at_fractions([11.0, 11.0 + dlon, 11.0 + dlon], [lat, lat, lat + dlat], QUARTERS)
     assert pts[1] == pytest.approx([11.0 + dlon, lat], abs=1e-6)
 
 
 def test_zero_length_segments_do_not_break_interpolation():
-    pts = points_at_fractions([11.0, 11.0, 11.0, 11.2], [47.0, 47.0, 47.0, 47.0])
+    pts = points_at_fractions([11.0, 11.0, 11.0, 11.2], [47.0, 47.0, 47.0, 47.0], QUARTERS)
     assert np.isfinite(pts).all()
     assert pts[1, 0] == pytest.approx(11.1, abs=1e-4)
 
 
 @pytest.mark.parametrize("lons,lats", [([11.0], [47.0]), ([11.0, 11.0], [47.0, 47.0])])
 def test_degenerate_geometry_collapses_to_the_point(lons, lats):
-    pts = points_at_fractions(lons, lats)
+    pts = points_at_fractions(lons, lats, QUARTERS)
     assert np.isfinite(pts).all()
     assert pts == pytest.approx(np.tile([11.0, 47.0], (3, 1)))
 
@@ -78,12 +81,12 @@ def test_edge_anchor_columns_decode_back_to_the_polyline():
     records["geom_offset"] = [0, 2]
     records["geom_count"] = [2, 2]
     ref = np.array([[11.0, 47.0], [11.0, 47.1]])
-    cols = edge_anchor_columns(records, geometry, np.array([0, 1]), ref)
-    assert set(cols) == set(anchor_column_names())
+    cols = edge_anchor_columns(records, geometry, np.array([0, 1]), ref, QUARTERS)
+    assert set(cols) == set(anchor_column_names(QUARTERS))
     assert all(c.dtype == np.dtype("i2") for c in cols.values())
-    row0 = decode_row(cols, 0, ref[0])
+    row0 = decode_row(cols, 0, ref[0], QUARTERS)
     assert row0[1] == pytest.approx([11.2, 47.0], abs=1e-4)
-    row1 = decode_row(cols, 1, ref[1])
+    row1 = decode_row(cols, 1, ref[1], QUARTERS)
     assert row1[1] == pytest.approx([11.0, 47.15], abs=1e-3)
 
 

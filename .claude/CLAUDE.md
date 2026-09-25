@@ -107,7 +107,7 @@ raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, 
 `tour-match-gaps.json`) are copied into `huts/public/data/` by the
 pipeline's own `copy_public_data` task (a `(source, public name)` table, `PUBLIC_FILES` in `dodo.py`). `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
-`adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` (both with 25/50/75 % anchor offset columns) feed the client-side tour search engine
+`adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` (both with mid-route anchor offset columns) feed the client-side tour search engine
 (`huts/src/tourSearch/`, see "App structure" above) that runs entirely in the browser off these
 static files — no query-time backend. The hut-edge payload contract (columns, dtypes, what's
 deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` — see

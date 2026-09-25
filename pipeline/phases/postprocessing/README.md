@@ -112,7 +112,7 @@ AT+Bayern — neither shippable nor seedable as-is) to two things, written into 
    start point appears in *any* hut's retained approach ships too (all variants, since closure
    needs whatever the client already has open), keyed both hut→starts and start→huts.
 
-3. **Anchor columns** — six i2 columns (`a25_dlat`…`a75_dlng`, units of 1e-4°) locating the row's start edge at 25 / 50 / 75 % of its full-resolution arc length, as offsets from the row's hut coordinate in `huts.geojson` (helper: `lib/anchors.py`). The client stands a tour's signpost on them.
+3. **Anchor columns** — two i2 columns (`a50_dlat`, `a50_dlng`, units of 1e-4°) locating the row's start edge at 50 % of its full-resolution arc length, as offsets from the row's hut coordinate in `huts.geojson` (helper: `lib/anchors.py`). The client stands a tour's signpost on them.
 
 - **doit wiring**: `file_dep=[start-edges/records.npy, start-edges/geometry.npy, huts.geojson, start-points-id-table.json]`,
   `targets=[start-edges/approaches.bin, start-edges/approaches.json]`.
@@ -126,7 +126,7 @@ spec D3). Columns laid out per-column, not interleaved, so gzip sees each column
 pattern uninterrupted; hut ids narrow `RECORD_DTYPE`'s `i8` down to `u2` (well under 65,536 huts).
 Measured, not assumed (`data/analysis/payload_sizing.json`): 3 variants × 6,067 edges × 13 columns
 = 693 KB raw, 43.4 KB gzipped — a byte-shuffle filter made it *worse* (46.4 KB), so this doesn't
-add one; quantisation is out of scope on the same measurement. Six i2 anchor columns (`a25_dlat`…`a75_dlng`, 1e-4° offsets from the `from_id` hut's coordinate at 25 / 50 / 75 % of the edge's full-resolution arc length, from `lib/anchors.py`) are appended after the scalar columns; the script prints their gzipped growth.
+add one; quantisation is out of scope on the same measurement. Two i2 anchor columns (`a50_dlat`, `a50_dlng`, 1e-4° offsets from the `from_id` hut's coordinate at 50 % of the edge's full-resolution arc length, from `lib/anchors.py`) are appended after the scalar columns; the script prints their gzipped growth.
 
 - **doit wiring**: `task_dep=[build_profiles]` (records.npy's `profile_offset`/`profile_count` are
   rewritten in place, not a declared target — see `build_edge_tiles.py`'s comment above),
