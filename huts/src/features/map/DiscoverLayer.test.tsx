@@ -280,9 +280,29 @@ describe('DiscoverLayer signposts', () => {
     const groups = [{ startId: 1, tours: [hovered, tour(1, [11])] }, { startId: 2, tours: [tour(2, [10]), tour(2, [11]), tour(2, [12])] }] as never
     const { container } = renderLayer({ groups, startById: close, allTours: [hovered], hoveredTourKeys: new Set([tourKey(hovered)]) }, 9)
     expect(container.querySelector('.signpost-marker')).toBeNull()
-    const bubble = container.querySelector('.start-count-marker.cluster') as HTMLElement
+    const bubble = container.querySelector('.start-count-marker') as HTMLElement
     expect(bubble.textContent).toBe('5')
     expect(bubble.classList.contains('highlighted')).toBe(true)
+  })
+
+  it('shows a start point as a bubble below the reveal zoom and as a signpost from it', () => {
+    const tours = stackTours(2)
+    const { container: far } = render1(tours, {}, 9)
+    expect(far.querySelector('.signpost-marker')).toBeNull()
+    expect(far.querySelector('.start-count-marker')!.textContent).toBe('2')
+    const { container: near } = render1(tours, {}, 13)
+    expect(near.querySelector('.signpost-marker')).not.toBeNull()
+    expect(near.querySelector('.start-count-marker')).toBeNull()
+  })
+
+  it('a one-tour bubble below the reveal zoom focuses the list instead of picking the tour', () => {
+    const t = tour(1, [10, 11])
+    const onPickRoute = vi.fn()
+    const onFocusTours = vi.fn()
+    const { container } = render1([t], { onPickRoute, onFocusTours }, 9)
+    fireEvent.click(container.querySelector('.start-count-marker')!)
+    expect(onFocusTours).toHaveBeenCalledWith([tourKey(t)])
+    expect(onPickRoute).not.toHaveBeenCalled()
   })
 
   it('highlights the marker of a start whose tour is hovered from the list', () => {

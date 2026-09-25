@@ -26,13 +26,13 @@ import './map.css'
 export const ROUTE_REVEAL_ZOOM = 11
 
 const iconCache = new Map<string, L.DivIcon>()
-function clusterIcon(count: number, dimmed: boolean, highlighted: boolean): L.DivIcon {
+function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.DivIcon {
   const key = `${count}|${dimmed}|${highlighted}`
   let icon = iconCache.get(key)
   if (!icon) {
     const size = Math.round(markerRadius(count) * 2)
     icon = L.divIcon({
-      className: `start-count-marker cluster${dimmed ? ' dimmed' : ''}${highlighted ? ' highlighted' : ''}`,
+      className: `start-count-marker${dimmed ? ' dimmed' : ''}${highlighted ? ' highlighted' : ''}`,
       html: `<span>${count}</span>`,
       iconSize: [size, size],
     })
@@ -43,8 +43,9 @@ function clusterIcon(count: number, dimmed: boolean, highlighted: boolean): L.Di
 
 const toursText = (n: number) => `In ${n} Touren`
 
-/** One signpost marker per start point with matching tours (a single tour board, or a stack of boards with
- *  the tour count) or per cluster of start points (a round yellow bubble with the summed count), clustered by zoom.
+/** One marker per start point with matching tours or per cluster of start points, clustered by zoom. Below
+ *  `ROUTE_REVEAL_ZOOM` every marker is a round yellow bubble with the summed count, and a click always focuses and zooms in; from there
+ *  on a start point becomes a signpost (a single tour board, or a stack of boards with the tour count) and a cluster stays a bubble.
  *  Panning and zooming only re-cluster, they never re-search. A single board and every board of a spread stack
  *  pick their tour on click; a stack or cluster click flies the map to the bounds of its tours, focuses the results list on them
  *  and draws them at the focused tier until the focus is dropped (show all tours, a map click, or zooming out
@@ -151,11 +152,11 @@ export default function DiscoverLayer({
 
   const markers = useMemo(() => clusterer.clustersFor(view.bbox, view.zoom), [clusterer, view])
   const htmlByMarker = useMemo(() => new Map(markers.flatMap((m) => {
-    if (m.kind === 'cluster') return []
+    if (m.kind === 'cluster' || !routeReveal) return []
     const boards = (groupOfStart.get(m.startId)?.tours ?? [])
       .map((t) => ({ key: tourKey(t), label: tourBoardLabel(t, startById) }))
     return [[markerKey(m), markerKind(m) === 'single' && boards[0] ? singleHtml(boards[0]) : stackHtml(boards)] as const]
-  })), [markers, groupOfStart, startById])
+  })), [markers, groupOfStart, startById, routeReveal])
 
   const highlightedStarts = useMemo(() => {
     const ids = new Set<number>()
@@ -171,7 +172,7 @@ export default function DiscoverLayer({
       return
     }
     const startIds = startIdsOf(m)
-    const only = m.kind === 'start' && m.count === 1 ? groupOfStart.get(m.startId)?.tours[0] : undefined
+    const only = routeReveal && m.kind === 'start' && m.count === 1 ? groupOfStart.get(m.startId)?.tours[0] : undefined
     if (only) { onPickRoute(only); return }
     onFocusTours?.(keysOfStarts(startIds))
     const bounds = tourBounds(startIds)
@@ -191,10 +192,10 @@ export default function DiscoverLayer({
         const outsideFocus = focusTours != null && !keysOfStarts(ids).some((k) => focusTours.has(k))
         const dimmedMarker = dimmed || outsideFocus
         const highlighted = ids.some((id) => highlightedStarts.has(id))
-        if (m.kind === 'cluster') {
+        if (m.kind === 'cluster' || !routeReveal) {
           return (
             <Marker
-              key={markerKey(m)} position={[m.lat, m.lng]} icon={clusterIcon(m.count, dimmedMarker, highlighted)}
+              key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
               eventHandlers={{
                 mouseover: () => hoverStarts(new Set(ids)),
                 mouseout: () => hoverStarts(null),

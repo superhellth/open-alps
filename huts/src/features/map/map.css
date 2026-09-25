@@ -125,7 +125,7 @@
   .signpost-marker.spread .board { transition: none; }
 }
 
-/* Cluster bubble: several start points under one count. */
+/* Count bubble: a cluster, or any marker while zoomed out below the route reveal zoom. */
 .start-count-marker span {
   display: flex;
   align-items: center;

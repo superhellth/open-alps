@@ -45,10 +45,10 @@ describe('PlannerMap discover mode', () => {
     const onNavigate = vi.fn()
     const groups = [{ startId: 1, tours: [tour(1), tour(1), tour(1)] }, { startId: 2, tours: [tour(2)] }]
     const { container } = render(<PlannerMap mode={discover({ groups, onNavigate })} commands={commands} />)
-    await waitFor(() => expect(container.querySelectorAll('.signpost-marker').length).toBeGreaterThan(0))
-    const labels = [...container.querySelectorAll('.signpost-marker .sign')].map((n) => n.textContent)
+    await waitFor(() => expect(container.querySelectorAll('.start-count-marker').length).toBeGreaterThan(0))
+    const labels = [...container.querySelectorAll('.start-count-marker')].map((n) => n.textContent)
     expect(labels).toContain('3')
-    fireEvent.click(container.querySelector('.signpost-marker .sign')!)
+    fireEvent.click(container.querySelector('.start-count-marker')!)
     expect(onNavigate).toHaveBeenCalled()
   })
   it('reports the current bbox/zoom as the map settles', async () => {
