@@ -10,8 +10,8 @@ import type { StartPoint } from '@/data/types.js'
 import RouteLayer from './RouteLayer.js'
 import { createStartClusterer, markerRadius } from './clusterStarts.js'
 import type { MapMarker } from './clusterStarts.js'
-import { currentView, routeTouchesBbox } from './viewport.js'
-import type { View } from './viewport.js'
+import { currentView, routeTouchesBbox } from '@/lib/viewport.js'
+import type { View } from '@/lib/viewport.js'
 import './map.css'
 
 /** Below this zoom, routes stay hidden and only count-markers show — tuned lower than the

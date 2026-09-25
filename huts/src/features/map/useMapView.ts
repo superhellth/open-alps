@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import L from 'leaflet'
 import { ROUTE_REVEAL_ZOOM } from './DiscoverLayer.js'
-import type { View } from './viewport.js'
+import type { View } from '@/lib/viewport.js'
 
 export interface ViewTarget { lat: number; lng: number; zoom: number }
 export type Bounds = [[number, number], [number, number]]
