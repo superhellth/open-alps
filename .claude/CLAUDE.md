@@ -39,13 +39,13 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 `search/SearchClientProvider.tsx` and `trip/TripsProvider.tsx` (autosave to `localStorage`).
 
 `huts/src/plannerPage/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
-`usePlannerSearch` runs the whole-graph search, results grouped by start point and drawn as clustered
+`features/discover/usePlannerSearch` runs the whole-graph search, results grouped by start point and drawn as clustered
 count markers) -> Customize (a picked tour becomes a `Trip`; `TripEditor.tsx` swaps/extends/trims huts
 and changes start/exit) -> Plan nights (`TripPanel.tsx`: per-night availability, hand-set booking status,
 start-date answers) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`SavedTripsList.tsx`) lists saved trips and draws them on the map (`map/SavedTripsLayer.tsx`).
-`formState.ts` builds the `Query`; `rankTours.ts`/`tourSearch/rankFit.ts` order results;
+`features/discover/formState.ts` builds the `Query`; `rankTours.ts`/`tourSearch/rankFit.ts` order results;
 `data/hutClass.ts` classifies each hut (marker shape = operator, fill = service).
 
 `huts/src/search/` runs the heavy search in a Web Worker (`searchWorker.ts`) that owns the large
@@ -55,9 +55,12 @@ overlap tables (`hut-edge-ids`/`start-edge-ids`); the main thread holds only the
 
 `huts/src/trip/` is the trip model (`trip.ts`), persistence (`tripStorage.ts`), reducer
 (`tripsReducer.ts`) and share link. A `Trip` stores hut GUIDs and start-point ids only; legs are
-re-derived on every load by `tourSearch/tripLegs.ts`'s `legsFromTrip`, and a night that no longer
+re-derived on every load by `trip/tripLegs.ts`'s `legsFromTrip`, and a night that no longer
 resolves is flagged "changed since saved" rather than substituted. Editor moves live in
-`tourSearch/tripEdit.ts`, overlap warnings in `tourSearch/tripOverlaps.ts`.
+`trip/tripEdit.ts`, overlap warnings in `trip/tripOverlaps.ts`.
+
+Imports point downward: lib/ui/format/availability/tourSearch < trip < data/search < features/adminPage/gpxEditor < app;
+enforced by `huts/src/architecture.test.ts`.
 
 `huts/src/tourSearch/` is the client-side tour search engine: `loadHutEdges.ts`/
 `loadApproaches.ts`/`loadHutEdgeIds.ts` fetch and parse the pipeline's binary edge-payload/approach
@@ -68,7 +71,7 @@ reversed-direction duplicates and suppresses near-identical routes; `adjacency.t
 `legFilters.ts`, `dinDuration.ts`, `overlap.ts`, `resolveVariant.ts`, `reverseLeg.ts` are the
 supporting graph/filtering primitives. (`pipeline/CLAUDE.md`'s "Deferred" note still describes this
 client as not-yet-built — that note is stale.) `groupByStart.ts`, `rankFit.ts`, `limits.ts`
-(`LEG_COUNT_SLIDER_MAX`, measured) and the `trip*.ts` files support the Planner.
+(`LEG_COUNT_SLIDER_MAX`, measured) and `plannerTour.ts` support the Planner.
 
 `huts/src/adminPage/AdminPage.tsx` (the `#admin` route) is the internal-only, not user-facing
 debugging/sanity-check view of the raw hut-to-hut routing graph: renders `/data/trails.pmtiles` and
