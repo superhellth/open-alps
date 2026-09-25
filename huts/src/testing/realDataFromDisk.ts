@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { readColumns } from './binaryColumns.js'
-import { buildEdgeIdsData } from './loadHutEdgeIds.js'
-import type { HutEdgeIdsManifest } from './loadHutEdgeIds.js'
-import type { ApproachesData, ApproachRecord, GraphData, HutEdgeIdsData, HutEdgeRecord, HutEdgesData } from './types.js'
+import { readColumns } from '@/tourSearch/binaryColumns.js'
+import { buildEdgeIdsData } from '@/tourSearch/loadHutEdgeIds.js'
+import type { HutEdgeIdsManifest } from '@/tourSearch/loadHutEdgeIds.js'
+import type { ApproachesData, ApproachRecord, GraphData, HutEdgeIdsData, HutEdgeRecord, HutEdgesData } from '@/tourSearch/types.js'
 
 export const DATA_DIR = fileURLToPath(new URL('../../public/data/', import.meta.url))
 

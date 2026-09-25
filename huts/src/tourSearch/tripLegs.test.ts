@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newTrip } from '../trip/trip.js'
 import { legsFromTrip, linkLeg, summarizeLegs, variantOf } from './tripLegs.js'
-import { makeTripGraph } from './tripTestGraph.js'
+import { makeTripGraph } from '@/testing/tripTestGraph.js'
 
 const graph = makeTripGraph()
 const variant = { sacCeiling: null, allowUngraded: false }

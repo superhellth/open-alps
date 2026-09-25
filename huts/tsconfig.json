@@ -6,6 +6,7 @@
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
     "strict": true,
+    "paths": { "@/*": ["./src/*"] },
     "noEmit": true,
     "isolatedModules": true,
     "skipLibCheck": true,

@@ -4,7 +4,7 @@ import {
   applyEndpoint, applyExtend, applySwap, applyTrim, endpointCandidates, extendCandidates,
   modeOfTrip, swapCandidates, trimAllowed,
 } from './tripEdit.js'
-import { makeTripGraph } from './tripTestGraph.js'
+import { makeTripGraph } from '@/testing/tripTestGraph.js'
 
 const graph = makeTripGraph()
 const variant = { sacCeiling: null, allowUngraded: false }

@@ -3,7 +3,7 @@ import { overlapLegsOf, tripOverlaps } from './tripOverlaps.js'
 import type { EdgeIdTables } from './overlap.js'
 import type { HutEdgeIdsData } from './types.js'
 import { legsFromTrip } from './tripLegs.js'
-import { makeTripGraph } from './tripTestGraph.js'
+import { makeTripGraph } from '@/testing/tripTestGraph.js'
 import { newTrip } from '../trip/trip.js'
 
 function table(rows: { sorted: number[]; prefix: number[]; suffix: number[] }[]): HutEdgeIdsData {

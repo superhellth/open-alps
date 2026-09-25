@@ -1,5 +1,5 @@
-import { makeTripGraph } from '../tourSearch/tripTestGraph.js'
-import type { AppData } from '../data/buildAppData.js'
+import { makeTripGraph } from './tripTestGraph.js'
+import type { AppData } from '@/data/buildAppData.js'
 
 /** Huts A B C D E X of makeTripGraph with names, coordinates and OHRS ids for D ('103') and E ('104') only. */
 export function makeTestAppData(): AppData {

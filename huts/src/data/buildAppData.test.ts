@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildAppData } from './buildAppData.js'
-import { makeTripGraph } from '../tourSearch/tripTestGraph.js'
+import { makeTripGraph } from '@/testing/tripTestGraph.js'
 
 const fc = (features: unknown[]) => ({ type: 'FeatureCollection', features }) as GeoJSON.FeatureCollection
 const point = (lng: number, lat: number) => ({ type: 'Point', coordinates: [lng, lat] })

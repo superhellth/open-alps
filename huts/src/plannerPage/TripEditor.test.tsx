@@ -5,7 +5,7 @@ import { render, renderHook, screen, fireEvent, cleanup } from '@testing-library
 import '@testing-library/jest-dom/vitest'
 import { useTripEditor } from './TripEditor.js'
 import type { EditingState, TripEditorProps } from './TripEditor.js'
-import { makeTestAppData } from './testAppData.js'
+import { makeTestAppData } from '@/testing/testAppData.js'
 import { legsFromTrip } from '../tourSearch/tripLegs.js'
 import { newTrip } from '../trip/trip.js'
 import { makeStartLabel } from './labels.js'

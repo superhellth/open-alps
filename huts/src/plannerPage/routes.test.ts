@@ -3,7 +3,7 @@ import { legLayer, straightRoute, tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from './tours.js'
 import { legsFromTrip } from '../tourSearch/tripLegs.js'
-import { makeTripGraph } from '../tourSearch/tripTestGraph.js'
+import { makeTripGraph } from '@/testing/tripTestGraph.js'
 import { newTrip } from '../trip/trip.js'
 
 const ctx: RouteContext = {

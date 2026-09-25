@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest'
 import { buildAdjacency } from './adjacency.js'
 import { resolveVariant } from './resolveVariant.js'
 import { findTours } from './index.js'
-import { loadGraphDataFromDisk } from './realDataFromDisk.js'
+import { loadGraphDataFromDisk } from '@/testing/realDataFromDisk.js'
 import type { GraphData } from './types.js'
 
 describe('real shipped payload (huts/public/data)', () => {

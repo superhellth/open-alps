@@ -1,5 +1,5 @@
 import { describe, it } from 'vitest'
-import { loadGraphDataFromDisk } from './realDataFromDisk.js'
+import { loadGraphDataFromDisk } from '@/testing/realDataFromDisk.js'
 import { findTours } from './index.js'
 import type { Query } from './types.js'
 
