@@ -8,6 +8,7 @@ import { tokens } from '@/ui/tokens.js'
 import { SORT_LABEL } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
+import { formatDistanceKm } from '@/format/distance.js'
 import { styles } from './ResultsList.styles.js'
 
 const PAGE_SIZE = 25
@@ -117,7 +118,7 @@ export default function ResultsList({
               </Box>
               <Box sx={styles.statRow}>
                 <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'duration') }}>{formatSignpostTime(tour.totalDurationH)}</span>
-                <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'distance') }}>{(tour.totalDistanceM / 1000).toFixed(1)} km</span>
+                <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'distance') }}>{formatDistanceKm(tour.totalDistanceM)}</span>
               </Box>
               <Typography variant="caption" color="text.secondary" component="div">
                 {tour.legs.length} Tage ·{' '}
