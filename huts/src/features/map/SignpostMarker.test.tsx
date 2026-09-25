@@ -1,171 +1,119 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
-import { render, cleanup, fireEvent, act } from '@testing-library/react'
-import L from 'leaflet'
-import { MapContainer, useMap } from 'react-leaflet'
-import SignpostMarker, { CLOSE_DELAY_MS, OPEN_DELAY_MS } from './SignpostMarker.js'
-import { stackHtml, singleHtml } from './signpostHtml.js'
+import { describe, it, expect, afterEach, vi } from 'vitest'
+import { render, cleanup, fireEvent } from '@testing-library/react'
+import { MapContainer } from 'react-leaflet'
+import SignpostMarker from './SignpostMarker.js'
+import { dotHtml, singleHtml } from './signpostHtml.js'
 import type { BoardTour } from './signpostHtml.js'
 
 const bt = (i: number): BoardTour => ({ key: `k${i}`, label: { text: `Z${i}`, distance: '1.0 km', title: `t${i}` } })
-let map: L.Map
-function CaptureMap() { map = useMap(); return null }
 
-beforeEach(() => { vi.useFakeTimers() })
-afterEach(() => { cleanup(); vi.useRealTimers() })
+afterEach(cleanup)
 
 function setup(over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) {
-  const handlers = { onHoverMarker: vi.fn(), onHoverTour: vi.fn(), onActivate: vi.fn() }
-  const utils = render(
+  const handlers = { onHoverMarker: vi.fn(), onActivate: vi.fn() }
+  const tree = (props: Partial<Parameters<typeof SignpostMarker>[0]>) => (
     <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
-      <CaptureMap />
-      <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2)])} dimmed={false} highlighted={false} fadedKeys={new Set()} {...handlers} {...over} />
-    </MapContainer>,
+      <SignpostMarker
+        position={[47, 11]} kind="dot" html={dotHtml(bt(1), 'right')} dimmed={false} highlighted={false} fadedKeys={new Set()}
+        {...handlers} {...props}
+      />
+    </MapContainer>
   )
+  const utils = render(tree(over))
   const el = () => utils.container.querySelector('.signpost-marker') as HTMLElement
-  return { ...utils, ...handlers, el }
+  return { ...utils, ...handlers, el, again: (props: Partial<Parameters<typeof SignpostMarker>[0]>) => utils.rerender(tree({ ...over, ...props })) }
 }
-const advance = (ms: number) => act(() => { vi.advanceTimersByTime(ms) })
+const board = (over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) => setup({ kind: 'board', html: singleHtml(bt(1), 'right'), ...over })
 
-describe('SignpostMarker spread', () => {
-  it('does not spread before the open delay and spreads after it', () => {
-    const { el } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS - 1)
-    expect(el().classList.contains('spread')).toBe(false)
-    advance(1)
-    expect(el().classList.contains('spread')).toBe(true)
-  })
-  it('does not collapse inside the close delay, collapses after it', () => {
-    const { el } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS)
-    fireEvent.mouseOut(el().querySelector('.sign')!, { relatedTarget: document.body })
-    advance(CLOSE_DELAY_MS - 1)
-    expect(el().classList.contains('spread')).toBe(true)
-    advance(1)
-    expect(el().classList.contains('spread')).toBe(false)
-  })
-  it('stays open when the pointer crosses from one board to another', () => {
-    const { el } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS)
-    const [a, b] = el().querySelectorAll('.board')
-    fireEvent.mouseOut(a, { relatedTarget: b })
-    fireEvent.mouseOver(b)
-    advance(CLOSE_DELAY_MS * 2)
-    expect(el().classList.contains('spread')).toBe(true)
-  })
-  it('collapses at once on zoomstart and on dragstart', () => {
-    const { el } = setup()
-    for (const event of ['zoomstart', 'dragstart']) {
-      fireEvent.mouseOver(el().querySelector('.sign')!)
-      advance(OPEN_DELAY_MS)
-      expect(el().classList.contains('spread')).toBe(true)
-      act(() => { map.fire(event) })
-      expect(el().classList.contains('spread')).toBe(false)
-    }
-  })
-  it('raises a spread marker above its neighbours', () => {
-    const { el } = setup()
-    const before = Number(el().style.zIndex)
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS)
-    expect(Number(el().style.zIndex)).toBeGreaterThan(before + 5000)
-  })
-  it('does not spread a single or a cluster marker', () => {
-    const { el } = setup({ kind: 'single', html: singleHtml(bt(1)) })
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS * 2)
-    expect(el().classList.contains('spread')).toBe(false)
-  })
-  it('keeps its spread state when the html changes while spread', () => {
-    const { el, rerender } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS)
-    rerender(
-      <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
-        <CaptureMap />
-        <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2), bt(3)])} dimmed={false} highlighted={false} fadedKeys={new Set()} onHoverMarker={() => {}} onHoverTour={() => {}} onActivate={() => {}} />
-      </MapContainer>,
-    )
-    expect(el().classList.contains('spread')).toBe(true)
-  })
-  it('does not fire a pending timer after unmount', () => {
-    const { el, unmount } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    unmount()
-    expect(() => advance(OPEN_DELAY_MS * 2)).not.toThrow()
-  })
-})
-
-describe('SignpostMarker events', () => {
-  it('reports the hovered board and clears it on leaving', () => {
-    const { el, onHoverTour, onHoverMarker } = setup()
-    fireEvent.mouseOver(el().querySelector('.sign')!)
-    advance(OPEN_DELAY_MS)
-    fireEvent.mouseOver(el().querySelector('.board[data-tour-key="k2"]')!)
-    expect(onHoverTour).toHaveBeenLastCalledWith('k2')
-    fireEvent.mouseOut(el().querySelector('.board[data-tour-key="k2"]')!, { relatedTarget: document.body })
-    expect(onHoverTour).toHaveBeenLastCalledWith(null)
-    expect(onHoverMarker).toHaveBeenLastCalledWith(false)
-  })
-  it('activates a board, the overflow board and the body sign from clicks', () => {
-    const many = Array.from({ length: 10 }, (_, i) => bt(i))
-    const { el, onActivate } = setup({ html: stackHtml(many) })
-    fireEvent.click(el().querySelector('.board[data-tour-key="k3"]')!)
-    expect(onActivate).toHaveBeenLastCalledWith({ kind: 'tour', tourKey: 'k3' })
-    fireEvent.click(el().querySelector('[data-overflow]')!)
-    expect(onActivate).toHaveBeenLastCalledWith({ kind: 'overflow' })
-    fireEvent.click(el().querySelector('.stack-sign')!)
-    expect(onActivate).toHaveBeenLastCalledWith({ kind: 'body' })
-  })
-  it('toggles dimmed and highlighted as classes', () => {
-    const { el } = setup({ dimmed: true, highlighted: true })
+describe('SignpostMarker board', () => {
+  it('has the board kind class and toggles dimmed and highlighted', () => {
+    const { el } = board({ dimmed: true, highlighted: true })
+    expect(el().classList.contains('board')).toBe(true)
     expect(el().classList.contains('dimmed')).toBe(true)
     expect(el().classList.contains('highlighted')).toBe(true)
   })
-})
-
-describe('SignpostMarker keyboard', () => {
-  it('spreads on focus at once, activates a board with Enter, collapses with Escape', () => {
-    const { el, onActivate } = setup()
+  it('reports hover and leave of the marker', () => {
+    const { el, onHoverMarker } = board()
+    fireEvent.mouseOver(el().querySelector('.sign')!)
+    expect(onHoverMarker).toHaveBeenLastCalledWith(true)
+    fireEvent.mouseOut(el().querySelector('.sign')!, { relatedTarget: document.body })
+    expect(onHoverMarker).toHaveBeenLastCalledWith(false)
+  })
+  it('reports focus and blur of the board', () => {
+    const { el, onHoverMarker } = board()
     fireEvent.focusIn(el().querySelector('.sign')!)
-    expect(el().classList.contains('spread')).toBe(true)
-    fireEvent.keyDown(el().querySelector('.board[data-tour-key="k1"]')!, { key: 'Enter' })
-    expect(onActivate).toHaveBeenLastCalledWith({ kind: 'tour', tourKey: 'k1' })
-    fireEvent.keyDown(el().querySelector('.board[data-tour-key="k1"]')!, { key: 'Escape' })
-    expect(el().classList.contains('spread')).toBe(false)
+    expect(onHoverMarker).toHaveBeenLastCalledWith(true)
+    fireEvent.focusOut(el().querySelector('.sign')!, { relatedTarget: null })
+    expect(onHoverMarker).toHaveBeenLastCalledWith(false)
   })
-  it('focusing a board highlights its tour', () => {
-    const { el, onHoverTour } = setup()
-    fireEvent.focusIn(el().querySelector('.board[data-tour-key="k2"]')!)
-    expect(onHoverTour).toHaveBeenLastCalledWith('k2')
+  it('activates on click and on Enter, not on a click beside the board', () => {
+    const { el, onActivate } = board()
+    fireEvent.click(el().querySelector('.mast')!)
+    expect(onActivate).not.toHaveBeenCalled()
+    fireEvent.click(el().querySelector('.sign')!)
+    expect(onActivate).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(el().querySelector('.sign')!, { key: 'Enter' })
+    expect(onActivate).toHaveBeenCalledTimes(2)
+  })
+  it('fades the board of the given tour keys and leaves the others opaque', () => {
+    expect(board({ fadedKeys: new Set(['k1']) }).el().querySelector('.sign')!.classList.contains('faded')).toBe(true)
+    cleanup()
+    expect(board({ fadedKeys: new Set(['k2']) }).el().querySelector('.sign')!.classList.contains('faded')).toBe(false)
+  })
+  it('never previews, even when highlighted', () => {
+    expect(board({ highlighted: true }).el().classList.contains('previewing')).toBe(false)
   })
 })
 
-describe('SignpostMarker board placement', () => {
-  const at = (x: number) => {
-    vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(1000, 600))
-    vi.spyOn(L.Map.prototype, 'latLngToContainerPoint').mockImplementation(() => L.point(x, 300))
-  }
-  const single = (heading: 'east' | 'west') => setup({ kind: 'single', html: singleHtml(bt(1), heading), heading })
-
-  it('puts a single board on its heading side of the mast', () => {
-    at(500)
-    expect(single('east').el().classList.contains('side-right')).toBe(true)
-    cleanup()
-    expect(single('west').el().classList.contains('side-left')).toBe(true)
+describe('SignpostMarker dot', () => {
+  it('has the dot kind class and no preview at rest', () => {
+    const { el } = setup()
+    expect(el().classList.contains('dot')).toBe(true)
+    expect(el().classList.contains('previewing')).toBe(false)
   })
-  it('flips a board that would leave the viewport, keeping the arrow direction', () => {
-    at(950)
-    const { el, container } = single('east')
-    expect(el().classList.contains('side-left')).toBe(true)
-    expect(container.querySelector('.sign')!.classList.contains('heads-west')).toBe(false)
+  it('previews on hover and hides on leave', () => {
+    const { el } = setup()
+    fireEvent.mouseOver(el().querySelector('.dot')!)
+    expect(el().classList.contains('previewing')).toBe(true)
+    fireEvent.mouseOut(el().querySelector('.dot')!, { relatedTarget: document.body })
+    expect(el().classList.contains('previewing')).toBe(false)
   })
-  it('fades boards of the given tour keys and leaves the others opaque', () => {
-    const { container } = setup({ fadedKeys: new Set(['k1']) })
-    expect(container.querySelector('[data-tour-key="k1"]')!.classList.contains('faded')).toBe(true)
-    expect(container.querySelector('[data-tour-key="k2"]')!.classList.contains('faded')).toBe(false)
+  it('previews on focus and hides on blur', () => {
+    const { el } = setup()
+    fireEvent.focusIn(el().querySelector('.dot')!)
+    expect(el().classList.contains('previewing')).toBe(true)
+    fireEvent.focusOut(el().querySelector('.dot')!, { relatedTarget: null })
+    expect(el().classList.contains('previewing')).toBe(false)
+  })
+  it('previews while its tour is highlighted from elsewhere', () => {
+    const { el, again } = setup({ highlighted: true })
+    expect(el().classList.contains('previewing')).toBe(true)
+    again({ highlighted: false })
+    expect(el().classList.contains('previewing')).toBe(false)
+  })
+  it('raises a previewing dot above its neighbours', () => {
+    const { el, again } = setup()
+    const before = Number(el().style.zIndex)
+    again({ highlighted: true })
+    expect(Number(el().style.zIndex)).toBeGreaterThan(before + 5000)
+  })
+  it('activates on click and on Enter', () => {
+    const { el, onActivate } = setup()
+    fireEvent.click(el().querySelector('.dot')!)
+    fireEvent.keyDown(el().querySelector('.dot')!, { key: 'Enter' })
+    expect(onActivate).toHaveBeenCalledTimes(2)
+  })
+  it('does not fade its dot or its preview board', () => {
+    const { el } = setup({ fadedKeys: new Set(['k1']) })
+    expect(el().querySelector('.dot')!.classList.contains('faded')).toBe(false)
+    expect(el().querySelector('.preview .sign')!.classList.contains('faded')).toBe(false)
+  })
+  it('does not keep a stuck preview when its html is replaced under the pointer', () => {
+    const { el, again } = setup()
+    fireEvent.mouseOver(el().querySelector('.dot')!)
+    expect(el().classList.contains('previewing')).toBe(true)
+    again({ html: dotHtml(bt(1), 'left') })
+    expect(el().classList.contains('previewing')).toBe(false)
   })
 })

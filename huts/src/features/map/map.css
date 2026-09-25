@@ -28,11 +28,10 @@
 
 .waypoint-hit { background: none; border: none; cursor: pointer; }
 
-/* Signpost markers. The marker element is 0x0 at the geographic point; signs and boards are absolutely
-   positioned children, so the spread column can overflow it without resizing it. */
+/* Signpost markers. The marker element is 0x0 at the geographic point; boards and dots are absolutely
+   positioned children. */
 .signpost-marker {
   --board-h: 26px;
-  --board-pitch: 30px;
   --mast-h: 24px;
 }
 /* Mast and foot: the foot dot sits on the anchor (the marker origin), the mast rises from it. */
@@ -44,9 +43,12 @@
   position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px;
   border-radius: 50%; background: var(--color-ink); pointer-events: none;
 }
-.signpost-marker .sign,
-.signpost-marker .board {
+/* The board sits on top of the mast, its flat tail edge flush with the mast's outer edge, so the post continues straight
+   down from the tail. The arrow points away from the mast; `side-left` mirrors it. */
+.signpost-marker .sign {
   position: absolute;
+  left: -1px;
+  top: calc((var(--mast-h) + var(--board-h)) * -1);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -63,86 +65,46 @@
   clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
 }
 /* Yellow face inset from the ink edge, clipped to the same arrow. */
-.signpost-marker .sign::before,
-.signpost-marker .board::before {
+.signpost-marker .sign::before {
   content: '';
   position: absolute;
   inset: 2px;
   background: var(--color-signpost);
   clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
 }
-.signpost-marker .sign > *,
-.signpost-marker .board > * { position: relative; }
+.signpost-marker .sign > * { position: relative; }
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .signpost-marker .km { opacity: 0.75; }
+.signpost-marker .sign.side-left { left: 1px; transform: translateX(-100%); padding: 0 8px 0 16px; }
+.signpost-marker .sign.side-left,
+.signpost-marker .sign.side-left::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
 
-/* Single: the board sits on top of the mast, its flat tail edge flush with the mast's outer edge, so the post continues straight down from the tail. The arrow points away from
-   the mast, so the shape follows the side of the mast (`side-right`/`side-left`, set by SignpostMarker so a board never
-   leaves the viewport), not the heading. */
-.signpost-marker.single .sign { left: -1px; top: calc((var(--mast-h) + var(--board-h)) * -1); }
-.signpost-marker.single.side-left .sign { left: 1px; transform: translateX(-100%); padding: 0 8px 0 16px; }
-.signpost-marker.single.side-left .sign,
-.signpost-marker.single.side-left .sign::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
-/* Stack: the count sign is centred on the point. */
-.signpost-marker.stack .stack-sign {
-  left: 0;
-  top: calc(var(--board-h) / -2 - var(--mast-h));
-  min-width: 34px;
-  justify-content: center;
-  transform: translateX(-50%);
-  font-size: 0.9rem;
-  font-weight: 700;
+/* Dot: a tour whose board found no room. An 8 px foot without a mast; the pseudo-element widens the hit area to 16 px. */
+.signpost-marker .dot {
+  position: absolute; left: -4px; top: -4px;
+  box-sizing: border-box; width: 8px; height: 8px;
+  border-radius: 50%; border: 2px solid var(--color-ink); background: var(--color-signpost);
+  cursor: pointer;
 }
-
-/* Spread: boards start folded onto the sign and hidden, and move up the pole. */
-.signpost-marker .board {
-  left: 0;
-  top: calc(var(--board-h) / -2 - var(--mast-h));
-  opacity: 0;
-  visibility: hidden;
-  transform: translate(0, 0);
-  transition: transform 160ms ease-out, opacity 160ms ease-out, visibility 0s linear 160ms;
-}
-.signpost-marker.spread .board {
-  opacity: 1;
-  visibility: visible;
-  transform: translate(var(--dx, 0px), calc(var(--up) * var(--board-pitch) * -1));
-  transition: transform 160ms ease-out, opacity 160ms ease-out;
-}
-.signpost-marker.to-right { --dx: 12px; }
-.signpost-marker.to-left { --dx: calc(-100% - 12px); }
-.signpost-marker.to-left .board { left: auto; right: 0; }
-.signpost-marker.to-left .board,
-.signpost-marker.to-left .board::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
-.signpost-marker.to-left .board { padding: 0 8px 0 16px; }
-/* Covers the gaps between boards so the pointer never leaves the marker while crossing them. */
-.signpost-marker .spread-backdrop {
-  position: absolute;
-  left: -20px;
-  right: -240px;
-  top: calc(var(--board-pitch) * -9 - var(--mast-h) - 10px);
-  bottom: 10px;
-  pointer-events: none;
-}
-.signpost-marker.spread .spread-backdrop { pointer-events: auto; }
-.signpost-marker.to-left .spread-backdrop { left: -240px; right: -20px; }
-.signpost-marker.spread { z-index: 1000; }
+.signpost-marker .dot::after { content: ''; position: absolute; inset: -4px; }
+/* The preview is the board on a mast; it never takes the pointer, so the dot keeps the hover. */
+.signpost-marker .preview { display: none; pointer-events: none; }
+.signpost-marker.previewing .preview { display: block; }
+.signpost-marker .preview .sign { cursor: default; }
 
 .signpost-marker .sign:focus-visible,
-.signpost-marker .board:focus-visible { outline: 3px solid var(--color-alpine-blue); outline-offset: 2px; }
+.signpost-marker .dot:focus-visible { outline: 3px solid var(--color-alpine-blue); outline-offset: 2px; }
 .signpost-marker:not(.dimmed):hover .sign,
 .signpost-marker.highlighted .sign { filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--color-ink) 55%, transparent)); z-index: 1; }
-.signpost-marker .board:hover::before { background: #fff; }
+.signpost-marker .sign:hover::before { background: #fff; }
+.signpost-marker:not(.dimmed):hover .dot,
+.signpost-marker.highlighted .dot { background: #fff; }
 .signpost-marker.dimmed .sign,
 .signpost-marker.dimmed .mast,
-.signpost-marker.dimmed .foot { opacity: 0.45; }
+.signpost-marker.dimmed .foot,
+.signpost-marker.dimmed .dot { opacity: 0.45; }
 /* A tour hovered from its route line or the list: its board steps back so the highlighted line reads clearly. */
 .signpost-marker .faded { opacity: 0.35; }
-
-@media (prefers-reduced-motion: reduce) {
-  .signpost-marker .board,
-  .signpost-marker.spread .board { transition: none; }
-}
 
 /* Count bubble: a cluster, or any marker while zoomed out below the route reveal zoom. */
 .start-count-marker span {

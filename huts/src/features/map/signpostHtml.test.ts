@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { SPREAD_CAP, escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
+import { dotHtml, escapeHtml, singleHtml } from './signpostHtml.js'
 import type { BoardTour } from './signpostHtml.js'
 
 const bt = (i: number, text = `Ziel ${i}`): BoardTour => ({
@@ -10,60 +10,48 @@ const doc = (html: string) => { const d = document.createElement('div'); d.inner
 
 describe('singleHtml', () => {
   it('is one focusable board with the tour key, end point, distance and title', () => {
-    const d = doc(singleHtml(bt(1)))
+    const d = doc(singleHtml(bt(1), 'right'))
     const sign = d.querySelector('.sign[data-tour-key="k1"]')!
     expect(sign.getAttribute('tabindex')).toBe('0')
     expect(sign.getAttribute('title')).toBe('Ziel 1 (Parkplatz), 1.0 km')
     expect(sign.textContent).toContain('Ziel 1')
     expect(sign.textContent).toContain('1.0 km')
-    expect(sign.querySelector('svg')).toBeNull()
   })
   it('escapes the end point name', () => {
-    expect(singleHtml(bt(1, '<b>&"'))).not.toContain('<b>')
+    expect(singleHtml(bt(1, '<b>&"'), 'right')).not.toContain('<b>')
     expect(escapeHtml('<&>"')).toBe('&lt;&amp;&gt;&quot;')
   })
-})
-
-describe('stackHtml', () => {
-  it('has a body sign with the tour count, a backdrop and one board per tour', () => {
-    const d = doc(stackHtml([bt(1), bt(2), bt(3)]))
-    expect(d.querySelector('.sign')!.textContent).toBe('3')
-    expect(d.querySelector('.spread-backdrop')).not.toBeNull()
-    expect([...d.querySelectorAll('.board[data-tour-key]')].map((b) => b.getAttribute('data-tour-key'))).toEqual(['k1', 'k2', 'k3'])
-    expect(d.querySelector('[data-overflow]')).toBeNull()
+  it('puts the side on the board', () => {
+    expect(doc(singleHtml(bt(1), 'left')).querySelector('.sign.side-left')).not.toBeNull()
+    expect(doc(singleHtml(bt(1), 'right')).querySelector('.sign.side-right')).not.toBeNull()
   })
-  it('stacks boards on the pole in list order, first at the top', () => {
-    const ups = [...doc(stackHtml([bt(1), bt(2), bt(3)])).querySelectorAll<HTMLElement>('.board')].map((b) => b.style.getPropertyValue('--up'))
-    expect(ups).toEqual(['3', '2', '1'])
-  })
-  it('caps the spread and adds an overflow board with a title naming the total', () => {
-    const tours = Array.from({ length: SPREAD_CAP + 4 }, (_, i) => bt(i))
-    const d = doc(stackHtml(tours))
-    expect(d.querySelectorAll('.board[data-tour-key]')).toHaveLength(SPREAD_CAP)
-    const overflow = d.querySelector('.board.overflow[data-overflow]')!
-    expect(overflow.textContent).toBe('+4')
-    expect(overflow.getAttribute('title')).toBe('Alle 12 Touren in der Liste zeigen')
-  })
-  it('adds no overflow board at exactly the cap', () => {
-    const d = doc(stackHtml(Array.from({ length: SPREAD_CAP }, (_, i) => bt(i))))
-    expect(d.querySelector('[data-overflow]')).toBeNull()
+  it('plants a mast and foot dot before the board', () => {
+    const d = doc(singleHtml(bt(1), 'right'))
+    expect(d.querySelector('.mast')).not.toBeNull()
+    expect(d.querySelector('.foot')).not.toBeNull()
+    expect(d.querySelector('.mast')!.getAttribute('data-tour-key')).toBeNull()
   })
 })
 
-describe('singleHtml heading', () => {
-  it('flips the board only for a tour heading west', () => {
-    expect(doc(singleHtml(bt(1))).querySelector('.heads-west')).toBeNull()
-    expect(doc(singleHtml(bt(1), 'west')).querySelector('.sign.heads-west')).not.toBeNull()
+describe('dotHtml', () => {
+  it('is one focusable dot carrying the tour key and title, without mast or foot in the flow', () => {
+    const d = doc(dotHtml(bt(1), 'left'))
+    const dot = d.querySelector('.dot[data-tour-key="k1"]')!
+    expect(dot.getAttribute('tabindex')).toBe('0')
+    expect(dot.getAttribute('title')).toBe('Ziel 1 (Parkplatz), 1.0 km')
+    expect(d.querySelector(':scope > .foot')).toBeNull()
   })
-})
-
-describe('mast', () => {
-  it('singleHtml and stackHtml plant a mast and foot dot before the board', () => {
-    for (const html of [singleHtml(bt(1)), stackHtml([bt(1), bt(2)])]) {
-      const d = doc(html)
-      expect(d.querySelector('.mast')).not.toBeNull()
-      expect(d.querySelector('.foot')).not.toBeNull()
-      expect(d.querySelector('.mast')!.getAttribute('data-tour-key')).toBeNull()
-    }
+  it('holds a hidden preview board on the given side, not focusable and without a tour key', () => {
+    const d = doc(dotHtml(bt(1), 'left'))
+    const sign = d.querySelector('.preview .sign.side-left')!
+    expect(sign.textContent).toContain('Ziel 1')
+    expect(sign.textContent).toContain('1.0 km')
+    expect(sign.hasAttribute('tabindex')).toBe(false)
+    expect(sign.hasAttribute('data-tour-key')).toBe(false)
+    expect(d.querySelector('.preview')!.getAttribute('aria-hidden')).toBe('true')
+    expect(d.querySelector('.preview .mast')).not.toBeNull()
+  })
+  it('escapes the end point name', () => {
+    expect(dotHtml(bt(1, '<b>&"'), 'right')).not.toContain('<b>')
   })
 })
