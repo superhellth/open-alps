@@ -1,4 +1,4 @@
-import type { FreeByOffset } from '../availability/types.js'
+import type { FreeByOffset } from '@/availability/types.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 
 /** Direct-booking huts (no OHRS id) and a failed/unfetched offset both count as available — only a

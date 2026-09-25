@@ -1,8 +1,8 @@
-import { newTrip } from '../trip/trip.js'
-import type { Trip } from '../trip/trip.js'
-import type { SourceType } from '../tourSearch/types.js'
-import type { FormState } from '@/features/discover/formState.js'
-import type { TripDraft } from '@/features/discover/plannerState.js'
+import { newTrip } from '@/trip/trip.js'
+import type { Trip } from '@/trip/trip.js'
+import type { SourceType } from '@/tourSearch/types.js'
+import type { FormState } from './formState.js'
+import type { TripDraft } from './plannerState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 

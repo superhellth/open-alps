@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { filterOfficial, nightStateOf, sortTours } from './rankTours.js'
-import { DEFAULT_FORM, rankTargetsFromForm } from '@/features/discover/formState.js'
+import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { FreeByOffset } from '../availability/types.js'
+import type { FreeByOffset } from '@/availability/types.js'
 
 const tour = (huts: number[], durations: number[], over: Partial<PlannerTour> = {}): PlannerTour => ({
   huts, startId: 1, exitStartId: 1, totalDurationH: durations.reduce((s, d) => s + d, 0), totalAscentM: durations.length * 100,

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { filterByAvailability, tourHasFullNight } from './availabilityFilter.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { FreeByOffset } from '../availability/types.js'
+import type { FreeByOffset } from '@/availability/types.js'
 
 function tour(huts: number[]): PlannerTour {
   return {
