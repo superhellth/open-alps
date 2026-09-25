@@ -1,4 +1,4 @@
-import { StrictMode, useSyncExternalStore } from 'react'
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ThemeProvider } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
@@ -14,14 +14,10 @@ import PlannerPage from '@/plannerPage/PlannerPage.js'
 import { SearchClientProvider } from '@/search/SearchClientProvider.js'
 import { TripsProvider } from '@/trip/TripsProvider.js'
 import { SHARE_HASH_PREFIX } from '@/trip/shareLink.js'
-
-function subscribeHash(callback: () => void) {
-  window.addEventListener('hashchange', callback)
-  return () => window.removeEventListener('hashchange', callback)
-}
+import { useHash } from '@/lib/useHash.js'
 
 function Router() {
-  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
+  const hash = useHash()
   // #admin needs none of the planner's data or the search worker, so it renders outside the providers.
   if (hash === '#admin') return <AdminPage />
   // Planen and Meine Touren share one provider instance, so switching tabs reloads and reparses nothing.

@@ -23,6 +23,8 @@ The overall app structure, data sources, and the client-side tour search engine
 (`src/tourSearch/`, `src/search/`, `src/trip/`) are documented in the repository root
 `CLAUDE.md` — read that first. This file covers only what's specific to working inside `huts/`.
 
+Imports that leave a top-level `src/` directory use the `@/` alias (`@/data/buildAppData.js`).
+
 `tools/` holds standalone Node scripts (e.g. `gpxEditorPlugin.ts`, the Vite plugin backing the
 dev-only GPX editor) that are outside `src/` because they run at build/dev-server time, not in
 the browser bundle.

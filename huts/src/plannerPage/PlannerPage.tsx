@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '../data/AppDataProvider.js'
@@ -39,15 +39,11 @@ import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripEditor } from './TripEditor.js'
 import type { EditingState } from './TripEditor.js'
 import { useTripOverlaps } from './useTripOverlaps.js'
+import { useHash } from '@/lib/useHash.js'
 
 const EMPTY_GRAPH: TripGraph = { hutEdges: { hutIds: [], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } }
 const PLACEHOLDER_TRIP: Trip = { id: '', name: '', createdAt: '', updatedAt: '', startDate: null, partySize: 1, start: { startId: 0, sourceType: 1 }, huts: [], exit: { startId: 0, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false }, nights: [] }
 const PLACEHOLDER_LEGS: TripLegs = { variantId: -1, hutIndices: [], legs: [], changed: [] }
-
-function subscribeHash(callback: () => void) {
-  window.addEventListener('hashchange', callback)
-  return () => window.removeEventListener('hashchange', callback)
-}
 
 export default function PlannerPage({ importHash }: { importHash: string | null }) {
   const app = useAppData()
@@ -78,7 +74,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
   const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
   const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
-  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash)
+  const hash = useHash()
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])

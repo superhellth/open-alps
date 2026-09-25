@@ -27,8 +27,8 @@ not be called in a loop over the whole hut list.
 
 ## App structure
 
-`huts/src/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
-(`theme.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: every hash except `#admin`
+`huts/src/app/main.tsx` is a hash-based router with no library, wrapped in MUI's `ThemeProvider`
+(`ui/theme.ts`, Barlow self-hosted via `@fontsource/*`)/`CssBaseline`: every hash except `#admin`
 renders `plannerPage/PlannerPage.tsx` (`#trips` selects its `saved` sidebar view, `#trip=<payload>`
 is a share link that opens the planner with an import offer), and `#admin` renders
 `adminPage/AdminPage.tsx` outside the providers (it needs none of the planner's data or the
@@ -46,7 +46,7 @@ start-date answers) -> Take along (share link, `trip/shareLink.ts`). The sidebar
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`SavedTripsList.tsx`) lists saved trips and draws them on the map (`map/SavedTripsLayer.tsx`).
 `formState.ts` builds the `Query`; `rankTours.ts`/`tourSearch/rankFit.ts` order results;
-`hutClass.ts` classifies each hut (marker shape = operator, fill = service).
+`data/hutClass.ts` classifies each hut (marker shape = operator, fill = service).
 
 `huts/src/search/` runs the heavy search in a Web Worker (`searchWorker.ts`) that owns the large
 overlap tables (`hut-edge-ids`/`start-edge-ids`); the main thread holds only the small routing graph
