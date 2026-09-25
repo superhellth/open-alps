@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import L from 'leaflet'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '@/data/appDataContext.js'
 import type { AppData } from '@/data/buildAppData.js'
@@ -34,9 +33,8 @@ import type { RouteContext } from '@/features/map/routes.js'
 import { officialToTour } from '@/tourSearch/plannerTour.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { inBbox } from '@/features/map/viewport.js'
-import { ROUTE_REVEAL_ZOOM } from '@/features/map/DiscoverLayer.js'
+import { useMapView } from '@/features/map/useMapView.js'
 import { tourKey } from '@/features/map/tourKey.js'
-import type { View } from '@/features/map/viewport.js'
 import { tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripEditor } from '@/features/trip/TripEditor.js'
@@ -55,6 +53,7 @@ export default function PlannerPage({ importHash }: { importHash: string | null 
 function Planner({ data, client, importHash }: { data: AppData; client: SearchClient; importHash: string | null }) {
   const { state, dispatch, activeTrip, isDraft, draftDirty } = useTrips()
   const prompt = useFirstVisitPrompt()
+  const { mapView, setMapView, routesVisible, restoreView, fitBounds, rememberViewBeforeTrip, restoreViewAfterTrip, fitToPoints } = useMapView()
 
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
@@ -63,10 +62,6 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
   const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
-  const [mapView, setMapView] = useState<View | null>(null)
-  const [restoreView, setRestoreView] = useState<{ lat: number; lng: number; zoom: number } | null>(null)
-  const [fitBounds, setFitBounds] = useState<[[number, number], [number, number]] | null>(null)
-  const preTripView = useRef<{ lat: number; lng: number; zoom: number } | null>(null)
   const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
   const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
@@ -120,13 +115,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const showAllTours = useCallback(() => {
     setFocusStarts(null)
-    const bounds = L.latLngBounds([])
-    for (const g of groups) {
-      const s = data.startById.get(g.startId)
-      if (s) bounds.extend([s.lat, s.lng])
-    }
-    if (bounds.isValid()) setFitBounds([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]])
-  }, [groups, data])
+    fitToPoints(groups.flatMap((g) => { const s = data.startById.get(g.startId); return s ? [s] : [] }))
+  }, [groups, data, fitToPoints])
 
   const tripLegs = useMemo(() => (activeTrip ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && tripLegs ? 'trip' : 'discover'
@@ -139,8 +129,6 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     onChange: (trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip }),
   })
 
-  // Below ROUTE_REVEAL_ZOOM the map shows only count markers, so a hovered tour highlights its bubble instead of drawing a route.
-  const routesVisible = mapView !== null && mapView.zoom >= ROUTE_REVEAL_ZOOM
   const previewRoute = useMemo(
     () => (previewTour && routesVisible ? tourToRoute(previewTour, routeCtx) : null),
     [previewTour, routeCtx, routesVisible],
@@ -150,11 +138,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     [mode, activeTrip, tripLegs, routeCtx])
 
   function pick(tour: PlannerTour) {
-    if (mapView) {
-      preTripView.current = {
-        lat: (mapView.bbox[1] + mapView.bbox[3]) / 2, lng: (mapView.bbox[0] + mapView.bbox[2]) / 2, zoom: mapView.zoom,
-      }
-    }
+    rememberViewBeforeTrip()
     const trip = tripFromTour(tour, {
       hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, startLabel, form, draft,
     })
@@ -196,7 +180,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   function backFromTrip() {
     setEditing(null)
     dispatch({ type: 'closeActive' })
-    if (preTripView.current) setRestoreView({ ...preTripView.current })
+    restoreViewAfterTrip()
     if (openedFrom === 'saved') window.location.hash = '#trips'
   }
 
