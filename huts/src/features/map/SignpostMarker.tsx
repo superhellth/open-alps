@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { MarkerKind } from './clusterStarts.js'
+import { HOVER_Z_OFFSET } from './routePanes.js'
 import type { Heading } from './signpostHtml.js'
 
 export const OPEN_DELAY_MS = 200
 export const CLOSE_DELAY_MS = 250
-/** Lifts a spread marker above every neighbour so the column is never covered. */
+/** Lifts a spread marker above every neighbour, hovered ones included, so the column is never covered. */
 const SPREAD_Z_OFFSET = 10_000
 /** Widest a board can be (matches `max-width` in map.css); the side flips when it would cross the viewport edge. */
 const BOARD_MAX_WIDTH = 220
@@ -99,13 +100,13 @@ export default function SignpostMarker({ position, kind, html, heading = 'east',
     const el = marker?.getElement()
     if (!marker || !el) return
     el.classList.toggle('spread', spread)
-    marker.setZIndexOffset(spread ? SPREAD_Z_OFFSET : 0)
+    marker.setZIndexOffset(spread ? SPREAD_Z_OFFSET : highlighted ? HOVER_Z_OFFSET : 0)
     if (spread) {
       const toLeft = map.latLngToContainerPoint(marker.getLatLng()).x > map.getSize().x / 2
       el.classList.toggle('to-left', toLeft)
       el.classList.toggle('to-right', !toLeft)
     }
-  }, [icon, spread, map])
+  }, [icon, spread, highlighted, map])
 
   useEffect(() => {
     const el = markerRef.current?.getElement()

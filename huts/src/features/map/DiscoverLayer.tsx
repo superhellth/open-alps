@@ -13,6 +13,7 @@ import type { RouteContext } from './routes.js'
 import RouteLayer from './RouteLayer.js'
 import WaypointLayer, { collectSymbols } from './WaypointLayer.js'
 import HoverTooltip from './HoverTooltip.js'
+import { HOVER_Z_OFFSET } from './routePanes.js'
 import SignpostMarker from './SignpostMarker.js'
 import type { Activation } from './SignpostMarker.js'
 import { anchorMarkerKind, createAnchorClusterer, createStartClusterer, markerRadius } from './clusterStarts.js'
@@ -230,6 +231,7 @@ export default function DiscoverLayer({
         return (
           <Marker
             key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
+            zIndexOffset={hovered ? HOVER_Z_OFFSET : 0}
             eventHandlers={{
               mouseover: () => hoverStarts(new Set(ids)),
               mouseout: () => hoverStarts(null),

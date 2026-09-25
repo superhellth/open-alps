@@ -34,3 +34,6 @@ export function ensureRoutePanes(map: L.Map) {
   }
   createPane(map, HIT_PANE, 500, 1)
 }
+
+/** Marker z-index offset that paints a hovered marker above every unhovered one. */
+export const HOVER_Z_OFFSET = 1_000
