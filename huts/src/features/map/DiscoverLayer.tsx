@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { StartGroup } from '@/tourSearch/groupByStart.js'
@@ -39,9 +39,9 @@ function countIcon(count: number, cluster: boolean, dimmed: boolean, highlighted
  *  `ROUTE_REVEAL_ZOOM`, faint route lines draw for every tour whose waypoints' bounding box
  *  overlaps the current viewport, so a tour stays drawn while any part of it is on screen. Markers no longer "select":
  *  clicking one that stands for a single tour picks it; otherwise it flies the map to the bounds of the tours it stands for and focuses the results
- *  list on them. Cluster bubbles (several start points) carry a ring; single start points do not. */
+ *  list on them and draws just those tours at full strength above the faded rest until the focus is dropped (show all tours, a map click, or zooming out past the zoom the click flew to); bubbles outside that focus fade like the search-running state. Cluster bubbles (several start points) carry a ring; single start points do not. */
 export default function DiscoverLayer({
-  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, onNavigate, onFocusStarts, onHoverStarts, onViewChange,
+  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, onNavigate, focusStarts, onFocusStarts, onHoverStarts, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
@@ -53,18 +53,24 @@ export default function DiscoverLayer({
   /** Start point of the tour hovered in the results list; the marker covering it is highlighted. */
   onPickRoute: (tour: PlannerTour) => void
   onNavigate?: () => void
-  /** Start points whose tours the results list should be limited to; null lifts the limit. */
+  /** Start points whose tours the results list is limited to and the map highlights; null when unfocused. */
+  focusStarts?: Set<number> | null
+  /** Sets the focus; null lifts it. */
   onFocusStarts?: (startIds: number[] | null) => void
   /** Start points of the bubble under the pointer; null when none. */
   onHoverStarts?: (startIds: Set<number> | null) => void
   onViewChange?: (view: View) => void
 }) {
   const map = useMap()
+  /** Zoom the map settled on when the focus was set; zooming out below it drops the focus. */
+  const focusZoom = useRef(0)
   const [view, setView] = useState<View>(() => currentView(map))
   useMapEvents({
     moveend: () => setView(currentView(map)),
-    zoomend: () => setView(currentView(map)),
-    dragstart: () => onFocusStarts?.(null),
+    zoomend: () => {
+      setView(currentView(map))
+      if (focusStarts && map.getZoom() < focusZoom.current) onFocusStarts?.(null)
+    },
   })
   useEffect(() => { onViewChange?.(view) }, [view, onViewChange])
 
@@ -85,8 +91,8 @@ export default function DiscoverLayer({
   const [hoveredStartIds, setHoveredStartIds] = useState<Set<number> | null>(null)
   const hoverStarts = (ids: Set<number> | null) => { setHoveredStartIds(ids); onHoverStarts?.(ids) }
   const highlightedRoutes = useMemo(() => routedTours.flatMap(({ tour, route }) =>
-    tourKey(tour) === hoveredTourKey || hoveredStartIds?.has(tour.startId) ? [{ key: tourKey(tour), route }] : []),
-  [routedTours, hoveredTourKey, hoveredStartIds])
+    tourKey(tour) === hoveredTourKey || hoveredStartIds?.has(tour.startId) || focusStarts?.has(tour.startId) ? [{ key: tourKey(tour), route }] : []),
+  [routedTours, hoveredTourKey, hoveredStartIds, focusStarts])
 
   /** Bounds of every waypoint of every tour starting at one of the given start points. */
   const tourBounds = (startIds: number[]): L.LatLngBounds | null => {
@@ -118,7 +124,7 @@ export default function DiscoverLayer({
         <Marker
           key={m.kind === 'start' ? `s${m.startId}` : `c${m.clusterId}`}
           position={[m.lat, m.lng]}
-          icon={countIcon(m.count, m.kind === 'cluster', dimmed, m === highlightedMarker)}
+          icon={countIcon(m.count, m.kind === 'cluster', dimmed || (focusStarts != null && !startIdsOf(m).some((id) => focusStarts.has(id))), m === highlightedMarker)}
           eventHandlers={{
             mouseover: () => hoverStarts(new Set(startIdsOf(m))),
             mouseout: () => hoverStarts(null),
@@ -129,8 +135,13 @@ export default function DiscoverLayer({
               const startIds = startIdsOf(m)
               onFocusStarts?.(startIds)
               const bounds = tourBounds(startIds)
-              if (bounds) map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 })
-              else if (m.kind === 'cluster') map.setView([m.lat, m.lng], Math.min(clusterer.expansionZoom(m.clusterId), map.getMaxZoom()))
+              if (bounds) {
+                focusZoom.current = Math.min(map.getBoundsZoom(bounds, false, L.point(80, 80)), map.getMaxZoom())
+                map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 })
+              } else if (m.kind === 'cluster') {
+                focusZoom.current = Math.min(clusterer.expansionZoom(m.clusterId), map.getMaxZoom())
+                map.setView([m.lat, m.lng], focusZoom.current)
+              }
             },
           }}
         />

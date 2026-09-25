@@ -49,7 +49,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const {
     form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
-    search, tours, visibleTours, groups, groupStartPoints, viewTours, setFocusStarts,
+    search, tours, visibleTours, groups, groupStartPoints, viewTours, focusStarts, setFocusStarts,
     hoveredTourKey, setHoveredTourKey, hoveredStarts, setHoveredStarts,
   } = useDiscover({ data, client, mapView })
 
@@ -107,12 +107,12 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       kind: 'discover', groups, dimmed: search.status === 'searching', startById: data.startById,
       allTours: tours, routeCtx, hoveredTourKey,
       onNavigate: () => { dismissPrompt(); setDiscoverTab('results') },
-      onFocusStarts: (ids) => setFocusStarts(ids && new Set(ids)),
+      focusStarts, onFocusStarts: (ids) => setFocusStarts(ids && new Set(ids)),
       onHoverStarts: setHoveredStarts, onViewChange: setMapView, onHoverTour: setHoveredTourKey, onPickRoute: pick,
     }
   }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
     editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, tours, hoveredTourKey,
-    dismissPrompt, setDiscoverTab, setFocusStarts, setHoveredStarts, setMapView, setHoveredTourKey, pick])
+    dismissPrompt, setDiscoverTab, focusStarts, setFocusStarts, setHoveredStarts, setMapView, setHoveredTourKey, pick])
   const mapCommands = useMemo<MapCommands>(() => ({
     route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg, restoreView, fitBounds,
     onMapClick: () => { dismissPrompt(); setFocusStarts(null) },

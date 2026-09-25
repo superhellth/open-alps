@@ -16,6 +16,8 @@ export interface DiscoverMapMode {
   hoveredTourKey: string | null
   /** Called when a marker is clicked — navigation only, no filtering. */
   onNavigate: () => void
+  /** Start points the list and map are focused on; null when unfocused. */
+  focusStarts: Set<number> | null
   onFocusStarts: (startIds: number[] | null) => void
   onHoverStarts: (startIds: Set<number> | null) => void
   /** Called whenever the map's bbox/zoom changes, so the list can mirror it. */
@@ -28,7 +30,7 @@ export function DiscoverMapLayers({ mode }: { mode: DiscoverMapMode }) {
   return (
     <DiscoverLayer
       groups={mode.groups} startById={mode.startById} dimmed={mode.dimmed}
-      onNavigate={mode.onNavigate} onFocusStarts={mode.onFocusStarts} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
+      onNavigate={mode.onNavigate} focusStarts={mode.focusStarts} onFocusStarts={mode.onFocusStarts} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
       allTours={mode.allTours} routeCtx={mode.routeCtx}
       hoveredTourKey={mode.hoveredTourKey} onHoverTour={mode.onHoverTour} onPickRoute={mode.onPickRoute}
     />

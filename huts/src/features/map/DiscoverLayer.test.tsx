@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
-import { MapContainer } from 'react-leaflet'
+import { useState } from 'react'
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
+import L from 'leaflet'
+import { render, cleanup, fireEvent, act } from '@testing-library/react'
+import { MapContainer, useMap } from 'react-leaflet'
 import DiscoverLayer from './DiscoverLayer.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 
@@ -21,9 +23,13 @@ const routeCtx = {
   startById, officialById: new Map(),
 }
 
+let map: L.Map
+function CaptureMap() { map = useMap(); return null }
+
 function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13) {
   return render(
     <MapContainer center={[47.3, 12]} zoom={zoom} style={{ height: 400, width: 400 }}>
+      <CaptureMap />
       <DiscoverLayer
         groups={[]} startById={startById}
         dimmed={false} allTours={[tour(1, [10, 11])]}
@@ -33,6 +39,12 @@ function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, z
       />
     </MapContainer>,
   )
+}
+
+/** Owns the focus the way the planner does, so the layer's own focus changes feed back into its props. */
+function FocusedLayer(props: Parameters<typeof DiscoverLayer>[0]) {
+  const [focus, setFocus] = useState<Set<number> | null>(null)
+  return <DiscoverLayer {...props} focusStarts={focus} onFocusStarts={(ids) => setFocus(ids && new Set(ids))} />
 }
 
 describe('DiscoverLayer route lines', () => {
@@ -61,5 +73,59 @@ describe('DiscoverLayer route lines', () => {
     const { container: few } = renderLayer({ allTours: many.slice(0, 10), routeCtx: routeCtxMany }, 13)
     const pathsPerTour = few.querySelectorAll('path.leaflet-interactive').length / 10
     expect(all.querySelectorAll('path.leaflet-interactive').length).toBe(80 * pathsPerTour)
+  })
+})
+
+describe('DiscoverLayer bubble focus', () => {
+  const two = new Map([...startById, [2, { name: null, sourceType: 1, lat: 47.3, lng: 12.015 }]])
+  const tours = [tour(1, [10, 11]), tour(2, [10, 11])]
+  const groups = [{ startId: 1, tours: [tours[0], tours[0]] }, { startId: 2, tours: [tours[1], tours[1]] }] as never
+  const routeCtx2 = { ...routeCtx, startById: two }
+
+  beforeEach(() => {
+    vi.spyOn(L.Map.prototype, 'flyToBounds').mockReturnThis()
+    vi.spyOn(L.Map.prototype, 'getSize').mockReturnValue(L.point(400, 400))
+  })
+  afterEach(() => { vi.restoreAllMocks() })
+
+  function renderFocused() {
+    return render(
+      <MapContainer center={[47.3, 12]} zoom={13} style={{ height: 400, width: 400 }}>
+        <CaptureMap />
+        <FocusedLayer
+          groups={groups} startById={two} dimmed={false} allTours={tours} routeCtx={routeCtx2}
+          hoveredTourKey={null} onHoverTour={() => {}} onPickRoute={() => {}}
+        />
+      </MapContainer>,
+    )
+  }
+
+  it('highlights the clicked bubble\'s tours above the faded rest and dims other bubbles', () => {
+    const { container } = renderFocused()
+    const highlighted = () => container.querySelectorAll('.leaflet-route-dot-pane path').length
+    const faded = () => container.querySelectorAll('.leaflet-route-dim-dot-pane path').length
+    expect(highlighted()).toBe(0)
+    fireEvent.click(container.querySelector('.start-count-marker') as HTMLElement)
+    expect(highlighted()).toBeGreaterThan(0)
+    expect(highlighted()).toBe(faded() / 2)
+    const bubbles = container.querySelectorAll('.start-count-marker')
+    expect(bubbles[0].classList.contains('dimmed')).toBe(false)
+    expect(bubbles[1].classList.contains('dimmed')).toBe(true)
+  })
+
+  it('keeps the focus through a drag and through zooming that stays at or above the click zoom, drops it below', () => {
+    vi.spyOn(L.Map.prototype, 'getBoundsZoom').mockReturnValue(13)
+    const { container } = renderFocused()
+    const focused = () => container.querySelectorAll('.leaflet-route-dot-pane path').length > 0
+    fireEvent.click(container.querySelector('.start-count-marker') as HTMLElement)
+    expect(focused()).toBe(true)
+    act(() => { map.fire('dragstart') })
+    expect(focused()).toBe(true)
+    act(() => { map.setZoom(14, { animate: false }) })
+    expect(focused()).toBe(true)
+    act(() => { map.setZoom(13, { animate: false }) })
+    expect(focused()).toBe(true)
+    act(() => { map.setZoom(12, { animate: false }) })
+    expect(focused()).toBe(false)
   })
 })
