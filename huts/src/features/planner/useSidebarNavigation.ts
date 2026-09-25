@@ -1,3 +1,4 @@
+import { useCallback } from 'react'
 import { useHash } from '@/lib/useHash.js'
 import { useTrips } from '@/trip/tripsContext.js'
 
@@ -26,10 +27,10 @@ export function useSidebarNavigation({ mode, openedFrom, setOpenedFrom, onBackFr
     dispatch({ type: 'closeActive' })
     window.location.hash = ''
   }
-  function openSavedTrip(id: string) {
+  const openSavedTrip = useCallback((id: string) => {
     setOpenedFrom('saved')
     dispatch({ type: 'setActive', id })
-  }
+  }, [setOpenedFrom, dispatch])
   function openPinnedDraft() {
     setOpenedFrom('saved')
     dispatch({ type: 'reopenDraft' })
