@@ -3,13 +3,15 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
+from lib.anchors import decode_row  # noqa: E402
 from postprocessing.build_approach_table import (  # noqa: E402
-    build_tables, bucket_index, gather_candidates, parse_duration_buckets,
+    approach_anchor_columns, build_tables, bucket_index, gather_candidates, parse_duration_buckets,
     parse_variant_names, select_approaches,
 )
 
@@ -268,3 +270,17 @@ def test_every_selected_row_carries_a_variant_ready_for_the_variant_column():
     )
     assert all(isinstance(r["variant"], int) for r in rows)
     assert rows[0]["variant"] == binfmt.VARIANT_FAST_ANY
+
+
+def test_approach_anchors_are_offsets_from_the_rows_hut_along_the_start_edge():
+    records = _records([_record(1, binfmt.TYPE_PARKING, 0, 1000.0, 0.0, 0.0)])
+    records["geom_offset"], records["geom_count"] = 0, 2
+    geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"], geometry["lat"] = [11.4, 11.0], [47.0, 47.0]  # parking -> hut
+    hut_lonlat = np.array([[11.0, 47.0]])
+
+    cols = approach_anchor_columns([{"edge_id": 0, "hut_id": 0}], records, geometry, hut_lonlat)
+
+    anchors = decode_row(cols, 0, hut_lonlat[0])
+    assert anchors[0, 0] == pytest.approx(11.3, abs=1e-4)  # 25 % is near the parking end
+    assert anchors[2, 0] == pytest.approx(11.1, abs=1e-4)

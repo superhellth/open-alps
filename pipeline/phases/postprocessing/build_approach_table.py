@@ -29,6 +29,7 @@ Usage: python pipeline/phases/postprocessing/build_approach_table.py
 """
 
 import argparse
+import gzip
 import json
 import sys
 from collections import defaultdict
@@ -39,7 +40,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib import speed  # noqa: E402
-from lib.pipeline import START_EDGES_DIR, START_POINTS_DIR, load_config  # noqa: E402
+from lib.anchors import edge_anchor_columns  # noqa: E402
+from lib.geo import hut_points  # noqa: E402
+from lib.pipeline import RAW_DIR, START_EDGES_DIR, START_POINTS_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 config = load_config()
@@ -48,6 +51,14 @@ _SOURCE_TYPE_NAME = {
     binfmt.TYPE_PARKING: "parking", binfmt.TYPE_STATION: "station",
     binfmt.TYPE_PARTNER: "partner_betrieb",
 }
+
+
+def approach_anchor_columns(approaches: list, records: np.ndarray, geometry: np.ndarray,
+                            hut_lonlat: np.ndarray) -> dict:
+    """Anchor columns for the approach rows: each row's start edge geometry, offsets from its hut."""
+    row_ids = np.array([r["edge_id"] for r in approaches], dtype=np.int64)
+    ref = hut_lonlat[np.array([r["hut_id"] for r in approaches], dtype=np.int64)]
+    return edge_anchor_columns(records, geometry, row_ids, ref)
 
 
 def gather_candidates(records: np.ndarray, id_table: dict, variant_ids: set) -> dict:
@@ -165,6 +176,8 @@ if __name__ == "__main__":
         help="comma-separated binfmt.VARIANT_NAMES values eligible as approach candidates "
              "(see pipeline.config.json's approach.variants)",
     )
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"),
+                        help="path to the hut master-data GeoJSON")
     parser.add_argument("--out-bin", default=str(START_EDGES_DIR / "approaches.bin"),
                         help="path to write the packed approach-table binary")
     parser.add_argument("--out-manifest", default=str(START_EDGES_DIR / "approaches.json"),
@@ -200,7 +213,14 @@ if __name__ == "__main__":
             "ascent_m": ("f4", np.array([r["ascent_m"] for r in approaches], dtype="f4")),
             "descent_m": ("f4", np.array([r["descent_m"] for r in approaches], dtype="f4")),
         }
+        plain_payload, _ = binfmt.pack_columns(columns)
+        geometry = binfmt.load_array(Path(args.edges_dir) / "geometry.npy")
+        hut_lonlat = np.array(hut_points(args.huts))
+        for name, values in approach_anchor_columns(approaches, records, geometry, hut_lonlat).items():
+            columns[name] = ("i2", values)
         payload, column_manifest = binfmt.pack_columns(columns)
+        growth = len(gzip.compress(payload, compresslevel=9)) - len(gzip.compress(plain_payload, compresslevel=9))
+        print(f"anchor growth: {growth:+,} B gzipped", flush=True)
         Path(args.out_bin).parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_bin, "wb") as f:
             f.write(payload)

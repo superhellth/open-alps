@@ -138,6 +138,7 @@ def task_build_approach_table():
         args=[
             f"--edges-dir {START_EDGES_DIR}",
             f"--id-table {START_POINTS_DIR / 'start-points-id-table.json'}",
+            f"--huts {RAW_DIR / 'huts.geojson'}",
             f"--out-bin {START_EDGES_DIR / 'approaches.bin'}",
             f"--out-manifest {START_EDGES_DIR / 'approaches.json'}",
         ],
@@ -148,7 +149,10 @@ def task_build_approach_table():
             ),
             cli_param("variants", "variants", str, ",".join(CONFIG["approach"]["variants"])),
         ],
-        file_dep=[START_EDGES_DIR / "records.npy", START_POINTS_DIR / "start-points-id-table.json"],
+        file_dep=[
+            START_EDGES_DIR / "records.npy", START_EDGES_DIR / "geometry.npy",
+            START_POINTS_DIR / "start-points-id-table.json", RAW_DIR / "huts.geojson",
+        ],
         targets=[START_EDGES_DIR / "approaches.bin", START_EDGES_DIR / "approaches.json"],
     )
 

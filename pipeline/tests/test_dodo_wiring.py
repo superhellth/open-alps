@@ -469,3 +469,9 @@ def test_copy_public_data_declares_every_source_and_public_target():
 def test_build_edge_payload_depends_on_hut_edge_geometry():
     deps = [str(d) for d in dodo.task_build_edge_payload()["file_dep"]]
     assert any(d.endswith("hut-edges/geometry.npy") for d in deps)
+
+
+def test_build_approach_table_depends_on_start_edge_geometry_and_huts():
+    deps = [str(d) for d in dodo.task_build_approach_table()["file_dep"]]
+    assert any(d.endswith("start-edges/geometry.npy") for d in deps)
+    assert any(d.endswith("huts.geojson") for d in deps)
