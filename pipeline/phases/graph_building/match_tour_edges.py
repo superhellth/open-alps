@@ -26,6 +26,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt, speed  # noqa: E402
+from lib.anchors import points_at_fractions  # noqa: E402
 from lib.dem_sample import sample_points  # noqa: E402
 from lib.elevation_profile import ascent_descent, merge_segments, resample_to_points, smooth_profile  # noqa: E402
 from lib.geo import haversine_m_vec_pairs  # noqa: E402
@@ -37,6 +38,12 @@ from lib.timing import phase  # noqa: E402
 from lib.tour_folder import load_all_tour_folders, load_tour_folder  # noqa: E402
 
 SCRIPT_NAME = "match_tour_edges.py"
+
+
+def leg_anchors_json(points) -> list:
+    """The leg's 25/50/75 % anchors as [lat, lng] pairs in walking order, rounded to 6 decimals."""
+    pts = points_at_fractions([p[0] for p in points], [p[1] for p in points])
+    return [[round(float(lat), 6), round(float(lon), 6)] for lon, lat in pts]
 
 
 def match_leg(points, dem_path, kernel_m, min_slope_segment_m, speed_model, min_speed_ms,
@@ -209,7 +216,7 @@ def main(argv=None):
                     "legIndex": leg_index, "edgeId": len(matched_legs),
                     "distanceM": result["distance_m"], "ascentM": result["ascent_m"],
                     "descentM": result["descent_m"], "durationS": result["duration_s"],
-                    "maxEleM": result["max_ele_m"],
+                    "maxEleM": result["max_ele_m"], "anchors": leg_anchors_json(points),
                     "from": _hub_json(from_chosen), "to": _hub_json(to_chosen),
                 })
 
