@@ -19,7 +19,9 @@ import type { MapMarker } from './clusterStarts.js'
 import { escapeHtml, singleHtml, stackHtml } from './signpostHtml.js'
 import type { Heading } from './signpostHtml.js'
 import { tourBoardLabel } from './tourBoard.js'
-import { indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
+import { indexToursByEnd, indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
+import { makeStartLabel } from '@/data/labels.js'
+import type { WaypointStop } from './types.js'
 import './map.css'
 
 /** Below this zoom, routes stay hidden and only markers show — tuned lower than the
@@ -115,6 +117,10 @@ export default function DiscoverLayer({
   }, [allTours, routeCtx, routeReveal, view.bbox])
   const toursByLeg = useMemo(() => indexToursByLeg(routedTours), [routedTours])
   const toursByHut = useMemo(() => indexToursByHut(routedTours), [routedTours])
+  const toursByEnd = useMemo(() => indexToursByEnd(routedTours), [routedTours])
+  const startLabel = useMemo(() => makeStartLabel(startById), [startById])
+  const toursOfStop = (stop: WaypointStop) => (stop.type === 'hut' ? toursByHut.get(stop.hutId) : toursByEnd.get(stop.startId)) ?? []
+  const titleOfStop = (stop: WaypointStop) => (stop.type === 'hut' ? hutNameById.get(stop.hutId) ?? String(stop.hutId) : startLabel(stop.startId))
 
   const [hoveredStartIds, setHoveredStartIds] = useState<ReadonlySet<number> | null>(null)
   const hoverStarts = (ids: Set<number> | null) => { setHoveredStartIds(ids); onHoverStarts?.(ids) }
@@ -249,8 +255,8 @@ export default function DiscoverLayer({
       {tiered.filter((t) => t.tier === 'hovered').map(({ key, route }) => <RouteLayer key={`h-${key}`} route={route} emphasis="hovered" dots={false} interactive={false} />)}
       <WaypointLayer
         symbols={symbols}
-        onHoverHut={(hutId, at) => hoverKeys(hutId === null ? null : toursByHut.get(hutId) ?? [], at, hutId === null ? undefined : hutNameById.get(hutId) ?? String(hutId))}
-        onClickHut={(hutId) => clickKeys(toursByHut.get(hutId) ?? [])}
+        onHoverStop={(stop, at) => hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop))}
+        onClickStop={(stop) => clickKeys(toursOfStop(stop))}
       />
       <HoverTooltip tip={tip} />
     </>

@@ -53,12 +53,12 @@ function symbolIcon(stop: WaypointStop): L.DivIcon {
 
 const HIT_ICON = L.divIcon({ className: 'waypoint-hit', html: '', iconSize: [24, 24], iconAnchor: [12, 12] })
 
-/** Hut and end-point symbols of every visible route. The visible symbols are display-only; hut hover and
+/** Hut and end-point symbols of every visible route. The visible symbols are display-only; hover and
  *  click go through invisible hit markers above them, so hovering never replaces the element under the pointer. */
-export default function WaypointLayer({ symbols, onHoverHut, onClickHut }: {
+export default function WaypointLayer({ symbols, onHoverStop, onClickStop }: {
   symbols: WaypointSymbol[]
-  onHoverHut: (hutId: number | null, at: L.LatLng) => void
-  onClickHut: (hutId: number) => void
+  onHoverStop: (stop: WaypointStop | null, at: L.LatLng) => void
+  onClickStop: (stop: WaypointStop) => void
 }) {
   const map = useMap()
   ensureRoutePanes(map)
@@ -70,20 +70,16 @@ export default function WaypointLayer({ symbols, onHoverHut, onClickHut }: {
           icon={symbolIcon(s.stop)} interactive={false} keyboard={false}
         />
       ))}
-      {symbols.flatMap((s) => {
-        if (s.stop.type !== 'hut') return []
-        const { hutId } = s.stop
-        return [
-          <Marker
-            key={`hit-${s.id}`} position={[s.lat, s.lng]} pane={HIT_PANE} icon={HIT_ICON} keyboard={false}
-            eventHandlers={{
-              mouseover: (e) => onHoverHut(hutId, e.latlng),
-              mouseout: (e) => onHoverHut(null, e.latlng),
-              click: () => onClickHut(hutId),
-            }}
-          />,
-        ]
-      })}
+      {symbols.map((s) => (
+        <Marker
+          key={`hit-${s.id}`} position={[s.lat, s.lng]} pane={HIT_PANE} icon={HIT_ICON} keyboard={false}
+          eventHandlers={{
+            mouseover: (e) => onHoverStop(s.stop, e.latlng),
+            mouseout: (e) => onHoverStop(null, e.latlng),
+            click: () => onClickStop(s.stop),
+          }}
+        />
+      ))}
     </>
   )
 }

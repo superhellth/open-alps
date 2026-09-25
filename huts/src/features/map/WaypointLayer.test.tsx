@@ -37,13 +37,13 @@ describe('WaypointLayer', () => {
   const renderLayer = (symbols = collectSymbols([{ route: route(end(1), hut(10), hut(11)), tier: 'rest' }])) =>
     render(
       <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
-        <WaypointLayer symbols={symbols} onHoverHut={() => {}} onClickHut={() => {}} />
+        <WaypointLayer symbols={symbols} onHoverStop={() => {}} onClickStop={() => {}} />
       </MapContainer>,
     )
-  it('draws a symbol per waypoint in the pane of its tier and a hit target per hut only', () => {
+  it('draws a symbol per waypoint in the pane of its tier and a hit target per symbol', () => {
     const { container } = renderLayer()
     expect(container.querySelectorAll('.leaflet-route-rest-symbol-pane .leaflet-marker-icon')).toHaveLength(3)
-    expect(container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon')).toHaveLength(2)
+    expect(container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon')).toHaveLength(3)
   })
   it('does not make the visible symbols interactive', () => {
     const { container } = renderLayer()

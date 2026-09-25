@@ -138,9 +138,17 @@ describe('DiscoverLayer shared legs and huts', () => {
     const { container } = renderLayer({ ...focusOn(a, b), onHoverTours, hutNameById: new Map([[10, 'Hütte Eins']]) })
     const hits = container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon')
     expect(hits.length).toBeGreaterThan(0)
-    fireEvent.mouseOver(hits[0])
+    fireEvent.mouseOver(hits[1])
     expect(onHoverTours.mock.calls.at(-1)![0].size).toBe(2)
     expect(document.querySelector('.leaflet-tooltip')!.textContent).toBe('Hütte EinsIn 2 Touren')
+  })
+
+  it('hovering an end point hit target hovers every tour starting or ending there; the tooltip names it', async () => {
+    const onHoverTours = vi.fn()
+    const { container } = renderLayer({ ...focusOn(a, b), onHoverTours })
+    fireEvent.mouseOver(container.querySelectorAll('.leaflet-route-hit-pane .leaflet-marker-icon')[0])
+    expect(onHoverTours.mock.calls.at(-1)![0].size).toBe(2)
+    expect(document.querySelector('.leaflet-tooltip')!.textContent).toBe('BahnhofIn 2 Touren')
   })
 
   it('draws hovered tours at the hovered tier and leaves the rest layer interactive', async () => {

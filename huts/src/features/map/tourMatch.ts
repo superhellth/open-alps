@@ -38,6 +38,16 @@ export function indexToursByHut(routed: RoutedTour[]): Map<number, string[]> {
   return index
 }
 
+/** Start point id → keys of every tour starting or ending there. */
+export function indexToursByEnd(routed: RoutedTour[]): Map<number, string[]> {
+  const index = new Map<number, string[]>()
+  for (const { key, tour } of routed) {
+    pushOnce(index, tour.startId, key)
+    if (tour.exitStartId !== tour.startId) pushOnce(index, tour.exitStartId, key)
+  }
+  return index
+}
+
 export interface TierState {
   hoveredKeys: ReadonlySet<string>
   hoveredStarts: ReadonlySet<number> | null

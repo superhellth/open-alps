@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
+import { indexToursByEnd, indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
 import type { RoutedTour, TierState } from './tourMatch.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { Route, RouteLeg } from './types.js'
@@ -42,6 +42,15 @@ describe('indexToursByHut', () => {
     const index = indexToursByHut([routed('a', [10, 11], []), routed('b', [11], []), routed('c', [12], [])])
     expect(index.get(11)).toEqual(['a', 'b'])
     expect(index.get(12)).toEqual(['c'])
+  })
+})
+
+describe('indexToursByEnd', () => {
+  it('lists tours starting or ending at a start point, once per tour', () => {
+    const r = (key: string, startId: number, exitStartId: number) => ({ ...routed(key, [], []), tour: { huts: [], startId, exitStartId } as unknown as PlannerTour })
+    const index = indexToursByEnd([r('a', 1, 2), r('b', 2, 2), r('c', 1, 1)])
+    expect(index.get(1)).toEqual(['a', 'c'])
+    expect(index.get(2)).toEqual(['a', 'b'])
   })
 })
 
