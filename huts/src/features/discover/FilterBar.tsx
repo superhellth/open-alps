@@ -12,6 +12,7 @@ import { DEFAULT_FORM, isFilterSelectionValid } from './formState.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
 import RangeCalendar from './RangeCalendar.js'
+import { styles } from './FilterBar.styles.js'
 
 interface FilterBarProps {
   form: FormState
@@ -84,7 +85,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
     />
   )
   return (
-    <Box component="form" onSubmit={(e) => e.preventDefault()} sx={{ p: 2, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box component="form" onSubmit={(e) => e.preventDefault()} sx={styles.root}>
       {disabled && <Typography color="text.secondary">Wegenetz wird geladen …</Typography>}
 
       <Box>
@@ -113,10 +114,10 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
             <Typography>{draft.partySize} Pers.</Typography>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
-              sx={{ width: 40, height: 40, minWidth: 0, p: 0 }}
+              sx={styles.stepperButton}
               onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 25}
-              sx={{ width: 40, height: 40, minWidth: 0, p: 0 }}
+              sx={styles.stepperButton}
               onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
           </Box>
         </Box>
@@ -159,23 +160,18 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
 
       <Accordion
         disableGutters elevation={0} square expanded={erweitertOpen} onChange={(_, isExpanded) => setErweitert(isExpanded)}
-        sx={{ bgcolor: 'transparent', '&:before': { display: 'none' } }}
+        sx={styles.accordion}
       >
         <AccordionSummary
           expandIcon={<Typography sx={{ color: 'primary.main', fontWeight: 'bold' }} aria-hidden>{erweitertOpen ? '−' : '+'}</Typography>}
-          sx={{
-            px: 1, mx: -1, borderRadius: 1, minHeight: 0, '&.Mui-expanded': { minHeight: 0 },
-            '&:hover': { bgcolor: 'action.hover' },
-            '& .MuiAccordionSummary-content': { margin: '4px 0', '&.Mui-expanded': { margin: '4px 0' } },
-            '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': { transform: 'none' },
-          }}
+          sx={styles.accordionSummary}
         >
           <ErweitertSummary form={form} />
         </AccordionSummary>
-        <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 0, pt: 1 }}>
+        <AccordionDetails sx={styles.accordionDetails}>
           {check('Klettersteige erlauben', form.allowViaFerrata, (allowViaFerrata) => onFormChange({ allowViaFerrata }))}
           {check('auch ungeratete Wege erlauben', form.allowUngraded, (allowUngraded) => onFormChange({ allowUngraded }))}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 1 }}>
+          <Box sx={styles.hutClassHeading}>
             <Typography variant="subtitle2">Hüttenarten</Typography>
             <Tooltip
               title="Sonstige: nicht vom Alpenverein betriebene Hütten. Selbstversorgerhütten sind unbewirtschaftet, meist Selbstverpflegung, ggf. Schlüssel beim Verein holen."
