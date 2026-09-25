@@ -30,7 +30,7 @@ const someTripLegs = {
 
 const commands: MapCommands = { route: null, fitRoute: false, highlightedLeg: null, restoreView: null, fitBounds: null, onMapClick: () => {} }
 const discover = (over: Partial<DiscoverMapMode> = {}): DiscoverMapMode => ({
-  kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hoveredTourKey: null, previewStartId: null,
+  kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hoveredTourKey: null,
   onNavigate: () => {}, onFocusStarts: () => {}, onHoverStarts: () => {}, onViewChange: () => {}, onHoverTour: () => {}, onPickRoute: () => {},
   ...over,
 })

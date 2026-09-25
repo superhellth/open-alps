@@ -13,10 +13,14 @@ export const styles = {
   sortChip: (active: boolean): SxProps<Theme> => (active
     ? { bgcolor: tokens.signpost, color: tokens.ink, '&:hover': { bgcolor: tokens.signpost } }
     : { bgcolor: 'transparent', border: '1px solid', borderColor: 'divider' }),
-  row: (highlighted: boolean): SxProps<Theme> => ({
-    display: 'block', borderBottom: '1px solid', borderColor: 'divider',
-    ...(highlighted && { bgcolor: `color-mix(in srgb, ${tokens.signpost} 25%, transparent)`, boxShadow: `inset 4px 0 0 ${tokens.signpost}` }),
-  }),
+  row: (highlighted: boolean): SxProps<Theme> => {
+    const active = { bgcolor: `color-mix(in srgb, ${tokens.signpost} 25%, transparent)`, boxShadow: `inset 4px 0 0 ${tokens.signpost}` }
+    return {
+      display: 'block', borderBottom: '1px solid', borderColor: 'divider',
+      '&:hover, &.Mui-focusVisible': active,
+      ...(highlighted && active),
+    }
+  },
   chainRow: { display: 'flex', alignItems: 'baseline', gap: 1, fontFamily: SIGNPOST_FONT, fontWeight: 600 },
   statRow: { display: 'flex', flexWrap: 'nowrap', gap: 2, mt: 0.5, color: 'text.secondary' },
   officialRow: { display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 },

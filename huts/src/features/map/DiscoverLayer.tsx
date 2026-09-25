@@ -41,7 +41,7 @@ function countIcon(count: number, cluster: boolean, dimmed: boolean, highlighted
  *  clicking one that stands for a single tour picks it; otherwise it flies the map to the bounds of the tours it stands for and focuses the results
  *  list on them. Cluster bubbles (several start points) carry a ring; single start points do not. */
 export default function DiscoverLayer({
-  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, onNavigate, onFocusStarts, onHoverStarts, onViewChange,
+  groups, startById, dimmed, allTours, routeCtx, hoveredTourKey, onHoverTour, onPickRoute, onNavigate, onFocusStarts, onHoverStarts, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
@@ -51,7 +51,6 @@ export default function DiscoverLayer({
   hoveredTourKey: string | null
   onHoverTour: (key: string | null) => void
   /** Start point of the tour hovered in the results list; the marker covering it is highlighted. */
-  previewStartId?: number | null
   onPickRoute: (tour: PlannerTour) => void
   onNavigate?: () => void
   /** Start points whose tours the results list should be limited to; null lifts the limit. */
@@ -108,9 +107,10 @@ export default function DiscoverLayer({
 
   const markers = clusterer.clustersFor(view.bbox, view.zoom)
   const highlightedMarker = useMemo(() => {
-    if (previewStartId == null) return null
-    return markers.find((m) => m.kind === 'start' ? m.startId === previewStartId : clusterer.startIdsOf(m.clusterId).includes(previewStartId)) ?? null
-  }, [markers, clusterer, previewStartId])
+    const hoveredStartId = hoveredTourKey == null ? undefined : allTours.find((t) => tourKey(t) === hoveredTourKey)?.startId
+    if (hoveredStartId === undefined) return null
+    return markers.find((m) => m.kind === 'start' ? m.startId === hoveredStartId : clusterer.startIdsOf(m.clusterId).includes(hoveredStartId)) ?? null
+  }, [markers, clusterer, allTours, hoveredTourKey])
 
   return (
     <>

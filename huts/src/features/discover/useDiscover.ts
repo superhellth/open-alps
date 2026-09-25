@@ -26,7 +26,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
   const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
   const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
-  const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
@@ -68,6 +67,5 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     tab, setTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, groupStartPoints, viewTours,
     focusStarts, setFocusStarts, hoveredTourKey, setHoveredTourKey, hoveredStarts, setHoveredStarts,
-    previewTour, setPreviewTour,
   }
 }

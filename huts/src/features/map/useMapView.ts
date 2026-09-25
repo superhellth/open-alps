@@ -1,6 +1,5 @@
 import { useCallback, useRef, useState } from 'react'
 import L from 'leaflet'
-import { ROUTE_REVEAL_ZOOM } from './DiscoverLayer.js'
 import type { View } from '@/lib/viewport.js'
 
 export interface ViewTarget { lat: number; lng: number; zoom: number }
@@ -15,9 +14,6 @@ export function useMapView() {
   const viewRef = useRef<View | null>(null)
   viewRef.current = mapView
 
-  // Below ROUTE_REVEAL_ZOOM the map shows only count markers, so a hovered tour highlights its bubble instead of drawing a route.
-  const routesVisible = mapView !== null && mapView.zoom >= ROUTE_REVEAL_ZOOM
-
   const rememberViewBeforeTrip = useCallback(() => {
     const v = viewRef.current
     if (v) preTripView.current = { lat: (v.bbox[1] + v.bbox[3]) / 2, lng: (v.bbox[0] + v.bbox[2]) / 2, zoom: v.zoom }
@@ -31,5 +27,5 @@ export function useMapView() {
     if (bounds.isValid()) setFitBounds([[bounds.getSouth(), bounds.getWest()], [bounds.getNorth(), bounds.getEast()]])
   }, [])
 
-  return { mapView, setMapView, routesVisible, restoreView, fitBounds, rememberViewBeforeTrip, restoreViewAfterTrip, fitToPoints }
+  return { mapView, setMapView, restoreView, fitBounds, rememberViewBeforeTrip, restoreViewAfterTrip, fitToPoints }
 }

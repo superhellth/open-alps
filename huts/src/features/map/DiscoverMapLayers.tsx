@@ -14,7 +14,6 @@ export interface DiscoverMapMode {
   allTours: PlannerTour[]
   routeCtx: RouteContext | null
   hoveredTourKey: string | null
-  previewStartId: number | null
   /** Called when a marker is clicked — navigation only, no filtering. */
   onNavigate: () => void
   onFocusStarts: (startIds: number[] | null) => void
@@ -31,7 +30,7 @@ export function DiscoverMapLayers({ mode }: { mode: DiscoverMapMode }) {
       groups={mode.groups} startById={mode.startById} dimmed={mode.dimmed}
       onNavigate={mode.onNavigate} onFocusStarts={mode.onFocusStarts} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
       allTours={mode.allTours} routeCtx={mode.routeCtx}
-      hoveredTourKey={mode.hoveredTourKey} onHoverTour={mode.onHoverTour} previewStartId={mode.previewStartId} onPickRoute={mode.onPickRoute}
+      hoveredTourKey={mode.hoveredTourKey} onHoverTour={mode.onHoverTour} onPickRoute={mode.onPickRoute}
     />
   )
 }
