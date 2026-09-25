@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { Alert, Badge, Box, Button, Snackbar, Tab, Tabs, TextField } from '@mui/material'
 import { useAppData } from '@/data/appDataContext.js'
 import type { AppData } from '@/data/buildAppData.js'
 import { useSearchClient } from '@/search/searchClientContext.js'
 import type { SearchClient } from '@/search/searchClient.js'
-import { usePlannerSearch } from '@/features/discover/usePlannerSearch.js'
-import { groupByStart } from '@/tourSearch/groupByStart.js'
+import { useDiscover } from '@/features/discover/useDiscover.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import { decodeTripFromHash, shareUrl } from '@/trip/shareLink.js'
 import type { Trip } from '@/trip/trip.js'
 import { useTrips } from '@/trip/tripsContext.js'
-import { filterByAvailability } from '@/features/discover/availabilityFilter.js'
 import DiscardDraftDialog from './DiscardDraftDialog.js'
 import FilterBar from '@/features/discover/FilterBar.js'
 import FirstVisitPrompt from './FirstVisitPrompt.js'
@@ -21,18 +19,10 @@ import ResultsList from '@/features/discover/ResultsList.js'
 import SavedTripsList from '@/features/saved/SavedTripsList.js'
 import SidebarHeader from './SidebarHeader.js'
 import TripPanel from '@/features/trip/TripPanel.js'
-import { DEFAULT_FORM, rankTargetsFromForm } from '@/features/discover/formState.js'
-import type { FormState } from '@/features/discover/formState.js'
 import { makeStartLabel } from '@/data/labels.js'
-import { DEFAULT_DRAFT, dayCountFromDraft, legCountRangeFromDraft } from '@/features/discover/plannerState.js'
-import type { TripDraft } from '@/features/discover/plannerState.js'
-import { filterOfficial, sortTours } from '@/features/discover/rankTours.js'
-import type { SortDir, SortKey } from '@/features/discover/rankTours.js'
 import { tourToRoute, tripToRoute } from '@/features/map/routes.js'
 import type { RouteContext } from '@/features/map/routes.js'
-import { officialToTour } from '@/tourSearch/plannerTour.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import { inBbox } from '@/features/map/viewport.js'
 import { useMapView } from '@/features/map/useMapView.js'
 import { tourKey } from '@/features/map/tourKey.js'
 import { tripFromTour } from '@/features/discover/tripFromTour.js'
@@ -55,68 +45,32 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const prompt = useFirstVisitPrompt()
   const { mapView, setMapView, routesVisible, restoreView, fitBounds, rememberViewBeforeTrip, restoreViewAfterTrip, fitToPoints } = useMapView()
 
-  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
-  const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
-  const [sortKey, setSortKey] = useState<SortKey>('fit')
-  const [sortDir, setSortDir] = useState<SortDir>('asc')
-  const [discoverTab, setDiscoverTab] = useState<'filters' | 'results'>('filters')
-  const [erweitertOpen, setErweitertOpen] = useState(false)
-  const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
-  const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
   const [editing, setEditing] = useState<EditingState>(null)
   const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
   const [importDismissed, setImportDismissed] = useState(false)
   const [shareNote, setShareNote] = useState<string | null>(null)
   const [shareFallback, setShareFallback] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<Trip | null>(null)
-  const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
-  const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
   const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
   const hash = useHash()
 
-  const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
-  const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
-
-  const search = usePlannerSearch({ client, data, form, draft })
-  useEffect(() => { setFocusStarts(null) }, [form, draft])
-  const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
-  const dayCountTarget = useMemo(() => dayCountFromDraft(draft), [draft])
+  const {
+    form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
+    search, tours, visibleTours, groups, groupStartPoints, viewTours, setFocusStarts,
+    hoveredTourKey, setHoveredTourKey, hoveredStarts, setHoveredStarts, previewTour, setPreviewTour,
+  } = useDiscover({ data, client, mapView })
 
   const startLabel = useMemo(() => makeStartLabel(data.startById), [data])
   const routeCtx = useMemo<RouteContext>(() => ({
     hutCoordsById: data.hutCoordsById, startById: data.startById,
     officialById: new Map(data.officialTours.map((t) => [t.tourId, t])),
   }), [data])
-  const ohrsIdByHutIndex = useMemo(
-    () => new Map([...data.hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const)), [data])
-
-  const officialTours = useMemo(
-    () => data.officialTours.map(officialToTour).filter((t): t is PlannerTour => t !== null), [data])
-  const tours = useMemo<PlannerTour[]>(
-    () => [...(search.chains ?? []), ...filterOfficial(officialTours, form, legCountRange, data.startById)],
-    [data, search.chains, officialTours, form, legCountRange])
-  const visibleTours = useMemo(
-    () => filterByAvailability(tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset),
-    [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])
-  const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
-
-  const rankedTours = useMemo(
-    () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
-    [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
-  const viewTours = useMemo(() => {
-    if (focusStarts) return rankedTours.filter((t) => focusStarts.has(t.startId))
-    if (!mapView) return rankedTours
-    return rankedTours.filter((t) => {
-      const s = data.startById.get(t.startId)
-      return s !== undefined && inBbox(s, mapView.bbox)
-    })
-  }, [rankedTours, mapView, data, focusStarts])
 
   const showAllTours = useCallback(() => {
     setFocusStarts(null)
-    fitToPoints(groups.flatMap((g) => { const s = data.startById.get(g.startId); return s ? [s] : [] }))
-  }, [groups, data, fitToPoints])
+    fitToPoints(groupStartPoints)
+  }, [groupStartPoints, setFocusStarts, fitToPoints])
 
   const tripLegs = useMemo(() => (activeTrip ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
   const mode = activeTrip && tripLegs ? 'trip' : 'discover'
@@ -265,8 +219,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
                 tours={viewTours} totalCount={visibleTours.length} onShowAll={showAllTours}
                 isHighlighted={(t) => tourKey(t) === hoveredTourKey || (hoveredStarts?.has(t.startId) ?? false)}
                 noMatches={search.status === 'done' && tours.length === 0}
-                sortKey={sortKey} onSortChange={setSortKey}
-                sortDir={sortDir} onSortDirChange={setSortDir}
+                sortKey={sort.key} onSortChange={sort.setKey}
+                sortDir={sort.dir} onSortDirChange={sort.setDir}
                 hutNameById={data.hutNameById} onPreview={setPreviewTour} onPick={pick}
                 onOpenFilters={() => setDiscoverTab('filters')}
               />

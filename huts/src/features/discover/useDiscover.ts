@@ -1,0 +1,73 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { AppData } from '@/data/buildAppData.js'
+import type { SearchClient } from '@/search/searchClient.js'
+import { groupByStart } from '@/tourSearch/groupByStart.js'
+import { officialToTour } from '@/tourSearch/plannerTour.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
+import { inBbox } from '@/features/map/viewport.js'
+import type { View } from '@/features/map/viewport.js'
+import { filterByAvailability } from './availabilityFilter.js'
+import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
+import type { FormState } from './formState.js'
+import { DEFAULT_DRAFT, dayCountFromDraft, legCountRangeFromDraft } from './plannerState.js'
+import type { TripDraft } from './plannerState.js'
+import { filterOfficial, sortTours } from './rankTours.js'
+import type { SortDir, SortKey } from './rankTours.js'
+import { usePlannerSearch } from './usePlannerSearch.js'
+
+/** Discover state: filter form, search, ranking, and the result lists derived from them. */
+export function useDiscover({ data, client, mapView }: { data: AppData; client: SearchClient; mapView: View | null }) {
+  const [form, setForm] = useState<FormState>(DEFAULT_FORM)
+  const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
+  const [sortKey, setSortKey] = useState<SortKey>('fit')
+  const [sortDir, setSortDir] = useState<SortDir>('asc')
+  const [tab, setTab] = useState<'filters' | 'results'>('filters')
+  const [erweitertOpen, setErweitertOpen] = useState(false)
+  const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
+  const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
+  const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
+  const [previewTour, setPreviewTour] = useState<PlannerTour | null>(null)
+
+  const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
+  const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
+
+  const search = usePlannerSearch({ client, data, form, draft })
+  useEffect(() => { setFocusStarts(null) }, [form, draft])
+  const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
+  const dayCountTarget = useMemo(() => dayCountFromDraft(draft), [draft])
+
+  const ohrsIdByHutIndex = useMemo(
+    () => new Map([...data.hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const)), [data])
+  const officialTours = useMemo(
+    () => data.officialTours.map(officialToTour).filter((t): t is PlannerTour => t !== null), [data])
+  const tours = useMemo<PlannerTour[]>(
+    () => [...(search.chains ?? []), ...filterOfficial(officialTours, form, legCountRange, data.startById)],
+    [data, search.chains, officialTours, form, legCountRange])
+  const visibleTours = useMemo(
+    () => filterByAvailability(tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset),
+    [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])
+  const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
+  const groupStartPoints = useMemo(
+    () => groups.flatMap((g) => { const s = data.startById.get(g.startId); return s ? [s] : [] }), [groups, data])
+
+  const rankedTours = useMemo(
+    () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
+    [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
+  const viewTours = useMemo(() => {
+    if (focusStarts) return rankedTours.filter((t) => focusStarts.has(t.startId))
+    if (!mapView) return rankedTours
+    return rankedTours.filter((t) => {
+      const s = data.startById.get(t.startId)
+      return s !== undefined && inBbox(s, mapView.bbox)
+    })
+  }, [rankedTours, mapView, data, focusStarts])
+
+  return {
+    form, patchForm, draft, patchDraft,
+    sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
+    tab, setTab, erweitertOpen, setErweitertOpen,
+    search, tours, visibleTours, groups, groupStartPoints, viewTours,
+    focusStarts, setFocusStarts, hoveredTourKey, setHoveredTourKey, hoveredStarts, setHoveredStarts,
+    previewTour, setPreviewTour,
+  }
+}
