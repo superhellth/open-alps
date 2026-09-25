@@ -1,5 +1,5 @@
 import type { Edge, Hover } from './types.js'
-import ElevationSparkline from '../ElevationSparkline.js'
+import ElevationSparkline from './ElevationSparkline.js'
 
 // Short display labels + color per OSM sac_scale value, easiest -> hardest (matches
 // SAC_SCALE_RANK in data/scripts/06-build-hut-graph.py). Color scales green -> red with grade.

@@ -1,5 +1,5 @@
 import type L from 'leaflet'
-import type { HutClass } from '../hutClass.js'
+import type { HutClass } from '@/data/hutClass.js'
 
 export interface Edge {
   fromId: number

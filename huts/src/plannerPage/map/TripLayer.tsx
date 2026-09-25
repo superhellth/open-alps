@@ -1,7 +1,7 @@
 import L from 'leaflet'
 import { Marker, Tooltip } from 'react-leaflet'
 import { formatSignpostTime } from '../../format/signpostTime.js'
-import type { HutOperator } from '../../hutClass.js'
+import type { HutOperator } from '@/data/hutClass.js'
 import type { SourceType } from '../../tourSearch/types.js'
 import { hutSymbolSvg, startSymbolSvg } from './hutSymbol.js'
 import './map.css'

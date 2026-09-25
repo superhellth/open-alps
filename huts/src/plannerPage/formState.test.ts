@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { DEFAULT_FORM, buildQuery, isFilterSelectionValid, legTimeRangeFromCeiling, rankTargetsFromForm } from './formState.js'
-import type { HutClass } from '../hutClass.js'
+import type { HutClass } from '@/data/hutClass.js'
 
 const huts: (HutClass | null)[] = [
   { operator: 'av', serviced: true }, { operator: 'av', serviced: false },

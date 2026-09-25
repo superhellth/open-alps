@@ -1,7 +1,7 @@
 import { Box } from '@mui/material'
 import { nightText } from '../availability/nightState.js'
 import type { NightAvailability } from '../availability/nightState.js'
-import { tokens } from '../theme.js'
+import { tokens } from '@/ui/theme.js'
 
 const SHAPE = { free: 'filled', few: 'half', full: 'crossed', unknown: 'question' } as const
 

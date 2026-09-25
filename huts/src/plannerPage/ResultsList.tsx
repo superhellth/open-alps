@@ -4,7 +4,7 @@ import { Box, Button, Chip, List, ListItemButton, Pagination, Typography } from 
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import { formatSignpostTime } from '../format/signpostTime.js'
-import { SIGNPOST_FONT, tokens } from '../theme.js'
+import { SIGNPOST_FONT, tokens } from '@/ui/theme.js'
 import { SORT_LABEL } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import type { PlannerTour } from './tours.js'

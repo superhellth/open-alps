@@ -3,8 +3,8 @@ import {
   IconButton, LinearProgress, MenuItem, Select, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useState } from 'react'
-import { ALL_HUT_CLASSES, OPERATOR_LABEL, hutClassKey, hutClassLabel } from '../hutClass.js'
-import type { HutOperator } from '../hutClass.js'
+import { ALL_HUT_CLASSES, OPERATOR_LABEL, hutClassKey, hutClassLabel } from '@/data/hutClass.js'
+import type { HutOperator } from '@/data/hutClass.js'
 
 const OPERATORS = Object.keys(OPERATOR_LABEL) as HutOperator[]
 import type { TourMode } from '../tourSearch/types.js'

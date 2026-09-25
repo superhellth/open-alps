@@ -1,6 +1,6 @@
 import type { MouseEvent } from 'react'
 import { Box, Typography } from '@mui/material'
-import { tokens } from '../../theme.js'
+import { tokens } from '@/ui/theme.js'
 import type { TripElevation } from './useTripElevation.js'
 
 const WIDTH = 600

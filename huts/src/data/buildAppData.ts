@@ -3,7 +3,7 @@ import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
 import type { OfficialTourView } from '../tourSearch/officialTours.js'
 import type { RawTour } from '../tourSearch/loadOfficialTours.js'
 import type { TripGraph } from '../tourSearch/tripLegs.js'
-import type { HutClass } from '../hutClass.js'
+import type { HutClass } from './hutClass.js'
 import { idFromOsmFeatureId } from '../plannerPage/labels.js'
 import type { StartPoint } from '../plannerPage/types.js'
 

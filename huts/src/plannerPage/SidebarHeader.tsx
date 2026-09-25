@@ -1,5 +1,5 @@
 import { Box } from '@mui/material'
-import { SIGNPOST_FONT, tokens } from '../theme.js'
+import { SIGNPOST_FONT, tokens } from '@/ui/theme.js'
 
 export interface SidebarHeaderProps {
   view: 'discover' | 'saved' | 'trip'
