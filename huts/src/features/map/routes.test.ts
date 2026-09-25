@@ -10,6 +10,7 @@ const ctx: RouteContext = {
   hutCoordsById: new Map([[0, { lat: 47.1, lng: 11.1 }], [1, { lat: 47.2, lng: 11.2 }]]),
   startById: new Map([[100, { name: 'S', sourceType: 1, lat: 47.0, lng: 11.0 }]]),
   officialById: new Map(),
+  hutClassByIndex: new Map([[0, { operator: 'av', serviced: true }]]),
 }
 const chain = (over: Partial<PlannerTour> = {}): PlannerTour => ({
   huts: [0, 1], startId: 100, exitStartId: 100, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0,
@@ -35,6 +36,19 @@ describe('tourToRoute', () => {
   })
   it('is null when a waypoint cannot be placed', () => {
     expect(tourToRoute(chain({ huts: [0, 99] }), ctx)).toBeNull()
+  })
+})
+
+describe('waypoint stops', () => {
+  it('marks huts with their class and end points with their kind', () => {
+    const r = tourToRoute(chain(), ctx)!
+    expect(r.waypoints[0].stop).toEqual({ type: 'end', startId: 100, sourceType: 1 })
+    expect(r.waypoints[1].stop).toEqual({ type: 'hut', hutId: 0, operator: 'av', serviced: true })
+    expect(r.waypoints[3].stop).toEqual({ type: 'end', startId: 100, sourceType: 1 })
+  })
+  it('gives an unclassified hut no stop instead of a guessed one', () => {
+    const r = tourToRoute(chain(), ctx)!
+    expect(r.waypoints[2]).toEqual({ lat: 47.2, lng: 11.2 })
   })
 })
 

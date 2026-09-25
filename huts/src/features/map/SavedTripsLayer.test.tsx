@@ -10,7 +10,7 @@ import type { TripGraph } from '@/tourSearch/types.js'
 afterEach(cleanup)
 
 const graph: TripGraph = { hutEdges: { hutIds: ['{A}'], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } }
-const routeCtx: RouteContext = { hutCoordsById: new Map([[0, { lat: 47.3, lng: 12 }]]), startById: new Map([[100, { lat: 47.2, lng: 12.1, name: 'Start', sourceType: 1 }]]), officialById: new Map() }
+const routeCtx: RouteContext = { hutCoordsById: new Map([[0, { lat: 47.3, lng: 12 }]]), startById: new Map([[100, { lat: 47.2, lng: 12.1, name: 'Start', sourceType: 1 }]]), officialById: new Map(), hutClassByIndex: new Map() }
 const trip = newTrip({ name: 'T', startDate: null, partySize: 1, start: { startId: 100, sourceType: 1 }, huts: ['{A}'], exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false } })
 
 function renderLayer(props: Partial<Parameters<typeof SavedTripsLayer>[0]> = {}) {

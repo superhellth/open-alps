@@ -57,6 +57,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const routeCtx = useMemo<RouteContext>(() => ({
     hutCoordsById: data.hutCoordsById, startById: data.startById,
     officialById: new Map(data.officialTours.map((t) => [t.tourId, t])),
+    hutClassByIndex: data.hutClassByIndex,
   }), [data])
 
   const showAllTours = useCallback(() => {

@@ -1,8 +1,15 @@
+import type { HutOperator } from '@/data/hutClass.js'
 import type { GeometryLayer } from '@/tourSearch/loadLegGeometry.js'
+
+/** What a waypoint is, so the map can draw its symbol; absent when nothing reliable is known (no guessing). */
+export type WaypointStop =
+  | { type: 'hut'; hutId: number; operator: HutOperator; serviced: boolean }
+  | { type: 'end'; startId: number; sourceType: number }
 
 export interface RouteWaypoint {
   lat: number
   lng: number
+  stop?: WaypointStop
 }
 
 export interface RouteLeg {

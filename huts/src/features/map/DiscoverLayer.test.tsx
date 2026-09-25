@@ -20,7 +20,7 @@ function tour(startId: number, huts: number[]): PlannerTour {
 const startById = new Map([[1, { name: null, sourceType: 1, lat: 47.3, lng: 12 }]])
 const routeCtx = {
   hutCoordsById: new Map([[10, { lat: 47.3, lng: 12 }], [11, { lat: 47.31, lng: 12.01 }]]),
-  startById, officialById: new Map(),
+  startById, officialById: new Map(), hutClassByIndex: new Map(),
 }
 
 let map: L.Map
@@ -67,7 +67,7 @@ describe('DiscoverLayer route lines', () => {
     const many = Array.from({ length: 80 }, (_, i) => tour(1, [i]))
     const routeCtxMany = {
       hutCoordsById: new Map(many.map((t, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
-      startById, officialById: new Map(),
+      startById, officialById: new Map(), hutClassByIndex: new Map(),
     }
     const { container: all } = renderLayer({ allTours: many, routeCtx: routeCtxMany }, 13)
     const { container: few } = renderLayer({ allTours: many.slice(0, 10), routeCtx: routeCtxMany }, 13)

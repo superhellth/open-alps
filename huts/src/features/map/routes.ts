@@ -5,11 +5,13 @@ import type { Trip } from '@/trip/trip.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { Route, RouteWaypoint } from './types.js'
 import type { StartPoint } from '@/data/types.js'
+import type { HutClass } from '@/data/hutClass.js'
 
 export interface RouteContext {
   hutCoordsById: Map<number, { lat: number; lng: number }>
   startById: Map<number, StartPoint>
   officialById: Map<number, OfficialTourView>
+  hutClassByIndex: Map<number, HutClass>
 }
 
 export function legLayer(legIndex: number, legCount: number): GeometryLayer {
@@ -25,8 +27,16 @@ export function straightRoute(waypoints: RouteWaypoint[]): Route {
 }
 
 function place(id: number, kind: 'hut' | 'start', ctx: RouteContext): RouteWaypoint | null {
-  const p = kind === 'hut' ? ctx.hutCoordsById.get(id) : ctx.startById.get(id)
-  return p ? { lat: p.lat, lng: p.lng } : null
+  if (kind === 'hut') {
+    const p = ctx.hutCoordsById.get(id)
+    if (!p) return null
+    const cls = ctx.hutClassByIndex.get(id)
+    return cls
+      ? { lat: p.lat, lng: p.lng, stop: { type: 'hut', hutId: id, operator: cls.operator, serviced: cls.serviced } }
+      : { lat: p.lat, lng: p.lng }
+  }
+  const s = ctx.startById.get(id)
+  return s ? { lat: s.lat, lng: s.lng, stop: { type: 'end', startId: id, sourceType: s.sourceType } } : null
 }
 
 function waypointsOf(startId: number, huts: number[], exitStartId: number, ctx: RouteContext): RouteWaypoint[] | null {
