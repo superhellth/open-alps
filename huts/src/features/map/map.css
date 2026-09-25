@@ -33,6 +33,16 @@
 .signpost-marker {
   --board-h: 26px;
   --board-pitch: 30px;
+  --mast-h: 24px;
+}
+/* Mast and foot: the foot dot sits on the anchor (the marker origin), the mast rises from it. */
+.signpost-marker .mast {
+  position: absolute; left: -0.75px; top: calc(var(--mast-h) * -1);
+  width: 1.5px; height: var(--mast-h); background: var(--color-ink); pointer-events: none;
+}
+.signpost-marker .foot {
+  position: absolute; left: -2.5px; top: -2.5px; width: 5px; height: 5px;
+  border-radius: 50%; background: var(--color-ink); pointer-events: none;
 }
 .signpost-marker .sign,
 .signpost-marker .board {
@@ -66,16 +76,17 @@
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .signpost-marker .km { opacity: 0.75; }
 
-/* Single tour: the arrow tip sits on the start point. */
-.signpost-marker.single .sign { left: 0; top: calc(var(--board-h) / -2); transform: translateX(-100%); }
-/* A tour heading west: the board lies east of the start and its arrow points west. */
-.signpost-marker.single .sign.heads-west { transform: none; padding: 0 8px 0 16px; }
+/* Single: the board hangs from the mast top by its tail. Arrow direction is the heading (`.heads-west` = arrow on the left);
+   the side of the mast is `side-right`/`side-left`, set by SignpostMarker so a board never leaves the viewport. */
+.signpost-marker.single .sign { left: 0; }
+.signpost-marker.single.side-left .sign { transform: translateX(-100%); }
+.signpost-marker.single .sign.heads-west { padding: 0 8px 0 16px; }
 .signpost-marker.single .sign.heads-west,
 .signpost-marker.single .sign.heads-west::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
 /* Stack: the count sign is centred on the point. */
 .signpost-marker.stack .stack-sign {
   left: 0;
-  top: calc(var(--board-h) / -2);
+  top: calc(var(--board-h) / -2 - var(--mast-h));
   min-width: 34px;
   justify-content: center;
   transform: translateX(-50%);
@@ -86,7 +97,7 @@
 /* Spread: boards start folded onto the sign and hidden, and move up the pole. */
 .signpost-marker .board {
   left: 0;
-  top: calc(var(--board-h) / -2);
+  top: calc(var(--board-h) / -2 - var(--mast-h));
   opacity: 0;
   visibility: hidden;
   transform: translate(0, 0);
@@ -109,7 +120,7 @@
   position: absolute;
   left: -20px;
   right: -240px;
-  top: calc(var(--board-pitch) * -9 - 10px);
+  top: calc(var(--board-pitch) * -9 - var(--mast-h) - 10px);
   bottom: 10px;
   pointer-events: none;
 }
@@ -122,7 +133,11 @@
 .signpost-marker:not(.dimmed):hover .sign,
 .signpost-marker.highlighted .sign { filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--color-ink) 55%, transparent)); z-index: 1; }
 .signpost-marker .board:hover::before { background: #fff; }
-.signpost-marker.dimmed .sign { opacity: 0.45; }
+.signpost-marker.dimmed .sign,
+.signpost-marker.dimmed .mast,
+.signpost-marker.dimmed .foot { opacity: 0.45; }
+/* A tour hovered from its route line or the list: its board steps back so the highlighted line reads clearly. */
+.signpost-marker .faded { opacity: 0.35; }
 
 @media (prefers-reduced-motion: reduce) {
   .signpost-marker .board,

@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { MarkerKind } from './clusterStarts.js'
+import type { Heading } from './signpostHtml.js'
 
 export const OPEN_DELAY_MS = 200
 export const CLOSE_DELAY_MS = 250
 /** Lifts a spread marker above every neighbour so the column is never covered. */
 const SPREAD_Z_OFFSET = 10_000
+/** Widest a board can be (matches `max-width` in map.css); the side flips when it would cross the viewport edge. */
+const BOARD_MAX_WIDTH = 220
 
 export type Activation = { kind: 'tour'; tourKey: string } | { kind: 'overflow' } | { kind: 'body' }
 
@@ -26,12 +29,16 @@ const tourKeyOf = (target: EventTarget | null): string | null => {
 /** One signpost marker. The icon depends only on `kind` and `html`; dimmed, highlighted, spread and the
  *  spread side are classes toggled on the live icon element, so hovering never replaces the DOM under the
  *  pointer. Only a `stack` spreads. */
-export default function SignpostMarker({ position, kind, html, dimmed, highlighted, onHoverMarker, onHoverTour, onActivate }: {
+export default function SignpostMarker({ position, kind, html, heading = 'east', dimmed, highlighted, fadedKeys, onHoverMarker, onHoverTour, onActivate }: {
   position: [number, number]
   kind: MarkerKind
   html: string
+  /** Direction of a single board's arrow; also the side of the mast it prefers. */
+  heading?: Heading
   dimmed: boolean
   highlighted: boolean
+  /** Tour keys whose boards are drawn faded. */
+  fadedKeys: ReadonlySet<string>
   /** The pointer or focus entered (true) or left (false) the marker as a whole, spread boards included. */
   onHoverMarker: (hovering: boolean) => void
   /** The tour board under the pointer or focus; null when none. */
@@ -64,6 +71,28 @@ export default function SignpostMarker({ position, kind, html, dimmed, highlight
     el.classList.toggle('dimmed', dimmed)
     el.classList.toggle('highlighted', highlighted)
   }, [icon, dimmed, highlighted])
+
+  useEffect(() => {
+    const marker = markerRef.current
+    const el = marker?.getElement()
+    if (!marker || !el || kind !== 'single') return
+    const place = () => {
+      const x = map.latLngToContainerPoint(marker.getLatLng()).x
+      const preferred = heading === 'west' ? 'left' : 'right'
+      const fits = preferred === 'right' ? x + BOARD_MAX_WIDTH <= map.getSize().x : x - BOARD_MAX_WIDTH >= 0
+      const side = fits ? preferred : preferred === 'right' ? 'left' : 'right'
+      el.classList.toggle('side-left', side === 'left')
+      el.classList.toggle('side-right', side === 'right')
+    }
+    place()
+    map.on('moveend zoomend', place)
+    return () => { map.off('moveend zoomend', place) }
+  }, [icon, kind, heading, map])
+
+  useEffect(() => {
+    markerRef.current?.getElement()?.querySelectorAll<HTMLElement>('[data-tour-key]')
+      .forEach((board) => board.classList.toggle('faded', fadedKeys.has(board.dataset.tourKey!)))
+  }, [icon, fadedKeys])
 
   useEffect(() => {
     const marker = markerRef.current

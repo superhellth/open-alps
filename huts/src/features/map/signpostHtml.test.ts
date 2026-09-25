@@ -56,3 +56,14 @@ describe('singleHtml heading', () => {
     expect(doc(singleHtml(bt(1), 'west')).querySelector('.sign.heads-west')).not.toBeNull()
   })
 })
+
+describe('mast', () => {
+  it('singleHtml and stackHtml plant a mast and foot dot before the board', () => {
+    for (const html of [singleHtml(bt(1)), stackHtml([bt(1), bt(2)])]) {
+      const d = doc(html)
+      expect(d.querySelector('.mast')).not.toBeNull()
+      expect(d.querySelector('.foot')).not.toBeNull()
+      expect(d.querySelector('.mast')!.getAttribute('data-tour-key')).toBeNull()
+    }
+  })
+})

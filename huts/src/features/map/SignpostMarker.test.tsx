@@ -19,7 +19,7 @@ function setup(over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) {
   const utils = render(
     <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
       <CaptureMap />
-      <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2)])} dimmed={false} highlighted={false} {...handlers} {...over} />
+      <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2)])} dimmed={false} highlighted={false} fadedKeys={new Set()} {...handlers} {...over} />
     </MapContainer>,
   )
   const el = () => utils.container.querySelector('.signpost-marker') as HTMLElement
@@ -86,7 +86,7 @@ describe('SignpostMarker spread', () => {
     rerender(
       <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
         <CaptureMap />
-        <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2), bt(3)])} dimmed={false} highlighted={false} onHoverMarker={() => {}} onHoverTour={() => {}} onActivate={() => {}} />
+        <SignpostMarker position={[47, 11]} kind="stack" html={stackHtml([bt(1), bt(2), bt(3)])} dimmed={false} highlighted={false} fadedKeys={new Set()} onHoverMarker={() => {}} onHoverTour={() => {}} onActivate={() => {}} />
       </MapContainer>,
     )
     expect(el().classList.contains('spread')).toBe(true)
@@ -141,5 +141,31 @@ describe('SignpostMarker keyboard', () => {
     const { el, onHoverTour } = setup()
     fireEvent.focusIn(el().querySelector('.board[data-tour-key="k2"]')!)
     expect(onHoverTour).toHaveBeenLastCalledWith('k2')
+  })
+})
+
+describe('SignpostMarker board placement', () => {
+  const at = (x: number) => {
+    vi.spyOn(L.Map.prototype, 'getSize').mockImplementation(() => L.point(1000, 600))
+    vi.spyOn(L.Map.prototype, 'latLngToContainerPoint').mockImplementation(() => L.point(x, 300))
+  }
+  const single = (heading: 'east' | 'west') => setup({ kind: 'single', html: singleHtml(bt(1), heading), heading })
+
+  it('puts a single board on its heading side of the mast', () => {
+    at(500)
+    expect(single('east').el().classList.contains('side-right')).toBe(true)
+    cleanup()
+    expect(single('west').el().classList.contains('side-left')).toBe(true)
+  })
+  it('flips a board that would leave the viewport, keeping the arrow direction', () => {
+    at(950)
+    const { el, container } = single('east')
+    expect(el().classList.contains('side-left')).toBe(true)
+    expect(container.querySelector('.sign')!.classList.contains('heads-west')).toBe(false)
+  })
+  it('fades boards of the given tour keys and leaves the others opaque', () => {
+    const { container } = setup({ fadedKeys: new Set(['k1']) })
+    expect(container.querySelector('[data-tour-key="k1"]')!.classList.contains('faded')).toBe(true)
+    expect(container.querySelector('[data-tour-key="k2"]')!.classList.contains('faded')).toBe(false)
   })
 })
