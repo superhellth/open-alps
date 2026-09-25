@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, cleanup, waitFor } from '@testing-library/react'
 import { MapContainer } from 'react-leaflet'
 import RouteLayer from './RouteLayer.js'
-import * as geometry from '../../tourSearch/loadLegGeometry.js'
-import type { Route } from '../types.js'
+import * as geometry from '@/tourSearch/loadLegGeometry.js'
+import type { Route } from './types.js'
 
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { loadLegGeometry } from '../../tourSearch/loadLegGeometry.js'
-import type { Route } from '../types.js'
+import { loadLegGeometry } from '@/tourSearch/loadLegGeometry.js'
+import type { Route } from './types.js'
 
 /** Resolves each leg's real trail geometry. An entry is undefined while its fetch is in flight
  *  (the caller draws nothing yet) and null if it rejected or the leg has no geometry (edgeId < 0);

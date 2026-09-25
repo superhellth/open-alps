@@ -3,8 +3,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { MapContainer, TileLayer } from 'react-leaflet'
 import SavedTripsLayer from './SavedTripsLayer.js'
-import { newTrip } from '../../trip/trip.js'
-import type { RouteContext } from '../routes.js'
+import { newTrip } from '@/trip/trip.js'
+import type { RouteContext } from './routes.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)

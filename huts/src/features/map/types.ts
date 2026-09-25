@@ -1,4 +1,4 @@
-import type { GeometryLayer } from '../tourSearch/loadLegGeometry.js'
+import type { GeometryLayer } from '@/tourSearch/loadLegGeometry.js'
 
 export interface RouteWaypoint {
   lat: number

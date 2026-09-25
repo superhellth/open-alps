@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import DirectionsTransitIcon from '@mui/icons-material/DirectionsTransit'
 import { OPERATOR_SHAPE } from '@/data/hutClass.js'
 import type { HutOperator } from '@/data/hutClass.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER } from '../../tourSearch/types.js'
+import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER } from '@/tourSearch/types.js'
 import { tokens } from '@/ui/theme.js'
 
 const { ink, paper, signpost } = tokens

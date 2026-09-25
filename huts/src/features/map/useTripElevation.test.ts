@@ -4,7 +4,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { useTripElevation } from './useTripElevation.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
 
-vi.mock('../../tourSearch/loadLegElevation.js', () => ({
+vi.mock('@/tourSearch/loadLegElevation.js', () => ({
   loadLegElevation: vi.fn(async (_layer: string, edgeId: number) => {
     // edge 1: 3 samples over 1km; edge 2: 2 samples over 0.5km — distanceM comes from the leg, not this mock
     return edgeId === 1 ? [1000, 1050, 1020] : [1020, 1010]

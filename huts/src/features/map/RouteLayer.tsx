@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo } from 'react'
 import type L from 'leaflet'
 import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import { tokens } from '@/ui/theme.js'
-import type { Route } from '../types.js'
+import type { Route } from './types.js'
 import { useLegGeometries } from './useLegGeometries.js'
 
 interface Segment {

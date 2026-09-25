@@ -4,7 +4,7 @@ import type { RouteContext } from './routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from '@/trip/trip.js'
 
 const ctx: RouteContext = {
   hutCoordsById: new Map([[0, { lat: 47.1, lng: 11.1 }], [1, { lat: 47.2, lng: 11.2 }]]),

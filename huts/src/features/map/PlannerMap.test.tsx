@@ -4,7 +4,7 @@ import { render, screen, cleanup, waitFor, fireEvent } from '@testing-library/re
 import '@testing-library/jest-dom/vitest'
 import PlannerMap from './PlannerMap.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from '@/trip/trip.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)
