@@ -3,9 +3,12 @@
 
 Measured, not assumed (data/analysis/payload_sizing.json): 3 variants x 6,067 edges x 13 columns =
 693 KB raw, 43.4 KB gzipped; a byte-shuffle filter made it WORSE (46.4 KB), so this does not add
-one. Both figures are floors - four columns were zeros and the variant copies identical - but even
+one. Both figures cover the scalar columns and are floors - four columns were zeros and the variant copies identical - but even
 at 5x this is far under any budget, which is why quantisation is out of scope (spec F's caveat
 says measure after packing, and the measurement says the straightforward packing is fine).
+
+Six i2 anchor columns (lib/anchors.py) are appended after the scalar columns; their measured
+gzipped growth is recorded in docs/tour-suggestion-payload.md §1.
 
 Geometry is NOT shipped here - it stays in hut-edges.pmtiles, fetched lazily only for tours the
 user opens (already how GraphPage.jsx renders edges). No duration column ships either (spec D3):
@@ -18,6 +21,7 @@ Usage: python pipeline/phases/postprocessing/build_edge_payload.py
 """
 
 import argparse
+import gzip
 import json
 import sys
 from pathlib import Path
@@ -26,6 +30,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
+from lib.anchors import edge_anchor_columns  # noqa: E402
 from lib.geo import hut_points  # noqa: E402
 from lib.pipeline import HUT_EDGES_DIR, RAW_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
@@ -51,8 +56,16 @@ def hut_guids(features: list) -> list:
     return guids
 
 
-def pack_edges(records: np.ndarray, hut_ids: list) -> tuple:
+def anchor_columns_for_payload(records: np.ndarray, geometry: np.ndarray, hut_lonlat: np.ndarray) -> dict:
+    """Anchor columns for every payload row, offset from the row's from_id hut coordinate."""
+    ref = hut_lonlat[records["from_id"].astype(np.int64)]
+    return edge_anchor_columns(records, geometry, np.arange(len(records)), ref)
+
+
+def pack_edges(records: np.ndarray, hut_ids: list, anchors: dict | None = None) -> tuple:
     columns = {name: (dtype, records[name]) for name, dtype in COLUMNS}
+    for name, values in (anchors or {}).items():
+        columns[name] = ("i2", values)
     payload, column_manifest = binfmt.pack_columns(columns)
     manifest = {
         "rows": len(records),
@@ -83,12 +96,16 @@ if __name__ == "__main__":
         with open(args.huts, encoding="utf-8") as f:
             hut_ids = hut_guids(json.load(f)["features"])
 
-        payload, manifest = pack_edges(records, hut_ids)
-
-        import gzip
+        geometry = binfmt.load_array(Path(args.edges_dir) / "geometry.npy")
+        hut_lonlat = np.array(hut_points(args.huts))
+        anchors = anchor_columns_for_payload(records, geometry, hut_lonlat)
+        plain, _ = pack_edges(records, hut_ids)
+        payload, manifest = pack_edges(records, hut_ids, anchors)
+        plain_gz = len(gzip.compress(plain, compresslevel=9))
         gz_size = len(gzip.compress(payload, compresslevel=9))
         print(f"hut edges: {len(records):,} rows", flush=True)
         print(f"payload: {len(payload):,} B raw, {gz_size:,} B gzipped", flush=True)
+        print(f"anchor growth: {gz_size - plain_gz:+,} B gzipped", flush=True)
 
         Path(args.out_bin).parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_bin, "wb") as f:

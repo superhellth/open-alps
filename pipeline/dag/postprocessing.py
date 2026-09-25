@@ -163,7 +163,7 @@ def task_build_edge_payload():
             f"--out-manifest {HUT_EDGES_DIR / 'payload.json'}",
         ],
         task_dep=["build_profiles"],  # see task_build_hut_edge_tiles's comment
-        file_dep=[HUT_EDGES_DIR / "records.npy", RAW_DIR / "huts.geojson"],
+        file_dep=[HUT_EDGES_DIR / "records.npy", HUT_EDGES_DIR / "geometry.npy", RAW_DIR / "huts.geojson"],
         targets=[HUT_EDGES_DIR / "payload.bin", HUT_EDGES_DIR / "payload.json"],
     )
 

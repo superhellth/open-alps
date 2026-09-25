@@ -464,3 +464,8 @@ def test_copy_public_data_declares_every_source_and_public_target():
     task = dodo.task_copy_public_data()
     assert {os.path.basename(t) for t in task["targets"]} == {n for _, n in dodo.PUBLIC_FILES}
     assert all(t.startswith("../huts/public/data/") for t in task["targets"])
+
+
+def test_build_edge_payload_depends_on_hut_edge_geometry():
+    deps = [str(d) for d in dodo.task_build_edge_payload()["file_dep"]]
+    assert any(d.endswith("hut-edges/geometry.npy") for d in deps)
