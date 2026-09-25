@@ -1,3 +1,4 @@
+import type { LatLng } from './anchors.js'
 import type { RawTour, TourEndpointType } from './loadOfficialTours.js'
 
 export interface OfficialTourLeg {
@@ -11,6 +12,8 @@ export interface OfficialTourLeg {
   descentM: number
   durationH: number
   maxEleM: number
+  /** 25/50/75 % points of the leg in walking order; null when tours.json ships none. */
+  anchors?: LatLng[] | null
 }
 
 export interface OfficialTourView {
@@ -29,6 +32,7 @@ export function buildOfficialTourViews(tours: RawTour[]): OfficialTourView[] {
       legIndex: leg.legIndex, from: leg.from, to: leg.to, edgeId: leg.edgeId, reversed: false,
       distanceM: leg.distanceM, ascentM: leg.ascentM, descentM: leg.descentM,
       durationH: leg.durationS / 3600, maxEleM: leg.maxEleM,
+      anchors: leg.anchors ? leg.anchors.map(([lat, lng]) => ({ lat, lng })) : null,
     }))
     return {
       tourId: tour.tourId, name: tour.name, legs,

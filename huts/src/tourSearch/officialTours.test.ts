@@ -35,4 +35,17 @@ describe('buildOfficialTourViews', () => {
     }
     expect(buildOfficialTourViews([tour])[0].legs[0].to).toEqual({ type: 'partner_betrieb', id: 99 })
   })
+
+  it('maps shipped leg anchors to lat/lng, null when a leg ships none', () => {
+    const tour: RawTour = {
+      tourId: 4, name: 'Anchored', numDays: 1,
+      legs: [
+        { legIndex: 0, edgeId: 0, ...scalars(1000, 0, 0, 900, 900), from: { type: 'hut', id: 1 }, to: { type: 'hut', id: 2 }, anchors: [[47, 11], [47.1, 11.1]] },
+        { legIndex: 1, edgeId: 1, ...scalars(1000, 0, 0, 900, 900), from: { type: 'hut', id: 2 }, to: { type: 'hut', id: 3 } },
+      ],
+    }
+    const [view] = buildOfficialTourViews([tour])
+    expect(view.legs[0].anchors).toEqual([{ lat: 47, lng: 11 }, { lat: 47.1, lng: 11.1 }])
+    expect(view.legs[1].anchors).toBeNull()
+  })
 })
