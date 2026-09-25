@@ -38,6 +38,9 @@ each column separately, don't assume a struct-of-rows layout.
 | `ungraded_m` | f4 | metres with neither an explicit `sac_scale` nor an implied grade (spec C4) |
 | `inferred_m` | f4 | metres graded via the physical-implication table, not an explicit tag — kept separate from `ungraded_m` because the two support different claims |
 | `snap_m` | f4 | total hub-to-trail snap gap across both ends — already folded into `distance_m`/`ascent_m`/`descent_m`; shipped so a client can flag a large-snap edge as approximate |
+| `a25_dlat`, `a25_dlng`, `a50_dlat`, `a50_dlng`, `a75_dlat`, `a75_dlng` | i2 | anchor at 25 / 50 / 75 % of the edge's full-resolution arc length, stored direction, as an offset from the `from_id` hut's coordinate in `huts.geojson` in units of 1e-4° (≈ 11 m N–S, ≈ 7.6 m E–W at 47° N). The pipeline asserts no overflow; `check_postprocessing` asserts sampled anchors lie within 25 m of the polyline. The reference is arithmetic only: the geometry's endpoints may differ from the hut coordinate by `snap_m`. The client stands a tour's signpost on one of these anchors. |
+
+**Anchor growth** (measured on the last rebuild, both payloads summed, gzipped): _pending measurement_; all three fractions ship unless the +60 KB size gate trips, in which case only `a50_*` ships and the client uses leg midpoints only.
 
 **Geometry is not in this payload.** Path polylines stay in `hut-edges.pmtiles`, fetched lazily
 only for tours the user actually opens — the payload above is metadata-only, meant to be loaded
@@ -81,6 +84,7 @@ The reverse-traversal contract:
   `inferred_m`.
 - **Swapped**: `ascent_m` ↔ `descent_m`.
 - **Recomputed**: duration (§2, from the swapped ascent/descent).
+- **Reversed**: the 25 % and 75 % anchors swap (`a25_*` ↔ `a75_*`); 50 % stays.
 - **Reversed for display**: geometry and elevation profile (both fetched separately, from
   `hut-edges.pmtiles` and `hut-edges/profiles.npy` respectively — neither lives in this payload).
 
@@ -156,7 +160,7 @@ Alpenverein ArcGIS layer's `OBJECTID` for `TYPE_PARTNER` rows — same field, tw
 spaces depending on `source_type`, exceeds u4 range either way), `source_type` (u1,
 `binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER`), `variant` (u1, one of `binfmt.VARIANT_*` —
 today only `VARIANT_FAST_ANY` rows are ever candidates, see below), `access_unknown` (u1,
-boolean), `distance_m`/`ascent_m`/`descent_m` (f4).
+boolean), `distance_m`/`ascent_m`/`descent_m` (f4), plus the same six `a25_*`…`a75_*` anchor columns as §1 (i2), cut from the row's start-edge geometry (`access point → hut`) and referenced to the row's hut (`hut_id`). Reverse-index rows (exit legs that are not approach rows) carry no anchors; the client falls back to the chord point.
 
 Row selection is a matrix, not a top-k: every gathered candidate is bucketed into a cell keyed by
 `(source_type, variant, duration_bucket)` — `duration_bucket` from `config.approach
@@ -218,3 +222,7 @@ onto it by array position, not by any new id scheme. `huts.geojson` itself gaine
 (`docs/superpowers/specs/2026-08-28-hut-classification-design.md`) — a separate, unrelated change
 from this backend, noted here only because a client reading this payload will likely also read
 those fields off the huts it joins onto.
+
+## 9. `tours.json` leg anchors
+
+Each official-tour leg carries `anchors: [[lat, lng], [lat, lng], [lat, lng]]` at 25 / 50 / 75 % of the leg's arc length in walking order, cut from the raw GPX trace (absolute coordinates, no offsets).

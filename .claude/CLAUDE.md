@@ -70,7 +70,7 @@ confirmation), `features/map/useMapView` (live viewport, pre-trip view to restor
 `features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
-Discover draws signpost markers (`SignpostMarker`: single board, a stack that spreads on hover, or a cluster), waypoint symbols from
+Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), grouped by `createAnchorClusterer` into a single board or a stack that spreads on hover (`SignpostMarker`), with round count bubbles grouped by start point below `ROUTE_REVEAL_ZOOM`; waypoint symbols from
 `WaypointLayer` and three route emphasis tiers (`routePanes.ts`). Discover focus is a set of tour keys (`useDiscover`'s
 `focusTours`) and hover is a set of tour keys (`hoveredTourKeys`); `tourKey` lives in `tourSearch/tourKey.ts`.
 
@@ -82,7 +82,7 @@ enforced by `huts/src/architecture.test.ts`.
 outputs (`hut-edge-payload.bin`+`.json`, `approaches.bin`+`.json`, contract documented in
 `docs/tour-suggestion-payload.md`) into an in-memory `GraphData`; `search.ts` searches hut-chains
 against a `Query` (leg count/time bounds, mode, start point); `diversity.ts` dedupes
-reversed-direction duplicates and suppresses near-identical routes; `adjacency.ts`,
+reversed-direction duplicates and suppresses near-identical routes; `anchors.ts`/`legAnchors.ts`/`tourAnchor.ts` (anchor offsets, the per-leg anchor lookup, the signpost's anchor choice), `adjacency.ts`,
 `legFilters.ts`, `dinDuration.ts`, `overlap.ts`, `resolveVariant.ts`, `reverseLeg.ts` are the
 supporting graph/filtering primitives. (`pipeline/CLAUDE.md`'s "Deferred" note still describes this
 client as not-yet-built — that note is stale.) `groupByStart.ts`, `rankFit.ts`, `limits.ts`
@@ -107,7 +107,7 @@ raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, 
 `tour-match-gaps.json`) are copied into `huts/public/data/` by the
 pipeline's own `copy_public_data` task (a `(source, public name)` table, `PUBLIC_FILES` in `dodo.py`). `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
-`adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` feed the client-side tour search engine
+`adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` (both with 25/50/75 % anchor offset columns) feed the client-side tour search engine
 (`huts/src/tourSearch/`, see "App structure" above) that runs entirely in the browser off these
 static files — no query-time backend. The hut-edge payload contract (columns, dtypes, what's
 deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` — see
