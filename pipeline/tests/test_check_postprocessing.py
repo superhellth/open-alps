@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
 from quality.check_postprocessing import (  # noqa: E402
-    check_approach_coverage, check_manifest_agreement, check_public_copy_freshness,
+    check_anchors_on_path, check_approach_coverage, check_manifest_agreement, check_public_copy_freshness,
     check_shipped_straightness, check_tours_json_geometry,
 )
 
@@ -146,3 +146,15 @@ def test_tours_json_geometry_flags_a_row_count_mismatch():
     tours = [{"legs": [{"edgeId": 0}, {"edgeId": 1}]}]
     check = check_tours_json_geometry(tours, [3], max_flagged=500)
     assert check["flagged"][0]["reason"] == "matched_legs_vs_geometry_rows"
+
+
+def test_anchors_on_path_passes_points_on_the_line():
+    poly = np.array([[11.0, 47.0], [11.4, 47.0]])
+    c = check_anchors_on_path("hut_edges", [np.array([[11.1, 47.0], [11.2, 47.0]])], [poly], 25.0, 500)
+    assert c["summary"]["flagged"] == 0 and c["summary"]["checked"] == 1
+
+
+def test_anchors_on_path_flags_a_point_off_the_line():
+    poly = np.array([[11.0, 47.0], [11.4, 47.0]])
+    c = check_anchors_on_path("hut_edges", [np.array([[11.2, 47.01]])], [poly], 25.0, 500)
+    assert c["summary"]["flagged"] == 1

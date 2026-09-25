@@ -18,7 +18,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.geo import haversine_m  # noqa: E402
+from lib.anchors import ANCHOR_FRACTIONS, decode_row, distance_to_polyline_m  # noqa: E402
+from lib.geo import haversine_m, hut_points  # noqa: E402
 from lib.pipeline import (  # noqa: E402
     BUILD_DIR, EDGE_LAYER_DIRNAMES, PUBLIC_DATA_DIR, QUALITY_DIR, RAW_DIR, load_config,
 )  # noqa: E402
@@ -38,6 +39,40 @@ EDGE_PAYLOAD_LAYERS = [
     ("start_edges", None, "geometry.json", "geometry.bin"),
     ("tour_edges", None, "geometry.json", "geometry.bin"),
 ]
+
+
+ANCHOR_SAMPLE_ROWS = 500
+
+
+def check_anchors_on_path(layer_name: str, anchors: list, polylines: list, tolerance_m: float,
+                          max_flagged: int) -> dict:
+    """Every sampled decoded anchor lies within tolerance_m of its edge's full-resolution polyline.
+    anchors[i] is (k, 2) lon/lat, polylines[i] is (n, 2) lon/lat."""
+    flagged = []
+    for i, (points, poly) in enumerate(zip(anchors, polylines)):
+        for k, (lon, lat) in enumerate(points):
+            d = distance_to_polyline_m(lon, lat, poly)
+            if d > tolerance_m:
+                flagged.append({"layer": layer_name, "sample": i, "anchor": k, "distance_m": d})
+    return build_check(
+        f"anchors_on_path_{layer_name}", {"tolerance_m": tolerance_m}, checked=len(anchors),
+        flagged_rows=flagged, baseline=0, max_flagged_rows=max_flagged,
+        sort_key=lambda r: r["distance_m"],
+    )
+
+
+def _polyline(records, geometry, row):
+    off, cnt = int(records[row]["geom_offset"]), int(records[row]["geom_count"])
+    piece = geometry[off:off + cnt]
+    return np.column_stack([piece["lon"], piece["lat"]])
+
+
+def _sample_rows(n_rows: int) -> range:
+    return range(0, n_rows, max(1, n_rows // ANCHOR_SAMPLE_ROWS))
+
+
+def _present_fractions(columns: dict) -> tuple:
+    return tuple(f for f in ANCHOR_FRACTIONS if f"a{int(round(f * 100))}_dlat" in columns)
 
 
 def check_approach_coverage(candidates_by_hut: dict, approach_columns: dict, n_huts: int,
@@ -184,6 +219,7 @@ def main(argv=None):
     parser.add_argument("--min-length-m", type=float, default=pp_cfg.get("minLengthM", 300))
     parser.add_argument("--straightness-threshold", type=float,
                          default=pp_cfg.get("straightnessThreshold", 0.97))
+    parser.add_argument("--anchor-tolerance-m", type=float, default=pp_cfg.get("anchorToleranceM", 25.0))
     parser.add_argument("--max-points-for-straightness-flag", type=int,
                          default=pp_cfg.get("maxPointsForStraightnessFlag", 4))
     args = parser.parse_args(argv)
@@ -210,6 +246,55 @@ def main(argv=None):
         c = check_approach_coverage(candidates_by_hut, approach_columns, n_huts, args.max_flagged_rows)
         print(f"approach_coverage: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged", flush=True)
         checks.append(c)
+
+        huts_lonlat = np.array(hut_points(raw_dir / "huts.geojson"))
+
+        def report_anchors(layer_name, anchors, polylines):
+            c = check_anchors_on_path(layer_name, anchors, polylines, args.anchor_tolerance_m,
+                                      args.max_flagged_rows)
+            print(f"anchors_on_path[{layer_name}]: {c['summary']['flagged']:,} / "
+                  f"{c['summary']['checked']:,} flagged", flush=True)
+            checks.append(c)
+
+        hut_dir = build_dir / "hut-edges"
+        if (hut_dir / "payload.json").exists() and (hut_dir / "payload.bin").exists() \
+                and (hut_dir / "geometry.npy").exists():
+            manifest = json.loads((hut_dir / "payload.json").read_text(encoding="utf-8"))
+            cols = _unpack_columns((hut_dir / "payload.bin").read_bytes(), manifest["columns"], manifest["rows"])
+            if "a50_dlat" in cols:
+                recs = binfmt.load_array(hut_dir / "records.npy", mmap=False)
+                geom = binfmt.load_array(hut_dir / "geometry.npy", mmap=False)
+                rows = _sample_rows(manifest["rows"])
+                fractions = _present_fractions(cols)
+                report_anchors(
+                    "hut_edges",
+                    [decode_row(cols, i, huts_lonlat[int(cols["from_id"][i])], fractions) for i in rows],
+                    [_polyline(recs, geom, i) for i in rows])
+
+        start_geometry_path = build_dir / "start-edges" / "geometry.npy"
+        if "a50_dlat" in approach_columns and start_geometry_path.exists():
+            geom = binfmt.load_array(start_geometry_path, mmap=False)
+            rows = _sample_rows(approach_manifest["rows"])
+            fractions = _present_fractions(approach_columns)
+            report_anchors(
+                "start_edges",
+                [decode_row(approach_columns, i, huts_lonlat[int(approach_columns["hut_id"][i])], fractions)
+                 for i in rows],
+                [_polyline(start_records, geom, int(approach_columns["edge_id"][i])) for i in rows])
+
+        tour_dir = build_dir / "tour-edges"
+        if (tour_dir / "tours.json").exists() and (tour_dir / "geometry.npy").exists() \
+                and (tour_dir / "records.npy").exists():
+            with open(tour_dir / "tours.json", encoding="utf-8") as f:
+                legs = [leg for t in json.load(f) for leg in t["legs"] if leg.get("anchors")]
+            if legs:
+                recs = binfmt.load_array(tour_dir / "records.npy", mmap=False)
+                geom = binfmt.load_array(tour_dir / "geometry.npy", mmap=False)
+                rows = _sample_rows(len(legs))
+                report_anchors(
+                    "tour_edges",
+                    [np.array([[lng, lat] for lat, lng in legs[i]["anchors"]]) for i in rows],
+                    [_polyline(recs, geom, legs[i]["edgeId"]) for i in rows])
 
         for layer_name, payload_manifest_name, geometry_manifest_name, geometry_bin_name in EDGE_PAYLOAD_LAYERS:
             layer_dir = build_dir / EDGE_LAYER_DIRNAMES[layer_name]

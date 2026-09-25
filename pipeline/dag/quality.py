@@ -120,6 +120,9 @@ def task_check_postprocessing():
             START_EDGES_DIR / "geometry.json", START_EDGES_DIR / "geometry.bin",
             TOUR_EDGES_DIR / "tours.json", TOUR_EDGES_DIR / "geometry.json",
             TOUR_EDGES_DIR / "geometry.bin",
+            HUT_EDGES_DIR / "payload.bin", HUT_EDGES_DIR / "records.npy",
+            HUT_EDGES_DIR / "geometry.npy", START_EDGES_DIR / "geometry.npy",
+            TOUR_EDGES_DIR / "records.npy", TOUR_EDGES_DIR / "geometry.npy",
         ],
         targets=[QUALITY_DIR / "postprocessing.json"],
     )

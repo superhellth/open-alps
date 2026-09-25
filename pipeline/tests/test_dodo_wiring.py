@@ -475,3 +475,9 @@ def test_build_approach_table_depends_on_start_edge_geometry_and_huts():
     deps = [str(d) for d in dodo.task_build_approach_table()["file_dep"]]
     assert any(d.endswith("start-edges/geometry.npy") for d in deps)
     assert any(d.endswith("huts.geojson") for d in deps)
+
+
+def test_check_postprocessing_depends_on_the_geometry_it_samples_anchors_against():
+    deps = [str(d) for d in dodo.task_check_postprocessing()["file_dep"]]
+    for name in ("hut-edges/geometry.npy", "start-edges/geometry.npy", "tour-edges/geometry.npy", "hut-edges/payload.bin"):
+        assert any(d.endswith(name) for d in deps), name
