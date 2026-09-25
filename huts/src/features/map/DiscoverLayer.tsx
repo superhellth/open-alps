@@ -16,7 +16,7 @@ import './map.css'
 
 /** Below this zoom, routes stay hidden and only count-markers show — tuned lower than the
  *  clusterer's own maxZoom (14) so routes appear before markers finish separating one-per-start. */
-export const ROUTE_REVEAL_ZOOM = 10
+export const ROUTE_REVEAL_ZOOM = 11
 
 const iconCache = new Map<string, L.DivIcon>()
 function countIcon(count: number, cluster: boolean, dimmed: boolean, highlighted: boolean): L.DivIcon {
