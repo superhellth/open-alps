@@ -111,11 +111,14 @@ describe('DiscoverLayer shared legs and huts', () => {
   })
 
   it('a leg click focuses the matched tours and is not read as the map click that drops the focus', async () => {
+    const fly = vi.spyOn(L.Map.prototype, 'flyToBounds').mockReturnThis()
+    vi.spyOn(L.Map.prototype, 'getBoundsZoom').mockReturnValue(13)
     const onFocusTours = vi.fn()
     const onMapClick = vi.fn()
     const { container } = renderLayer({ allTours: [a, b], onFocusTours }, 13, <MapClick onClick={onMapClick} />)
     fireEvent.click(await firstRestPath(container))
     expect(onFocusTours).toHaveBeenCalledWith(expect.arrayContaining([tourKey(a), tourKey(b)]))
+    expect(fly).toHaveBeenCalledTimes(1)
     expect(onMapClick).not.toHaveBeenCalled()
   })
 

@@ -57,6 +57,11 @@ export function tourToRoute(tour: PlannerTour, ctx: RouteContext): Route | null 
   }
 }
 
+/** Every waypoint (start, huts, exit) of the given tours; tours that fail to resolve are skipped. */
+export function tourWaypoints(tours: PlannerTour[], ctx: RouteContext): RouteWaypoint[] {
+  return tours.flatMap((tour) => tourToRoute(tour, ctx)?.waypoints ?? [])
+}
+
 /** The active trip's route. An unedited official trip is drawn along the official GPX (tour-edge
  *  layer); any other trip along the legs re-derived from the hut graph. */
 export function tripToRoute(trip: Trip, tripLegs: TripLegs, ctx: RouteContext): Route | null {

@@ -19,7 +19,7 @@ import SavedTripsList from '@/features/saved/SavedTripsList.js'
 import SidebarHeader from './SidebarHeader.js'
 import TripPanel from '@/features/trip/TripPanel.js'
 import { makeStartLabel } from '@/data/labels.js'
-import { tripToRoute } from '@/features/map/routes.js'
+import { tourWaypoints, tripToRoute } from '@/features/map/routes.js'
 import type { RouteContext } from '@/features/map/routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { useMapView } from '@/features/map/useMapView.js'
@@ -49,7 +49,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const {
     form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
-    search, tours, visibleTours, groups, groupStartPoints, viewTours, focusTours, setFocusTours,
+    search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours,
     hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
   } = useDiscover({ data, client, mapView })
 
@@ -62,8 +62,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const showAllTours = useCallback(() => {
     setFocusTours(null)
-    fitToPoints(groupStartPoints)
-  }, [groupStartPoints, setFocusTours, fitToPoints])
+    fitToPoints(tourWaypoints(visibleTours, routeCtx))
+  }, [visibleTours, routeCtx, setFocusTours, fitToPoints])
 
   const {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editor, highlightedLeg, setHighlightedLeg,

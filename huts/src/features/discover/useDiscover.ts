@@ -47,8 +47,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     () => filterByAvailability(tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset),
     [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])
   const groups = useMemo(() => groupByStart(visibleTours), [visibleTours])
-  const groupStartPoints = useMemo(
-    () => groups.flatMap((g) => { const s = data.startById.get(g.startId); return s ? [s] : [] }), [groups, data])
 
   const rankedTours = useMemo(
     () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
@@ -66,7 +64,7 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     form, patchForm, draft, patchDraft,
     sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
     tab, setTab, erweitertOpen, setErweitertOpen,
-    search, tours, visibleTours, groups, groupStartPoints, viewTours,
+    search, tours, visibleTours, groups, viewTours,
     focusTours, setFocusTours, hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
   }
 }

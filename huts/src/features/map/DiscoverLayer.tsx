@@ -7,7 +7,7 @@ import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 import { currentView, routeTouchesBbox } from '@/lib/viewport.js'
 import type { View } from '@/lib/viewport.js'
-import { tourToRoute } from './routes.js'
+import { tourToRoute, tourWaypoints } from './routes.js'
 import type { RouteContext } from './routes.js'
 import RouteLayer from './RouteLayer.js'
 import WaypointLayer, { collectSymbols } from './WaypointLayer.js'
@@ -138,20 +138,27 @@ export default function DiscoverLayer({
       if (tour) onPickRoute(tour)
       return
     }
-    focusZoom.current = map.getZoom()
     onFocusTours?.(keys)
+    const bounds = boundsOfTours(keys.flatMap((k) => tourByKey.get(k) ?? []))
+    if (bounds) zoomToBounds(bounds)
+    else focusZoom.current = map.getZoom()
   }
 
-  /** Bounds of every waypoint of every tour starting at one of the given start points. */
-  const tourBounds = (startIds: number[]): L.LatLngBounds | null => {
+  /** Bounds of every waypoint of the given tours. */
+  const boundsOfTours = (tours: PlannerTour[]): L.LatLngBounds | null => {
     if (!routeCtx) return null
-    const ids = new Set(startIds)
     const bounds = L.latLngBounds([])
-    for (const g of groups) {
-      if (!ids.has(g.startId)) continue
-      for (const tour of g.tours) tourToRoute(tour, routeCtx)?.waypoints.forEach((p) => bounds.extend([p.lat, p.lng]))
-    }
+    for (const p of tourWaypoints(tours, routeCtx)) bounds.extend([p.lat, p.lng])
     return bounds.isValid() ? bounds : null
+  }
+  /** Bounds of every tour starting at one of the given start points. */
+  const tourBounds = (startIds: number[]) => {
+    const ids = new Set(startIds)
+    return boundsOfTours(groups.filter((g) => ids.has(g.startId)).flatMap((g) => g.tours))
+  }
+  const zoomToBounds = (bounds: L.LatLngBounds) => {
+    focusZoom.current = Math.min(map.getBoundsZoom(bounds, false, L.point(80, 80)), map.getMaxZoom())
+    map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 })
   }
 
   const startIdsOf = (m: MapMarker) => (m.kind === 'cluster' ? clusterer.startIdsOf(m.clusterId) : [m.startId])
@@ -188,8 +195,7 @@ export default function DiscoverLayer({
     onFocusTours?.(keysOfStarts(startIds))
     const bounds = tourBounds(startIds)
     if (bounds) {
-      focusZoom.current = Math.min(map.getBoundsZoom(bounds, false, L.point(80, 80)), map.getMaxZoom())
-      map.flyToBounds(bounds, { padding: [40, 40], duration: 0.6 })
+      zoomToBounds(bounds)
     } else if (m.kind === 'cluster') {
       focusZoom.current = Math.min(clusterer.expansionZoom(m.clusterId), map.getMaxZoom())
       map.setView([m.lat, m.lng], focusZoom.current)
