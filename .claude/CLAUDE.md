@@ -64,6 +64,13 @@ re-derived on every load by `trip/tripLegs.ts`'s `legsFromTrip`, and a night tha
 resolves is flagged "changed since saved" rather than substituted. Editor moves live in
 `trip/tripEdit.ts`, overlap warnings in `trip/tripOverlaps.ts`.
 
+`PlannerPage.tsx` only composes four hooks: `features/discover/useDiscover` (filter form, search, ranking and the
+result lists derived from them), `features/trip/useTripSession` (the open trip: legs, editor, share link, draft-discard
+confirmation), `features/map/useMapView` (live viewport, pre-trip view to restore, fit-to-bounds commands) and
+`features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
+`{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
+`*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
+
 Imports point downward: lib/ui/format/availability/tourSearch < trip < data/search < features/adminPage/gpxEditor < app;
 enforced by `huts/src/architecture.test.ts`.
 
