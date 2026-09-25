@@ -26,7 +26,7 @@ import { tourKey } from '@/features/map/tourKey.js'
 import { tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripSession } from '@/features/trip/useTripSession.js'
-import { useHash } from '@/lib/useHash.js'
+import { useSidebarNavigation } from './useSidebarNavigation.js'
 
 export default function PlannerPage({ importHash }: { importHash: string | null }) {
   const app = useAppData()
@@ -43,7 +43,6 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const [importDismissed, setImportDismissed] = useState(false)
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
-  const hash = useHash()
 
   const {
     form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
@@ -67,7 +66,9 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds,
   } = useTripSession({ data, client, startLabel })
-  const sidebarView: 'discover' | 'saved' | 'trip' = mode === 'trip' ? 'trip' : (hash === '#trips' ? 'saved' : 'discover')
+  const { sidebarView, goPlanen, goMeineTouren, goHome, openSavedTrip, openPinnedDraft, backFromTrip } = useSidebarNavigation({
+    mode, openedFrom, setOpenedFrom, onBackFromTrip: () => { setEditing(null); restoreViewAfterTrip() },
+  })
 
   const previewRoute = useMemo(
     () => (previewTour && routesVisible ? tourToRoute(previewTour, routeCtx) : null),
@@ -89,30 +90,6 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   function confirmDiscard() {
     confirmDiscardDraft()
     setPreviewTour(null)
-  }
-
-  function goPlanen() { window.location.hash = '' }
-  function goMeineTouren() {
-    if (activeTrip) dispatch({ type: 'closeActive' })
-    window.location.hash = '#trips'
-  }
-  function goHome() {
-    dispatch({ type: 'closeActive' })
-    window.location.hash = ''
-  }
-  function openSavedTrip(id: string) {
-    setOpenedFrom('saved')
-    dispatch({ type: 'setActive', id })
-  }
-  function openPinnedDraft() {
-    setOpenedFrom('saved')
-    dispatch({ type: 'reopenDraft' })
-  }
-  function backFromTrip() {
-    setEditing(null)
-    dispatch({ type: 'closeActive' })
-    restoreViewAfterTrip()
-    if (openedFrom === 'saved') window.location.hash = '#trips'
   }
 
   const importedTrip = useMemo(() => (importHash ? decodeTripFromHash(importHash) : null), [importHash])
