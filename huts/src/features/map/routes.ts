@@ -1,4 +1,4 @@
-import { tourAnchor } from '@/tourSearch/tourAnchor.js'
+import { anchorCandidates, tourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { Bbox, TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { LegAnchorLookup } from '@/tourSearch/legAnchors.js'
 import type { GeometryLayer } from '@/tourSearch/loadLegGeometry.js'
@@ -62,12 +62,21 @@ export function tourToRoute(tour: PlannerTour, ctx: RouteContext): Route | null 
   }
 }
 
-/** Where the tour's signpost stands on its route, or null when no anchor of the tour is in `bbox`. */
-export function tourAnchorOf(tour: PlannerTour, route: Route, ctx: RouteContext, bbox: Bbox): TourAnchor | null {
-  return tourAnchor({
+function anchorRouteOf(tour: PlannerTour, route: Route) {
+  return {
     waypoints: route.waypoints,
     legs: route.legs.map((l, i) => ({ layer: l.layer, edgeId: l.edgeId, reversed: l.reversed, distanceM: tour.legs[i].distanceM })),
-  }, ctx.legAnchors, bbox)
+  }
+}
+
+/** Where the tour's signpost stands on its route, or null when no anchor of the tour is in `bbox`. */
+export function tourAnchorOf(tour: PlannerTour, route: Route, ctx: RouteContext, bbox: Bbox): TourAnchor | null {
+  return tourAnchor(anchorRouteOf(tour, route), ctx.legAnchors, bbox)
+}
+
+/** Every anchor of the tour's route in `bbox`, nearest half the tour's distance first: the places its signpost may stand. */
+export function tourAnchorCandidatesOf(tour: PlannerTour, route: Route, ctx: RouteContext, bbox: Bbox): TourAnchor[] {
+  return anchorCandidates(anchorRouteOf(tour, route), ctx.legAnchors, bbox)
 }
 
 /** Every waypoint (start, huts, exit) of the given tours; tours that fail to resolve are skipped. */

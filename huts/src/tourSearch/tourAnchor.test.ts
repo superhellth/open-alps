@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tourAnchor } from './tourAnchor.js'
+import { anchorCandidates, tourAnchor } from './tourAnchor.js'
 import type { AnchorRoute } from './tourAnchor.js'
 import type { LegAnchorLookup } from './legAnchors.js'
 
@@ -73,5 +73,35 @@ describe('tourAnchor', () => {
     const one: LegAnchorLookup = () => [pt(47.05, 11.2)]
     const r: AnchorRoute = { waypoints: [pt(47, 11), pt(47, 11.4)], legs: [leg(0, 1000)] }
     expect(tourAnchor(r, one, WORLD)!.lat).toBeCloseTo(47.05, 6)
+  })
+})
+
+describe('anchorCandidates', () => {
+  // half = 1000 m. Leg 0 anchors at 250/500/750 (lng 11.1/11.2/11.3), leg 1 chord points at 1250/1500/1750 (11.5/11.6/11.7).
+  it('orders every candidate by distance from half the tour, ties in walking order', () => {
+    const lngs = anchorCandidates(route, stored, WORLD).map((c) => c.lng)
+    const expected = [11.3, 11.5, 11.2, 11.6, 11.1, 11.7]
+    expect(lngs).toHaveLength(expected.length)
+    lngs.forEach((lng, i) => expect(lng).toBeCloseTo(expected[i], 6))
+  })
+
+  it('keeps only candidates inside the bbox', () => {
+    const lngs = anchorCandidates(route, stored, [11.0, 46, 11.35, 48]).map((c) => c.lng)
+    expect(lngs).toHaveLength(3)
+    ;[11.3, 11.2, 11.1].forEach((lng, i) => expect(lngs[i]).toBeCloseTo(lng, 6))
+  })
+
+  it('keeps the heading of each candidate', () => {
+    const west: AnchorRoute = { waypoints: [pt(47, 11.4), pt(47, 11)], legs: [leg(-1, 1000)] }
+    expect(anchorCandidates(west, none, WORLD).every((c) => c.heading === 'west')).toBe(true)
+  })
+
+  it('is empty when nothing is in view or the route has no legs', () => {
+    expect(anchorCandidates(route, stored, [12.5, 46, 13, 48])).toEqual([])
+    expect(anchorCandidates({ waypoints: [pt(47, 11)], legs: [] }, none, WORLD)).toEqual([])
+  })
+
+  it('starts with the tourAnchor choice', () => {
+    expect(anchorCandidates(route, stored, WORLD)[0]).toEqual(tourAnchor(route, stored, WORLD))
   })
 })

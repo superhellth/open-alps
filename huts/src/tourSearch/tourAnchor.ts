@@ -42,17 +42,18 @@ function candidates(route: AnchorRoute, lookup: LegAnchorLookup): Candidate[] {
   })
 }
 
-/** Where a tour's signpost stands: the anchor nearest half the tour's distance, or, when that is outside `bbox`,
- *  the in-view anchor nearest it; null when the tour has no anchor in view. */
-export function tourAnchor(route: AnchorRoute, lookup: LegAnchorLookup, bbox: Bbox): TourAnchor | null {
+/** Every anchor of the route inside `bbox`, the one nearest half the tour's distance first; equally near ones keep
+ *  walking order. */
+export function anchorCandidates(route: AnchorRoute, lookup: LegAnchorLookup, bbox: Bbox): TourAnchor[] {
   const half = route.legs.reduce((sum, l) => sum + l.distanceM, 0) / 2
-  let best: Candidate | null = null
-  let bestInView: Candidate | null = null
-  for (const c of candidates(route, lookup)) {
-    const d = Math.abs(c.at - half)
-    if (!best || d < Math.abs(best.at - half)) best = c
-    if (inBbox(c, bbox) && (!bestInView || d < Math.abs(bestInView.at - half))) bestInView = c
-  }
-  const chosen = best && inBbox(best, bbox) ? best : bestInView
-  return chosen ? { lat: chosen.lat, lng: chosen.lng, heading: chosen.heading } : null
+  return candidates(route, lookup)
+    .filter((c) => inBbox(c, bbox))
+    .map((c) => ({ c, distance: Math.abs(c.at - half) }))
+    .sort((a, b) => a.distance - b.distance)
+    .map(({ c }) => ({ lat: c.lat, lng: c.lng, heading: c.heading }))
+}
+
+/** Where a tour's signpost stands by default: the first of `anchorCandidates`, null when the tour has no anchor in view. */
+export function tourAnchor(route: AnchorRoute, lookup: LegAnchorLookup, bbox: Bbox): TourAnchor | null {
+  return anchorCandidates(route, lookup, bbox)[0] ?? null
 }
