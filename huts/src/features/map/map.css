@@ -3,44 +3,11 @@
   filter: grayscale(0.75) brightness(1.08) contrast(0.9);
 }
 .hut-marker,
-.start-count-marker,
+.signpost-marker,
 .swap-marker {
   background: none;
   border: none;
 }
-.start-count-marker span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: var(--color-signpost);
-  color: var(--color-ink);
-  border: 2px solid var(--color-ink);
-  font: 700 0.9rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
-  font-variant-numeric: tabular-nums;
-  cursor: pointer;
-  transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
-}
-.start-count-marker:not(.dimmed):hover,
-.start-count-marker.highlighted {
-  z-index: 1000 !important;
-}
-.start-count-marker:not(.dimmed):hover span,
-.start-count-marker.highlighted span {
-  background: #fff;
-  transform: scale(1.2);
-  box-shadow: 0 0 0 3px var(--color-signpost), 0 2px 8px color-mix(in srgb, var(--color-ink) 55%, transparent);
-}
-.start-count-marker.dimmed span {
-  opacity: 0.45;
-}
-.start-count-marker.dimmed:hover span {
-  transform: none;
-  box-shadow: none;
-}
-
 .start-symbol {
   background: none;
   border: none;
@@ -59,3 +26,105 @@
 }
 
 .waypoint-hit { background: none; border: none; cursor: pointer; }
+
+/* Signpost markers. The marker element is 0x0 at the geographic point; signs and boards are absolutely
+   positioned children, so the spread column can overflow it without resizing it. */
+.signpost-marker {
+  --board-h: 26px;
+  --board-pitch: 30px;
+}
+.signpost-marker .sign,
+.signpost-marker .board {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: var(--board-h);
+  padding: 0 16px 0 8px;
+  max-width: 220px;
+  background: var(--color-ink);
+  color: var(--color-ink);
+  font: 600 0.8rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  cursor: pointer;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+}
+/* Yellow face inset from the ink edge, clipped to the same arrow. */
+.signpost-marker .sign::before,
+.signpost-marker .board::before {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--color-signpost);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
+}
+.signpost-marker .sign > *,
+.signpost-marker .board > * { position: relative; }
+.signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.signpost-marker .km { opacity: 0.75; }
+
+/* Single tour: the board's left edge sits on the start point. */
+.signpost-marker.single .sign { left: -8px; top: calc(var(--board-h) / -2); }
+/* Stack and cluster: the count sign is centred on the point. */
+.signpost-marker.stack .stack-sign,
+.signpost-marker.cluster .cluster-sign {
+  left: 0;
+  top: calc(var(--board-h) / -2);
+  min-width: 34px;
+  justify-content: center;
+  transform: translateX(-50%);
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+.signpost-marker.cluster .cluster-sign { height: calc(var(--board-h) * 1.6); top: calc(var(--board-h) * -0.8); padding: 0; }
+.signpost-marker .arm { position: absolute; left: 0; right: 0; height: 50%; display: flex; align-items: center; justify-content: center; }
+.signpost-marker .arm.right { top: 0; }
+.signpost-marker .arm.left { bottom: 0; transform: scaleX(-1); }
+
+/* Spread: boards start folded onto the sign and hidden, and move up the pole. */
+.signpost-marker .board {
+  left: 0;
+  top: calc(var(--board-h) / -2);
+  opacity: 0;
+  visibility: hidden;
+  transform: translate(0, 0);
+  transition: transform 160ms ease-out, opacity 160ms ease-out, visibility 0s linear 160ms;
+}
+.signpost-marker.spread .board {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(var(--dx, 0px), calc(var(--up) * var(--board-pitch) * -1));
+  transition: transform 160ms ease-out, opacity 160ms ease-out;
+}
+.signpost-marker.to-right { --dx: 12px; }
+.signpost-marker.to-left { --dx: calc(-100% - 12px); }
+.signpost-marker.to-left .board { left: auto; right: 0; }
+.signpost-marker.to-left .board,
+.signpost-marker.to-left .board::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
+.signpost-marker.to-left .board { padding: 0 8px 0 16px; }
+/* Covers the gaps between boards so the pointer never leaves the marker while crossing them. */
+.signpost-marker .spread-backdrop {
+  position: absolute;
+  left: -20px;
+  right: -240px;
+  top: calc(var(--board-pitch) * -9 - 10px);
+  bottom: 10px;
+  pointer-events: none;
+}
+.signpost-marker.spread .spread-backdrop { pointer-events: auto; }
+.signpost-marker.to-left .spread-backdrop { left: -240px; right: -20px; }
+.signpost-marker.spread { z-index: 1000; }
+
+.signpost-marker .sign:focus-visible,
+.signpost-marker .board:focus-visible { outline: 3px solid var(--color-alpine-blue); outline-offset: 2px; }
+.signpost-marker:not(.dimmed):hover .sign,
+.signpost-marker.highlighted .sign { filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--color-ink) 55%, transparent)); z-index: 1; }
+.signpost-marker .board:hover::before { background: #fff; }
+.signpost-marker.dimmed .sign { opacity: 0.45; }
+
+@media (prefers-reduced-motion: reduce) {
+  .signpost-marker .board,
+  .signpost-marker.spread .board { transition: none; }
+}
