@@ -56,12 +56,3 @@ export function markerKind(m: MapMarker): MarkerKind {
   if (m.kind === 'cluster') return 'cluster'
   return m.count === 1 ? 'single' : 'stack'
 }
-
-const MIN_RADIUS = 12
-const MAX_RADIUS = 34
-
-/** Marker radius in px: sqrt of the match count with fixed bounds, so single start points stay
- *  clickable and large clusters do not cover the map. */
-export function markerRadius(count: number): number {
-  return Math.min(MAX_RADIUS, Math.max(MIN_RADIUS, 9 + 3.5 * Math.sqrt(count)))
-}

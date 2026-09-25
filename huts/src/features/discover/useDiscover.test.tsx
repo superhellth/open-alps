@@ -5,6 +5,7 @@ import { useDiscover } from './useDiscover.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import type { TourResult } from '@/tourSearch/types.js'
+import { tourKey } from '@/tourSearch/tourKey.js'
 
 afterEach(cleanup)
 
@@ -21,23 +22,26 @@ describe('useDiscover', () => {
     expect(result.current.tab).toBe('filters')
   })
 
-  it('clears focusStarts when the form changes', () => {
+  it('clears focusTours when the form changes', () => {
     const data = makeTestAppData()
     const client = fakeClient([])
     const { result } = renderHook(() => useDiscover({ data, client, mapView: null }))
-    act(() => result.current.setFocusStarts(new Set([100])))
-    expect(result.current.focusStarts).not.toBeNull()
-    act(() => result.current.patchForm({ onlyAvailable: true }))
-    expect(result.current.focusStarts).toBeNull()
+    act(() => result.current.setFocusTours(new Set(['x'])))
+    expect(result.current.focusTours).not.toBeNull()
+    act(() => result.current.patchForm({ onlyAvailable: !result.current.form.onlyAvailable }))
+    expect(result.current.focusTours).toBeNull()
   })
 
-  it('viewTours holds only the focused starts when set', async () => {
+  it('limits viewTours to the focused tour keys and lifts the limit again', async () => {
     const data = makeTestAppData()
     const client = fakeClient([chain(100), chain(101)])
     const { result } = renderHook(() => useDiscover({ data, client, mapView: null }))
     await waitFor(() => expect(result.current.visibleTours.length).toBe(2))
     expect(result.current.viewTours).toHaveLength(2)
-    act(() => result.current.setFocusStarts(new Set([101])))
-    expect(result.current.viewTours.map((t) => t.startId)).toEqual([101])
+    const second = result.current.visibleTours[1]
+    act(() => result.current.setFocusTours(new Set([tourKey(second)])))
+    expect(result.current.viewTours.map(tourKey)).toEqual([tourKey(second)])
+    act(() => result.current.setFocusTours(null))
+    expect(result.current.viewTours).toHaveLength(2)
   })
 })

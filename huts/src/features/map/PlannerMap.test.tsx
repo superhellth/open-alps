@@ -30,8 +30,8 @@ const someTripLegs = {
 
 const commands: MapCommands = { route: null, fitRoute: false, highlightedLeg: null, restoreView: null, fitBounds: null, onMapClick: () => {} }
 const discover = (over: Partial<DiscoverMapMode> = {}): DiscoverMapMode => ({
-  kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hoveredTourKey: null,
-  onNavigate: () => {}, focusStarts: null, onFocusStarts: () => {}, onHoverStarts: () => {}, onViewChange: () => {}, onHoverTour: () => {}, onPickRoute: () => {},
+  kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hutNameById: new Map(), hoveredTourKeys: new Set(),
+  onNavigate: () => {}, focusTours: null, onFocusTours: () => {}, onHoverStarts: () => {}, onViewChange: () => {}, onHoverTours: () => {}, onPickRoute: () => {},
   ...over,
 })
 const tripMode = (over: Partial<TripMapMode> = {}): TripMapMode => ({
@@ -45,10 +45,10 @@ describe('PlannerMap discover mode', () => {
     const onNavigate = vi.fn()
     const groups = [{ startId: 1, tours: [tour(1), tour(1), tour(1)] }, { startId: 2, tours: [tour(2)] }]
     const { container } = render(<PlannerMap mode={discover({ groups, onNavigate })} commands={commands} />)
-    await waitFor(() => expect(container.querySelectorAll('.start-count-marker').length).toBeGreaterThan(0))
-    const labels = [...container.querySelectorAll('.start-count-marker span')].map((n) => n.textContent)
+    await waitFor(() => expect(container.querySelectorAll('.signpost-marker').length).toBeGreaterThan(0))
+    const labels = [...container.querySelectorAll('.signpost-marker .sign')].map((n) => n.textContent)
     expect(labels).toContain('3')
-    fireEvent.click(container.querySelector('.start-count-marker')!)
+    fireEvent.click(container.querySelector('.signpost-marker .sign')!)
     expect(onNavigate).toHaveBeenCalled()
   })
   it('reports the current bbox/zoom as the map settles', async () => {
@@ -61,7 +61,7 @@ describe('PlannerMap discover mode', () => {
   })
   it('renders no markers without matches', () => {
     const { container } = render(<PlannerMap mode={discover()} commands={commands} />)
-    expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
+    expect(container.querySelectorAll('.signpost-marker')).toHaveLength(0)
   })
   it('mutes the tiles in discover mode only', () => {
     const { container, rerender } = render(<PlannerMap mode={discover()} commands={commands} />)
@@ -99,7 +99,7 @@ describe('PlannerMap trip mode', () => {
   })
   it('shows no discover markers in trip mode', () => {
     const { container } = render(<PlannerMap mode={tripMode(tripProps)} commands={commands} />)
-    expect(container.querySelectorAll('.start-count-marker')).toHaveLength(0)
+    expect(container.querySelectorAll('.signpost-marker')).toHaveLength(0)
   })
 })
 

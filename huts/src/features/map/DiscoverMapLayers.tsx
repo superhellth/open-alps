@@ -13,16 +13,17 @@ export interface DiscoverMapMode {
   startById: Map<number, StartPoint>
   allTours: PlannerTour[]
   routeCtx: RouteContext | null
-  hoveredTourKey: string | null
+  hutNameById: Map<number, string>
+  hoveredTourKeys: ReadonlySet<string>
   /** Called when a marker is clicked — navigation only, no filtering. */
   onNavigate: () => void
-  /** Start points the list and map are focused on; null when unfocused. */
-  focusStarts: Set<number> | null
-  onFocusStarts: (startIds: number[] | null) => void
+  /** Tour keys the list and map are focused on; null when unfocused. */
+  focusTours: ReadonlySet<string> | null
+  onFocusTours: (keys: string[] | null) => void
   onHoverStarts: (startIds: Set<number> | null) => void
   /** Called whenever the map's bbox/zoom changes, so the list can mirror it. */
   onViewChange: (view: View) => void
-  onHoverTour: (key: string | null) => void
+  onHoverTours: (keys: ReadonlySet<string>) => void
   onPickRoute: (tour: PlannerTour) => void
 }
 
@@ -30,9 +31,9 @@ export function DiscoverMapLayers({ mode }: { mode: DiscoverMapMode }) {
   return (
     <DiscoverLayer
       groups={mode.groups} startById={mode.startById} dimmed={mode.dimmed}
-      onNavigate={mode.onNavigate} focusStarts={mode.focusStarts} onFocusStarts={mode.onFocusStarts} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
+      onNavigate={mode.onNavigate} focusTours={mode.focusTours} onFocusTours={mode.onFocusTours} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
       allTours={mode.allTours} routeCtx={mode.routeCtx}
-      hoveredTourKey={mode.hoveredTourKey} onHoverTour={mode.onHoverTour} onPickRoute={mode.onPickRoute}
+      hutNameById={mode.hutNameById} hoveredTourKeys={mode.hoveredTourKeys} onHoverTours={mode.onHoverTours} onPickRoute={mode.onPickRoute}
     />
   )
 }

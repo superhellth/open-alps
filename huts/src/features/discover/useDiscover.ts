@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppData } from '@/data/buildAppData.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import { groupByStart } from '@/tourSearch/groupByStart.js'
+import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import { officialToTour } from '@/tourSearch/plannerTour.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { inBbox } from '@/lib/viewport.js'
@@ -23,15 +24,15 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   const [sortDir, setSortDir] = useState<SortDir>('asc')
   const [tab, setTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
-  const [focusStarts, setFocusStarts] = useState<Set<number> | null>(null)
-  const [hoveredTourKey, setHoveredTourKey] = useState<string | null>(null)
+  const [focusTours, setFocusTours] = useState<Set<string> | null>(null)
+  const [hoveredTourKeys, setHoveredTourKeys] = useState<ReadonlySet<string>>(NO_TOURS)
   const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
 
   const search = usePlannerSearch({ client, data, form, draft })
-  useEffect(() => { setFocusStarts(null) }, [form, draft])
+  useEffect(() => { setFocusTours(null) }, [form, draft])
   const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
   const dayCountTarget = useMemo(() => dayCountFromDraft(draft), [draft])
 
@@ -53,19 +54,19 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
     [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
   const viewTours = useMemo(() => {
-    if (focusStarts) return rankedTours.filter((t) => focusStarts.has(t.startId))
+    if (focusTours) return rankedTours.filter((t) => focusTours.has(tourKey(t)))
     if (!mapView) return rankedTours
     return rankedTours.filter((t) => {
       const s = data.startById.get(t.startId)
       return s !== undefined && inBbox(s, mapView.bbox)
     })
-  }, [rankedTours, mapView, data, focusStarts])
+  }, [rankedTours, mapView, data, focusTours])
 
   return {
     form, patchForm, draft, patchDraft,
     sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
     tab, setTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, groupStartPoints, viewTours,
-    focusStarts, setFocusStarts, hoveredTourKey, setHoveredTourKey, hoveredStarts, setHoveredStarts,
+    focusTours, setFocusTours, hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
   }
 }

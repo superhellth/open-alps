@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { createStartClusterer, markerKind, markerRadius } from './clusterStarts.js'
+import { createStartClusterer, markerKind } from './clusterStarts.js'
 import type { MapMarker } from './clusterStarts.js'
 
 const WORLD: [number, number, number, number] = [-180, -85, 180, 85]
@@ -34,15 +34,6 @@ describe('createStartClusterer', () => {
 
   it('handles no markers', () => {
     expect(createStartClusterer([]).clustersFor(WORLD, 5)).toEqual([])
-  })
-})
-
-describe('markerRadius', () => {
-  it('grows with the count, sub-linearly, inside fixed bounds', () => {
-    expect(markerRadius(1)).toBeLessThan(markerRadius(10))
-    expect(markerRadius(100)).toBeLessThan(10 * markerRadius(10))
-    expect(markerRadius(1)).toBeGreaterThanOrEqual(12)
-    expect(markerRadius(1_000_000)).toBeLessThanOrEqual(34)
   })
 })
 

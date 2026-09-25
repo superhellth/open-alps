@@ -85,8 +85,8 @@ function renderPlannerWithSavedTrip() {
 
 /** Clicking a start marker that stands for a single tour picks that tour. */
 async function openFirstResult(container: HTMLElement) {
-  await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull(), { timeout: 5000 })
-  fireEvent.click(container.querySelector('.start-count-marker')!)
+  await waitFor(() => expect(container.querySelector('.signpost-marker')).not.toBeNull(), { timeout: 5000 })
+  fireEvent.click(container.querySelector('.signpost-marker .sign')!)
 }
 
 describe('PlannerPage', () => {
@@ -122,8 +122,8 @@ describe('PlannerPage', () => {
     expect(screen.getByText('Daten werden geladen ...')).toBeInTheDocument()
 
     // The search finishes and start point 100 shows one matching tour.
-    await waitFor(() => expect(container.querySelector('.start-count-marker')).not.toBeNull(), { timeout: 5000 })
-    expect(container.querySelector('.start-count-marker span')?.textContent).toBe('1')
+    await waitFor(() => expect(container.querySelector('.signpost-marker')).not.toBeNull(), { timeout: 5000 })
+    expect(container.querySelectorAll('.signpost-marker.single')).toHaveLength(1)
 
     await openFirstResult(container)
 
