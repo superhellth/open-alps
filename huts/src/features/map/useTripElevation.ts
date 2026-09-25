@@ -16,18 +16,20 @@ export interface TripElevation {
   loading: boolean
 }
 
+const NO_LEGS: TripLegs['legs'] = []
 const EMPTY: TripElevation = { points: [], nightBoundariesKm: [], loading: false }
 
 /** Loads and concatenates every leg's elevation series on the main thread (byte-range fetches via
  *  loadLegElevation); a leg with no edge (null, or edgeId < 0) contributes a boundary but no
  *  points. Distance within a leg is spread evenly across its sample count — the payload does not
  *  carry per-sample distance, only the leg total. */
-export function useTripElevation(tripLegs: TripLegs): TripElevation {
-  const [state, setState] = useState<TripElevation>({ points: [], nightBoundariesKm: [], loading: tripLegs.legs.length > 0 })
-  const key = tripLegs.legs.map((l) => (l ? `${l.edgeId}:${l.reversed}` : 'null')).join(',')
+export function useTripElevation(tripLegs: TripLegs | null): TripElevation {
+  const legs = tripLegs?.legs ?? NO_LEGS
+  const [state, setState] = useState<TripElevation>({ points: [], nightBoundariesKm: [], loading: legs.length > 0 })
+  const key = legs.map((l) => (l ? `${l.edgeId}:${l.reversed}` : 'null')).join(',')
 
   useEffect(() => {
-    if (tripLegs.legs.length === 0) { setState(EMPTY); return }
+    if (!tripLegs || legs.length === 0) { setState(EMPTY); return }
     let cancelled = false
     setState((s) => ({ ...s, loading: true }))
 
@@ -35,13 +37,13 @@ export function useTripElevation(tripLegs: TripLegs): TripElevation {
       const points: ElevationPoint[] = []
       const nightBoundariesKm: number[] = [0]
       let cumulativeKm = 0
-      for (let i = 0; i < tripLegs.legs.length; i++) {
-        const leg = tripLegs.legs[i]
+      for (let i = 0; i < legs.length; i++) {
+        const leg = legs[i]
         if (!leg || leg.edgeId < 0) {
           nightBoundariesKm.push(cumulativeKm)
           continue
         }
-        const layer = legLayer(i, tripLegs.legs.length)
+        const layer = legLayer(i, legs.length)
         const values = await loadLegElevation(layer, leg.edgeId, leg.reversed)
         const legKm = leg.distanceM / 1000
         values.forEach((elevationM, j) => {

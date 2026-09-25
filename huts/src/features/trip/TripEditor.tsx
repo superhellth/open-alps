@@ -32,8 +32,8 @@ export interface CandidateMarker {
 
 export interface TripEditorProps {
   graph: TripGraph
-  trip: Trip
-  tripLegs: TripLegs
+  trip: Trip | null
+  tripLegs: TripLegs | null
   hutNameById: Map<number, string>
   startLabel: (startId: number) => string
   editing: EditingState
@@ -54,6 +54,16 @@ const ACTIVE_LABEL = {
  *  the map. */
 export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, editing, onEditing, onChange }: TripEditorProps) {
   const [rowMenu, setRowMenu] = useState<{ night: number; anchor: HTMLElement } | null>(null)
+  if (!trip || !tripLegs) {
+    return {
+      candidates: [] as CandidateMarker[],
+      pickCandidate: (_arg: { hutIndex?: number; startId?: number }): void => {},
+      activeLabel: null as string | null,
+      renderRowMenu: (_night: number): ReactNode => null,
+      renderEndpointMenu: (_which: 'start' | 'exit'): ReactNode => null,
+      renderExtendButtons: (): ReactNode => null,
+    }
+  }
   const name = (h: number) => hutNameById.get(h) ?? String(h)
   const resolvable = tripLegs.hutIndices.every((i) => i !== null)
   const car = modeOfTrip(trip) === 'car'

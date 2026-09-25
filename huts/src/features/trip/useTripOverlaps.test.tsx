@@ -17,6 +17,16 @@ const trip = (huts: string[]) => newTrip({
 const client = (overlaps: SearchClient['overlaps']): SearchClient => ({ ready: Promise.resolve(), search: () => Promise.resolve([]), overlaps, dispose: () => {} })
 
 describe('useTripOverlaps', () => {
+  it('returns no warnings and asks nothing without a trip or legs', () => {
+    const overlaps = vi.fn()
+    const c = client(overlaps)
+    const { result: noTrip } = renderHook(() => useTripOverlaps(c, null, null))
+    expect(noTrip.current).toEqual([])
+    const t = trip(['{A}', '{B}'])
+    const { result: noLegs } = renderHook(() => useTripOverlaps(c, t, null))
+    expect(noLegs.current).toEqual([])
+    expect(overlaps).not.toHaveBeenCalled()
+  })
   it('turns overlapping leg pairs into German warnings, numbered by stage', async () => {
     const overlaps = vi.fn().mockResolvedValue([[0, 2]])
     const t = trip(['{A}', '{B}', '{C}', '{D}'])

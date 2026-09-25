@@ -3,6 +3,7 @@ import L from 'leaflet'
 import { Marker, useMap, useMapEvents } from 'react-leaflet'
 import type { StartGroup } from '@/tourSearch/groupByStart.js'
 import { tourToRoute } from './routes.js'
+import { tourKey } from './tourKey.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
@@ -31,11 +32,6 @@ function countIcon(count: number, cluster: boolean, dimmed: boolean, highlighted
     iconCache.set(key, icon)
   }
   return icon
-}
-
-/** A tour's stable cross-component identity (hover sync between the map and the results list). */
-export function tourKey(tour: PlannerTour): string {
-  return `${tour.startId}-${tour.official?.tourId ?? ''}-${tour.huts.join('.')}`
 }
 
 /** One marker per start point with matching tours, clustered by zoom; a cluster shows the sum of

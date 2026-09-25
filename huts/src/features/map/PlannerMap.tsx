@@ -21,8 +21,6 @@ import type { Route } from './types.js'
 import type { StartPoint } from '@/data/types.js'
 import './map.css'
 
-const EMPTY_TRIP_LEGS: TripLegs = { variantId: -1, hutIndices: [], legs: [], changed: [] }
-
 export interface PlannerMapProps {
   mode: 'discover' | 'trip' | 'saved'
   groups: StartGroup<PlannerTour>[]
@@ -62,9 +60,9 @@ export interface PlannerMapProps {
   /** null when no trip is open — the height profile then renders nothing. */
   tripLegs: TripLegs | null
   onHoverLeg: (index: number | null) => void
-  savedTrips?: Trip[]
-  savedGraph?: TripGraph
-  savedRouteCtx?: RouteContext
+  savedTrips: Trip[]
+  savedGraph: TripGraph
+  savedRouteCtx: RouteContext
   hoveredTripId?: string | null
   onHoverTrip?: (id: string | null) => void
   onOpenSavedTrip?: (id: string) => void
@@ -98,7 +96,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
     activeLabel, onCancelEditing, allTours, routeCtx, hoveredTourKey, onHoverTour, previewStartId, onPickRoute, restoreView, fitBounds,
     tripLegs, onHoverLeg, savedTrips, savedGraph, savedRouteCtx, hoveredTripId, onHoverTrip, onOpenSavedTrip,
   } = props
-  const elevation = useTripElevation(tripLegs ?? EMPTY_TRIP_LEGS)
+  const elevation = useTripElevation(tripLegs)
   const [profileOpen, setProfileOpen] = useState(true)
   return (
     <Box className={mode === 'discover' ? 'map-muted' : undefined} sx={{ height: '100%', width: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -133,7 +131,7 @@ const PlannerMap = memo(function PlannerMap(props: PlannerMapProps) {
               hutCoordsById={hutCoordsById} candidateStartCoords={candidateStartCoords} onPickCandidate={onPickCandidate}
             />
           )}
-          {mode === 'saved' && savedTrips && savedGraph && savedRouteCtx && (
+          {mode === 'saved' && (
             <SavedTripsLayer
               active={mode === 'saved'} trips={savedTrips} graph={savedGraph} routeCtx={savedRouteCtx}
               hoveredTripId={hoveredTripId ?? null} onHoverTrip={onHoverTrip ?? (() => {})}

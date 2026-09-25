@@ -9,7 +9,7 @@ honor its STOP conditions.
 | 001 | [Foundations: alias, testing dir, useHash, stray files](001-foundations.md) | P1 | S | — | DONE |
 | 002 | [Untangle dependencies and enforce layers](002-untangle-dependencies.md) | P1 | M | 001 | DONE |
 | 003 | [Split plannerPage into feature folders](003-feature-folders.md) | P1 | M | 002 | DONE |
-| 004 | [Ready boundary, provider split, zero lint warnings](004-ready-boundary-and-providers.md) | P2 | M | 003 | TODO |
+| 004 | [Ready boundary, provider split, zero lint warnings](004-ready-boundary-and-providers.md) | P2 | M | 003 | DONE |
 | 005 | [Decompose PlannerPage and PlannerMap](005-decompose-planner.md) | P2 | L | 004 | TODO |
 | 006 | [Styling: tokens as CSS variables, style modules](006-styling.md) | P2 | M | 005 | TODO |
 

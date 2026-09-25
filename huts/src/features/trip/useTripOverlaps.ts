@@ -5,14 +5,14 @@ import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '@/trip/trip.js'
 
 /** Overlap between an edited trip's legs is a warning, not a block; the tables live in the worker. */
-export function useTripOverlaps(client: SearchClient | null, trip: Trip, tripLegs: TripLegs): string[] {
-  const legs = useMemo(() => overlapLegsOf(tripLegs), [tripLegs])
-  const loopClosure = trip.start.startId === trip.exit.startId
+export function useTripOverlaps(client: SearchClient | null, trip: Trip | null, tripLegs: TripLegs | null): string[] {
+  const legs = useMemo(() => (tripLegs ? overlapLegsOf(tripLegs) : null), [tripLegs])
+  const loopClosure = trip !== null && trip.start.startId === trip.exit.startId
   const [pairs, setPairs] = useState<[number, number][]>([])
   const key = legs ? `${loopClosure}|${legs.map((l) => `${l.kind}${l.edgeId}${l.reversed ? 'r' : ''}`).join(',')}` : 'none'
 
   useEffect(() => {
-    if (!client || !legs || legs.length === 0) { setPairs([]); return }
+    if (!client || !trip || !legs || legs.length === 0) { setPairs([]); return }
     let cancelled = false
     client.overlaps(legs, loopClosure).then(
       (p) => { if (!cancelled) setPairs(p) },

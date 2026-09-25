@@ -25,6 +25,8 @@ const base = {
   rankCtx: { targets: { legCountTarget: 2, legCountRange: [2, 4] as [number, number], legTimeRangeH: [1, 8] as [number, number] }, ohrsIdByHutIndex: new Map(), freeByOffset: null },
   routeCtx: null, hoveredTourKey: null, onHoverTour: () => {}, onPickRoute: () => {},
   tripLegs: null, onHoverLeg: () => {},
+  savedTrips: [], savedGraph: { hutEdges: { hutIds: [], variantNames: {}, records: [] }, approaches: { records: [], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } } } as TripGraph,
+  savedRouteCtx: { hutCoordsById: new Map(), startById: new Map(), officialById: new Map() },
 }
 
 describe('PlannerMap discover mode', () => {

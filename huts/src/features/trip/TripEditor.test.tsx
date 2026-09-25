@@ -29,6 +29,18 @@ function RowMenuHarness({ night, editing, onEditing, onChange }: { night: number
 }
 
 describe('useTripEditor', () => {
+  it('offers nothing while trip or legs are null', () => {
+    const onChange = vi.fn()
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, trip: null, tripLegs: null, editing: { kind: 'swap', index: 1 }, onChange }))
+    expect(result.current.candidates).toEqual([])
+    expect(result.current.activeLabel).toBeNull()
+    expect(result.current.renderRowMenu(0)).toBeNull()
+    expect(result.current.renderEndpointMenu('start')).toBeNull()
+    expect(result.current.renderExtendButtons()).toBeNull()
+    result.current.pickCandidate({ hutIndex: 1 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('renderRowMenu offers Hütte tauschen and Hütte entfernen (disabled with reason when not allowed)', () => {
     render(<RowMenuHarness night={2} editing={null} onEditing={() => {}} onChange={() => {}} />)
     fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 3'))

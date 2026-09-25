@@ -27,9 +27,8 @@ export function usePlannerSearch(
 ): PlannerSearch {
   const [state, setState] = useState<Omit<PlannerSearch, 'freeByOffset'>>({ status: 'idle', chains: null, error: null })
   const [freeByOffset, setFreeByOffset] = useState<FreeByOffset | null>(null)
-  const legCountRange = legCountRangeFromDraft(draft)
-  const [legCountMin, legCountMax] = legCountRange
-  const nights = legCountMax - 1
+  const legCountRange = useMemo(() => legCountRangeFromDraft(draft), [draft])
+  const nights = legCountRange[1] - 1
 
   // Availability for ranking and badges. Night j is read at offset j+1, so the base date is one day
   // before the first night.
@@ -56,7 +55,7 @@ export function usePlannerSearch(
       }
     }, debounceMs)
     return () => { cancelled = true; clearTimeout(timer) }
-  }, [client, data, form, legCountMin, legCountMax, debounceMs])
+  }, [client, data, form, legCountRange, debounceMs])
 
   return useMemo(() => ({ ...state, freeByOffset }), [state, freeByOffset])
 }
