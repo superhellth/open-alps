@@ -3,18 +3,18 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import PlannerPage from './PlannerPage.js'
-import { AppDataProvider } from '../data/AppDataProvider.js'
-import { SearchClientProvider } from '../search/SearchClientProvider.js'
-import { TripsProvider } from '../trip/TripsProvider.js'
+import { AppDataProvider } from '@/data/AppDataProvider.js'
+import { SearchClientProvider } from '@/search/SearchClientProvider.js'
+import { TripsProvider } from '@/trip/TripsProvider.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
-import type { WorkerLike } from '../search/searchClient.js'
-import type { TourResult } from '../tourSearch/types.js'
-import * as availability from '../availability/fetchAvailability.js'
-import * as detail from '../availability/fetchHutDetail.js'
-import { newTrip } from '../trip/trip.js'
-import { saveTrips } from '../trip/tripStorage.js'
+import type { WorkerLike } from '@/search/searchClient.js'
+import type { TourResult } from '@/tourSearch/types.js'
+import * as availability from '@/availability/fetchAvailability.js'
+import * as detail from '@/availability/fetchHutDetail.js'
+import { newTrip } from '@/trip/trip.js'
+import { saveTrips } from '@/trip/tripStorage.js'
 
-vi.mock('../tourSearch/loadLegElevation.js', () => ({
+vi.mock('@/tourSearch/loadLegElevation.js', () => ({
   loadLegElevation: vi.fn(async () => [1000, 1050, 1020]),
 }))
 
@@ -196,8 +196,8 @@ describe('PlannerPage', () => {
   })
 
   it('offers to import a shared trip from a share link', async () => {
-    const { encodeTripToHash } = await import('../trip/shareLink.js')
-    const { newTrip } = await import('../trip/trip.js')
+    const { encodeTripToHash } = await import('@/trip/shareLink.js')
+    const { newTrip } = await import('@/trip/trip.js')
     const shared = newTrip({
       name: 'Aus Link', startDate: null, partySize: 1, start: { startId: 100, sourceType: 1 }, huts: ['{A}'],
       exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },

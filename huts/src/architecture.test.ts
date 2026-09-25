@@ -9,7 +9,7 @@ const LAYER: Record<string, number> = {
   lib: 0, ui: 0, format: 0, availability: 0, tourSearch: 0,
   trip: 1,
   data: 2, search: 2,
-  features: 3, adminPage: 3, gpxEditor: 3, plannerPage: 3,
+  features: 3, adminPage: 3, gpxEditor: 3,
   app: 4,
 }
 
@@ -61,10 +61,15 @@ describe('architecture', () => {
     expect(bad, `tourSearch imports trip:\n${bad.join('\n')}`).toEqual([])
   })
 
-  it('imports plannerPage only from plannerPage and app', () => {
+  it('keeps features independent except for planner', () => {
+    const featureOf = (p: string) => (topOf(p) === 'features' ? p.split('/')[1] : undefined)
     const bad = edges
-      .filter((e) => topOf(e.to) === 'plannerPage' && !['plannerPage', 'app'].includes(topOf(e.from)))
+      .filter((e) => {
+        const a = featureOf(e.from)
+        const b = featureOf(e.to)
+        return a !== undefined && b !== undefined && a !== b && a !== 'planner'
+      })
       .map((e) => `${e.from} -> ${e.spec}`)
-    expect(bad, `plannerPage imported from below:\n${bad.join('\n')}`).toEqual([])
+    expect(bad, `feature imports another feature:\n${bad.join('\n')}`).toEqual([])
   })
 })

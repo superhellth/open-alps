@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import ImportTripDialog from './ImportTripDialog.js'
-import { newTrip } from '../trip/trip.js'
+import { newTrip } from '@/trip/trip.js'
 
 afterEach(cleanup)
 

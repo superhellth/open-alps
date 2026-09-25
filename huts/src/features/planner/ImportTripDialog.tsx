@@ -1,5 +1,5 @@
 import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Typography } from '@mui/material'
-import type { Trip } from '../trip/trip.js'
+import type { Trip } from '@/trip/trip.js'
 
 export default function ImportTripDialog({ trip, onImport, onDiscard }: { trip: Trip | null; onImport: () => void; onDiscard: () => void }) {
   return (

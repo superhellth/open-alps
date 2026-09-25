@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { browserStorage } from '../trip/tripStorage.js'
+import { browserStorage } from '@/trip/tripStorage.js'
 
 const KEY = 'open-alps.prompt-seen'
 
