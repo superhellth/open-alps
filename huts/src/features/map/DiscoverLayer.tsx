@@ -45,7 +45,7 @@ function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.Div
   return icon
 }
 
-const toursText = (n: number) => `In ${n} Touren`
+const toursText = (n: number) => (n === 1 ? 'In 1 Tour' : `In ${n} Touren`)
 
 /** Below `ROUTE_REVEAL_ZOOM` one round yellow bubble per start point or cluster of start points carries the summed count; a click
  *  focuses the results list on those tours and zooms in. From `ROUTE_REVEAL_ZOOM` on each tour's board stands on a mast planted on
