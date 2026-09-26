@@ -22,7 +22,6 @@ export interface DiscoverMapMode {
   /** Whether the focused tours draw their routes (default true); a bubble click focuses without drawing them. */
   focusRoutes?: boolean
   onFocusTours: (keys: string[] | null, routes?: boolean) => void
-  onHoverStarts: (startIds: Set<number> | null) => void
   /** Called whenever the map's bbox/zoom changes, so the list can mirror it. */
   onViewChange: (view: View) => void
   onHoverTours: (keys: ReadonlySet<string>) => void
@@ -33,7 +32,7 @@ export function DiscoverMapLayers({ mode }: { mode: DiscoverMapMode }) {
   return (
     <DiscoverLayer
       groups={mode.groups} startById={mode.startById} dimmed={mode.dimmed}
-      onNavigate={mode.onNavigate} focusTours={mode.focusTours} focusRoutes={mode.focusRoutes} onFocusTours={mode.onFocusTours} onHoverStarts={mode.onHoverStarts} onViewChange={mode.onViewChange}
+      onNavigate={mode.onNavigate} focusTours={mode.focusTours} focusRoutes={mode.focusRoutes} onFocusTours={mode.onFocusTours} onViewChange={mode.onViewChange}
       allTours={mode.allTours} routeCtx={mode.routeCtx}
       hutNameById={mode.hutNameById} hoveredTourKeys={mode.hoveredTourKeys} onHoverTours={mode.onHoverTours} onPickRoute={mode.onPickRoute}
     />

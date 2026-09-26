@@ -51,7 +51,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const {
     form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours, focusRoutes, setFocusRoutes,
-    hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
+    hoveredTourKeys, setHoveredTourKeys,
   } = useDiscover({ data, client, mapView })
 
   const startLabel = useMemo(() => makeStartLabel(data.startById), [data])
@@ -111,14 +111,14 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     }
     return {
       kind: 'discover', groups, dimmed: search.status === 'searching', startById: data.startById,
-      allTours: tours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours, focusRoutes,
+      allTours: visibleTours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours, focusRoutes,
       onNavigate: () => { dismissPrompt(); setDiscoverTab('results') },
       onFocusTours: (keys, routes = true) => { setFocusTours(keys && new Set(keys)); setFocusRoutes(routes) },
-      onHoverStarts: setHoveredStarts, onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
+      onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
     }
   }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
-    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, tours, hoveredTourKeys, focusTours, focusRoutes,
-    dismissPrompt, setDiscoverTab, setFocusTours, setFocusRoutes, setHoveredStarts, setMapView, setHoveredTourKeys, pick])
+    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, visibleTours, hoveredTourKeys, focusTours, focusRoutes,
+    dismissPrompt, setDiscoverTab, setFocusTours, setFocusRoutes, setMapView, setHoveredTourKeys, pick])
   const mapCommands = useMemo<MapCommands>(() => ({
     route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg, restoreView, fitBounds,
     onMapClick: () => { dismissPrompt(); setFocusTours(null) },
@@ -162,7 +162,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
             <Box hidden={discoverTab !== 'results'}>
               <ResultsList
                 tours={viewTours} totalCount={visibleTours.length} onShowAll={showAllTours}
-                isHighlighted={(t) => hoveredTourKeys.has(tourKey(t)) || (hoveredStarts?.has(t.startId) ?? false)}
+                isHighlighted={(t) => hoveredTourKeys.has(tourKey(t))}
                 noMatches={search.status === 'done' && tours.length === 0}
                 sortKey={sort.key} onSortChange={sort.setKey}
                 sortDir={sort.dir} onSortDirChange={sort.setDir}

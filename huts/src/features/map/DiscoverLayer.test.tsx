@@ -346,6 +346,16 @@ describe('DiscoverLayer signposts', () => {
     expect(near.querySelector('.start-count-marker')).toBeNull()
   })
 
+  it('stands a bubble on its tour\'s anchor, not on its start point', () => {
+    const t = tour(1, [10, 11])
+    const ctx = { ...routeCtx, legAnchors: () => [{ lat: 47.35, lng: 12.05 }] }
+    const { container } = renderLayer({ groups: [{ startId: 1, tours: [t] }] as never, allTours: [t], routeCtx: ctx }, 9)
+    const el = container.querySelector<HTMLElement>('.start-count-marker')!
+    const expected = map.latLngToLayerPoint(L.latLng(47.35, 12.05))
+    expect(L.DomUtil.getPosition(el).x).toBeCloseTo(expected.x, 0)
+    expect(L.DomUtil.getPosition(el).y).toBeCloseTo(expected.y, 0)
+  })
+
   it('a one-tour bubble below the reveal zoom focuses the list instead of picking the tour', () => {
     const t = tour(1, [10, 11])
     const onPickRoute = vi.fn()

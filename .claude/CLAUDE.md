@@ -39,7 +39,7 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 `search/SearchClientProvider.tsx` and `trip/TripsProvider.tsx` (autosave to `localStorage`).
 
 `huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
-`features/discover/usePlannerSearch` runs the whole-graph search, results grouped by start point and drawn as clustered
+`features/discover/usePlannerSearch` runs the whole-graph search, results drawn as clustered
 count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx` swaps/extends/trims huts
 and changes start/exit) -> Plan nights (`features/trip/TripPanel.tsx`: per-night availability, hand-set booking status,
 start-date answers) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
@@ -70,7 +70,7 @@ confirmation), `features/map/useMapView` (live viewport, pre-trip view to restor
 `features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
-Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), placed by `features/map/placeSignposts.ts` (greedy in rank order: a colliding tour moves to its next anchor candidate, `tourSearch/tourAnchor.ts`'s `anchorCandidates`; a board whose foot stays in view is pinned (never moves or flips, may overhang the edge) and turns into a dot on its spot when it collides; a tour that fits nowhere is a foot dot whose hover shows its board, `SignpostMarker`), with round count bubbles grouped by start point below `ROUTE_REVEAL_ZOOM`; waypoint symbols from
+Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), placed by `features/map/placeSignposts.ts` (greedy in rank order: a colliding tour moves to its next anchor candidate, `tourSearch/tourAnchor.ts`'s `anchorCandidates`; a board whose foot stays in view is pinned (never moves or flips, may overhang the edge) and turns into a dot on its spot when it collides; a tour that fits nowhere is a foot dot whose hover shows its board, `SignpostMarker`), with round count bubbles below `ROUTE_REVEAL_ZOOM` clustering the tours at their unclipped default anchors (`features/map/clusterTours.ts`), so a bubble splits into boards where it stood; waypoint symbols from
 `WaypointLayer` and three route emphasis tiers (`routePanes.ts`). Discover focus is a set of tour keys (`useDiscover`'s
 `focusTours`) and hover is a set of tour keys (`hoveredTourKeys`); `tourKey` lives in `tourSearch/tourKey.ts`.
 

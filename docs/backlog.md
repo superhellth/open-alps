@@ -7,11 +7,7 @@ under `docs/superpowers/`.
 
 ## High
 
-### Avoid zoom-in without rendering legs in ui (zoomed-in too much)
-
-### distinguish clickable from non-clickable bubbles
-
-### clicking bubble should zoom in to that area
+### Hovering out-of-focus signposts
 
 ### Investigate dashed geometry-less legs on Discover route previews
 

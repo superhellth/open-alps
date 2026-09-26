@@ -38,7 +38,7 @@ export default function ResultsList({
   totalCount: number
   /** Lifts the map-based limit and zooms the map out to every tour. */
   onShowAll: () => void
-  /** True for tours highlighted on the map (hovered route, hovered start bubble or hovered row). */
+  /** True for tours highlighted on the map (hovered route, hovered bubble or hovered row). */
   isHighlighted: (tour: PlannerTour) => boolean
   noMatches: boolean
   sortKey: SortKey

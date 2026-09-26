@@ -28,7 +28,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   /** Whether the focused tours draw their routes; a bubble click focuses without drawing them. */
   const [focusRoutes, setFocusRoutes] = useState(true)
   const [hoveredTourKeys, setHoveredTourKeys] = useState<ReadonlySet<string>>(NO_TOURS)
-  const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
   const patchDraft = useCallback((patch: Partial<TripDraft>) => setDraft((d) => ({ ...d, ...patch })), [])
@@ -67,6 +66,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
     tab, setTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, viewTours,
-    focusTours, setFocusTours, focusRoutes, setFocusRoutes, hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
+    focusTours, setFocusTours, focusRoutes, setFocusRoutes, hoveredTourKeys, setHoveredTourKeys,
   }
 }

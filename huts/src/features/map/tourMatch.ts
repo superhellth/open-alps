@@ -50,12 +50,11 @@ export function indexToursByEnd(routed: RoutedTour[]): Map<number, string[]> {
 
 export interface TierState {
   hoveredKeys: ReadonlySet<string>
-  hoveredStarts: ReadonlySet<number> | null
   focus: ReadonlySet<string> | null
 }
 
-export function tierOf(tour: { key: string; startId: number }, s: TierState): EmphasisTier {
-  if (s.hoveredKeys.has(tour.key)) return 'hovered'
-  if (s.focus?.has(tour.key) || s.hoveredStarts?.has(tour.startId)) return 'focused'
+export function tierOf(key: string, s: TierState): EmphasisTier {
+  if (s.hoveredKeys.has(key)) return 'hovered'
+  if (s.focus?.has(key)) return 'focused'
   return 'rest'
 }

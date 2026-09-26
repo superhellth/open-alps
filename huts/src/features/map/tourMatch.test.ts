@@ -55,13 +55,11 @@ describe('indexToursByEnd', () => {
 })
 
 describe('tierOf', () => {
-  const t = { key: 'k', startId: 1 }
-  const state = (over: Partial<TierState> = {}): TierState => ({ hoveredKeys: new Set<string>(), hoveredStarts: null, focus: null, ...over })
-  it('is rest by default', () => { expect(tierOf(t, state())).toBe('rest') })
-  it('is focused inside the focus set', () => { expect(tierOf(t, state({ focus: new Set(['k']) }))).toBe('focused') })
-  it('is rest outside the focus set', () => { expect(tierOf(t, state({ focus: new Set(['other']) }))).toBe('rest') })
-  it('is focused when its bubble is hovered', () => { expect(tierOf(t, state({ hoveredStarts: new Set([1]) }))).toBe('focused') })
-  it('is hovered when its key is hovered, over focus and bubble hover', () => {
-    expect(tierOf(t, state({ hoveredKeys: new Set(['k']), focus: new Set(['k']), hoveredStarts: new Set([1]) }))).toBe('hovered')
+  const state = (over: Partial<TierState> = {}): TierState => ({ hoveredKeys: new Set<string>(), focus: null, ...over })
+  it('is rest by default', () => { expect(tierOf('k', state())).toBe('rest') })
+  it('is focused inside the focus set', () => { expect(tierOf('k', state({ focus: new Set(['k']) }))).toBe('focused') })
+  it('is rest outside the focus set', () => { expect(tierOf('k', state({ focus: new Set(['other']) }))).toBe('rest') })
+  it('is hovered when its key is hovered, over focus', () => {
+    expect(tierOf('k', state({ hoveredKeys: new Set(['k']), focus: new Set(['k']) }))).toBe('hovered')
   })
 })

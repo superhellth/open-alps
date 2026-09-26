@@ -1,38 +1,37 @@
 import { describe, it, expect } from 'vitest'
-import { createStartClusterer, markerRadius } from './clusterStarts.js'
+import { createTourClusterer, markerRadius } from './clusterTours.js'
 
 const WORLD: [number, number, number, number] = [-180, -85, 180, 85]
-const markers = [
-  { startId: 1, count: 3, lat: 47.0, lng: 11.0 },
-  { startId: 2, count: 4, lat: 47.001, lng: 11.001 },
-  { startId: 3, count: 2, lat: 48.5, lng: 13.0 },
+const points = [
+  { key: 'a', lat: 47.0, lng: 11.0 },
+  { key: 'b', lat: 47.001, lng: 11.001 },
+  { key: 'c', lat: 47.001, lng: 11.001 },
+  { key: 'd', lat: 48.5, lng: 13.0 },
 ]
 
-describe('createStartClusterer', () => {
-  const clusterer = createStartClusterer(markers)
+describe('createTourClusterer', () => {
+  const clusterer = createTourClusterer(points)
 
-  it('zoomed out, clusters carry the sum of their members\' match counts', () => {
+  it('zoomed out, clusters count their tours', () => {
     const items = clusterer.clustersFor(WORLD, 2)
     expect(items).toHaveLength(1)
-    expect(items[0]).toMatchObject({ kind: 'cluster', count: 9 })
+    expect(items[0]).toMatchObject({ kind: 'cluster', count: 4 })
   })
 
-  it('zoomed in, resolves to single start points with their own counts', () => {
+  it('zoomed in, resolves to single tours', () => {
     const items = clusterer.clustersFor(WORLD, 15)
-    expect(items.map((m) => m.kind)).toEqual(['start', 'start', 'start'])
-    expect(items.map((m) => (m.kind === 'start' ? m.startId : -1)).sort()).toEqual([1, 2, 3])
-    expect(items.find((m) => m.kind === 'start' && m.startId === 2)?.count).toBe(4)
+    expect(items.map((m) => (m.kind === 'tour' ? m.key : '')).sort()).toEqual(['a', 'b', 'c', 'd'])
   })
 
-  it('lists the start ids inside a cluster and a zoom that splits it', () => {
+  it('lists the tour keys inside a cluster and a zoom that splits it', () => {
     const [cluster] = clusterer.clustersFor(WORLD, 2)
     if (cluster.kind !== 'cluster') throw new Error('expected a cluster')
-    expect(clusterer.startIdsOf(cluster.clusterId).sort()).toEqual([1, 2, 3])
+    expect(clusterer.keysOf(cluster.clusterId).sort()).toEqual(['a', 'b', 'c', 'd'])
     expect(clusterer.expansionZoom(cluster.clusterId)).toBeGreaterThan(2)
   })
 
-  it('handles no markers', () => {
-    expect(createStartClusterer([]).clustersFor(WORLD, 5)).toEqual([])
+  it('handles no tours', () => {
+    expect(createTourClusterer([]).clustersFor(WORLD, 5)).toEqual([])
   })
 })
 

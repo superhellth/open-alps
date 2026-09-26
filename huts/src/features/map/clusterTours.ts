@@ -1,36 +1,30 @@
 import Supercluster from 'supercluster'
 
-export interface StartMarker {
-  startId: number
-  count: number
+/** One tour on the bubble map, at the point its signpost stands on from the reveal zoom on. */
+export interface TourPoint {
+  key: string
   lat: number
   lng: number
 }
 
 export type MapMarker =
-  | { kind: 'start'; startId: number; count: number; lat: number; lng: number }
+  | { kind: 'tour'; key: string; count: 1; lat: number; lng: number }
   | { kind: 'cluster'; clusterId: number; count: number; lat: number; lng: number }
 
-export interface StartClusterer {
+export interface TourClusterer {
   clustersFor(bbox: [number, number, number, number], zoom: number): MapMarker[]
   expansionZoom(clusterId: number): number
-  startIdsOf(clusterId: number): number[]
+  keysOf(clusterId: number): string[]
 }
 
-type PointProps = { startId: number; count: number }
-type ClusterProps = { count: number }
+type PointProps = { key: string }
 
-export function createStartClusterer(markers: StartMarker[]): StartClusterer {
-  const index = new Supercluster<PointProps, ClusterProps>({
-    radius: 60,
-    maxZoom: 14,
-    map: (props) => ({ count: props.count }),
-    reduce: (accumulated, props) => { accumulated.count += props.count },
-  })
-  index.load(markers.map((m) => ({
+export function createTourClusterer(points: TourPoint[]): TourClusterer {
+  const index = new Supercluster<PointProps>({ radius: 60, maxZoom: 14 })
+  index.load(points.map((p) => ({
     type: 'Feature' as const,
-    properties: { startId: m.startId, count: m.count },
-    geometry: { type: 'Point' as const, coordinates: [m.lng, m.lat] },
+    properties: { key: p.key },
+    geometry: { type: 'Point' as const, coordinates: [p.lng, p.lat] },
   })))
 
   return {
@@ -39,13 +33,13 @@ export function createStartClusterer(markers: StartMarker[]): StartClusterer {
         const [lng, lat] = f.geometry.coordinates
         const props = f.properties as Record<string, unknown>
         if (props.cluster) {
-          return { kind: 'cluster', clusterId: props.cluster_id as number, count: props.count as number, lat, lng }
+          return { kind: 'cluster', clusterId: props.cluster_id as number, count: props.point_count as number, lat, lng }
         }
-        return { kind: 'start', startId: props.startId as number, count: props.count as number, lat, lng }
+        return { kind: 'tour', key: props.key as string, count: 1, lat, lng }
       })
     },
     expansionZoom: (clusterId) => index.getClusterExpansionZoom(clusterId),
-    startIdsOf: (clusterId) => index.getLeaves(clusterId, Infinity).map((f) => (f.properties as PointProps).startId),
+    keysOf: (clusterId) => index.getLeaves(clusterId, Infinity).map((f) => (f.properties as PointProps).key),
   }
 }
 

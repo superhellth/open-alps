@@ -12,8 +12,8 @@ import type { TripGraph } from '@/tourSearch/types.js'
 
 afterEach(cleanup)
 
-const tour = (startId: number): PlannerTour => ({
-  huts: [0], startId, exitStartId: startId, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0, legs: [],
+const tour = (startId: number, hut = 0): PlannerTour => ({
+  huts: [hut], startId, exitStartId: startId, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0, legs: [],
 })
 const startById = new Map([
   [1, { name: 'A', sourceType: 1, lat: 47.3, lng: 12.0 }],
@@ -31,7 +31,7 @@ const someTripLegs = {
 const commands: MapCommands = { route: null, fitRoute: false, highlightedLeg: null, restoreView: null, fitBounds: null, onMapClick: () => {} }
 const discover = (over: Partial<DiscoverMapMode> = {}): DiscoverMapMode => ({
   kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hutNameById: new Map(), hoveredTourKeys: new Set(),
-  onNavigate: () => {}, focusTours: null, onFocusTours: () => {}, onHoverStarts: () => {}, onViewChange: () => {}, onHoverTours: () => {}, onPickRoute: () => {},
+  onNavigate: () => {}, focusTours: null, onFocusTours: () => {}, onViewChange: () => {}, onHoverTours: () => {}, onPickRoute: () => {},
   ...over,
 })
 const tripMode = (over: Partial<TripMapMode> = {}): TripMapMode => ({
@@ -41,9 +41,9 @@ const tripMode = (over: Partial<TripMapMode> = {}): TripMapMode => ({
 })
 
 describe('PlannerMap discover mode', () => {
-  it('shows one count marker per start point and reports a click as navigation', async () => {
+  it('shows count markers clustering the tours and reports a click as navigation', async () => {
     const onNavigate = vi.fn()
-    const groups = [{ startId: 1, tours: [tour(1), tour(1), tour(1)] }, { startId: 2, tours: [tour(2)] }]
+    const groups = [{ startId: 1, tours: [tour(1, 0), tour(1, 1), tour(1, 2)] }, { startId: 2, tours: [tour(2)] }]
     const { container } = render(<PlannerMap mode={discover({ groups, onNavigate })} commands={commands} />)
     await waitFor(() => expect(container.querySelectorAll('.start-count-marker').length).toBeGreaterThan(0))
     const labels = [...container.querySelectorAll('.start-count-marker')].map((n) => n.textContent)
