@@ -5,9 +5,6 @@ import { fileURLToPath } from 'node:url'
 
 const SRC = path.dirname(fileURLToPath(import.meta.url))
 
-/** Files not yet migrated; each migration task removes its files. Empty at the end. */
-const PENDING: string[] = []
-
 const EXCLUDED_FILES = new Set(['ui/tokens.ts', 'ui/theme.ts', 'vite-env.d.ts'])
 const EXCLUDED_DIRS = new Set(['adminPage', 'gpxEditor', 'testing', 'node_modules'])
 
@@ -115,13 +112,8 @@ describe('design tokens', () => {
   const failuresByFile = new Map(files.map((f) => [f, scan(f, readFileSync(path.join(SRC, f), 'utf8'))]))
 
   it('uses tokens instead of spacing, font size, color, opacity and font-family literals', () => {
-    const bad = files.filter((f) => !PENDING.includes(f)).flatMap((f) => failuresByFile.get(f) ?? [])
+    const bad = files.flatMap((f) => failuresByFile.get(f) ?? [])
     expect(bad.map(format), 'literals bypassing ui/tokens.ts (or add `// design-exempt: <reason>`)').toEqual([])
-  })
-
-  it('PENDING lists only files that still have violations', () => {
-    const stale = PENDING.filter((f) => (failuresByFile.get(f) ?? []).length === 0)
-    expect(stale, 'remove migrated files from PENDING').toEqual([])
   })
 })
 

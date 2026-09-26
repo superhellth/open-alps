@@ -77,6 +77,14 @@ Discover draws signposts, boards on masts standing on each tour's anchor (`tourS
 Imports point downward: lib/ui/format/availability/tourSearch < trip < data/search < features/adminPage/gpxEditor < app;
 enforced by `huts/src/architecture.test.ts`.
 
+Design tokens live in `huts/src/ui/tokens.ts`: colors (`tokens`), `space` (MUI units named by relationship:
+`inline`/`item`/`row`/`group`/`section`/`inset`), `fontSize` (`xs`–`xl`, bound to the MUI typography variants in
+`ui/theme.ts`), `fonts`, `opacity` and `marker` (signpost geometry shared by `map.css` and `placeSignposts.ts`);
+`tokenCssVariables` exposes each as a `:root` CSS variable. Rules: parents own spacing (no margins except `0`),
+inner space never exceeds outer space, spacing lives in `*.styles.ts`, text sizes come from MUI variants or
+`fontSize.*`, colors and alpha levels come from tokens. `huts/src/designTokens.test.ts` fails on any literal that
+bypasses them; a line opts out with `// design-exempt: <reason>` (`/* … */` in CSS).
+
 `huts/src/tourSearch/` is the client-side tour search engine: `loadHutEdges.ts`/
 `loadApproaches.ts`/`loadHutEdgeIds.ts` fetch and parse the pipeline's binary edge-payload/approach
 outputs (`hut-edge-payload.bin`+`.json`, `approaches.bin`+`.json`, contract documented in
