@@ -17,6 +17,9 @@ const ROLE_OFFSET: Record<PaneRole, number> = { casing: 0, line: 10, symbol: 20 
 /** Invisible, always-on-top markers that receive hut hover/click; the visible symbols underneath never re-render on hover. */
 export const HIT_PANE = 'route-hit'
 
+/** Wide invisible lines that receive route-leg hover/click, just below `HIT_PANE` so hut hit markers stay on top. */
+export const LEG_HIT_PANE = 'route-leg-hit'
+
 export const paneName = (tier: EmphasisTier, role: PaneRole) => `route-${tier}-${role}`
 
 function createPane(map: L.Map, name: string, z: number, opacity: number) {
@@ -33,6 +36,7 @@ export function ensureRoutePanes(map: L.Map) {
     }
   }
   createPane(map, HIT_PANE, 500, 1)
+  createPane(map, LEG_HIT_PANE, 495, 1)
 }
 
 /** Marker z-index offset that paints a hovered marker above every unhovered one. */

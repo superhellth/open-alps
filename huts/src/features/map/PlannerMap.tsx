@@ -1,4 +1,4 @@
-import { memo, useEffect } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { Box } from '@mui/material'
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -11,7 +11,7 @@ import { TripMapLayers, TripMapProfile, TripMapStatusBar } from './TripMapLayers
 import type { TripMapMode } from './TripMapLayers.js'
 import { ACTIVE_TILES } from './tiles.js'
 import type { Bounds, ViewTarget } from './useMapView.js'
-import type { Route } from './types.js'
+import type { ProfilePosition, Route } from './types.js'
 import './map.css'
 import { styles } from './PlannerMap.styles.js'
 
@@ -56,6 +56,8 @@ function FitBoundsCommand({ bounds }: { bounds: Bounds | null }) {
 // One MapContainer stays mounted across modes so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps) {
   const { route, fitRoute, highlightedLeg, restoreView, fitBounds, onMapClick } = commands
+  const [cursor, setCursor] = useState<ProfilePosition | null>(null)
+  useEffect(() => { if (mode.kind !== 'trip') setCursor(null) }, [mode.kind])
   return (
     <Box className={mode.kind === 'discover' ? 'map-muted' : undefined} sx={styles.root}>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -71,12 +73,17 @@ const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps)
               subscribed once this fires the map back to the pre-pick view. */}
           <RestoreView view={restoreView} />
           <FitBoundsCommand bounds={fitBounds} />
-          {route && <RouteLayer route={route} highlightedLeg={highlightedLeg} fit={fitRoute} />}
+          {route && (
+            <RouteLayer
+              route={route} highlightedLeg={highlightedLeg} cursor={cursor} fit={fitRoute}
+              onHover={mode.kind === 'trip' ? (hovering, legIndex) => mode.onHoverLeg(hovering ? legIndex : null) : undefined}
+            />
+          )}
           {mode.kind === 'trip' && <TripMapLayers mode={mode} />}
           {mode.kind === 'saved' && <SavedMapLayers mode={mode} />}
         </MapContainer>
       </Box>
-      {mode.kind === 'trip' && <TripMapProfile mode={mode} highlightedLeg={highlightedLeg} onHoverPosition={() => {}} />}
+      {mode.kind === 'trip' && <TripMapProfile mode={mode} highlightedLeg={highlightedLeg} onHoverPosition={setCursor} />}
     </Box>
   )
 })

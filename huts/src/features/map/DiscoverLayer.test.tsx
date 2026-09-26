@@ -100,7 +100,7 @@ describe('DiscoverLayer shared legs and huts', () => {
   const a = tour(1, [10, 11])
   const b = tour(1, [10, 11, 12])
   const c = tour(1, [12], { legs: [2, 2].map((edgeId) => ({ durationH: 1, ascentM: 0, descentM: 0, distanceM: 0, edgeId, reversed: false })) } as never)
-  const restPaths = (container: HTMLElement) => container.querySelectorAll('.leaflet-route-rest-line-pane path.leaflet-interactive')
+  const restPaths = (container: HTMLElement) => container.querySelectorAll('.leaflet-route-leg-hit-pane path.leaflet-interactive')
   const firstRestPath = async (container: HTMLElement) => {
     await waitFor(() => expect(restPaths(container).length).toBeGreaterThan(0))
     return restPaths(container)[0]
@@ -156,7 +156,7 @@ describe('DiscoverLayer shared legs and huts', () => {
   it('draws hovered tours at the hovered tier and leaves the rest layer interactive', async () => {
     const { container } = renderLayer({ hoveredTourKeys: new Set([tourKey(a)]) })
     await waitFor(() => expect(container.querySelectorAll('.leaflet-route-hovered-line-pane path').length).toBeGreaterThan(0))
-    expect(container.querySelectorAll('.leaflet-route-rest-line-pane path.leaflet-interactive').length).toBeGreaterThan(0)
+    expect(container.querySelectorAll('.leaflet-route-leg-hit-pane path.leaflet-interactive').length).toBeGreaterThan(0)
   })
 
   it('draws focused tours thin at the focused tier and no dots on route lines', async () => {
@@ -185,8 +185,8 @@ describe('DiscoverLayer marker focus', () => {
   const focusViaBoard = async (c: HTMLElement) => {
     const board = c.querySelector('.signpost-marker.board .sign')!
     fireEvent.mouseOver(board)
-    await waitFor(() => expect(c.querySelector('.leaflet-route-rest-line-pane path.leaflet-interactive')).not.toBeNull())
-    fireEvent.click(c.querySelector('.leaflet-route-rest-line-pane path.leaflet-interactive')!)
+    await waitFor(() => expect(c.querySelector('.leaflet-route-leg-hit-pane path.leaflet-interactive')).not.toBeNull())
+    fireEvent.click(c.querySelector('.leaflet-route-leg-hit-pane path.leaflet-interactive')!)
     fireEvent.mouseOut(board, { relatedTarget: document.body })
   }
   const groups = [{ startId: 1, tours: tours.slice(0, 2) }, { startId: 2, tours: tours.slice(2) }] as never

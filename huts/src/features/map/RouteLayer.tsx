@@ -2,9 +2,15 @@ import { Fragment, useEffect, useMemo } from 'react'
 import type L from 'leaflet'
 import { CircleMarker, Polyline, useMap } from 'react-leaflet'
 import { tokens } from '@/ui/theme.js'
-import { ensureRoutePanes, paneName } from './routePanes.js'
-import type { EmphasisTier, Route } from './types.js'
+import { opacity } from '@/ui/tokens.js'
+import { pointAlong } from './pointAlong.js'
+import { LEG_HIT_PANE, ensureRoutePanes, paneName } from './routePanes.js'
+import type { EmphasisTier, ProfilePosition, Route } from './types.js'
 import { useLegGeometries } from './useLegGeometries.js'
+
+/** Line widths in px. */
+const HIT_WIDTH = 16
+const HIGHLIGHT_EXTRA = 4
 
 interface Segment {
   positions: [number, number][]
@@ -32,8 +38,8 @@ function FitRoute({ positions }: { positions: [number, number][] }) {
 
 /** A route as selected-route styling: signpost yellow over an ink casing. Legs still loading (or
  *  without geometry) are dashed straight lines between their huts. `tier` picks the panes, `thin`
- *  the candidate line widths. */
-export default function RouteLayer({ route, highlightedLeg = null, fit = false, tier = 'hovered', thin = false, dots = true, interactive = true, onHover, onClick }: {
+ *  the candidate line widths. Hover and click come from a wide invisible hit line per leg. */
+export default function RouteLayer({ route, highlightedLeg = null, fit = false, tier = 'hovered', thin = false, dots = true, interactive = true, cursor = null, onHover, onClick }: {
   route: Route
   highlightedLeg?: number | null
   fit?: boolean
@@ -45,12 +51,15 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
   dots?: boolean
   /** false draws a display-only copy that never receives pointer events. */
   interactive?: boolean
+  /** Position hovered on the height profile, drawn as a dot on its leg. */
+  cursor?: ProfilePosition | null
   onHover?: (hovering: boolean, legIndex: number, at: L.LatLng) => void
   onClick?: (legIndex: number) => void
 }) {
   const positions = useMemo(() => route.waypoints.map((w): [number, number] => [w.lat, w.lng]), [route])
   const geometries = useLegGeometries(route)
   const segments = segmentsOf(positions, geometries)
+  const cursorSegment = cursor ? segments[cursor.legIndex] ?? null : null
   const baseWidth = thin ? 2 : 4
   const map = useMap()
   ensureRoutePanes(map)
@@ -63,15 +72,21 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
       {fit && <FitRoute positions={positions} />}
       {segments.map((seg, i) => {
         if (!seg) return null
-        const width = highlightedLeg === i ? baseWidth + 2 : baseWidth
+        const highlighted = highlightedLeg === i
+        const width = highlighted ? baseWidth + HIGHLIGHT_EXTRA : baseWidth
+        const strokeOpacity = highlightedLeg !== null && !highlighted ? opacity.dimmed : 1
         const dash = seg.isFallback ? '6 8' : undefined
         return (
           <Fragment key={i}>
-            <Polyline positions={seg.positions} pane={casingPane} pathOptions={{ color: tokens.ink, weight: width + (thin ? 2 : 4), dashArray: dash, interactive: false }} />
-            <Polyline
-              positions={seg.positions} pane={linePane} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash, interactive, bubblingMouseEvents: false }}
-              eventHandlers={{ mouseover: (e) => onHover?.(true, i, e.latlng), mouseout: (e) => onHover?.(false, i, e.latlng), click: () => onClick?.(i) }}
-            />
+            <Polyline positions={seg.positions} pane={casingPane} pathOptions={{ color: tokens.ink, weight: width + (thin ? 2 : 4), dashArray: dash, opacity: strokeOpacity }} interactive={false} />
+            <Polyline positions={seg.positions} pane={linePane} pathOptions={{ color: tokens.signpost, weight: width, dashArray: dash, opacity: strokeOpacity }} interactive={false} />
+            {interactive && (
+              <Polyline
+                positions={seg.positions} pane={LEG_HIT_PANE} interactive bubblingMouseEvents={false}
+                pathOptions={{ weight: HIT_WIDTH, opacity: 0 }}
+                eventHandlers={{ mouseover: (e) => onHover?.(true, i, e.latlng), mouseout: (e) => onHover?.(false, i, e.latlng), click: () => onClick?.(i) }}
+              />
+            )}
           </Fragment>
         )
       })}
@@ -81,6 +96,12 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
           pathOptions={{ color: tokens.ink, fillColor: tokens.signpost, fillOpacity: 1, weight: 2, interactive: false }}
         />
       ))}
+      {cursorSegment && (
+        <CircleMarker
+          center={pointAlong(cursorSegment.positions, cursor!.fraction)} pane={dotPane} radius={5} interactive={false}
+          pathOptions={{ color: tokens.ink, fillColor: tokens.white, fillOpacity: 1, weight: 2 }}
+        />
+      )}
     </>
   )
 }

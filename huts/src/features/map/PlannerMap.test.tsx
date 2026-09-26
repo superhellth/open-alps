@@ -97,6 +97,20 @@ describe('PlannerMap trip mode', () => {
     fireEvent.click(container.querySelector('.swap-marker')!)
     expect(onPickCandidate).toHaveBeenCalledWith({ hutIndex: 5 })
   })
+  it('reports a hovered trip leg from the map and clears it on leave', async () => {
+    const onHoverLeg = vi.fn()
+    const route = {
+      waypoints: [{ lat: 47.3, lng: 12.0 }, { lat: 47.4, lng: 12.1 }],
+      legs: [{ edgeId: -1, reversed: false, layer: 'start_edges' as const }],
+    }
+    const { container } = render(<PlannerMap mode={tripMode({ ...tripProps, onHoverLeg })} commands={{ ...commands, route }} />)
+    await waitFor(() => expect(container.querySelectorAll('.leaflet-route-leg-hit-pane path').length).toBeGreaterThan(0))
+    const hit = container.querySelector('.leaflet-route-leg-hit-pane path')!
+    fireEvent.mouseOver(hit)
+    expect(onHoverLeg).toHaveBeenLastCalledWith(0)
+    fireEvent.mouseOut(hit)
+    expect(onHoverLeg).toHaveBeenLastCalledWith(null)
+  })
   it('shows no discover markers in trip mode', () => {
     const { container } = render(<PlannerMap mode={tripMode(tripProps)} commands={commands} />)
     expect(container.querySelectorAll('.signpost-marker')).toHaveLength(0)
