@@ -12,8 +12,8 @@ export type SortKey = 'fit' | 'duration' | 'ascent' | 'distance'
 export const SORT_LABEL: Record<SortKey, string> = {
   fit: 'Empfehlung',
   duration: 'Gesamtdauer',
-  ascent: 'Anstieg',
   distance: 'Distanz',
+  ascent: 'Anstieg',
 }
 
 const TOTAL: Record<Exclude<SortKey, 'fit'>, (t: PlannerTour) => number> = {
