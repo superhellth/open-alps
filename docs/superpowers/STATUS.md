@@ -49,3 +49,4 @@ new row when a new spec is written.
 | 2026-09-26 | [Discover map: signposts stand on their tour](specs/2026-09-26-signpost-route-anchors-design.md) | done (§4 stacks superseded by 2026-09-26 signpost placement) |
 | 2026-09-26 | [Discover map: signpost placement instead of stacks](specs/2026-09-26-signpost-placement-design.md) | done |
 | 2026-09-26 | [Design tokens: spacing, type scale, colors](specs/2026-09-26-design-tokens-design.md) | done |
+| 2026-09-26 | [Tour detail view redesign](specs/2026-09-26-tour-detail-redesign-design.md) | in progress |
