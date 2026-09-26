@@ -12,8 +12,6 @@ const PENDING: string[] = [
   'features/map/TripMapLayers.styles.ts',
   'features/map/map.css',
   'features/map/placeSignposts.ts',
-  'features/saved/SavedTripsList.styles.ts',
-  'features/saved/SavedTripsList.tsx',
 ]
 
 const EXCLUDED_FILES = new Set(['ui/tokens.ts', 'ui/theme.ts', 'vite-env.d.ts'])

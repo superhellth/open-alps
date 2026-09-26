@@ -55,8 +55,8 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
   const rows = [...state.trips].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 
   return (
-    <Box sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+    <Box sx={styles.root}>
+      <Box sx={styles.header}>
         <Typography variant="h6" component="h2" sx={{ flex: 1 }}>Meine Touren</Typography>
         <IconButton aria-label="Weitere Aktionen" onClick={(e) => setHeaderMenuAnchor(e.currentTarget)}>
           <Typography component="span" sx={styles.menuGlyph}>⋮</Typography>
@@ -74,7 +74,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
           </MenuItem>
         </Menu>
       </Box>
-      {importError && <Alert severity="error" sx={{ mb: 2 }}>Die Datei enthält keine gültigen Touren.</Alert>}
+      {importError && <Alert severity="error">Die Datei enthält keine gültigen Touren.</Alert>}
 
       {state.draft && (
         <Box
@@ -100,14 +100,14 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
             onMouseEnter={() => onHoverTrip(trip.id)} onMouseLeave={() => onHoverTrip(null)}
             sx={styles.tripCard(hoveredTripId === trip.id)}
           >
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', py: 1.5 }}>
+            <Box sx={styles.tripRow}>
               <Box
                 role="button" tabIndex={0} onClick={() => onOpen(trip.id)}
                 onKeyDown={(e) => { if (e.key === 'Enter') onOpen(trip.id) }}
-                sx={{ flex: 1, cursor: 'pointer' }}
+                sx={styles.tripBody}
               >
                 {renaming?.id === trip.id ? (
-                  <Box sx={{ display: 'flex', gap: 1 }} onClick={(e) => e.stopPropagation()}>
+                  <Box sx={styles.renameRow} onClick={(e) => e.stopPropagation()}>
                     <TextField size="small" label="Name" value={renaming.name} onChange={(e) => setRenaming({ id: trip.id, name: e.target.value })} />
                     <Button
                       variant="contained"
@@ -118,7 +118,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
                   </Box>
                 ) : (
                   <>
-                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Box sx={styles.tripTitleRow}>
                       <Typography sx={styles.strong}>{trip.name}</Typography>
                       {changed && <Typography variant="caption" sx={styles.strong}>geändert</Typography>}
                     </Box>
