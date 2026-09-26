@@ -76,7 +76,7 @@ const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps)
           {mode.kind === 'saved' && <SavedMapLayers mode={mode} />}
         </MapContainer>
       </Box>
-      {mode.kind === 'trip' && <TripMapProfile mode={mode} highlightedLeg={highlightedLeg} />}
+      {mode.kind === 'trip' && <TripMapProfile mode={mode} highlightedLeg={highlightedLeg} onHoverPosition={() => {}} />}
     </Box>
   )
 })

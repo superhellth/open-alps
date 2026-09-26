@@ -75,7 +75,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editor, highlightedLeg, setHighlightedLeg,
     shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
-    openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds,
+    openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds, tripStopNames,
   } = useTripSession({ data, client, startLabel })
   const { sidebarView, goPlanen, goMeineTouren, goHome, openSavedTrip, openPinnedDraft, backFromTrip } = useSidebarNavigation({
     mode, openedFrom, setOpenedFrom, onBackFromTrip: () => { setEditing(null); restoreViewAfterTrip() },
@@ -105,7 +105,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     }
     if (mode === 'trip' && tripLegs) {
       return {
-        kind: 'trip', tripLegs, tripHuts, tripEnds, candidates: candidateMarkers,
+        kind: 'trip', tripLegs, tripHuts, tripEnds, stopNames: tripStopNames, candidates: candidateMarkers,
         hutCoordsById: data.hutCoordsById, candidateStartCoords,
         activeLabel: editor.activeLabel, onPickCandidate: editor.pickCandidate,
         onCancelEditing: () => setEditing(null), onHoverLeg: setHighlightedLeg,
@@ -118,7 +118,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       onFocusTours: (keys) => setFocusTours(keys && new Set(keys)),
       onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
     }
-  }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
+  }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, tripStopNames, candidateMarkers, candidateStartCoords,
     editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, visibleTours, hoveredTourKeys, focusTours,
     dismissPrompt, setDiscoverTab, setFocusTours, setMapView, setHoveredTourKeys, pick])
   const mapCommands = useMemo<MapCommands>(() => ({

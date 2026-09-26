@@ -84,6 +84,13 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
         return p ? [{ lat: p.lat, lng: p.lng, sourceType: e.sourceType as number }] : []
       })
     : [], [data, activeTrip])
+  const tripStopNames = useMemo(() => activeTrip && tripLegs
+    ? [
+        startLabel(activeTrip.start.startId),
+        ...tripLegs.hutIndices.map((i) => (i === null ? 'Unbekannte Hütte' : data.hutNameById.get(i) ?? String(i))),
+        startLabel(activeTrip.exit.startId),
+      ]
+    : [], [data, activeTrip, tripLegs, startLabel])
 
   return {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings,
@@ -91,6 +98,6 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
     shareNote, setShareNote, shareFallback, share,
     pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom,
-    candidateMarkers, candidateStartCoords, tripHuts, tripEnds,
+    candidateMarkers, candidateStartCoords, tripHuts, tripEnds, tripStopNames,
   }
 }

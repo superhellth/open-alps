@@ -65,4 +65,11 @@ describe('useTripSession', () => {
     expect(result.current.session.pendingPick).toBeNull()
     expect(result.current.session.activeTrip?.id).toBe('d2')
   })
+
+  it('names the stops: start label, each hut, exit label', () => {
+    const { result } = setup()
+    expect(result.current.session.tripStopNames).toEqual([])
+    act(() => { result.current.session.openDraft(trip('d1', ['{D}', '{E}'])) })
+    expect(result.current.session.tripStopNames).toEqual(['100', 'Hütte D', 'Hütte E', '100'])
+  })
 })

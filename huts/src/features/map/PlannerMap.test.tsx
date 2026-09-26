@@ -35,7 +35,7 @@ const discover = (over: Partial<DiscoverMapMode> = {}): DiscoverMapMode => ({
   ...over,
 })
 const tripMode = (over: Partial<TripMapMode> = {}): TripMapMode => ({
-  kind: 'trip', tripLegs: someTripLegs, tripHuts: [], tripEnds: [], candidates: [], hutCoordsById: new Map(), candidateStartCoords: new Map(),
+  kind: 'trip', tripLegs: someTripLegs, tripHuts: [], tripEnds: [], stopNames: [], candidates: [], hutCoordsById: new Map(), candidateStartCoords: new Map(),
   activeLabel: null, onPickCandidate: () => {}, onCancelEditing: () => {}, onHoverLeg: () => {},
   ...over,
 })
