@@ -3,7 +3,7 @@ import { fetchAvailabilityByOffset } from '@/availability/fetchAvailability.js'
 import { answerWindow, shiftAnswers } from '@/availability/startDateAnswer.js'
 import type { ShiftVerdict } from '@/availability/startDateAnswer.js'
 import type { HutOhrs } from '@/data/buildAppData.js'
-import { addIsoDays } from '@/format/dayMonth.js'
+import { addIsoDays, daysBetween, todayIso } from '@/format/dayMonth.js'
 import type { Trip } from '@/trip/trip.js'
 
 export const MAX_SHIFT = 3
@@ -21,10 +21,13 @@ export function useStartDateAnswers(trip: Trip, hutIndices: (number | null)[], h
     const startDate = trip.startDate
     if (!startDate) return
     let cancelled = false
+    // Shifts landing before today are neither fetched nor marked.
+    const minShift = Math.max(-MAX_SHIFT, daysBetween(startDate, todayIso()))
+    if (minShift > MAX_SHIFT) { setVerdicts(new Map()); return }
     const window = answerWindow(new Date(startDate), MAX_SHIFT)
-    fetchAvailabilityByOffset(window.base, trip.partySize, window.maxOffset(ohrsIds.length)).then((free) => {
+    fetchAvailabilityByOffset(window.base, trip.partySize, window.maxOffset(ohrsIds.length), minShift + MAX_SHIFT + 1).then((free) => {
       if (cancelled) return
-      setVerdicts(new Map(shiftAnswers(ohrsIds, free, MAX_SHIFT).map((a) => [addIsoDays(startDate, a.shiftDays), a.verdict])))
+      setVerdicts(new Map(shiftAnswers(ohrsIds, free, MAX_SHIFT, minShift).map((a) => [addIsoDays(startDate, a.shiftDays), a.verdict])))
     })
     return () => { cancelled = true }
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps

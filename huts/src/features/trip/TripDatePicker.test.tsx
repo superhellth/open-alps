@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import TripDatePicker from './TripDatePicker.js'
 import * as availability from '@/availability/fetchAvailability.js'
 import { newTrip } from '@/trip/trip.js'
 
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') }) })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 const trip = (startDate: string | null) => newTrip({
   name: 't', startDate, partySize: 2, start: { startId: 100, sourceType: 1 }, huts: ['{A}', '{B}'],
@@ -55,5 +56,28 @@ describe('TripDatePicker', () => {
     open(null)
     expect(screen.getByText('Tag der ersten Nacht wählen')).toBeInTheDocument()
     expect(spy).not.toHaveBeenCalled()
+  })
+  it('does not fetch or mark days before today', async () => {
+    vi.setSystemTime(new Date('2026-07-09T12:00:00Z'))
+    const free = new Map([[6, new Set(['H0'])], [7, new Set(['H1'])]]) as never
+    const spy = vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(free)
+    open('2026-07-10')
+    await waitFor(() => expect(document.querySelectorAll('[data-verdict]').length).toBe(5))
+    expect(spy.mock.calls[0][3]).toBe(3)
+    expect(screen.getByRole('button', { name: '2026-07-08' }).querySelector('[data-verdict]')).toBeNull()
+    expect(screen.getByRole('button', { name: '2026-07-09' }).querySelector('[data-verdict]')).not.toBeNull()
+  })
+  it('does not fetch when every nearby start date is past', () => {
+    vi.setSystemTime(new Date('2026-08-01T12:00:00Z'))
+    const spy = vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+    open('2026-07-10')
+    expect(spy).not.toHaveBeenCalled()
+  })
+  it('ignores clicks on past days', () => {
+    vi.setSystemTime(new Date('2026-07-09T12:00:00Z'))
+    vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+    const onChange = open('2026-07-10')
+    fireEvent.click(screen.getByRole('button', { name: '2026-07-08' }))
+    expect(onChange).not.toHaveBeenCalled()
   })
 })

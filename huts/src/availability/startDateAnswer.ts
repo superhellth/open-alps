@@ -18,10 +18,10 @@ export function answerWindow(firstNight: Date, maxShift: number) {
 }
 
 /** For each shifted first night, whether every hut has beds. Hut i on shift s reads offset s + maxShift + i + 1
- *  of the `answerWindow` fetch. "unclear" = nothing is full but some hut is direct-booking-only or its night is unknown. */
-export function shiftAnswers(ohrsIds: (string | null)[], freeByOffset: FreeByOffset, maxShift: number): ShiftAnswer[] {
+ *  of the `answerWindow` fetch. Shifts below `minShift` are left out. "unclear" = nothing is full but some hut is direct-booking-only or its night is unknown. */
+export function shiftAnswers(ohrsIds: (string | null)[], freeByOffset: FreeByOffset, maxShift: number, minShift = -maxShift): ShiftAnswer[] {
   const answers: ShiftAnswer[] = []
-  for (let shift = -maxShift; shift <= maxShift; shift++) {
+  for (let shift = minShift; shift <= maxShift; shift++) {
     let blocked = false
     let unclear = false
     ohrsIds.forEach((ohrsId, i) => {

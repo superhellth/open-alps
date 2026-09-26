@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import TripHeader from './TripHeader.js'
@@ -9,7 +9,8 @@ import { newTrip } from '@/trip/trip.js'
 import type { Trip } from '@/trip/trip.js'
 import * as availability from '@/availability/fetchAvailability.js'
 
-afterEach(() => { cleanup(); vi.restoreAllMocks() })
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-07-01T12:00:00Z') }) })
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.useRealTimers() })
 
 const data = makeTestAppData()
 const make = (startDate: string | null = '2026-07-10'): Trip => newTrip({

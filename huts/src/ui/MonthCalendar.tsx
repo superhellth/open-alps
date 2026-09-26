@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Box, IconButton, Typography } from '@mui/material'
+import { todayIso } from '@/format/dayMonth.js'
 import { styles } from './MonthCalendar.styles.js'
 
 const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -33,11 +34,11 @@ export interface MonthCalendarProps {
   disabled?: boolean
 }
 
-/** One month of day buttons (Monday first) with month navigation. */
+/** One month of day buttons (Monday first) with month navigation. Days before today are not pickable. */
 export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPickDay, dayMark, disabled = false }: MonthCalendarProps) {
   const initial = new Date(initialDay !== '' ? `${initialDay}T00:00:00Z` : Date.now())
   const [view, setView] = useState({ y: initial.getUTCFullYear(), m: initial.getUTCMonth() })
-  const todayIso = new Date().toISOString().slice(0, 10)
+  const today = todayIso()
 
   const shiftMonth = (delta: number) => {
     const d = new Date(Date.UTC(view.y, view.m + delta, 1))
@@ -61,11 +62,13 @@ export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPick
           if (iso === null) return <Box key={`empty-${i}`} />
           const inRange = rangeStart !== '' && rangeEnd !== '' && iso >= rangeStart && iso <= rangeEnd
           const isEndpoint = iso === rangeStart || iso === rangeEnd
+          const isPast = iso < today
+          const dayDisabled = disabled || isPast
           return (
             <Box
-              key={iso} role="button" aria-label={iso} aria-pressed={isEndpoint}
-              onClick={() => !disabled && onPickDay(iso)}
-              sx={styles.day({ disabled, isEndpoint, inRange, isToday: iso === todayIso })}
+              key={iso} role="button" aria-label={iso} aria-pressed={isEndpoint} aria-disabled={dayDisabled}
+              onClick={() => !dayDisabled && onPickDay(iso)}
+              sx={styles.day({ disabled: dayDisabled, isEndpoint, inRange, isToday: iso === today })}
             >
               <Typography variant="body2">{Number(iso.slice(-2))}</Typography>
               {dayMark && <Box sx={styles.mark}>{dayMark(iso)}</Box>}
