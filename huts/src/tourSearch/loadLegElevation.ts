@@ -1,3 +1,4 @@
+import { cachedPromise } from '@/lib/cachedPromise.js'
 import type { GeometryLayer } from './loadLegGeometry.js'
 
 /**
@@ -28,20 +29,15 @@ let manifestCache = new Map<GeometryLayer, Promise<LayerState>>()
 let legCache = new Map<string, Promise<number[]>>()
 
 function loadLayerState(layer: GeometryLayer, baseUrl: string): Promise<LayerState> {
-  let cached = manifestCache.get(layer)
-  if (!cached) {
-    cached = (async () => {
-      const manifest: ElevationManifest = await (await fetch(`${baseUrl}/${LAYER_FILES[layer].json}`)).json()
-      const offsets = new Array<number>(manifest.profile_counts.length + 1)
-      offsets[0] = 0
-      for (let i = 0; i < manifest.profile_counts.length; i++) {
-        offsets[i + 1] = offsets[i] + manifest.profile_counts[i]
-      }
-      return { offsets, wholeFileFetch: null }
-    })()
-    manifestCache.set(layer, cached)
-  }
-  return cached
+  return cachedPromise(manifestCache, layer, async () => {
+    const manifest: ElevationManifest = await (await fetch(`${baseUrl}/${LAYER_FILES[layer].json}`)).json()
+    const offsets = new Array<number>(manifest.profile_counts.length + 1)
+    offsets[0] = 0
+    for (let i = 0; i < manifest.profile_counts.length; i++) {
+      offsets[i + 1] = offsets[i] + manifest.profile_counts[i]
+    }
+    return { offsets, wholeFileFetch: null }
+  })
 }
 
 function decodeValues(buffer: ArrayBuffer, byteOffset: number, valueCount: number): number[] {
@@ -69,11 +65,16 @@ async function fetchLegValues(layer: GeometryLayer, edgeId: number, baseUrl: str
   if (res.status === 206) {
     return decodeValues(await res.arrayBuffer(), 0, valueCount)
   }
+  if (res.status !== 200) throw new Error(`${url}: HTTP ${res.status}`)
 
   // Host ignored Range and answered 200 with the entire body - do not retry with another Range
   // request. Decode this leg out of the full body, and cache the full body itself so this
   // (large) download happens at most once per layer per session.
-  if (!state.wholeFileFetch) state.wholeFileFetch = res.arrayBuffer()
+  if (!state.wholeFileFetch) {
+    const body = res.arrayBuffer()
+    state.wholeFileFetch = body
+    body.catch(() => { if (state.wholeFileFetch === body) state.wholeFileFetch = null })
+  }
   return decodeValues(await state.wholeFileFetch, byteStart, valueCount)
 }
 
@@ -83,13 +84,7 @@ export async function loadLegElevation(
   reversed: boolean,
   baseUrl = '/data',
 ): Promise<number[]> {
-  const cacheKey = `${layer}:${edgeId}`
-  let cached = legCache.get(cacheKey)
-  if (!cached) {
-    cached = fetchLegValues(layer, edgeId, baseUrl)
-    legCache.set(cacheKey, cached)
-  }
-  const values = await cached
+  const values = await cachedPromise(legCache, `${layer}:${edgeId}`, () => fetchLegValues(layer, edgeId, baseUrl))
   return reversed ? [...values].reverse() : values
 }
 

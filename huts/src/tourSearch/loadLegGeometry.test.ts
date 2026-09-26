@@ -116,4 +116,45 @@ describe('loadLegGeometry', () => {
 
     expect(points).toEqual([[47.0, 11.0], [47.25, 11.25]])
   })
+
+  it('retries a leg whose fetch failed instead of caching the failure', async () => {
+    let binFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      binFetchCount++
+      if (binFetchCount === 1) return Promise.reject(new TypeError('Failed to fetch'))
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
+
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('Failed to fetch')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
+
+  it('retries the layer manifest after a failed manifest fetch', async () => {
+    let manifestFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) {
+        manifestFetchCount++
+        if (manifestFetchCount === 1) return Promise.reject(new TypeError('Failed to fetch'))
+        return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      }
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
+
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('Failed to fetch')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
+
+  it('rejects an error status instead of decoding its body as the whole file, then retries', async () => {
+    let binFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      binFetchCount++
+      if (binFetchCount === 1) return Promise.resolve({ status: 503, arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) } as Response)
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
+
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('503')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
 })

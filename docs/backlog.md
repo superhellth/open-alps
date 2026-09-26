@@ -7,17 +7,17 @@ under `docs/superpowers/`.
 
 ## High
 
-### Hovering out-of-focus signposts
+### How to handle alpenvereinaktiv tours
 
-### Investigate dashed geometry-less legs on Discover route previews
-
-Some muted route previews show dashed straight lines between huts. Cause unknown: legs with
-`edgeId < 0`, rejected geometry fetches (errors swallowed in `useLegGeometries`) or slow loads.
-Details and how to triage in `docs/backlog/dashed-legs-without-geometry.md`.
+### Swap hut availability fetch source
 
 ### Integrate official tours into frontend
 
 ## Medium
+
+### Close tours that start / end in nearby locations
+
+### Avoid overlaps in displayed tours
 
 ### Surface data-quality signals to the frontend
 
