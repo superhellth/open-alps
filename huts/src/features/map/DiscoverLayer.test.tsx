@@ -352,7 +352,7 @@ describe('DiscoverLayer signposts', () => {
     const onFocusTours = vi.fn()
     const { container } = render1([t], { onPickRoute, onFocusTours }, 9)
     fireEvent.click(container.querySelector('.start-count-marker')!)
-    expect(onFocusTours).toHaveBeenCalledWith([tourKey(t)])
+    expect(onFocusTours).toHaveBeenCalledWith([tourKey(t)], false)
     expect(onPickRoute).not.toHaveBeenCalled()
   })
 

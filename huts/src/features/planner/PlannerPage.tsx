@@ -50,7 +50,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const {
     form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
-    search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours,
+    search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours, focusRoutes, setFocusRoutes,
     hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
   } = useDiscover({ data, client, mapView })
 
@@ -111,14 +111,14 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     }
     return {
       kind: 'discover', groups, dimmed: search.status === 'searching', startById: data.startById,
-      allTours: tours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours,
+      allTours: tours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours, focusRoutes,
       onNavigate: () => { dismissPrompt(); setDiscoverTab('results') },
-      onFocusTours: (keys) => setFocusTours(keys && new Set(keys)),
+      onFocusTours: (keys, routes = true) => { setFocusTours(keys && new Set(keys)); setFocusRoutes(routes) },
       onHoverStarts: setHoveredStarts, onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
     }
   }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
-    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, tours, hoveredTourKeys, focusTours,
-    dismissPrompt, setDiscoverTab, setFocusTours, setHoveredStarts, setMapView, setHoveredTourKeys, pick])
+    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, tours, hoveredTourKeys, focusTours, focusRoutes,
+    dismissPrompt, setDiscoverTab, setFocusTours, setFocusRoutes, setHoveredStarts, setMapView, setHoveredTourKeys, pick])
   const mapCommands = useMemo<MapCommands>(() => ({
     route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg, restoreView, fitBounds,
     onMapClick: () => { dismissPrompt(); setFocusTours(null) },

@@ -25,6 +25,8 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   const [tab, setTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
   const [focusTours, setFocusTours] = useState<Set<string> | null>(null)
+  /** Whether the focused tours draw their routes; a bubble click focuses without drawing them. */
+  const [focusRoutes, setFocusRoutes] = useState(true)
   const [hoveredTourKeys, setHoveredTourKeys] = useState<ReadonlySet<string>>(NO_TOURS)
   const [hoveredStarts, setHoveredStarts] = useState<Set<number> | null>(null)
 
@@ -65,6 +67,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
     sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
     tab, setTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, viewTours,
-    focusTours, setFocusTours, hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
+    focusTours, setFocusTours, focusRoutes, setFocusRoutes, hoveredTourKeys, setHoveredTourKeys, hoveredStarts, setHoveredStarts,
   }
 }

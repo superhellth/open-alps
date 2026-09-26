@@ -61,7 +61,7 @@ const toursText = (n: number) => `In ${n} Touren`
  *  hovered from anywhere but the signpost itself. */
 export default function DiscoverLayer({
   groups, startById, dimmed, allTours, routeCtx, hutNameById, hoveredTourKeys, onHoverTours, onPickRoute, onNavigate,
-  focusTours, onFocusTours, onHoverStarts, onViewChange,
+  focusTours, focusRoutes = true, onFocusTours, onHoverStarts, onViewChange,
 }: {
   groups: StartGroup<PlannerTour>[]
   startById: Map<number, StartPoint>
@@ -76,8 +76,11 @@ export default function DiscoverLayer({
   onNavigate?: () => void
   /** Tour keys the results list is limited to and the map highlights; null when unfocused. */
   focusTours?: ReadonlySet<string> | null
+  /** Whether the focused tours draw their routes; defaults to true. */
+  focusRoutes?: boolean
   /** Sets the focus; null lifts it. */
-  onFocusTours?: (keys: string[] | null) => void
+  /** `routes` false focuses the list and dims markers without drawing the focused routes. */
+  onFocusTours?: (keys: string[] | null, routes?: boolean) => void
   /** Start points of the marker under the pointer; null when none. */
   onHoverStarts?: (startIds: Set<number> | null) => void
   onViewChange?: (view: View) => void
@@ -139,8 +142,8 @@ export default function DiscoverLayer({
   const [hoveredStartIds, setHoveredStartIds] = useState<ReadonlySet<number> | null>(null)
   const hoverStarts = (ids: Set<number> | null) => { setHoveredStartIds(ids); onHoverStarts?.(ids) }
   const tiered = useMemo(() => routedTours.map((r) => ({
-    ...r, tier: tierOf({ key: r.key, startId: r.tour.startId }, { hoveredKeys: hoveredTourKeys, hoveredStarts: hoveredStartIds, focus: focusTours ?? null }),
-  })), [routedTours, hoveredTourKeys, hoveredStartIds, focusTours])
+    ...r, tier: tierOf({ key: r.key, startId: r.tour.startId }, { hoveredKeys: hoveredTourKeys, hoveredStarts: hoveredStartIds, focus: focusRoutes ? focusTours ?? null : null }),
+  })), [routedTours, hoveredTourKeys, hoveredStartIds, focusTours, focusRoutes])
   const drawn = useMemo(() => tiered.filter((t) => t.tier !== 'rest'), [tiered])
   const symbols = useMemo(() => collectSymbols(tiered), [tiered])
 
@@ -198,7 +201,7 @@ export default function DiscoverLayer({
   const activate = (m: MapMarker) => {
     onNavigate?.()
     const startIds = startIdsOf(m)
-    onFocusTours?.(keysOfStarts(startIds))
+    onFocusTours?.(keysOfStarts(startIds), false)
     const bounds = tourBounds(startIds)
     if (bounds) {
       zoomToBounds(bounds)
