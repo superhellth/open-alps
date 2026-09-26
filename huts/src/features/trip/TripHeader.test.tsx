@@ -67,7 +67,7 @@ describe('TripHeader', () => {
     fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Enter' })
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
 
-    onChange.mockClear()
+    vi.mocked(onChange).mockClear()
     open()
     fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Verworfen' } })
     fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Escape' })
