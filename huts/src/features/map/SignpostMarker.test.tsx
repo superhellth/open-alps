@@ -6,7 +6,7 @@ import SignpostMarker from './SignpostMarker.js'
 import { dotHtml, singleHtml } from './signpostHtml.js'
 import type { BoardTour } from './signpostHtml.js'
 
-const bt = (i: number): BoardTour => ({ key: `k${i}`, label: { text: `Z${i}`, distance: '1.0 km', title: `t${i}` } })
+const bt = (i: number): BoardTour => ({ key: `k${i}`, label: { text: `Z${i}`, detail: '↑ 1 m', roundTrip: false, title: `t${i}` } })
 
 afterEach(cleanup)
 

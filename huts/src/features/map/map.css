@@ -74,7 +74,9 @@
 }
 .signpost-marker .sign > * { position: relative; }
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-.signpost-marker .km { opacity: 0.75; }
+.signpost-marker .detail { opacity: 0.75; }
+.signpost-marker .loop { display: flex; flex: none; }
+.signpost-marker .loop svg { width: 14px; height: 14px; fill: currentColor; }
 .signpost-marker .sign.side-left { left: 1px; transform: translateX(-100%); padding: 0 8px 0 16px; }
 .signpost-marker .sign.side-left,
 .signpost-marker .sign.side-left::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }

@@ -13,10 +13,12 @@ const BOARD_H = 26
 const MAST_H = 24
 /** Widest a board can be (`max-width` in map.css). */
 const BOARD_MAX_W = 220
-/** Horizontal padding, gap between name and distance (map.css `.sign`). */
+/** Horizontal padding, gap between time and ascent (map.css `.sign`). */
 const PAD_LEFT = 8
 const PAD_RIGHT = 16
 const GAP = 6
+/** Round-trip loop icon width (map.css `.loop svg`). */
+const LOOP_W = 14
 /** Free space kept around every placed board. */
 const BOX_MARGIN = 4
 /** A dot keeps this far from every board foot and earlier dot. */
@@ -24,9 +26,10 @@ const DOT_CLEARANCE = 8
 
 const BOARD_FONT = "600 0.8rem 'Barlow Semi Condensed', 'Barlow', sans-serif"
 
-/** Board width from its texts, clamped to the CSS `max-width`. */
+/** Board width from its texts and loop icon, clamped to the CSS `max-width`. */
 export function boardWidth(label: TourBoardLabel, textWidth: (text: string) => number): number {
-  return Math.min(BOARD_MAX_W, PAD_LEFT + textWidth(label.text) + GAP + textWidth(label.distance) + PAD_RIGHT)
+  const loop = label.roundTrip ? LOOP_W + GAP : 0
+  return Math.min(BOARD_MAX_W, PAD_LEFT + loop + textWidth(label.text) + GAP + textWidth(label.detail) + PAD_RIGHT)
 }
 
 let canvasContext: CanvasRenderingContext2D | null | undefined

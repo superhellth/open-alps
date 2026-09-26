@@ -1,3 +1,6 @@
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import LoopIcon from '@mui/icons-material/Loop'
 import type { TourBoardLabel } from './tourBoard.js'
 import type { Side } from './placeSignposts.js'
 
@@ -10,8 +13,11 @@ export function escapeHtml(text: string): string {
   return text.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
 }
 
+/** Loop pictogram marking a round trip's board. */
+const LOOP_ICON = `<span class="loop" aria-hidden="true">${renderToStaticMarkup(createElement(LoopIcon))}</span>`
+
 function boardBody({ label }: BoardTour): string {
-  return `<span class="txt">${escapeHtml(label.text)}</span><span class="km">${escapeHtml(label.distance)}</span>`
+  return `${label.roundTrip ? LOOP_ICON : ''}<span class="txt">${escapeHtml(label.text)}</span><span class="detail">${escapeHtml(label.detail)}</span>`
 }
 
 const MAST = '<span class="mast"></span>'

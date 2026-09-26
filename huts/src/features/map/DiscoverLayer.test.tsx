@@ -256,7 +256,7 @@ describe('DiscoverLayer signposts', () => {
     [1, { name: 'Kaprun', sourceType: 1, lat: 47.3, lng: 12 }],
     [2, { name: 'Kaunertal', sourceType: 2, lat: 47.301, lng: 12 }],
   ])
-  const exiting = (i: number) => tour(1, [100 + i], { exitStartId: 2, totalDistanceM: 42_300 } as never)
+  const exiting = (i: number) => tour(1, [100 + i], { exitStartId: 2, totalDistanceM: 42_300, totalDurationH: 18.4, totalAscentM: 3210 } as never)
   const signpostHuts = new Map(Array.from({ length: 12 }, (_, i) => [100 + i, { lat: 47.31, lng: 12.01 }] as const))
   const stackTours = (n: number) => Array.from({ length: n }, (_, i) => exiting(i))
   const group = (tours: PlannerTour[]) => [{ startId: 1, tours }] as never
@@ -271,13 +271,14 @@ describe('DiscoverLayer signposts', () => {
   const render1 = (tours: PlannerTour[], props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13) =>
     renderLayer({ groups: group(tours), allTours: tours, startById: withExit, routeCtx: { ...routeCtx, startById: withExit, hutCoordsById: signpostHuts }, ...props }, zoom)
 
-  it('renders a single tour as one board labelled end point and distance; click picks the tour', () => {
+  it('renders a single tour as one board labelled distance and ascent; click picks the tour', () => {
     const t = exiting(0)
     const onPickRoute = vi.fn()
     const { container } = render1([t], { onPickRoute })
     const sign = container.querySelector('.signpost-marker.board .sign') as HTMLElement
-    expect(sign.textContent).toContain('Kaunertal')
     expect(sign.textContent).toContain('42.3 km')
+    expect(sign.textContent).toContain('↑ 3.210 m')
+    expect(sign.getAttribute('title')).toContain('Kaunertal')
     fireEvent.click(sign)
     expect(onPickRoute).toHaveBeenCalledWith(t)
   })
@@ -323,7 +324,7 @@ describe('DiscoverLayer signposts', () => {
     const { container } = render1(tours, { hoveredTourKeys: new Set([tourKey(tours[2])]) })
     const dot = container.querySelector('.signpost-marker.dot')!
     expect(dot.classList.contains('previewing')).toBe(true)
-    expect(dot.querySelector('.preview .sign')!.textContent).toContain('Kaunertal')
+    expect(dot.querySelector('.preview .sign')!.textContent).toContain('42.3 km')
   })
 
   it('draws no signpost for a tour without any anchor candidate in view', () => {

@@ -5,7 +5,7 @@ import type { PlaceTour, Placement } from './placeSignposts.js'
 import type { TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { TourBoardLabel } from './tourBoard.js'
 
-const label = (text = 'x'): TourBoardLabel => ({ text, distance: '1 km', title: text })
+const label = (text = 'x'): TourBoardLabel => ({ text, detail: '↑ 1 m', roundTrip: false, title: text })
 /** Identity-like projection: lng is x, lat is y in pixels. */
 const project = (p: { lat: number; lng: number }) => ({ x: p.lng, y: p.lat })
 const at = (x: number, y: number, heading: 'east' | 'west' = 'east'): TourAnchor => ({ lat: y, lng: x, heading })
@@ -184,11 +184,14 @@ describe('placeSignposts with a previous placement', () => {
 describe('boardWidth', () => {
   const ten = (s: string) => s.length * 10
   it('adds padding, gap and both texts', () => {
-    // 8 left padding + 'ab' (20) + 6 gap + '1 km' (40) + 16 right padding
-    expect(boardWidth({ text: 'ab', distance: '1 km', title: '' }, ten)).toBe(90)
+    // 8 left padding + 'ab' (20) + 6 gap + '↑ 1m' (40) + 16 right padding
+    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: false, title: '' }, ten)).toBe(90)
   })
-  it('clamps a long end point name to 220 px', () => {
-    expect(boardWidth({ text: 'x'.repeat(200), distance: '1 km', title: '' }, ten)).toBe(220)
+  it('clamps a long text to 220 px', () => {
+    expect(boardWidth({ text: 'x'.repeat(200), detail: '↑ 1 m', roundTrip: false, title: '' }, ten)).toBe(220)
+  })
+  it('adds the loop icon and its gap for a round trip', () => {
+    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: true, title: '' }, ten)).toBe(110)
   })
 })
 

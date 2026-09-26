@@ -8,25 +8,26 @@ const startById = new Map<number, StartPoint>([
   [1, start('Kaprun', 1)], [2, start('Kaunertal', 2)], [3, start(null, 2)],
 ])
 const tour = (over: Partial<PlannerTour> = {}): PlannerTour => ({
-  huts: [], startId: 1, exitStartId: 2, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 42_300, legs: [], ...over,
+  huts: [], startId: 1, exitStartId: 2, totalDurationH: 18.4, totalAscentM: 3210, totalDescentM: 0, totalDistanceM: 42_300, legs: [], ...over,
 } as PlannerTour)
 
 describe('tourBoardLabel', () => {
-  it('shows the bare exit name, the distance and the exit kind', () => {
+  it('shows distance and ascent, with route and walking time in the title', () => {
     const l = tourBoardLabel(tour(), startById)
-    expect(l.text).toBe('Kaunertal')
-    expect(l.distance).toBe('42.3 km')
-    expect(l.title).toContain('Kaunertal (Parkplatz)')
+    expect(l.text).toBe('42.3 km')
+    expect(l.detail).toBe('↑ 3.210 m')
+    expect(l.title).toBe('Kaprun → Kaunertal (Parkplatz) · 42.3 km · ↑ 3.210 m · 18½ Std')
   })
-  it('reads Rundtour when the exit is the start', () => {
-    expect(tourBoardLabel(tour({ exitStartId: 1 }), startById).text).toBe('Rundtour')
+  it('marks a round trip', () => {
+    const l = tourBoardLabel(tour({ exitStartId: 1 }), startById)
+    expect(l.text).toBe('42.3 km')
+    expect(l.roundTrip).toBe(true)
+    expect(l.title).toContain('Rundtour ab Kaprun')
   })
   it('falls back to the kind label for an unnamed exit', () => {
-    expect(tourBoardLabel(tour({ exitStartId: 3 }), startById).text).toBe('Parkplatz')
+    expect(tourBoardLabel(tour({ exitStartId: 3 }), startById).title).toContain('→ Parkplatz ·')
   })
   it('does not crash when the exit is missing from startById', () => {
-    const l = tourBoardLabel(tour({ exitStartId: 99 }), startById)
-    expect(l.text).toBe('Startpunkt')
-    expect(l.distance).toBe('42.3 km')
+    expect(tourBoardLabel(tour({ exitStartId: 99 }), startById).title).toContain('→ Startpunkt 99')
   })
 })

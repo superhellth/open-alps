@@ -1,24 +1,35 @@
 import { formatDistanceKm } from '@/format/distance.js'
-import { SOURCE_TYPE_LABEL, makeStartLabel } from '@/data/labels.js'
-import { SOURCE_TYPE_STATION } from '@/tourSearch/types.js'
+import { formatSignpostTime } from '@/format/signpostTime.js'
+import { makeStartLabel } from '@/data/labels.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 
 export const ROUND_TRIP_LABEL = 'Rundtour'
 
 export interface TourBoardLabel {
-  /** End point name (bare, without a "(Parkplatz)" suffix), the kind label when unnamed, or "Rundtour". */
+  /** Total distance. */
   text: string
-  distance: string
-  /** Full end point label plus distance, for the board's `title` attribute. */
+  /** Total ascent. */
+  detail: string
+  /** The tour ends where it starts; its board shows a loop icon. */
+  roundTrip: boolean
+  /** Route (start and exit, or "Rundtour ab" start) plus all stats, for the board's `title` attribute. */
   title: string
 }
 
 export function tourBoardLabel(tour: PlannerTour, startById: Map<number, StartPoint>): TourBoardLabel {
-  const exit = startById.get(tour.exitStartId)
-  const kind = SOURCE_TYPE_LABEL[exit?.sourceType ?? SOURCE_TYPE_STATION] ?? 'Startpunkt'
+  const startLabel = makeStartLabel(startById)
   const roundTrip = tour.exitStartId === tour.startId
-  const text = roundTrip ? ROUND_TRIP_LABEL : exit ? exit.name || kind : 'Startpunkt'
+  const time = formatSignpostTime(tour.totalDurationH)
   const distance = formatDistanceKm(tour.totalDistanceM)
-  return { text, distance, title: `${makeStartLabel(startById)(tour.exitStartId)}, ${distance}` }
+  const detail = `↑ ${Math.round(tour.totalAscentM).toLocaleString('de-DE')} m`
+  const route = roundTrip
+    ? `${ROUND_TRIP_LABEL} ab ${startLabel(tour.startId)}`
+    : `${startLabel(tour.startId)} → ${startLabel(tour.exitStartId)}`
+  return {
+    text: distance,
+    detail,
+    roundTrip,
+    title: `${route} · ${distance} · ${detail} · ${time}`,
+  }
 }
