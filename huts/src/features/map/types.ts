@@ -24,3 +24,9 @@ export interface Route {
 }
 
 export type EmphasisTier = 'rest' | 'focused' | 'hovered'
+
+/** A point on the height profile: which leg and how far along it (0…1), in travel direction. */
+export interface ProfilePosition {
+  legIndex: number
+  fraction: number
+}
