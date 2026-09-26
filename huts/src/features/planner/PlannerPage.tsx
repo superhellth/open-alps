@@ -75,7 +75,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editMode, setEditMode, editor, highlightedLeg, setHighlightedLeg,
-    shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
+    profileCursor, setProfileCursor, shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds, tripStopNames,
   } = useTripSession({ data, client, startLabel })
   const { sidebarView, goPlanen, goMeineTouren, goHome, openSavedTrip, openPinnedDraft, backFromTrip } = useSidebarNavigation({
@@ -113,7 +113,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     }
     if (mode === 'trip' && tripLegs) {
       return {
-        kind: 'trip', tripLegs, tripHuts, tripEnds, stopNames: tripStopNames, candidates: candidateMarkers,
+        kind: 'trip', tripLegs, tripHuts, tripEnds, candidates: candidateMarkers,
         hutCoordsById: data.hutCoordsById, candidateStartCoords,
         activeLabel: editor.activeLabel, onPickCandidate: editor.pickCandidate,
         onCancelEditing: () => setEditing(null), onHoverLeg: setHighlightedLeg,
@@ -126,13 +126,14 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       onFocusTours: (keys) => setFocusTours(keys && new Set(keys)),
       onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
     }
-  }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, tripStopNames, candidateMarkers, candidateStartCoords,
+  }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
     editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, visibleTours, hoveredTourKeys, focusTours,
     dismissPrompt, setDiscoverTab, setFocusTours, setMapView, setHoveredTourKeys, pick])
   const mapCommands = useMemo<MapCommands>(() => ({
-    route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg, restoreView, fitBounds,
+    route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg,
+    cursor: mode === 'trip' ? profileCursor : null, restoreView, fitBounds,
     onMapClick: () => { dismissPrompt(); setFocusTours(null) },
-  }), [mode, tripRoute, highlightedLeg, restoreView, fitBounds, dismissPrompt, setFocusTours])
+  }), [mode, tripRoute, highlightedLeg, profileCursor, restoreView, fitBounds, dismissPrompt, setFocusTours])
 
   const importedTrip = useMemo(() => (importHash ? decodeTripFromHash(importHash) : null), [importHash])
   const closeImport = () => { setImportDismissed(true); window.location.hash = '' }
@@ -195,6 +196,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
               onBack={backFromTrip} backLabel={openedFrom === 'saved' ? 'Meine Touren' : 'Ergebnisse'}
               highlightedLeg={highlightedLeg} onHoverLeg={setHighlightedLeg}
+              stopNames={tripStopNames} onHoverProfile={setProfileCursor}
               editor={editor} editMode={editMode} onEditModeChange={setEditMode}
               warnings={overlapWarnings} onShare={share}
             />

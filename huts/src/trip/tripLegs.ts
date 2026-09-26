@@ -56,6 +56,12 @@ export function linkLeg(graph: TripGraph, variantId: number, from: Endpoint, to:
   return null
 }
 
+/** A point along a trip: which leg and how far along it (0…1), in travel direction. */
+export interface ProfilePosition {
+  legIndex: number
+  fraction: number
+}
+
 export interface TripLegs {
   variantId: number
   /** Current payload index per trip hut, null when the GUID no longer resolves. */

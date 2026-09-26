@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { loadLegGeometry, _resetLegGeometryCachesForTests } from './loadLegGeometry.js'
+import { legLayer, loadLegGeometry, _resetLegGeometryCachesForTests } from './loadLegGeometry.js'
 
 // [lon, lat] pairs per synthetic edge, matching the pipeline's on-disk point order.
 const EDGE0: [number, number][] = [[11.0, 47.0], [11.25, 47.25]]
@@ -156,5 +156,11 @@ describe('loadLegGeometry', () => {
 
     await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('503')
     expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
+})
+
+describe('legLayer', () => {
+  it('uses start_edges for approach and exit, hut_edges between', () => {
+    expect([0, 1, 2].map((i) => legLayer(i, 3))).toEqual(['start_edges', 'hut_edges', 'start_edges'])
   })
 })

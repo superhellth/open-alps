@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  PROFILE_HEIGHT, PROFILE_MARGINS, elevationAxis, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, truncateLabel,
+  PROFILE_HEIGHT, PROFILE_MARGINS, elevationAxis, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, placeStopLabels, truncateLabel,
 } from './profileScale.js'
 import type { ElevationPoint } from './useTripElevation.js'
 
@@ -11,15 +11,14 @@ const points: ElevationPoint[] = [
 
 describe('elevationAxis', () => {
   it('uses 250 m steps when the span is under 1000 m and pads to whole steps', () => {
-    expect(elevationAxis(1000, 1400)).toEqual({ lo: 1000, hi: 1500, ticks: [1000, 1250, 1500] })
+    expect(elevationAxis(1000, 1400)).toEqual({ lo: 1000, hi: 1500 })
   })
   it('uses 500 m steps for larger spans', () => {
-    expect(elevationAxis(800, 2100)).toEqual({ lo: 500, hi: 2500, ticks: [500, 1000, 1500, 2000, 2500] })
+    expect(elevationAxis(800, 2100)).toEqual({ lo: 500, hi: 2500 })
   })
   it('never collapses a flat profile to zero height', () => {
     const axis = elevationAxis(1000, 1000)
     expect(axis.hi).toBeGreaterThan(axis.lo)
-    expect(axis.ticks.length).toBeGreaterThanOrEqual(2)
   })
 })
 
@@ -37,6 +36,9 @@ describe('makeScales', () => {
     expect(s.kmAt(s.x(0.75))).toBeCloseTo(0.75)
     expect(s.kmAt(-50)).toBe(0)
     expect(s.kmAt(10_000)).toBeCloseTo(1.5)
+  })
+  it('reports the lowest and highest sample', () => {
+    expect([s.minM, s.maxM]).toEqual([1000, 1400])
   })
   it('produces finite coordinates for a flat profile', () => {
     const flat = makeScales([{ distanceKm: 0, elevationM: 900, legIndex: 0 }, { distanceKm: 1, elevationM: 900, legIndex: 0 }], [0, 1], 600)
@@ -83,5 +85,23 @@ describe('truncateLabel / formatKm', () => {
   it('formats km with one German decimal', () => {
     expect(formatKm(18.24)).toBe('18,2')
     expect(formatKm(0)).toBe('0,0')
+  })
+})
+
+describe('placeStopLabels', () => {
+  it('centres hut names exactly on their lines', () => {
+    const labels = placeStopLabels([40, 200, 400, 560], ['Start', 'Hütte A', 'Hütte B', 'Ende'], 600)
+    expect(labels.slice(1, 3)).toEqual([{ x: 200, text: 'Hütte A' }, { x: 400, text: 'Hütte B' }])
+  })
+  it('falls back to the stage number, then to nothing, when a hut name does not fit', () => {
+    const labels = placeStopLabels([0, 40, 60, 100], ['S', 'Hütte A', 'Hütte B', 'E'], 100)
+    expect(labels[1].text).toBe('1')
+    expect(placeStopLabels([0, 50, 50, 100], ['S', 'A', 'B', 'E'], 100)[1].text).toBe('')
+  })
+  it('shifts the start and exit names inside the width and ellipsizes them to their space', () => {
+    const [start, , end] = placeStopLabels([10, 300, 590], ['Bahnhof', 'Hütte', 'Parkplatz'], 600, 6)
+    expect(start).toEqual({ x: 21, text: 'Bahnhof' })
+    expect(end.x + (end.text.length * 6) / 2).toBeLessThanOrEqual(600)
+    expect(placeStopLabels([0, 100], ['Bahnhof Mayrhofen', 'Ende'], 200, 6)[0].text).toMatch(/…$/)
   })
 })

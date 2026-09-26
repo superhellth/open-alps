@@ -28,14 +28,14 @@ const someTripLegs = {
   changed: [false],
 } as never
 
-const commands: MapCommands = { route: null, fitRoute: false, highlightedLeg: null, restoreView: null, fitBounds: null, onMapClick: () => {} }
+const commands: MapCommands = { route: null, fitRoute: false, highlightedLeg: null, cursor: null, restoreView: null, fitBounds: null, onMapClick: () => {} }
 const discover = (over: Partial<DiscoverMapMode> = {}): DiscoverMapMode => ({
   kind: 'discover', groups: [], dimmed: false, startById, allTours: [], routeCtx: null, hutNameById: new Map(), hoveredTourKeys: new Set(),
   onNavigate: () => {}, focusTours: null, onFocusTours: () => {}, onViewChange: () => {}, onHoverTours: () => {}, onPickRoute: () => {},
   ...over,
 })
 const tripMode = (over: Partial<TripMapMode> = {}): TripMapMode => ({
-  kind: 'trip', tripLegs: someTripLegs, tripHuts: [], tripEnds: [], stopNames: [], candidates: [], hutCoordsById: new Map(), candidateStartCoords: new Map(),
+  kind: 'trip', tripLegs: someTripLegs, tripHuts: [], tripEnds: [], candidates: [], hutCoordsById: new Map(), candidateStartCoords: new Map(),
   activeLabel: null, onPickCandidate: () => {}, onCancelEditing: () => {}, onHoverLeg: () => {},
   ...over,
 })
@@ -131,18 +131,6 @@ describe('PlannerMap saved mode', () => {
       />,
     )
     expect(container.querySelectorAll('path').length).toBeGreaterThan(baseline)
-  })
-})
-
-describe('PlannerMap height profile', () => {
-  it('renders a collapsible height profile docked at the bottom when a trip is open', () => {
-    render(<PlannerMap mode={tripMode()} commands={commands} />)
-    expect(screen.getByRole('button', { name: /Höhenprofil/ })).toBeInTheDocument()
-  })
-
-  it('renders no profile toggle outside trip mode', () => {
-    render(<PlannerMap mode={discover()} commands={commands} />)
-    expect(screen.queryByRole('button', { name: /Höhenprofil/ })).not.toBeInTheDocument()
   })
 })
 

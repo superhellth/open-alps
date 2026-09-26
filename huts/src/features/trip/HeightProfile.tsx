@@ -1,19 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, RefObject } from 'react'
 import { Box, Typography } from '@mui/material'
-import { alpha } from '@mui/material/styles'
 import { formatMeters } from '@/format/meters.js'
 import { tokens } from '@/ui/theme.js'
-import { fontSize, opacity, rem } from '@/ui/tokens.js'
-import { PROFILE_HEIGHT, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, truncateLabel } from './profileScale.js'
-import type { ProfilePosition } from './types.js'
+import { fontSize, rem } from '@/ui/tokens.js'
+import type { ProfilePosition } from '@/trip/tripLegs.js'
+import { PROFILE_HEIGHT, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, placeStopLabels } from './profileScale.js'
 import type { ElevationPoint, TripElevation } from './useTripElevation.js'
 import { styles } from './HeightProfile.styles.js'
 
 const FALLBACK_WIDTH = 600
-const LABEL_GAP_PX = 6
 const KM_LABEL_MIN_GAP_PX = 34
+/** Below this vertical distance the min label would overlap the max label and is left out. */
+const MIN_LABEL_SPACING_PX = 14
 const TEXT_SIZE = rem(fontSize.xs)
+/** Space between a night line's top and its stop name. */
+const STOP_LABEL_GAP_PX = 2
 
 /** Width of `ref`'s element, kept current with a ResizeObserver; the fallback stands in where layout is unavailable. */
 function useWidth(ref: RefObject<HTMLElement | null>): number {
@@ -34,9 +36,9 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
   return width
 }
 
-/** The whole trip as one filled elevation curve, split per leg so the hovered leg can be filled in
- *  signpost yellow. Night boundaries carry the stop names and km; hovering shows a cursor with a
- *  readout and reports the leg and position along it. */
+/** The whole trip as one elevation line over a baseline, split per leg so the hovered leg can be
+ *  filled in signpost yellow. Each night line carries its stop name centred on top and its km below;
+ *  hovering shows a cursor with a readout and reports the leg and position along it. */
 export default function HeightProfile({ elevation, stops, highlightedLeg, onHoverLeg, onHoverPosition }: {
   elevation: TripElevation
   /** Names at the night boundaries: start, each hut, exit (legs + 1 entries). */
@@ -51,7 +53,7 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
   const { points, nightBoundariesKm: bounds } = elevation
 
   if (elevation.loading) {
-    return <Box ref={rootRef} sx={styles.root}><Typography variant="body2" sx={styles.message}>Höhenprofil lädt …</Typography></Box>
+    return <Box ref={rootRef} sx={styles.root}><Typography variant="body2">Höhenprofil lädt …</Typography></Box>
   }
   if (points.length === 0) return <Box ref={rootRef} sx={styles.root} />
 
@@ -64,18 +66,16 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
     else byLeg.set(p.legIndex, [p])
   }
 
+  const linePoints = (pts: ElevationPoint[]) => pts.map((p) => `${s.x(p.distanceKm)},${s.y(p.elevationM)}`).join(' ')
+  const highlighted = highlightedLeg === null ? undefined : byLeg.get(highlightedLeg)
+  const highlightArea = highlighted
+    && `${linePoints(highlighted)} ${s.x(highlighted[highlighted.length - 1].distanceKm)},${s.plotBottom} ${s.x(highlighted[0].distanceKm)},${s.plotBottom}`
+
   const cursorPoint = cursorKm === null ? null : nearestPoint(points, cursorKm)
   const cursorLeg = cursorKm === null ? null : legAtKm(bounds, cursorKm)
 
-  const stopLabels = bounds.map((km, i) => {
-    const last = i === bounds.length - 1
-    const x = s.x(km)
-    const neighbourX = last ? s.x(bounds[i - 1] ?? km) : s.x(bounds[i + 1])
-    return {
-      i, x: last ? x - 3 : x + 3, anchor: last ? ('end' as const) : ('start' as const),
-      text: truncateLabel(stops[i] ?? '', Math.abs(neighbourX - x) - LABEL_GAP_PX),
-    }
-  })
+  const stopLabels = placeStopLabels(bounds.map((km) => s.x(km)), stops, width)
+  const extremes = s.y(s.minM) - s.y(s.maxM) < MIN_LABEL_SPACING_PX ? [s.maxM] : [s.maxM, s.minM]
   let lastKmX = -Infinity
   const kmLabels = bounds.flatMap((km, i) => {
     const x = s.x(km)
@@ -106,42 +106,31 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
     <Box ref={rootRef} sx={styles.root}>
       <Typography variant="caption" sx={styles.readout}>{readout}</Typography>
       <svg data-testid="profile-svg" width={width} height={PROFILE_HEIGHT} onMouseMove={handleMove} onMouseLeave={handleLeave}>
-        {s.axis.ticks.map((tick) => (
-          <g key={tick}>
-            <line
-              data-testid="grid-line" x1={s.plotLeft} x2={s.plotRight} y1={s.y(tick)} y2={s.y(tick)}
-              stroke={alpha(tokens.ink, opacity.outline)} strokeWidth={1}
-            />
-            <text x={s.plotLeft - 4} y={s.y(tick)} textAnchor="end" dominantBaseline="middle" fontSize={TEXT_SIZE} fill={tokens.ink}>
-              {tick.toLocaleString('de-DE')}
-            </text>
-          </g>
+        {extremes.map((m) => (
+          <text key={m} data-testid="elevation-label" x={s.plotLeft - 4} y={s.y(m)} textAnchor="end" dominantBaseline="middle" fontSize={TEXT_SIZE} fill={tokens.ink}>
+            {Math.round(m).toLocaleString('de-DE')}
+          </text>
         ))}
+        {highlightArea && <polygon data-testid={`leg-area-${highlightedLeg}`} points={highlightArea} fill={tokens.signpost} stroke="none" />}
+        <line x1={s.plotLeft} x2={s.plotRight} y1={s.plotBottom} y2={s.plotBottom} stroke={tokens.ink} strokeWidth={1} />
         {[...byLeg.entries()].map(([legIndex, pts]) => {
           const on = legIndex === highlightedLeg
-          const line = pts.map((p) => `${s.x(p.distanceKm)},${s.y(p.elevationM)}`)
-          const area = `${line.join(' ')} ${s.x(pts[pts.length - 1].distanceKm)},${s.plotBottom} ${s.x(pts[0].distanceKm)},${s.plotBottom}`
           return (
-            <g key={legIndex}>
-              <polygon
-                data-testid={`leg-area-${legIndex}`} data-highlighted={on} points={area}
-                fill={on ? tokens.signpost : alpha(tokens.ink, opacity.shadow)} stroke="none"
-              />
-              <polyline
-                data-testid={`leg-segment-${legIndex}`} data-highlighted={on} points={line.join(' ')}
-                fill="none" stroke={tokens.ink} strokeWidth={on ? 2 : 1.5}
-              />
-            </g>
+            <polyline
+              key={legIndex} data-testid={`leg-segment-${legIndex}`} data-highlighted={on}
+              points={linePoints(pts)}
+              fill="none" stroke={tokens.ink} strokeWidth={on ? 2 : 1.5} strokeLinejoin="round"
+            />
           )
         })}
         {bounds.slice(1, -1).map((km, i) => (
           <line
-            key={i} data-testid="night-separator" x1={s.x(km)} x2={s.x(km)} y1={s.plotTop} y2={s.plotBottom}
+            key={i} data-testid="night-separator" x1={s.x(km)} x2={s.x(km)} y1={s.plotTop - STOP_LABEL_GAP_PX} y2={s.plotBottom}
             stroke={tokens.ink} strokeWidth={1}
           />
         ))}
-        {stopLabels.map((l) => (
-          <text key={l.i} data-testid="stop-label" x={l.x} y={s.plotTop - 6} textAnchor={l.anchor} fontSize={TEXT_SIZE} fontWeight={600} fill={tokens.ink}>
+        {stopLabels.map((l, i) => (
+          <text key={i} data-testid="stop-label" x={l.x} y={s.plotTop - STOP_LABEL_GAP_PX - 2} textAnchor="middle" fontSize={TEXT_SIZE} fontWeight={600} fill={tokens.ink}>
             {l.text}
           </text>
         ))}

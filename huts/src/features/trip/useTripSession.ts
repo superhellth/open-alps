@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppData } from '@/data/buildAppData.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
+import type { ProfilePosition } from '@/trip/tripLegs.js'
 import { shareUrl } from '@/trip/shareLink.js'
 import type { Trip } from '@/trip/trip.js'
 import { useTrips } from '@/trip/tripsContext.js'
@@ -14,6 +15,7 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
   const { dispatch, activeTrip, isDraft, draftDirty } = useTrips()
   const [editing, setEditing] = useState<EditingState>(null)
   const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
+  const [profileCursor, setProfileCursor] = useState<ProfilePosition | null>(null)
   const [editMode, setEditModeState] = useState(false)
   /** Turning edit mode off also cancels a pending edit. */
   const setEditMode = useCallback((on: boolean) => {
@@ -30,7 +32,7 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
   const nightCount = activeTrip?.huts.length ?? 0
   // A different trip starts in view mode; a hovered row that vanished never fires mouseleave.
   useEffect(() => { setEditModeState(false); setEditing(null) }, [tripId])
-  useEffect(() => { setHighlightedLeg(null) }, [tripId, nightCount])
+  useEffect(() => { setHighlightedLeg(null); setProfileCursor(null) }, [tripId, nightCount])
   const mode: 'trip' | 'discover' = activeTrip && tripLegs ? 'trip' : 'discover'
   const overlapWarnings = useTripOverlaps(client, activeTrip, tripLegs)
 
@@ -105,7 +107,7 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
 
   return {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings,
-    editing, setEditing, editMode, setEditMode, editor, highlightedLeg, setHighlightedLeg,
+    editing, setEditing, editMode, setEditMode, editor, highlightedLeg, setHighlightedLeg, profileCursor, setProfileCursor,
     shareNote, setShareNote, shareFallback, share,
     pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom,

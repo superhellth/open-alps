@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react'
+import { memo, useEffect } from 'react'
 import { Box } from '@mui/material'
 import { MapContainer, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
@@ -7,11 +7,12 @@ import type { DiscoverMapMode } from './DiscoverMapLayers.js'
 import RouteLayer from './RouteLayer.js'
 import { SavedMapLayers } from './SavedMapLayers.js'
 import type { SavedMapMode } from './SavedMapLayers.js'
-import { TripMapLayers, TripMapProfile, TripMapStatusBar } from './TripMapLayers.js'
+import { TripMapLayers, TripMapStatusBar } from './TripMapLayers.js'
 import type { TripMapMode } from './TripMapLayers.js'
 import { ACTIVE_TILES } from './tiles.js'
 import type { Bounds, ViewTarget } from './useMapView.js'
-import type { ProfilePosition, Route } from './types.js'
+import type { ProfilePosition } from '@/trip/tripLegs.js'
+import type { Route } from './types.js'
 import './map.css'
 import { styles } from './PlannerMap.styles.js'
 
@@ -19,6 +20,8 @@ export interface MapCommands {
   route: Route | null
   fitRoute: boolean
   highlightedLeg: number | null
+  /** Position hovered on the trip's height profile, drawn as a dot on the route. */
+  cursor: ProfilePosition | null
   /** Set once to jump the map back to Discover's viewport from before a tour was picked. */
   restoreView: ViewTarget | null
   /** Set to a fresh value to fly the map to these bounds. */
@@ -55,9 +58,7 @@ function FitBoundsCommand({ bounds }: { bounds: Bounds | null }) {
 
 // One MapContainer stays mounted across modes so pan/zoom survive switching.
 const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps) {
-  const { route, fitRoute, highlightedLeg, restoreView, fitBounds, onMapClick } = commands
-  const [cursor, setCursor] = useState<ProfilePosition | null>(null)
-  useEffect(() => { if (mode.kind !== 'trip') setCursor(null) }, [mode.kind])
+  const { route, fitRoute, highlightedLeg, cursor, restoreView, fitBounds, onMapClick } = commands
   return (
     <Box className={mode.kind === 'discover' ? 'map-muted' : undefined} sx={styles.root}>
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
@@ -83,7 +84,6 @@ const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps)
           {mode.kind === 'saved' && <SavedMapLayers mode={mode} />}
         </MapContainer>
       </Box>
-      {mode.kind === 'trip' && <TripMapProfile mode={mode} highlightedLeg={highlightedLeg} onHoverPosition={setCursor} />}
     </Box>
   )
 })

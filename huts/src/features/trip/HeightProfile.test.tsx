@@ -48,10 +48,24 @@ describe('HeightProfile', () => {
     expect(labels).toEqual(['Bahnhof X', 'Hütte A', 'Bahnhof X'])
   })
 
-  it('draws a grid line and label per round elevation step', () => {
+  it('centres each hut name on its night line', () => {
     draw()
-    expect(screen.getAllByTestId('grid-line')).toHaveLength(3) // 1000, 1250, 1500
-    expect(screen.getByText((1250).toLocaleString('de-DE'))).toBeInTheDocument()
+    const separator = screen.getByTestId('night-separator')
+    const hutLabel = screen.getAllByTestId('stop-label')[1]
+    expect(hutLabel).toHaveAttribute('x', separator.getAttribute('x1'))
+    expect(hutLabel).toHaveAttribute('text-anchor', 'middle')
+  })
+
+  it('falls back to the stage number when a hut name does not fit between its neighbours', () => {
+    draw({ stops: ['Bahnhof X', 'Sehr lange Hüttenbezeichnung am Gletscherrand', 'Bahnhof X'] })
+    expect(screen.getAllByTestId('stop-label')[1]).toHaveTextContent(/^1$/)
+  })
+
+  it('labels only the lowest and highest elevation, without grid lines', () => {
+    draw()
+    expect(screen.getAllByTestId('elevation-label').map((n) => n.textContent))
+      .toEqual([(1400).toLocaleString('de-DE'), (1000).toLocaleString('de-DE')])
+    expect(screen.queryByTestId('grid-line')).not.toBeInTheDocument()
   })
 
   it('labels km at the night boundaries', () => {
@@ -59,10 +73,17 @@ describe('HeightProfile', () => {
     expect(screen.getAllByTestId('km-label').map((n) => n.textContent)).toEqual(['0,0', '1,0', '1,5'])
   })
 
-  it('highlights the area and line of highlightedLeg', () => {
+  it('fills only the highlighted leg and thickens its line', () => {
     draw({ highlightedLeg: 1 })
-    for (const id of ['leg-segment-1', 'leg-area-1']) expect(screen.getByTestId(id)).toHaveAttribute('data-highlighted', 'true')
-    for (const id of ['leg-segment-0', 'leg-area-0']) expect(screen.getByTestId(id)).toHaveAttribute('data-highlighted', 'false')
+    expect(screen.getByTestId('leg-area-1')).toBeInTheDocument()
+    expect(screen.queryByTestId('leg-area-0')).not.toBeInTheDocument()
+    expect(screen.getByTestId('leg-segment-1')).toHaveAttribute('data-highlighted', 'true')
+    expect(screen.getByTestId('leg-segment-0')).toHaveAttribute('data-highlighted', 'false')
+  })
+
+  it('draws no fill without a highlighted leg', () => {
+    const { container } = draw()
+    expect(container.querySelector('polygon')).toBeNull()
   })
 
   it('hovering reports the leg and the fraction along it, leaving clears both', () => {

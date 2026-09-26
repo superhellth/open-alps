@@ -11,6 +11,8 @@ import { makeStartLabel } from '@/data/labels.js'
 import * as availability from '@/availability/fetchAvailability.js'
 import * as detail from '@/availability/fetchHutDetail.js'
 
+vi.mock('@/tourSearch/loadLegElevation.js', () => ({ loadLegElevation: vi.fn(async () => []) }))
+
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 const data = makeTestAppData()
@@ -26,6 +28,7 @@ function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
   const props = {
     trip: t, tripLegs: legsFromTrip(data.graph, t), data, startLabel: makeStartLabel(data.startById), isDraft: false,
     onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: 'Ergebnisse', highlightedLeg: null, onHoverLeg: vi.fn(),
+    stopNames: ['Start', 'Hütte D', 'Hütte E', 'Start'], onHoverProfile: vi.fn(),
     editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...over,
   }
   const { container } = render(<TripPanel {...props} />)

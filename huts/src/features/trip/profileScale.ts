@@ -1,24 +1,21 @@
 import type { ElevationPoint } from './useTripElevation.js'
 
 export const PROFILE_HEIGHT = 140
-/** Room for y-axis labels (left), stop names (top) and km labels (bottom). */
+/** Room for the min/max elevation labels (left), stop names (top) and km labels (bottom). */
 export const PROFILE_MARGINS = { left: 40, right: 8, top: 18, bottom: 22 }
 
 export interface ElevationAxis {
   lo: number
   hi: number
-  ticks: number[]
 }
 
-/** Grid steps of 500 m, or 250 m when the elevation span is under 1000 m; limits padded to whole steps. */
+/** Axis limits padded to whole steps of 500 m, or 250 m when the elevation span is under 1000 m. */
 export function elevationAxis(minM: number, maxM: number): ElevationAxis {
   const step = maxM - minM < 1000 ? 250 : 500
   const lo = Math.floor(minM / step) * step
   let hi = Math.ceil(maxM / step) * step
   if (hi === lo) hi = lo + step
-  const ticks: number[] = []
-  for (let t = lo; t <= hi; t += step) ticks.push(t)
-  return { lo, hi, ticks }
+  return { lo, hi }
 }
 
 export interface ProfileScales {
@@ -32,6 +29,9 @@ export interface ProfileScales {
   plotBottom: number
   axis: ElevationAxis
   maxKm: number
+  /** Lowest and highest sample of the trip. */
+  minM: number
+  maxM: number
 }
 
 export function makeScales(
@@ -54,7 +54,7 @@ export function makeScales(
     x: (km) => plotLeft + (km / maxKm) * plotW,
     y: (ele) => plotBottom - ((ele - axis.lo) / (axis.hi - axis.lo)) * (plotBottom - plotTop),
     kmAt: (px) => Math.min(1, Math.max(0, (px - plotLeft) / plotW)) * maxKm,
-    plotLeft, plotRight, plotTop, plotBottom, axis, maxKm,
+    plotLeft, plotRight, plotTop, plotBottom, axis, maxKm, minM: min, maxM: max,
   }
 }
 
@@ -81,6 +81,30 @@ export function truncateLabel(text: string, widthPx: number, charPx = 6.5): stri
   if (text.length <= max) return text
   if (max <= 1) return ''
   return `${text.slice(0, max - 1)}…`
+}
+
+export interface StopLabel {
+  x: number
+  text: string
+}
+
+/** Stop labels centred on their night lines at `xs`. Each label owns the space up to halfway to its
+ *  neighbours. A hut name that does not fit there falls back to its stage number, or '' when that
+ *  does not fit either. The start and exit names shift inwards to stay inside `width` and are
+ *  ellipsized to their space. */
+export function placeStopLabels(xs: number[], names: string[], width: number, charPx = 6.5, gapPx = 6): StopLabel[] {
+  const last = xs.length - 1
+  return xs.map((x, i) => {
+    const lo = i === 0 ? 0 : (xs[i - 1] + x) / 2 + gapPx / 2
+    const hi = i === last ? width : (x + xs[i + 1]) / 2 - gapPx / 2
+    if (i === 0 || i === last) {
+      const text = truncateLabel(names[i] ?? '', hi - lo, charPx)
+      const half = (text.length * charPx) / 2
+      return { x: Math.min(hi - half, Math.max(lo + half, x)), text }
+    }
+    const text = [names[i] ?? '', String(i)].find((t) => x - (t.length * charPx) / 2 >= lo && x + (t.length * charPx) / 2 <= hi) ?? ''
+    return { x, text }
+  })
 }
 
 export const formatKm = (km: number) => km.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })

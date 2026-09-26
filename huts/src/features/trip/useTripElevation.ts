@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { loadLegElevation } from '@/tourSearch/loadLegElevation.js'
+import { legLayer } from '@/tourSearch/loadLegGeometry.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
-import { legLayer } from './routes.js'
 
 export interface ElevationPoint {
   distanceKm: number

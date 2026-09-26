@@ -41,7 +41,7 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 `huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
 `features/discover/usePlannerSearch` runs the whole-graph search, results drawn as clustered
 count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx`'s `useTripEditor` exposes swap/extend/trim/start/exit moves that `StageList` hut nodes trigger in edit mode)
--> Plan nights (`features/trip/TripPanel.tsx` = `TripHeader` + `StageList`: per-night availability and an inline booking link on each hut node of the stage timeline
+-> Plan nights (`features/trip/TripPanel.tsx` = `TripHeader` + `HeightProfile` (whole-trip elevation line, `useTripElevation`) + `StageList`: per-night availability and an inline booking link on each hut node of the stage timeline
 (`StageNode`, legs between them are `StageLeg`); a "Wann?" calendar (`features/trip/TripDatePicker.tsx`, shared `ui/CalendarField`/`ui/MonthCalendar` with the filter bar) picks the arrival day: hovering a day moves the drawn stay onto it and marks each of its nights with that night's hut availability, `features/trip/useStayNights.ts`) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).

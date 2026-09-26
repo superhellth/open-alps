@@ -5,7 +5,8 @@ import { tokens } from '@/ui/theme.js'
 import { opacity } from '@/ui/tokens.js'
 import { pointAlong } from './pointAlong.js'
 import { LEG_HIT_PANE, ensureRoutePanes, paneName } from './routePanes.js'
-import type { EmphasisTier, ProfilePosition, Route } from './types.js'
+import type { ProfilePosition } from '@/trip/tripLegs.js'
+import type { EmphasisTier, Route } from './types.js'
 import { useLegGeometries } from './useLegGeometries.js'
 
 /** Line widths in px. */

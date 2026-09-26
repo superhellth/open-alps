@@ -1,7 +1,7 @@
 import { anchorCandidates, tourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { Bbox, TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { LegAnchorLookup } from '@/tourSearch/legAnchors.js'
-import type { GeometryLayer } from '@/tourSearch/loadLegGeometry.js'
+import { legLayer } from '@/tourSearch/loadLegGeometry.js'
 import type { OfficialTourView } from '@/tourSearch/officialTours.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '@/trip/trip.js'
@@ -17,10 +17,6 @@ export interface RouteContext {
   hutClassByIndex: Map<number, HutClass>
   /** Anchor points of a leg's edge, for placing a tour's signpost on its route. */
   legAnchors: LegAnchorLookup
-}
-
-export function legLayer(legIndex: number, legCount: number): GeometryLayer {
-  return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
 }
 
 function place(id: number, kind: 'hut' | 'start', ctx: RouteContext): RouteWaypoint | null {

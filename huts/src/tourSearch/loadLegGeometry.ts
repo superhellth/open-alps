@@ -8,6 +8,11 @@ import { cachedPromise } from '@/lib/cachedPromise.js'
  */
 export type GeometryLayer = 'hut_edges' | 'start_edges' | 'tour_edges'
 
+/** Layer of a generated leg: approach and exit are start edges, everything between hut edges. */
+export function legLayer(legIndex: number, legCount: number): GeometryLayer {
+  return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
+}
+
 interface GeometryManifest {
   point_counts: number[]
 }

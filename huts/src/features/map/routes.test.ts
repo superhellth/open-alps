@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { legLayer, tourAnchorOf, tourToRoute, tripToRoute } from './routes.js'
+import { tourAnchorOf, tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
@@ -16,12 +16,6 @@ const ctx: RouteContext = {
 const chain = (over: Partial<PlannerTour> = {}): PlannerTour => ({
   huts: [0, 1], startId: 100, exitStartId: 100, totalDurationH: 1, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0,
   legs: [0, 1, 2].map((edgeId) => ({ durationH: 1, ascentM: 0, descentM: 0, distanceM: 0, edgeId, reversed: false })), ...over,
-})
-
-describe('legLayer', () => {
-  it('uses start_edges for approach and exit, hut_edges between', () => {
-    expect([0, 1, 2].map((i) => legLayer(i, 3))).toEqual(['start_edges', 'hut_edges', 'start_edges'])
-  })
 })
 
 describe('tourToRoute', () => {
