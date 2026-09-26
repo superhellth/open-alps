@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { Box, IconButton, Typography } from '@mui/material'
+import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import { todayIso } from '@/format/dayMonth.js'
 import { styles } from './MonthCalendar.styles.js'
 
@@ -31,11 +33,13 @@ export interface MonthCalendarProps {
   onPickDay: (iso: string) => void
   /** Small mark under a day's number; when given, every day reserves the mark's row. */
   dayMark?: (iso: string) => ReactNode
+  /** Hovered pickable day; null once the pointer leaves the days. */
+  onHoverDay?: (iso: string | null) => void
   disabled?: boolean
 }
 
 /** One month of day buttons (Monday first) with month navigation. Days before today are not pickable. */
-export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPickDay, dayMark, disabled = false }: MonthCalendarProps) {
+export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPickDay, dayMark, onHoverDay, disabled = false }: MonthCalendarProps) {
   const initial = new Date(initialDay !== '' ? `${initialDay}T00:00:00Z` : Date.now())
   const [view, setView] = useState({ y: initial.getUTCFullYear(), m: initial.getUTCMonth() })
   const today = todayIso()
@@ -48,16 +52,16 @@ export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPick
   return (
     <Box>
       <Box sx={styles.monthHeader}>
-        <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(-1)} aria-label="Vorheriger Monat">‹</IconButton>
+        <IconButton size="small" sx={styles.navButton} disabled={disabled} onClick={() => shiftMonth(-1)} aria-label="Vorheriger Monat"><ChevronLeftIcon fontSize="small" /></IconButton>
         <Typography variant="body2" sx={styles.monthLabel}>{monthLabel(view.y, view.m)}</Typography>
-        <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(1)} aria-label="Nächster Monat">›</IconButton>
+        <IconButton size="small" sx={styles.navButton} disabled={disabled} onClick={() => shiftMonth(1)} aria-label="Nächster Monat"><ChevronRightIcon fontSize="small" /></IconButton>
       </Box>
       <Box sx={styles.grid}>
         {WEEKDAY_LABELS.map((w) => (
           <Typography key={w} variant="caption" color="text.secondary" align="center">{w}</Typography>
         ))}
       </Box>
-      <Box sx={styles.grid}>
+      <Box sx={styles.grid} onMouseLeave={() => onHoverDay?.(null)}>
         {buildMonthDays(view.y, view.m).map((iso, i) => {
           if (iso === null) return <Box key={`empty-${i}`} />
           const inRange = rangeStart !== '' && rangeEnd !== '' && iso >= rangeStart && iso <= rangeEnd
@@ -68,6 +72,7 @@ export default function MonthCalendar({ initialDay, rangeStart, rangeEnd, onPick
             <Box
               key={iso} role="button" aria-label={iso} aria-pressed={isEndpoint} aria-disabled={dayDisabled}
               onClick={() => !dayDisabled && onPickDay(iso)}
+              onMouseEnter={() => onHoverDay?.(dayDisabled ? null : iso)}
               sx={styles.day({ disabled: dayDisabled, isEndpoint, inRange, isToday: iso === today })}
             >
               <Typography variant="body2">{Number(iso.slice(-2))}</Typography>

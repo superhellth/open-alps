@@ -15,5 +15,6 @@ export const styles = {
   mark: { fontSize: rem(fontSize.xs), lineHeight: 1, minHeight: rem(fontSize.xs) },
   grid: { display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' },
   monthHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between' },
+  navButton: { width: 32, height: 32, borderRadius: 1 },
   monthLabel: { textTransform: 'capitalize' },
 } satisfies StyleMap
