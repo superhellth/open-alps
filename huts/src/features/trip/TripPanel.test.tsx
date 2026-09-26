@@ -46,9 +46,9 @@ describe('TripPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Meine Touren' }))
     expect(onBack).toHaveBeenCalled()
   })
-  it('marks a draft nicht gespeichert and saves', () => {
+  it('offers Merken for a draft and saves', () => {
     const { onSave } = renderPanel({ isDraft: true })
-    expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Merken' })).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     expect(onSave).toHaveBeenCalled()

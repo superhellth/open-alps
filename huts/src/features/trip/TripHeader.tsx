@@ -15,8 +15,6 @@ import Signpost from './Signpost.js'
 import TripDatePicker from './TripDatePicker.js'
 import { styles } from './TripHeader.styles.js'
 
-const DRAFT_MARK = 'nicht gespeichert'
-
 export interface TripHeaderProps {
   trip: Trip
   tripLegs: TripLegs
@@ -37,7 +35,6 @@ export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, on
   const km = Math.round(totals.distanceM / 1000).toLocaleString('de-DE')
   const stats = `${trip.huts.length} Nächte · ${km} km · ↑ ${formatMeters(totals.ascentM)} ↓ ${formatMeters(totals.descentM)}`
   const [saving, setSaving] = useState(false)
-  const subtitle = isDraft ? `${DRAFT_MARK} · ${stats}` : stats
 
   return (
     <Box sx={styles.root}>
@@ -52,7 +49,7 @@ export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, on
       </Box>
       <Signpost
         title={trip.name}
-        timeH={totals.durationH} subtitle={subtitle}
+        timeH={totals.durationH} subtitle={stats}
       />
       <SaveTripDialog
         open={saving} initialName={trip.name}

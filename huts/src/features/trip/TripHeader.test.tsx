@@ -47,9 +47,10 @@ describe('TripHeader', () => {
     renderHeader({ onShare: undefined })
     expect(screen.queryByRole('button', { name: 'Teilen' })).not.toBeInTheDocument()
   })
-  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren under the name from the dialog', async () => {
+  it('a draft shows its name, saves to Meine Touren under the name from the dialog', async () => {
     const { onSave } = renderHeader({ isDraft: true })
-    expect(screen.getByText(/^nicht gespeichert · 2 Nächte/)).toBeInTheDocument()
+    expect(screen.getByText(/^2 Nächte/)).toBeInTheDocument()
+    expect(screen.queryByText(/nicht gespeichert/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Mein Name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
@@ -60,9 +61,8 @@ describe('TripHeader', () => {
     fireEvent.click(screen.getByText('Testtour'))
     expect(screen.queryByLabelText('Tourname')).not.toBeInTheDocument()
   })
-  it('a saved trip shows Gespeichert instead of Merken and no nicht gespeichert mark', () => {
+  it('a saved trip shows Gespeichert instead of Merken', () => {
     renderHeader()
-    expect(screen.queryByText(/nicht gespeichert/)).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Merken' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Gespeichert' })).toBeInTheDocument()
   })
