@@ -144,7 +144,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
               <Tab value="filters" label="Filter" />
               <Tab
                 value="results"
-                label={<Badge color="primary" badgeContent={visibleTours.length} max={99} sx={{ pr: 1.2 }}>Ergebnisse</Badge>}
+                label={<Badge color="primary" badgeContent={visibleTours.length} max={99} sx={styles.resultsBadge}>Ergebnisse</Badge>}
               />
             </Tabs>
             <Box hidden={discoverTab !== 'filters'} sx={{ position: 'relative' }}>
@@ -188,7 +188,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
               onHoverLeg={setHighlightedLeg}
               renderStageControls={editor.renderRowMenu}
               endpointControls={
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                <Box sx={styles.filtersColumn}>
                   {editor.renderEndpointMenu('start')}
                   {editor.renderEndpointMenu('exit')}
                 </Box>
@@ -198,7 +198,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
             />
           )}
           {shareFallback && (
-            <Box sx={{ p: 2 }}>
+            <Box sx={styles.shareFallback}>
               <TextField size="small" fullWidth label="Link zum Teilen" value={shareFallback} slotProps={{ htmlInput: { readOnly: true } }} onFocus={(e) => e.target.select()} />
             </Box>
           )}

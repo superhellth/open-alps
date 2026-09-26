@@ -56,7 +56,7 @@ export default function SidebarHeader({ view, savedCount, onWordmark, onPlanen, 
       >
         Hüttentouren
       </Box>
-      <Box component="nav" sx={{ display: 'flex', marginLeft: 'auto' }}>
+      <Box component="nav" sx={styles.nav}>
         {fingerpost('Planen', planenActive, 0, 2, onPlanen)}
         {fingerpost(`Meine Touren (${savedCount})`, !planenActive, 1, 2, onMeineTouren)}
       </Box>
