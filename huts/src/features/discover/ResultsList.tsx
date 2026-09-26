@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { Box, Button, Chip, List, ListItemButton, Pagination, Typography } from '@mui/material'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import { formatSignpostTime } from '@/format/signpostTime.js'
@@ -89,8 +90,8 @@ export default function ResultsList({
       </Box>
       {tours.length < totalCount && (
         <Box sx={styles.showAll}>
-          <Button size="small" color="inherit" onClick={onShowAll} sx={{ color: 'text.secondary' }}>
-            ← Alle {totalCount} Touren anzeigen
+          <Button size="small" color="inherit" startIcon={<ArrowBackIcon />} onClick={onShowAll} sx={{ color: 'text.secondary' }}>
+            Alle {totalCount} Touren anzeigen
           </Button>
         </Box>
       )}

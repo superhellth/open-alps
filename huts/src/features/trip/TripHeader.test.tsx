@@ -23,7 +23,7 @@ function renderHeader(over: Partial<Parameters<typeof TripHeader>[0]> = {}) {
   const trip = over.trip ?? make()
   const props = {
     trip, tripLegs: legsFromTrip(data.graph, trip), hutOhrsByIndex: data.hutOhrsByIndex, isDraft: false,
-    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: '← Ergebnisse', onShare: vi.fn(), ...over,
+    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: 'Ergebnisse', onShare: vi.fn(), ...over,
   }
   render(<TripHeader {...props} />)
   return props
@@ -37,8 +37,8 @@ describe('TripHeader', () => {
     expect(screen.getByText(/Std$/)).toBeInTheDocument()
   })
   it('calls back and share', () => {
-    const { onBack, onShare } = renderHeader({ backLabel: '← Meine Touren' })
-    fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
+    const { onBack, onShare } = renderHeader({ backLabel: 'Meine Touren' })
+    fireEvent.click(screen.getByRole('button', { name: 'Meine Touren' }))
     fireEvent.click(screen.getByRole('button', { name: 'Teilen' }))
     expect(onBack).toHaveBeenCalled()
     expect(onShare).toHaveBeenCalled()

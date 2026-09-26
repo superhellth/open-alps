@@ -82,7 +82,7 @@ describe('ResultsList', () => {
     const { rerender } = render(<ResultsList {...p} />)
     expect(screen.queryByText(/Touren anzeigen/)).toBeNull()
     rerender(<ResultsList {...p} tours={[p.tours[0]]} />)
-    fireEvent.click(screen.getByText('← Alle 2 Touren anzeigen'))
+    fireEvent.click(screen.getByText('Alle 2 Touren anzeigen'))
     expect(p.onShowAll).toHaveBeenCalled()
   })
 })

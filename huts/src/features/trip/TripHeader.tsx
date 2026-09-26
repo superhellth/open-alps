@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Box, Button, Typography } from '@mui/material'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import ShortcutIcon from '@mui/icons-material/Shortcut'
@@ -41,7 +42,7 @@ export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, on
   return (
     <Box sx={styles.root}>
       <Box sx={styles.topRow}>
-        <Button size="small" color="secondary" onClick={onBack}>{backLabel}</Button>
+        <Button size="small" color="secondary" startIcon={<ArrowBackIcon />} onClick={onBack}>{backLabel}</Button>
         <Box sx={styles.actions}>
           {onShare && <Button size="small" color="secondary" startIcon={<ShortcutIcon />} onClick={onShare}>Teilen</Button>}
           {isDraft

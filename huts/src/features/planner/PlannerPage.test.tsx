@@ -129,11 +129,11 @@ describe('PlannerPage', () => {
     await openFirstResult(container)
 
     // The trip panel replaces the results column, opened as a draft.
-    expect(await screen.findByRole('button', { name: '← Ergebnisse' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Ergebnisse' })).toBeInTheDocument()
     expect(screen.getAllByText('Hütte A').length).toBeGreaterThan(0)
     expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ergebnisse' }))
     expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
   })
 
@@ -145,7 +145,7 @@ describe('PlannerPage', () => {
     const more = screen.getAllByRole('button', { name: 'Eine Person mehr', hidden: true }).find((el) => !el.closest('[hidden]'))!
     fireEvent.click(more)
 
-    fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ergebnisse' }))
     const row = await screen.findByRole('button', { name: /Hütte A/ })
     fireEvent.click(row)
 
@@ -158,7 +158,7 @@ describe('PlannerPage', () => {
   it('replaces an unedited draft silently on a new pick', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Ergebnisse' }))
     const row = await screen.findByRole('button', { name: /Hütte A/ })
     fireEvent.click(row)
     expect(screen.queryByText('Ungespeicherte Tour verwerfen?')).not.toBeInTheDocument()
@@ -251,7 +251,7 @@ describe('PlannerPage', () => {
     )
     expect(await screen.findByText('Aus Link')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'In meine Touren übernehmen' }))
-    expect(await screen.findByRole('button', { name: '← Ergebnisse' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Ergebnisse' })).toBeInTheDocument()
   })
 
   it('#trips shows the saved-trips list', async () => {
@@ -264,8 +264,8 @@ describe('PlannerPage', () => {
     window.location.hash = '#trips'
     renderPlannerWithSavedTrip()
     fireEvent.click(await screen.findByText('Kaiser'))
-    expect(await screen.findByRole('button', { name: '← Meine Touren' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
+    expect(await screen.findByRole('button', { name: 'Meine Touren' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Meine Touren' }))
     expect(window.location.hash).toBe('#trips')
     expect(await screen.findByText('Meine Touren')).toBeInTheDocument()
   })

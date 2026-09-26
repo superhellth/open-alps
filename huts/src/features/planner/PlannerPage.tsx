@@ -142,7 +142,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       <SidebarHeader view={sidebarView} savedCount={state.trips.length} onWordmark={goHome} onPlanen={goPlanen} onMeineTouren={goMeineTouren} />
       <Box sx={styles.body}>
         <Box sx={styles.sidebar}>
-          {/* Kept mounted (only hidden) while a trip or the saved list is showing, so "← Ergebnisse"
+          {/* Kept mounted (only hidden) while a trip or the saved list is showing, so "Ergebnisse"
               restores the list's scroll position. */}
           <Box hidden={sidebarView !== 'discover'}>
             <Tabs
@@ -193,7 +193,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
               isDraft={isDraft} onSave={(name) => dispatch({ type: 'saveDraft', name })}
               onUnsave={() => dispatch({ type: 'unsave', id: activeTrip.id, name: resetName(activeTrip) })}
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
-              onBack={backFromTrip} backLabel={openedFrom === 'saved' ? '← Meine Touren' : '← Ergebnisse'}
+              onBack={backFromTrip} backLabel={openedFrom === 'saved' ? 'Meine Touren' : 'Ergebnisse'}
               highlightedLeg={highlightedLeg} onHoverLeg={setHighlightedLeg}
               editor={editor} editMode={editMode} onEditModeChange={setEditMode}
               warnings={overlapWarnings} onShare={share}

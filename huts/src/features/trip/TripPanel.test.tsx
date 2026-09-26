@@ -25,7 +25,7 @@ function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
   const t = over.trip ?? trip
   const props = {
     trip: t, tripLegs: legsFromTrip(data.graph, t), data, startLabel: makeStartLabel(data.startById), isDraft: false,
-    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: '← Ergebnisse', highlightedLeg: null, onHoverLeg: vi.fn(),
+    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: 'Ergebnisse', highlightedLeg: null, onHoverLeg: vi.fn(),
     editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...over,
   }
   render(<TripPanel {...props} />)
@@ -42,8 +42,8 @@ describe('TripPanel', () => {
     expect(screen.getByLabelText('Notizen')).toBeInTheDocument()
   })
   it('goes back with the caller-supplied label', () => {
-    const { onBack } = renderPanel({ backLabel: '← Meine Touren' })
-    fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
+    const { onBack } = renderPanel({ backLabel: 'Meine Touren' })
+    fireEvent.click(screen.getByRole('button', { name: 'Meine Touren' }))
     expect(onBack).toHaveBeenCalled()
   })
   it('marks a draft nicht gespeichert and saves', () => {
