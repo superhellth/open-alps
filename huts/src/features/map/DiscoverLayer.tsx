@@ -131,10 +131,6 @@ export default function DiscoverLayer({
     return placeSignposts(placeableTours, project, measureBoard, { width: size.x, height: size.y }, previousPlacements.current)
   }, [placeableTours, map])
   useEffect(() => { previousPlacements.current = placements }, [placements])
-  /** The pointer is on a signpost: its own board keeps full opacity. */
-  const [pointerOnSignpost, setPointerOnSignpost] = useState(false)
-  /** The pointer is on a hut or end symbol: the boards of its tours are highlighted, not stepped back. */
-  const [pointerOnStop, setPointerOnStop] = useState(false)
   /** Zoom at which the pointer entered a count bubble. A zoom change re-clusters the bubbles without a mouseout, so the
    *  pointer counts as on a bubble only at that zoom; there the other bubbles keep full opacity. */
   const [bubbleHoverZoom, setBubbleHoverZoom] = useState<number | null>(null)
@@ -234,8 +230,7 @@ export default function DiscoverLayer({
             key={p.key} position={[p.lat, p.lng]} kind={p.kind}
             html={p.kind === 'board' ? singleHtml(boardTour, p.side) : dotHtml(boardTour, p.side)}
             dimmed={dimmedMarker} highlighted={highlighted}
-            fadedKeys={pointerOnSignpost || pointerOnStop ? NO_TOURS : hoveredTourKeys}
-            onHoverMarker={(hovering) => { setPointerOnSignpost(hovering); onHoverTours(hovering ? new Set([p.key]) : NO_TOURS) }}
+            onHoverMarker={(hovering) => onHoverTours(hovering ? new Set([p.key]) : NO_TOURS)}
             onActivate={() => { onNavigate(); onPickRoute(tour) }}
           />
         )
@@ -256,7 +251,7 @@ export default function DiscoverLayer({
       {tiered.filter((t) => t.tier === 'hovered').map(({ key, route }) => <RouteLayer key={`h-${key}`} route={route} tier="hovered" dots={false} interactive={false} />)}
       <WaypointLayer
         symbols={symbols}
-        onHoverStop={(stop, at) => { setPointerOnStop(stop !== null); hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop)) }}
+        onHoverStop={(stop, at) => { hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop)) }}
         onClickStop={(stop) => clickKeys(toursOfStop(stop))}
       />
       <HoverTooltip tip={tip} />

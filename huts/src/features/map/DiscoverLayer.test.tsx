@@ -460,12 +460,11 @@ describe('DiscoverLayer signposts on the route', () => {
     expect(container.querySelectorAll('.signpost-marker.dot')).toHaveLength(1)
   })
 
-  it('fades a board while its tour is hovered from elsewhere, not while the board itself is hovered', async () => {
+  it('highlights a board while its tour is hovered from elsewhere and never fades it', async () => {
     vi.spyOn(routes, 'tourAnchorCandidatesOf').mockReturnValue([anchor])
     const t = tour(1, [10, 11])
     const { container } = renderLayer({ ...focusOn(t), groups: [{ startId: 1, tours: [t] }] as never, hoveredTourKeys: new Set([tourKey(t)]) }, 13)
-    await waitFor(() => expect(container.querySelector('.sign.faded')).not.toBeNull())
-    fireEvent.mouseOver(container.querySelector('.sign')!)
-    await waitFor(() => expect(container.querySelector('.sign.faded')).toBeNull())
+    await waitFor(() => expect(container.querySelector('.signpost-marker.board.highlighted')).not.toBeNull())
+    expect(container.querySelector('.faded')).toBeNull()
   })
 })

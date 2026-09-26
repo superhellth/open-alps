@@ -13,14 +13,12 @@ const TOUR_ELEMENT = '[data-tour-key]'
 /** One signpost marker: a board on a mast, or a foot dot whose board shows as a preview while its tour is hovered or
  *  focused, or highlighted from elsewhere. The icon depends only on `kind` and `html`; dimmed, highlighted and previewing
  *  are classes toggled on the live icon element, so hovering never replaces the DOM under the pointer. */
-export default function SignpostMarker({ position, kind, html, dimmed, highlighted, fadedKeys, onHoverMarker, onActivate }: {
+export default function SignpostMarker({ position, kind, html, dimmed, highlighted, onHoverMarker, onActivate }: {
   position: [number, number]
   kind: SignpostKind
   html: string
   dimmed: boolean
   highlighted: boolean
-  /** Tour keys whose boards are drawn faded. */
-  fadedKeys: ReadonlySet<string>
   /** The pointer or focus entered (true) or left (false) the marker. */
   onHoverMarker: (hovering: boolean) => void
   /** The board or dot was clicked or Enter was pressed on it. */
@@ -47,11 +45,6 @@ export default function SignpostMarker({ position, kind, html, dimmed, highlight
   useEffect(() => {
     markerRef.current?.setZIndexOffset(previewing ? PREVIEW_Z_OFFSET : highlighted ? HOVER_Z_OFFSET : 0)
   }, [icon, previewing, highlighted])
-
-  useEffect(() => {
-    markerRef.current?.getElement()?.querySelectorAll<HTMLElement>(`.sign${TOUR_ELEMENT}`)
-      .forEach((board) => board.classList.toggle('faded', fadedKeys.has(board.dataset.tourKey!)))
-  }, [icon, fadedKeys])
 
   useEffect(() => {
     const el = markerRef.current?.getElement()

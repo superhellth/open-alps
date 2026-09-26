@@ -15,7 +15,7 @@ function setup(over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) {
   const tree = (props: Partial<Parameters<typeof SignpostMarker>[0]>) => (
     <MapContainer center={[47, 11]} zoom={13} style={{ height: 400, width: 400 }}>
       <SignpostMarker
-        position={[47, 11]} kind="dot" html={dotHtml(bt(1), 'right')} dimmed={false} highlighted={false} fadedKeys={new Set()}
+        position={[47, 11]} kind="dot" html={dotHtml(bt(1), 'right')} dimmed={false} highlighted={false}
         {...handlers} {...props}
       />
     </MapContainer>
@@ -55,11 +55,6 @@ describe('SignpostMarker board', () => {
     expect(onActivate).toHaveBeenCalledTimes(1)
     fireEvent.keyDown(el().querySelector('.sign')!, { key: 'Enter' })
     expect(onActivate).toHaveBeenCalledTimes(2)
-  })
-  it('fades the board of the given tour keys and leaves the others opaque', () => {
-    expect(board({ fadedKeys: new Set(['k1']) }).el().querySelector('.sign')!.classList.contains('faded')).toBe(true)
-    cleanup()
-    expect(board({ fadedKeys: new Set(['k2']) }).el().querySelector('.sign')!.classList.contains('faded')).toBe(false)
   })
   it('never previews, even when highlighted', () => {
     expect(board({ highlighted: true }).el().classList.contains('previewing')).toBe(false)
@@ -103,11 +98,6 @@ describe('SignpostMarker dot', () => {
     fireEvent.click(el().querySelector('.dot')!)
     fireEvent.keyDown(el().querySelector('.dot')!, { key: 'Enter' })
     expect(onActivate).toHaveBeenCalledTimes(2)
-  })
-  it('does not fade its dot or its preview board', () => {
-    const { el } = setup({ fadedKeys: new Set(['k1']) })
-    expect(el().querySelector('.dot')!.classList.contains('faded')).toBe(false)
-    expect(el().querySelector('.preview .sign')!.classList.contains('faded')).toBe(false)
   })
   it('does not keep a stuck preview when its html is replaced under the pointer', () => {
     const { el, again } = setup()

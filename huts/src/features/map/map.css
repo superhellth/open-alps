@@ -103,8 +103,6 @@
 .signpost-marker.dimmed .mast,
 .signpost-marker.dimmed .foot,
 .signpost-marker.dimmed .dot { opacity: 0.45; }
-/* A tour hovered from its route line or the list: its board steps back so the highlighted line reads clearly. */
-.signpost-marker .faded { opacity: 0.35; }
 
 /* Count bubble: a cluster, or any marker while zoomed out below the route reveal zoom. */
 .start-count-marker span {
