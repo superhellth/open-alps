@@ -22,7 +22,7 @@ function renderHeader(over: Partial<Parameters<typeof TripHeader>[0]> = {}) {
   const trip = over.trip ?? make()
   const props = {
     trip, tripLegs: legsFromTrip(data.graph, trip), hutOhrsByIndex: data.hutOhrsByIndex, isDraft: false,
-    onChange: vi.fn(), onSave: vi.fn(), onBack: vi.fn(), backLabel: '← Ergebnisse', onShare: vi.fn(), ...over,
+    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: '← Ergebnisse', onShare: vi.fn(), ...over,
   }
   render(<TripHeader {...props} />)
   return props
@@ -46,20 +46,29 @@ describe('TripHeader', () => {
     renderHeader({ onShare: undefined })
     expect(screen.queryByRole('button', { name: 'Teilen' })).not.toBeInTheDocument()
   })
-  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren, and can be renamed', () => {
+  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren, and can be renamed', async () => {
     const { onSave, onChange, trip } = renderHeader({ isDraft: true })
     expect(screen.getByText(/^nicht gespeichert · 2 Nächte/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Zu Meine Touren' }))
-    expect(onSave).toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: 'Testtour' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Mein Name' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    expect(onSave).toHaveBeenCalledWith('Mein Name')
+    fireEvent.click(await screen.findByRole('button', { name: 'Testtour' }))
     fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Neu' } })
     fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Enter' })
     expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
   })
-  it('a saved trip has no save button and no nicht gespeichert mark', () => {
+  it('a saved trip shows Gespeichert instead of Merken and no nicht gespeichert mark', () => {
     renderHeader()
     expect(screen.queryByText(/nicht gespeichert/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Zu Meine Touren' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Merken' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gespeichert' })).toBeInTheDocument()
+  })
+  it('Gespeichert removes the trip without a confirmation dialog', () => {
+    const { onUnsave } = renderHeader()
+    fireEvent.click(screen.getByRole('button', { name: 'Gespeichert' }))
+    expect(onUnsave).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
   it('renames in place: Enter commits, Escape cancels, blank or unchanged is ignored', () => {
     const { onChange, trip } = renderHeader()

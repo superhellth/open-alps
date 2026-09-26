@@ -73,6 +73,48 @@ describe('draft lifecycle', () => {
     expect(state.activeId).toBe(t.id)
   })
 
+  it('saveDraft applies the given name', () => {
+    const t = trip('a')
+    let state = tripsReducer(empty, { type: 'openDraft', trip: t })
+    state = tripsReducer(state, { type: 'saveDraft', name: 'Eigener Name' })
+    expect(state.trips[0].name).toBe('Eigener Name')
+  })
+
+  it('unsave turns a saved trip back into the open draft', () => {
+    const t = trip('a')
+    const saved = tripsReducer(tripsReducer(empty, { type: 'openDraft', trip: t }), { type: 'saveDraft' })
+    const state = tripsReducer(saved, { type: 'unsave', id: t.id })
+    expect(state.trips).toEqual([])
+    expect(state.draft).toEqual(saved.trips[0])
+    expect(state.activeIsDraft).toBe(true)
+    expect(state.activeId).toBeNull()
+    expect(state.deleted).toBeNull()
+    expect(state.unsaved).toEqual({ id: t.id, index: 0 })
+  })
+
+  it('undoUnsave puts the draft back at its list position and reopens it as saved', () => {
+    const [a, b] = [trip('a'), trip('b')]
+    let state = tripsReducer(tripsReducer(empty, { type: 'create', trip: a }), { type: 'create', trip: b })
+    state = tripsReducer(state, { type: 'unsave', id: a.id })
+    state = tripsReducer(state, { type: 'updateDraft', trip: { ...a, name: 'Umbenannt' } })
+    state = tripsReducer(state, { type: 'undoUnsave' })
+    expect(state.trips.map((t) => t.id)).toEqual([a.id, b.id])
+    expect(state.trips[0].name).toBe('Umbenannt')
+    expect(state.draft).toBeNull()
+    expect(state.activeId).toBe(a.id)
+    expect(state.activeIsDraft).toBe(false)
+    expect(state.unsaved).toBeNull()
+  })
+
+  it('undoUnsave is a no-op once another draft replaced the unsaved trip', () => {
+    const a = trip('a')
+    let state = tripsReducer(empty, { type: 'create', trip: a })
+    state = tripsReducer(state, { type: 'unsave', id: a.id })
+    state = tripsReducer(state, { type: 'openDraft', trip: trip('b') })
+    expect(state.unsaved).toBeNull()
+    expect(tripsReducer(state, { type: 'undoUnsave' })).toBe(state)
+  })
+
   it('saveDraft is a no-op when there is no draft', () => {
     expect(tripsReducer(empty, { type: 'saveDraft' })).toBe(empty)
   })

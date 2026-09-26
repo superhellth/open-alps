@@ -6,6 +6,8 @@ export interface TripsState extends StoredTrips {
   draftBaseline: Trip | null
   /** The most recent deletion, kept so it can be undone. */
   deleted: { trip: Trip; index: number } | null
+  /** The saved trip most recently turned back into the draft, and its list position, so it can be undone. */
+  unsaved: { id: string; index: number } | null
 }
 
 export type TripsAction =
@@ -13,7 +15,10 @@ export type TripsAction =
   | { type: 'update'; trip: Trip; now?: Date }
   | { type: 'openDraft'; trip: Trip }
   | { type: 'updateDraft'; trip: Trip; now?: Date }
-  | { type: 'saveDraft'; now?: Date }
+  | { type: 'saveDraft'; name?: string; now?: Date }
+  | { type: 'unsave'; id: string }
+  | { type: 'undoUnsave' }
+  | { type: 'dismissUnsave' }
   | { type: 'setActive'; id: string }
   | { type: 'closeActive' }
   | { type: 'delete'; id: string }
@@ -22,7 +27,7 @@ export type TripsAction =
   | { type: 'reopenDraft' }
 
 export function initialTripsState(stored: StoredTrips): TripsState {
-  return { ...stored, draftBaseline: stored.draft, deleted: null }
+  return { ...stored, draftBaseline: stored.draft, deleted: null, unsaved: null }
 }
 
 function sameEndpoint(a: TripEndpoint, b: TripEndpoint): boolean {
@@ -53,7 +58,7 @@ export function tripsReducer(state: TripsState, action: TripsAction): TripsState
       }
     }
     case 'openDraft':
-      return { ...state, draft: action.trip, draftBaseline: action.trip, activeId: null, activeIsDraft: true }
+      return { ...state, draft: action.trip, draftBaseline: action.trip, activeId: null, activeIsDraft: true, unsaved: null }
     case 'updateDraft': {
       if (!state.draft) return state
       const updatedAt = (action.now ?? new Date()).toISOString()
@@ -62,9 +67,34 @@ export function tripsReducer(state: TripsState, action: TripsAction): TripsState
     case 'saveDraft': {
       if (!state.draft) return state
       const updatedAt = (action.now ?? new Date()).toISOString()
-      const trip = { ...state.draft, updatedAt }
-      return { ...state, trips: [...state.trips, trip], draft: null, draftBaseline: null, activeId: trip.id, activeIsDraft: false }
+      const trip = { ...state.draft, name: action.name ?? state.draft.name, updatedAt }
+      return {
+        ...state, trips: [...state.trips, trip], draft: null, draftBaseline: null, activeId: trip.id, activeIsDraft: false,
+        unsaved: null,
+      }
     }
+    case 'unsave': {
+      const index = state.trips.findIndex((t) => t.id === action.id)
+      if (index === -1) return state
+      const trip = state.trips[index]
+      return {
+        ...state,
+        trips: state.trips.filter((t) => t.id !== action.id),
+        draft: trip, draftBaseline: trip, activeId: null, activeIsDraft: true,
+        unsaved: { id: trip.id, index },
+      }
+    }
+    case 'undoUnsave': {
+      if (!state.unsaved || state.draft?.id !== state.unsaved.id) return state
+      const trips = [...state.trips]
+      trips.splice(state.unsaved.index, 0, state.draft)
+      const activeId = state.activeIsDraft ? state.draft.id : state.activeId
+      return {
+        ...state, trips, draft: null, draftBaseline: null, activeId, activeIsDraft: false, unsaved: null,
+      }
+    }
+    case 'dismissUnsave':
+      return state.unsaved ? { ...state, unsaved: null } : state
     case 'reopenDraft':
       return state.draft ? { ...state, activeId: null, activeIsDraft: true } : state
     case 'setActive':

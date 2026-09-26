@@ -16,7 +16,8 @@ export interface TripPanelProps {
   startLabel: (startId: number) => string
   isDraft: boolean
   onChange: (trip: Trip) => void
-  onSave: () => void
+  onSave: (name: string) => void
+  onUnsave: () => void
   onBack: () => void
   backLabel: string
   highlightedLeg: number | null
@@ -30,7 +31,7 @@ export interface TripPanelProps {
 
 /** The open trip as three sections: header (name, totals, dates), stages, notes. */
 export default function TripPanel({
-  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, backLabel, highlightedLeg, onHoverLeg,
+  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onUnsave, onBack, backLabel, highlightedLeg, onHoverLeg,
   editor, editMode, onEditModeChange, warnings, onShare,
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
@@ -38,7 +39,7 @@ export default function TripPanel({
     <Box sx={styles.root}>
       <TripHeader
         trip={trip} tripLegs={tripLegs} hutOhrsByIndex={data.hutOhrsByIndex} isDraft={isDraft}
-        onChange={onChange} onSave={onSave} onBack={onBack} backLabel={backLabel} onShare={onShare}
+        onChange={onChange} onSave={onSave} onUnsave={onUnsave} onBack={onBack} backLabel={backLabel} onShare={onShare}
       />
       <Divider />
       <StageList

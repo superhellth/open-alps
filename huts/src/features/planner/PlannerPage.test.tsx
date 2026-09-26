@@ -167,12 +167,27 @@ describe('PlannerPage', () => {
     expect(screen.queryByText('Ungespeicherte Tour verwerfen?')).not.toBeInTheDocument()
   })
 
-  it('Zu Meine Touren moves the draft into saved trips and clears the nicht gespeichert mark', async () => {
+  it('Merken moves the draft into saved trips and clears the nicht gespeichert mark', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    fireEvent.click(screen.getByRole('button', { name: 'Zu Meine Touren' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     expect(screen.queryByText(/^nicht gespeichert ·/)).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Zu Meine Touren' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Gespeichert' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Merken' })).not.toBeInTheDocument())
+  })
+
+  it('removing a saved trip keeps it open as a draft and can be undone', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Gespeichert' }))
+    expect(await screen.findByRole('button', { name: 'Merken' })).toBeInTheDocument()
+    expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Rückgängig' }))
+    expect(await screen.findByRole('button', { name: 'Gespeichert' })).toBeInTheDocument()
+    expect(screen.queryByText(/^nicht gespeichert ·/)).not.toBeInTheDocument()
   })
 
   it('shows the fixed no-match hint and no markers when nothing matches', async () => {

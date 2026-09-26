@@ -182,7 +182,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
           {sidebarView === 'trip' && activeTrip && tripLegs && (
             <TripPanel
               trip={activeTrip} tripLegs={tripLegs} data={data} startLabel={startLabel}
-              isDraft={isDraft} onSave={() => dispatch({ type: 'saveDraft' })}
+              isDraft={isDraft} onSave={(name) => dispatch({ type: 'saveDraft', name })}
+              onUnsave={() => dispatch({ type: 'unsave', id: activeTrip.id })}
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
               onBack={backFromTrip} backLabel={openedFrom === 'saved' ? '← Meine Touren' : '← Ergebnisse'}
               highlightedLeg={highlightedLeg} onHoverLeg={setHighlightedLeg}
@@ -217,6 +218,11 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       <Snackbar
         open={state.deleted !== null} message="Tour gelöscht"
         action={<Button color="inherit" size="small" onClick={() => dispatch({ type: 'undoDelete' })}>Rückgängig</Button>}
+      />
+      <Snackbar
+        open={state.unsaved !== null} message="Aus Meine Touren entfernt" autoHideDuration={6000}
+        onClose={(_, reason) => { if (reason !== 'clickaway') dispatch({ type: 'dismissUnsave' }) }}
+        action={<Button color="inherit" size="small" onClick={() => dispatch({ type: 'undoUnsave' })}>Rückgängig</Button>}
       />
     </Box>
   )
