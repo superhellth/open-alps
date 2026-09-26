@@ -31,8 +31,19 @@ export default function SignpostMarker({ position, kind, html, dimmed, highlight
   const callbacks = useRef({ onHoverMarker, onActivate })
   useEffect(() => { callbacks.current = { onHoverMarker, onActivate } })
 
-  // A replaced icon element never fires `mouseout`, so the engaged state ends with it.
-  useEffect(() => { setEngaged(false) }, [icon])
+  /** Whether this marker has reported a hover it has not yet released. */
+  const hovering = useRef(false)
+  const release = () => {
+    if (!hovering.current) return
+    hovering.current = false
+    callbacks.current.onHoverMarker(false)
+  }
+
+  // A replaced or removed icon element never fires `mouseout`, so the engaged state and the reported hover end with it.
+  useEffect(() => {
+    setEngaged(false)
+    return release
+  }, [icon])
 
   useEffect(() => {
     const el = markerRef.current?.getElement()
@@ -50,11 +61,11 @@ export default function SignpostMarker({ position, kind, html, dimmed, highlight
     const el = markerRef.current?.getElement()
     if (!el) return
     const inside = (t: EventTarget | null) => t instanceof Node && el.contains(t)
-    const enter = () => { setEngaged(true); callbacks.current.onHoverMarker(true) }
+    const enter = () => { setEngaged(true); hovering.current = true; callbacks.current.onHoverMarker(true) }
     const leave = (e: MouseEvent | FocusEvent) => {
       if (inside(e.relatedTarget)) return
       setEngaged(false)
-      callbacks.current.onHoverMarker(false)
+      release()
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Enter' || !(e.target instanceof Element) || !e.target.closest(TOUR_ELEMENT)) return

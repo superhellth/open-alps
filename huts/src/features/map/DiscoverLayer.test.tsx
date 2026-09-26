@@ -409,6 +409,22 @@ describe('DiscoverLayer signposts', () => {
     expect(dimmedCount(mapHover)).toBe(0)
   })
 
+  it('releases the hover of a bubble that leaves the map while hovered', async () => {
+    const t = tour(1, [10, 11])
+    const onHoverTours = vi.fn()
+    const layer = (groups: unknown) => (
+      <MapContainer center={[47.3, 12]} zoom={9} style={{ height: 400, width: 400 }}>
+        <DiscoverLayer {...layerProps} groups={groups as never} startById={startById} dimmed={false} allTours={[t]} routeCtx={routeCtx} onHoverTours={onHoverTours} />
+      </MapContainer>
+    )
+    const { container, rerender } = render(layer([{ startId: 1, tours: [t] }]))
+    fireEvent.mouseOver(container.querySelector('.start-count-marker')!)
+    expect(onHoverTours.mock.calls.at(-1)![0].size).toBe(1)
+    rerender(layer([]))
+    await waitFor(() => expect(container.querySelector('.start-count-marker')).toBeNull())
+    expect(onHoverTours.mock.calls.at(-1)![0].size).toBe(0)
+  })
+
   it('highlights the marker of a start whose tour is hovered from the list', () => {
     const tours = stackTours(2)
     const { container } = render1(tours, { hoveredTourKeys: new Set([tourKey(tours[0])]) })

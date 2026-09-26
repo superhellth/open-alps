@@ -26,6 +26,28 @@ function setup(over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) {
 }
 const board = (over: Partial<Parameters<typeof SignpostMarker>[0]> = {}) => setup({ kind: 'board', html: singleHtml(bt(1), 'right'), ...over })
 
+describe('SignpostMarker hover release', () => {
+  it('releases the hover when unmounted while hovered', () => {
+    const { el, onHoverMarker, unmount } = board()
+    fireEvent.mouseOver(el().querySelector('.sign')!)
+    onHoverMarker.mockClear()
+    unmount()
+    expect(onHoverMarker).toHaveBeenLastCalledWith(false)
+  })
+  it('releases the hover when its icon is replaced while hovered', () => {
+    const { el, onHoverMarker, again } = board()
+    fireEvent.mouseOver(el().querySelector('.sign')!)
+    onHoverMarker.mockClear()
+    again({ html: singleHtml(bt(1), 'left') })
+    expect(onHoverMarker).toHaveBeenLastCalledWith(false)
+  })
+  it('does not release a hover it never held', () => {
+    const { onHoverMarker, unmount } = board()
+    unmount()
+    expect(onHoverMarker).not.toHaveBeenCalled()
+  })
+})
+
 describe('SignpostMarker board', () => {
   it('has the board kind class and toggles dimmed and highlighted', () => {
     const { el } = board({ dimmed: true, highlighted: true })

@@ -46,6 +46,32 @@ function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.Div
   return icon
 }
 
+/** A count bubble. A bubble that re-clusters away while hovered never gets a `mouseout`, so its hover is released on unmount. */
+function BubbleMarker({ position, icon, highlighted, onHover, onActivate }: {
+  position: [number, number]
+  icon: L.DivIcon
+  highlighted: boolean
+  onHover: (hovering: boolean) => void
+  onActivate: () => void
+}) {
+  const callbacks = useRef({ onHover, onActivate })
+  useEffect(() => { callbacks.current = { onHover, onActivate } })
+  const hovering = useRef(false)
+  useEffect(() => () => {
+    if (hovering.current) callbacks.current.onHover(false)
+  }, [])
+  return (
+    <Marker
+      position={position} icon={icon} zIndexOffset={highlighted ? HOVER_Z_OFFSET : 0}
+      eventHandlers={{
+        mouseover: () => { hovering.current = true; callbacks.current.onHover(true) },
+        mouseout: () => { hovering.current = false; callbacks.current.onHover(false) },
+        click: () => callbacks.current.onActivate(),
+      }}
+    />
+  )
+}
+
 /** A bubble click zooms to its tours' anchors at no less than `ROUTE_REVEAL_ZOOM`, so it splits into boards, and at no more than this. */
 const BUBBLE_ZOOM_MAX = 13
 
@@ -206,14 +232,13 @@ export default function DiscoverLayer({
         const highlighted = keys.some((k) => hoveredTourKeys.has(k))
         const dimmedMarker = dimmed || (!highlighted && (outsideFocus || (hoverActive && !pointerOnBubble)))
         return (
-          <Marker
-            key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
-            zIndexOffset={highlighted ? HOVER_Z_OFFSET : 0}
-            eventHandlers={{
-              mouseover: () => { setBubbleHoverZoom(view.zoom); onHoverTours(new Set(keys)) },
-              mouseout: () => { setBubbleHoverZoom(null); onHoverTours(NO_TOURS) },
-              click: () => activate(m),
+          <BubbleMarker
+            key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)} highlighted={highlighted}
+            onHover={(hovering) => {
+              setBubbleHoverZoom(hovering ? view.zoom : null)
+              onHoverTours(hovering ? new Set(keys) : NO_TOURS)
             }}
+            onActivate={() => activate(m)}
           />
         )
       })}
