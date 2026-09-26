@@ -25,7 +25,7 @@ function hutChain(tour: PlannerTour, hutNameById: Map<number, string>): { text: 
  *  the app's only accent color is a fill, never a text color. */
 function statStyle(active: boolean): CSSProperties {
   return active
-    ? { fontWeight: 700, background: tokens.signpost, color: tokens.ink, padding: '0 4px', borderRadius: 2 }
+    ? { fontWeight: 700, background: tokens.signpost, color: tokens.ink, padding: '0 var(--space-inline)', borderRadius: 2 }
     : { color: 'inherit' }
 }
 
@@ -75,7 +75,7 @@ export default function ResultsList({
               label={
                 <Box sx={styles.sortChipLabel}>
                   {SORT_LABEL[key]}
-                  {active && key !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon sx={{ fontSize: 14 }} /> : <ArrowDownwardIcon sx={{ fontSize: 14 }} />)}
+                  {active && key !== 'fit' && (sortDir === 'asc' ? <ArrowUpwardIcon sx={styles.sortArrow} /> : <ArrowDownwardIcon sx={styles.sortArrow} />)}
                 </Box>
               }
               onClick={() => {
@@ -88,18 +88,18 @@ export default function ResultsList({
         })}
       </Box>
       {tours.length < totalCount && (
-        <Box sx={{ px: 1, pt: 1 }}>
+        <Box sx={styles.showAll}>
           <Button size="small" color="inherit" onClick={onShowAll} sx={{ color: 'text.secondary' }}>
             ← Alle {totalCount} Touren anzeigen
           </Button>
         </Box>
       )}
       {shown.length === 0 && (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+        <Typography variant="body2" color="text.secondary" sx={styles.emptyHint}>
           Keine Touren im aktuellen Kartenausschnitt. Karte verschieben oder herauszoomen.
         </Typography>
       )}
-      <List disablePadding sx={{ px: 2, pb: 2 }}>
+      <List disablePadding sx={styles.list}>
         {shown.map((tour, i) => {
           const chain = hutChain(tour, hutNameById)
           return (
@@ -134,7 +134,7 @@ export default function ResultsList({
           )
         })}
       </List>
-      {pageCount > 1 && <Pagination sx={{ px: 2, pb: 2 }} count={pageCount} page={page} onChange={(_e, p) => setPage(p)} size="small" />}
+      {pageCount > 1 && <Pagination sx={styles.pagination} count={pageCount} page={page} onChange={(_e, p) => setPage(p)} size="small" />}
     </Box>
   )
 }

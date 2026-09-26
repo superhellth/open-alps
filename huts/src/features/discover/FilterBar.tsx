@@ -100,7 +100,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
         </Select>
       </Box>
 
-      <Box sx={{ display: 'flex', gap: 2 }}>
+      <Box sx={styles.twoColumns}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle2">Wann?</Typography>
           <RangeCalendar
@@ -111,7 +111,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
 
         <Box>
           <Typography variant="subtitle2">Wie viele?</Typography>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <Box sx={styles.stepperRow}>
             <Typography>{draft.partySize} Pers.</Typography>
             <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
               sx={styles.stepperButton}
@@ -129,7 +129,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
 
       <Box>
         <Typography variant="subtitle2">Gehzeit pro Tag</Typography>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+        <Box sx={styles.chipRow}>
           {LEG_TIME_CEILINGS.map((h) => (
             <Chip
               key={h} label={`bis ${h} h`} clickable disabled={disabled}
@@ -189,7 +189,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
               Mindestens eine Hüttenart muss ausgewählt sein.
             </Typography>
           )}
-          <Typography variant="subtitle2" sx={{ mt: 1 }}>Höhe</Typography>
+          <Typography variant="subtitle2">Höhe</Typography>
           <TextField
             size="small" type="number" label="Anstiegslimit pro Etappe (m, leer = unbegrenzt)" disabled={disabled}
             value={form.legAscentCapM} slotProps={{ htmlInput: { min: 0 } }}

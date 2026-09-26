@@ -90,24 +90,24 @@ export default function RangeCalendar({ startDate, endDate, onChange, disabled }
         sx={styles.trigger}
       >
         {summaryLabel(startDate, endDate)}
-        <CalendarMonthIcon fontSize="small" sx={{ ml: 1, color: 'action.active' }} aria-hidden />
+        <CalendarMonthIcon fontSize="small" sx={styles.icon} aria-hidden />
       </Button>
       <Popover
         open={anchorEl !== null} anchorEl={anchorEl} onClose={() => setAnchorEl(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
-        <Box sx={{ width: 280, p: 1.5 }}>
+        <Box sx={styles.popover}>
           <Box sx={styles.monthHeader}>
             <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(-1)} aria-label="Vorheriger Monat">‹</IconButton>
             <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{monthLabel(view.y, view.m)}</Typography>
             <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(1)} aria-label="Nächster Monat">›</IconButton>
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', mt: 0.5 }}>
+          <Box sx={styles.weekdayRow}>
             {WEEKDAY_LABELS.map((w) => (
               <Typography key={w} variant="caption" color="text.secondary" align="center">{w}</Typography>
             ))}
           </Box>
-          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+          <Box sx={styles.weekdayRow}>
             {cells.map((iso, i) => {
               if (iso === null) return <Box key={`empty-${i}`} />
               const inRange = shownStart !== '' && shownEnd !== '' && iso >= shownStart && iso <= shownEnd

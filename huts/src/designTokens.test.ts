@@ -8,13 +8,6 @@ const SRC = path.dirname(fileURLToPath(import.meta.url))
 /** Files not yet migrated; each migration task removes its files. Empty at the end. */
 const PENDING: string[] = [
   'data/hutClass.ts',
-  'features/discover/FilterBar.styles.ts',
-  'features/discover/FilterBar.tsx',
-  'features/discover/RangeCalendar.styles.ts',
-  'features/discover/RangeCalendar.tsx',
-  'features/discover/ResultsList.styles.ts',
-  'features/discover/ResultsList.tsx',
-  'features/map/DiscoverLayer.tsx',
   'features/map/HeightProfile.tsx',
   'features/map/TripMapLayers.styles.ts',
   'features/map/map.css',
@@ -95,7 +88,7 @@ const RULES: Rule[] = [
   {
     name: 'margin',
     test: (code, css) => {
-      const re = css ? /(?:^|[\s;{])margin[\w-]*\s*:\s*([^;}]+)/ : /\b(?:m|mx|my|mt|mb|ml|mr|margin\w*)\s*:\s*([^,}]+)/
+      const re = css ? /(?:^|[\s;{])margin[\w-]*\s*:\s*([^;}]+)/ : /\b(?:m|mx|my|mt|mb|ml|mr|margin\w*)\s*:\s*((?:-?[\d.]|['"`]|space\.)[^,}]*)/
       const m = re.exec(code)
       return m !== null && !['0', "'0'", '"0"'].includes(m[1].trim())
     },
@@ -167,6 +160,7 @@ describe('design token scanner', () => {
     expect(ts('sx={{ mt: 0.5 }}')).toEqual(['margin'])
     expect(ts("'& .x': { margin: '4px 0' }")).toEqual(['margin'])
     expect(ts('sx={{ m: 0 }}')).toEqual([])
+    expect(ts('return { y, m: m - 1, d }')).toEqual([])
     expect(css('margin: 0;')).toEqual([])
     expect(css('margin: 4px 0;')).toEqual(['margin'])
   })
