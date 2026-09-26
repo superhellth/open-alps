@@ -127,6 +127,8 @@ export default function DiscoverLayer({
   useEffect(() => { previousPlacements.current = placements }, [placements])
   /** The pointer is on a signpost: its own board keeps full opacity. */
   const [pointerOnSignpost, setPointerOnSignpost] = useState(false)
+  /** The pointer is on a hut or end symbol: the boards of its tours are highlighted, not stepped back. */
+  const [pointerOnStop, setPointerOnStop] = useState(false)
   const toursByLeg = useMemo(() => indexToursByLeg(routedTours), [routedTours])
   const toursByHut = useMemo(() => indexToursByHut(routedTours), [routedTours])
   const toursByEnd = useMemo(() => indexToursByEnd(routedTours), [routedTours])
@@ -240,7 +242,7 @@ export default function DiscoverLayer({
             key={p.key} position={[p.lat, p.lng]} kind={p.kind}
             html={p.kind === 'board' ? singleHtml(boardTour, p.side) : dotHtml(boardTour, p.side)}
             dimmed={dimmedMarker} highlighted={highlighted || startHovered}
-            fadedKeys={pointerOnSignpost ? NO_TOURS : hoveredTourKeys}
+            fadedKeys={pointerOnSignpost || pointerOnStop ? NO_TOURS : hoveredTourKeys}
             onHoverMarker={(hovering) => { setPointerOnSignpost(hovering); onHoverTours(hovering ? new Set([p.key]) : NO_TOURS) }}
             onActivate={() => { onNavigate?.(); onPickRoute(tour) }}
           />
@@ -262,7 +264,7 @@ export default function DiscoverLayer({
       {tiered.filter((t) => t.tier === 'hovered').map(({ key, route }) => <RouteLayer key={`h-${key}`} route={route} emphasis="hovered" dots={false} interactive={false} />)}
       <WaypointLayer
         symbols={symbols}
-        onHoverStop={(stop, at) => hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop))}
+        onHoverStop={(stop, at) => { setPointerOnStop(stop !== null); hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop)) }}
         onClickStop={(stop) => clickKeys(toursOfStop(stop))}
       />
       <HoverTooltip tip={tip} />
