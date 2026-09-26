@@ -42,7 +42,7 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 `features/discover/usePlannerSearch` runs the whole-graph search, results drawn as clustered
 count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx`'s `useTripEditor` exposes swap/extend/trim/start/exit moves that `StageList` rows trigger in edit mode)
 -> Plan nights (`features/trip/TripPanel.tsx` = `TripHeader` + `StageList` + `TripFooter`: per-night availability and hand-set booking
-status behind each row's chevron, start-day chips) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
+status behind each row's chevron; a "Wann?" calendar (`features/trip/TripDatePicker.tsx`, shared `ui/CalendarField`/`ui/MonthCalendar` with the filter bar) marks which start dates within ±3 days keep the chain bookable) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).
 `features/discover/formState.ts` builds the `Query`; `features/discover/rankTours.ts`/`tourSearch/rankFit.ts` order results;

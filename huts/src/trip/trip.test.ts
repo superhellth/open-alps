@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { newTrip, parseTrip, shiftStartDate } from './trip.js'
+import { newTrip, parseTrip } from './trip.js'
 
 const input = {
   name: 'Testtour', startDate: '2026-07-10', partySize: 2,
@@ -37,17 +37,5 @@ describe('parseTrip', () => {
   })
   it('accepts a null start date', () => {
     expect(parseTrip({ ...good, startDate: null })?.startDate).toBeNull()
-  })
-})
-
-describe('shiftStartDate', () => {
-  it('moves the first night by whole days, month boundaries included', () => {
-    const t = newTrip({ ...input, startDate: '2026-07-31' }, new Date(), 'id')
-    expect(shiftStartDate(t, 1).startDate).toBe('2026-08-01')
-    expect(shiftStartDate(t, -1).startDate).toBe('2026-07-30')
-  })
-  it('leaves an undated trip undated', () => {
-    const t = newTrip({ ...input, startDate: null }, new Date(), 'id')
-    expect(shiftStartDate(t, 1).startDate).toBeNull()
   })
 })

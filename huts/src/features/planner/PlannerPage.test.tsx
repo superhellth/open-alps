@@ -142,11 +142,8 @@ describe('PlannerPage', () => {
     await openFirstResult(container)
     expect(await screen.findByText(/^nicht gespeichert ·/)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByText(/· 1 Pers\./))
-    const partyFields = screen.getAllByLabelText('Personen')
-    const visible = partyFields.find((el) => !el.closest('[hidden]'))!
-    fireEvent.change(visible, { target: { value: '4' } })
-    fireEvent.keyDown(visible, { key: 'Escape', code: 'Escape' })
+    const more = screen.getAllByRole('button', { name: 'Eine Person mehr', hidden: true }).find((el) => !el.closest('[hidden]'))!
+    fireEvent.click(more)
 
     fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
     const row = await screen.findByRole('button', { name: /Hütte A/ })

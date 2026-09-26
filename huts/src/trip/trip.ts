@@ -99,10 +99,3 @@ export function parseTrip(value: unknown): Trip | null {
     ...(typeof notes === 'string' ? { notes } : {}),
   }
 }
-
-export function shiftStartDate(trip: Trip, days: number): Trip {
-  if (trip.startDate === null) return trip
-  const [y, m, d] = trip.startDate.split('-').map(Number)
-  const shifted = new Date(Date.UTC(y, m - 1, d + days))
-  return { ...trip, startDate: shifted.toISOString().slice(0, 10) }
-}

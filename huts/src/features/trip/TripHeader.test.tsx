@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import TripHeader from './TripHeader.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
@@ -71,21 +71,21 @@ describe('TripHeader', () => {
     expect(onUnsave).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
-  it('edits date and party size through the date summary popover', () => {
+  it('shows the stay in the Wann? field and edits party size with the stepper', () => {
     const { onChange, trip } = renderHeader()
-    fireEvent.click(screen.getByText('10.07.–12.07. · 2 Pers.'))
-    fireEvent.change(screen.getByLabelText('Startdatum (erste Nacht)'), { target: { value: '2026-07-12' } })
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, startDate: '2026-07-12' })
+    expect(screen.getByRole('button', { name: '10.07. – 12.07.' })).toBeInTheDocument()
+    expect(screen.getByText('2 Pers.')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Eine Person mehr' }))
+    expect(onChange).toHaveBeenLastCalledWith({ ...trip, partySize: 3 })
   })
-  it('clicking a start-day chip shifts the start date by that many days', async () => {
+  it('picking a calendar day sets the first night', () => {
     const { onChange, trip } = renderHeader()
-    await waitFor(() => expect(document.querySelectorAll('[data-shift]').length).toBe(7))
-    fireEvent.click(document.querySelector('[data-shift="1"]')!)
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, startDate: '2026-07-11' })
+    fireEvent.click(screen.getByRole('button', { name: '10.07. – 12.07.' }))
+    fireEvent.click(screen.getByRole('button', { name: '2026-07-14' }))
+    expect(onChange).toHaveBeenLastCalledWith({ ...trip, startDate: '2026-07-14' })
   })
-  it('an undated trip reads "Datum wählen" and shows no chips', () => {
+  it('an undated trip reads "Datum wählen"', () => {
     renderHeader({ trip: make(null) })
-    expect(screen.getByText('Datum wählen · 2 Pers.')).toBeInTheDocument()
-    expect(document.querySelectorAll('[data-shift]').length).toBe(0)
+    expect(screen.getByRole('button', { name: 'Datum wählen' })).toBeInTheDocument()
   })
 })

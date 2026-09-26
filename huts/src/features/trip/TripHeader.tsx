@@ -1,18 +1,17 @@
 import { useState } from 'react'
-import { Box, Button } from '@mui/material'
+import { Box, Button, Typography } from '@mui/material'
 import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import ShortcutIcon from '@mui/icons-material/Shortcut'
 import type { HutOhrs } from '@/data/buildAppData.js'
 import { formatMeters } from '@/format/meters.js'
-import { shiftStartDate } from '@/trip/trip.js'
 import type { Trip } from '@/trip/trip.js'
 import { summarizeLegs } from '@/trip/tripLegs.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
+import PartySizeStepper from '@/ui/PartySizeStepper.js'
 import SaveTripDialog from './SaveTripDialog.js'
 import Signpost from './Signpost.js'
-import StartDateStrip from './StartDateStrip.js'
-import TripDateSummary from './TripDateSummary.js'
+import TripDatePicker from './TripDatePicker.js'
 import { styles } from './TripHeader.styles.js'
 
 const DRAFT_MARK = 'nicht gespeichert'
@@ -58,11 +57,16 @@ export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, on
         open={saving} initialName={trip.name}
         onSave={(name) => { setSaving(false); onSave(name) }} onCancel={() => setSaving(false)}
       />
-      <TripDateSummary trip={trip} onChange={onChange} />
-      <StartDateStrip
-        trip={trip} hutIndices={tripLegs.hutIndices} hutOhrsByIndex={hutOhrsByIndex}
-        onShift={(days) => onChange(shiftStartDate(trip, days))}
-      />
+      <Box sx={styles.twoColumns}>
+        <Box sx={styles.dateColumn}>
+          <Typography variant="subtitle2">Wann?</Typography>
+          <TripDatePicker trip={trip} hutIndices={tripLegs.hutIndices} hutOhrsByIndex={hutOhrsByIndex} onChange={onChange} />
+        </Box>
+        <Box>
+          <Typography variant="subtitle2">Wie viele?</Typography>
+          <PartySizeStepper value={trip.partySize} onChange={(partySize) => onChange({ ...trip, partySize })} />
+        </Box>
+      </Box>
     </Box>
   )
 }

@@ -1,17 +1,14 @@
 # Backlog
 
-Cross-cutting data/pipeline problems that don't belong to one spec. Short summaries only — full
+Cross-cutting data/pipeline/ui problems that don't belong to one spec. Short summaries only — full
 explanation, evidence and pointers live in the dedicated file under `docs/backlog/`. Newest-highest-
-priority first within each section. An item graduates out of here when it gets its own spec or plan
-under `docs/superpowers/`.
+priority first within each section. An item graduates out of here when it is resolved.
 
 ## High
 
 ### How to handle alpenvereinaktiv tours
 
-### Swap hut availability fetch source
-
-### Integrate official tours into frontend
+### Broken tour geometry in tour detail view
 
 ## Medium
 

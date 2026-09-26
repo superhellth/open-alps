@@ -1,5 +1,5 @@
 import {
-  Accordion, AccordionDetails, AccordionSummary, Box, Button, Checkbox, Chip, FormControlLabel,
+  Accordion, AccordionDetails, AccordionSummary, Box, Checkbox, Chip, FormControlLabel,
   IconButton, LinearProgress, MenuItem, Select, TextField, Tooltip, Typography,
 } from '@mui/material'
 import { useState } from 'react'
@@ -11,6 +11,7 @@ import type { TourMode } from '@/tourSearch/types.js'
 import { DEFAULT_FORM, isFilterSelectionValid } from './formState.js'
 import type { FormState } from './formState.js'
 import type { TripDraft } from './plannerState.js'
+import PartySizeStepper from '@/ui/PartySizeStepper.js'
 import RangeCalendar from './RangeCalendar.js'
 import { styles } from './FilterBar.styles.js'
 
@@ -111,15 +112,7 @@ export default function FilterBar({ form, onFormChange, draft, onDraftChange, di
 
         <Box>
           <Typography variant="subtitle2">Wie viele?</Typography>
-          <Box sx={styles.stepperRow}>
-            <Typography>{draft.partySize} Pers.</Typography>
-            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize <= 1}
-              sx={styles.stepperButton}
-              onClick={() => onDraftChange({ partySize: draft.partySize - 1 })}>−</Button>
-            <Button size="small" variant="outlined" color="secondary" disabled={disabled || draft.partySize >= 25}
-              sx={styles.stepperButton}
-              onClick={() => onDraftChange({ partySize: draft.partySize + 1 })}>+</Button>
-          </Box>
+          <PartySizeStepper value={draft.partySize} disabled={disabled} onChange={(partySize) => onDraftChange({ partySize })} />
         </Box>
       </Box>
 

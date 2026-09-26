@@ -1,8 +1,7 @@
 import { useState } from 'react'
-import type { MouseEvent } from 'react'
-import { Box, Button, IconButton, Popover, Typography } from '@mui/material'
-import CalendarMonthIcon from '@mui/icons-material/CalendarMonth'
-import { styles } from './RangeCalendar.styles.js'
+import { formatDayMonthRange } from '@/format/dayMonth.js'
+import CalendarField from '@/ui/CalendarField.js'
+import MonthCalendar from '@/ui/MonthCalendar.js'
 
 interface RangeCalendarProps {
   startDate: string
@@ -11,121 +10,26 @@ interface RangeCalendarProps {
   disabled: boolean
 }
 
-const WEEKDAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
-
-function toIso(y: number, m: number, d: number): string {
-  return new Date(Date.UTC(y, m, d)).toISOString().slice(0, 10)
-}
-
-function parseIso(iso: string): { y: number; m: number; d: number } {
-  const [y, m, d] = iso.split('-').map(Number)
-  return { y, m: m - 1, d }
-}
-
-function monthLabel(y: number, m: number): string {
-  return new Date(Date.UTC(y, m, 1)).toLocaleDateString('de-AT', { month: 'long', year: 'numeric' })
-}
-
-function buildMonthDays(y: number, m: number): (string | null)[] {
-  const firstWeekday = (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7
-  const daysInMonth = new Date(Date.UTC(y, m + 1, 0)).getUTCDate()
-  const cells: (string | null)[] = Array(firstWeekday).fill(null)
-  for (let d = 1; d <= daysInMonth; d++) cells.push(toIso(y, m, d))
-  return cells
-}
-
-function fmtIso(iso: string): string {
-  const { y, m, d } = parseIso(iso)
-  return new Date(Date.UTC(y, m, d)).toLocaleDateString('de-AT', { day: '2-digit', month: '2-digit' })
-}
-
-function summaryLabel(startDate: string, endDate: string): string {
-  if (startDate === '' || endDate === '') return 'Zeitraum wählen'
-  return `${fmtIso(startDate)} – ${fmtIso(endDate)}`
-}
-
 export default function RangeCalendar({ startDate, endDate, onChange, disabled }: RangeCalendarProps) {
-  const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null)
-  const initial = startDate !== '' ? parseIso(startDate) : { y: new Date().getUTCFullYear(), m: new Date().getUTCMonth() }
-  const [view, setView] = useState({ y: initial.y, m: initial.m })
   // Holds the first click of a new range until the second click completes it,
   // so a single click never reports an empty endDate to the parent.
   const [pendingStart, setPendingStart] = useState<string | null>(null)
-
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const cells = buildMonthDays(view.y, view.m)
-
-  const shownStart = pendingStart ?? startDate
-  const shownEnd = pendingStart !== null ? pendingStart : endDate
-
-  const shiftMonth = (delta: number) => {
-    const d = new Date(Date.UTC(view.y, view.m + delta, 1))
-    setView({ y: d.getUTCFullYear(), m: d.getUTCMonth() })
-  }
-
-  const pickDay = (iso: string) => {
-    if (pendingStart === null) {
-      setPendingStart(iso)
-    } else if (iso < pendingStart) {
-      onChange({ startDate: iso, endDate: pendingStart })
-      setPendingStart(null)
-      setAnchorEl(null)
-    } else {
-      onChange({ startDate: pendingStart, endDate: iso })
-      setPendingStart(null)
-      setAnchorEl(null)
-    }
-  }
-
-  const openCalendar = (e: MouseEvent<HTMLElement>) => {
-    setView({ y: initial.y, m: initial.m })
-    setPendingStart(null)
-    setAnchorEl(e.currentTarget)
-  }
+  const label = startDate === '' || endDate === '' ? 'Zeitraum wählen' : formatDayMonthRange(startDate, endDate)
 
   return (
-    <>
-      <Button
-        size="small" variant="outlined" color="secondary" disabled={disabled} onClick={openCalendar}
-        sx={styles.trigger}
-      >
-        {summaryLabel(startDate, endDate)}
-        <CalendarMonthIcon fontSize="small" sx={styles.icon} aria-hidden />
-      </Button>
-      <Popover
-        open={anchorEl !== null} anchorEl={anchorEl} onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-      >
-        <Box sx={styles.popover}>
-          <Box sx={styles.monthHeader}>
-            <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(-1)} aria-label="Vorheriger Monat">‹</IconButton>
-            <Typography variant="body2" sx={{ textTransform: 'capitalize' }}>{monthLabel(view.y, view.m)}</Typography>
-            <IconButton size="small" disabled={disabled} onClick={() => shiftMonth(1)} aria-label="Nächster Monat">›</IconButton>
-          </Box>
-          <Box sx={styles.weekdayRow}>
-            {WEEKDAY_LABELS.map((w) => (
-              <Typography key={w} variant="caption" color="text.secondary" align="center">{w}</Typography>
-            ))}
-          </Box>
-          <Box sx={styles.weekdayRow}>
-            {cells.map((iso, i) => {
-              if (iso === null) return <Box key={`empty-${i}`} />
-              const inRange = shownStart !== '' && shownEnd !== '' && iso >= shownStart && iso <= shownEnd
-              const isEndpoint = iso === shownStart || iso === shownEnd
-              const isToday = iso === todayIso
-              return (
-                <Box
-                  key={iso} role="button" aria-label={iso} aria-pressed={isEndpoint}
-                  onClick={() => !disabled && pickDay(iso)}
-                  sx={styles.day({ disabled, isEndpoint, inRange, isToday })}
-                >
-                  <Typography variant="body2">{Number(iso.slice(-2))}</Typography>
-                </Box>
-              )
-            })}
-          </Box>
-        </Box>
-      </Popover>
-    </>
+    <CalendarField label={label} disabled={disabled} onOpen={() => setPendingStart(null)}>
+      {(close) => (
+        <MonthCalendar
+          initialDay={startDate} disabled={disabled}
+          rangeStart={pendingStart ?? startDate} rangeEnd={pendingStart ?? endDate}
+          onPickDay={(iso) => {
+            if (pendingStart === null) { setPendingStart(iso); return }
+            onChange(iso < pendingStart ? { startDate: iso, endDate: pendingStart } : { startDate: pendingStart, endDate: iso })
+            setPendingStart(null)
+            close()
+          }}
+        />
+      )}
+    </CalendarField>
   )
 }

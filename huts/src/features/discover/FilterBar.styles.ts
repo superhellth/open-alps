@@ -3,7 +3,6 @@ import { space } from '@/ui/tokens.js'
 
 export const styles = {
   root: { p: space.inset, display: 'flex', flexDirection: 'column', gap: space.group },
-  stepperButton: { width: 40, height: 40, minWidth: 0, p: 0 },
   accordion: { bgcolor: 'transparent', '&:before': { display: 'none' } },
   accordionSummary: {
     px: space.item, borderRadius: 1,
@@ -16,6 +15,5 @@ export const styles = {
   accordionDetails: { display: 'flex', flexDirection: 'column', gap: space.item, p: 0, pt: space.item },
   hutClassHeading: { display: 'flex', alignItems: 'center', gap: space.inline },
   twoColumns: { display: 'flex', gap: space.group },
-  stepperRow: { display: 'flex', gap: space.item, alignItems: 'center' },
   chipRow: { display: 'flex', gap: space.item },
 } satisfies StyleMap
