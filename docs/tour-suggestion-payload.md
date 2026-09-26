@@ -160,7 +160,7 @@ Alpenverein ArcGIS layer's `OBJECTID` for `TYPE_PARTNER` rows — same field, tw
 spaces depending on `source_type`, exceeds u4 range either way), `source_type` (u1,
 `binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER`), `variant` (u1, one of `binfmt.VARIANT_*` —
 today only `VARIANT_FAST_ANY` rows are ever candidates, see below), `access_unknown` (u1,
-boolean), `distance_m`/`ascent_m`/`descent_m` (f4), plus the same anchor columns as §1 (`a50_dlat`, `a50_dlng`, i2), cut from the row's start-edge geometry (`access point → hut`) and referenced to the row's hut (`hut_id`). Reverse-index rows (exit legs that are not approach rows) carry no anchors; the client falls back to the chord point.
+boolean), `distance_m`/`ascent_m`/`descent_m` (f4), plus the same anchor columns as §1 (`a50_dlat`, `a50_dlng`, i2), cut from the row's start-edge geometry (`access point → hut`) and referenced to the row's hut (`hut_id`). Reverse-index edges that no approach row covers (exit legs) get anchors from a side table in the same `approaches.bin`: `approaches.json`'s `exit_anchors` holds its own `rows` count and `columns` manifest (`edge_id` u4, `hut_id` u2, `a50_dlat`/`a50_dlng` i2, absolute byte offsets into the same buffer), one row per such edge in edge-id order, cut and referenced like the approach anchors. The client looks an exit leg's anchors up by `edge_id`, falling back to the chord point only for a payload without the table.
 
 Row selection is a matrix, not a top-k: every gathered candidate is bucketed into a cell keyed by
 `(source_type, variant, duration_bucket)` — `duration_bucket` from `config.approach

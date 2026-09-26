@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { readColumns } from '@/tourSearch/binaryColumns.js'
+import { readExitAnchors } from '@/tourSearch/loadApproaches.js'
 import { buildEdgeIdsData } from '@/tourSearch/loadHutEdgeIds.js'
 import type { HutEdgeIdsManifest } from '@/tourSearch/loadHutEdgeIds.js'
 import type { ApproachesData, ApproachRecord, GraphData, HutEdgeIdsData, HutEdgeRecord, HutEdgesData } from '@/tourSearch/types.js'
@@ -47,7 +48,7 @@ export function loadApproachesFromDisk(): ApproachesData {
       edgeId: c.edge_id ? c.edge_id[i] : -1,
     }
   }
-  return { records, reverseIndex: manifest.reverse_index }
+  return { records, exitAnchors: readExitAnchors(buffer, manifest), reverseIndex: manifest.reverse_index }
 }
 
 const EMPTY_IDS: HutEdgeIdsData = {

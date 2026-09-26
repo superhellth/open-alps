@@ -11,7 +11,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 from lib import binfmt  # noqa: E402
 from lib.anchors import decode_row  # noqa: E402
 from postprocessing.build_approach_table import (  # noqa: E402
-    approach_anchor_columns, build_tables, bucket_index, gather_candidates, parse_duration_buckets,
+    approach_anchor_columns, build_tables, bucket_index,
+    exit_anchor_rows, gather_candidates, parse_duration_buckets,
     parse_variant_names, select_approaches,
 )
 
@@ -283,3 +284,16 @@ def test_approach_anchors_are_offsets_from_the_rows_hut_along_the_start_edge():
 
     anchors = decode_row(cols, 0, hut_lonlat[0])
     assert anchors[0, 0] == pytest.approx(11.2, abs=1e-4)
+
+
+def test_exit_anchor_rows_list_reverse_index_edges_no_approach_row_covers():
+    approaches = [{"edge_id": 5, "hut_id": 0}]
+    entry = lambda edge_id, hut_id: {"edge_id": edge_id, "hut_id": hut_id}  # noqa: E731
+    index = {
+        "hut_to_starts": {"0": [entry(5, 0), entry(9, 0), entry(7, 0)], "1": [entry(8, 1), entry(9, 0)]},
+        "start_to_huts": {},
+    }
+
+    assert exit_anchor_rows(approaches, index) == [
+        {"edge_id": 7, "hut_id": 0}, {"edge_id": 8, "hut_id": 1}, {"edge_id": 9, "hut_id": 0},
+    ]

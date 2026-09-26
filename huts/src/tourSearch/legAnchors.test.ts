@@ -13,7 +13,8 @@ const approach = (over: Partial<ApproachRecord>): ApproachRecord => ({
 const hutCoordsById = new Map([[0, { lat: 47, lng: 11 }], [1, { lat: 47.1, lng: 11.2 }]])
 const lookup = createLegAnchorLookup({
   hutEdges: { hutIds: [], variantNames: {}, records: [hut({ anchorOffsets: [10, 20, 30, 40, 50, 60] }), hut({ edgeId: 1 })] },
-  approaches: { records: [approach({ anchorOffsets: [1, 2] }), approach({ edgeId: 41 })], reverseIndex: { hut_to_starts: {}, start_to_huts: {} } },
+  approaches: { records: [approach({ anchorOffsets: [1, 2] }), approach({ edgeId: 41 })], reverseIndex: { hut_to_starts: {}, start_to_huts: {} },
+    exitAnchors: new Map([[55, { hutIndex: 0, anchorOffsets: [3, 4] }]]) },
   hutCoordsById,
   officialTours: [{ tourId: 1, name: 't', totalDistanceM: 0, totalAscentM: 0, totalDescentM: 0, totalDurationH: 0, legs: [
     { legIndex: 0, from: { type: 'hut', id: 0 }, to: { type: 'hut', id: 1 }, edgeId: 7, reversed: false, distanceM: 1, ascentM: 0, descentM: 0, durationH: 0, maxEleM: 0, anchors: [{ lat: 1, lng: 2 }] },
@@ -31,6 +32,11 @@ describe('createLegAnchorLookup', () => {
     const [a] = lookup('start_edges', 40)!
     expect(a.lat).toBeCloseTo(47.1001, 9)
     expect(a.lng).toBeCloseTo(11.2002, 9)
+  })
+  it('decodes exit-only start edges from the exit anchor table, relative to their hut', () => {
+    const [a] = lookup('start_edges', 55)!
+    expect(a.lat).toBeCloseTo(47.0003, 9)
+    expect(a.lng).toBeCloseTo(11.0004, 9)
   })
   it('returns the official leg anchors as shipped', () => {
     expect(lookup('tour_edges', 7)).toEqual([{ lat: 1, lng: 2 }])

@@ -26,7 +26,7 @@ export function createLegAnchorLookup({ hutEdges, approaches, hutCoordsById, off
       return decode(r?.anchorOffsets, r?.fromIndex)
     }
     if (layer === 'start_edges') {
-      const r = approachByEdge.get(edgeId)
+      const r = approachByEdge.get(edgeId) ?? approaches.exitAnchors?.get(edgeId)
       return decode(r?.anchorOffsets, r?.hutIndex)
     }
     return officialByEdge.get(edgeId) ?? null

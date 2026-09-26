@@ -53,12 +53,30 @@ _SOURCE_TYPE_NAME = {
 }
 
 
+# Columns of the exit-anchor side table share approaches.bin with the approach columns under this
+# prefix; the manifest lists them separately, without it, under "exit_anchors".
+EXIT_PREFIX = "exit_"
+
+
 def approach_anchor_columns(approaches: list, records: np.ndarray, geometry: np.ndarray,
                             hut_lonlat: np.ndarray) -> dict:
     """Anchor columns for the approach rows: each row's start edge geometry, offsets from its hut."""
     row_ids = np.array([r["edge_id"] for r in approaches], dtype=np.int64)
     ref = hut_lonlat[np.array([r["hut_id"] for r in approaches], dtype=np.int64)]
     return edge_anchor_columns(records, geometry, row_ids, ref)
+
+
+def exit_anchor_rows(approaches: list, index: dict) -> list:
+    """Reverse-index edges no approach row covers, one row per edge in edge-id order. Exit legs
+    walk these edges backwards, so they need anchors too; edges shared with an approach row
+    already have them there."""
+    covered = {r["edge_id"] for r in approaches}
+    rows = {}
+    for entries in index["hut_to_starts"].values():
+        for e in entries:
+            if e["edge_id"] not in covered:
+                rows[e["edge_id"]] = {"edge_id": e["edge_id"], "hut_id": e["hut_id"]}
+    return [rows[edge_id] for edge_id in sorted(rows)]
 
 
 def gather_candidates(records: np.ndarray, id_table: dict, variant_ids: set) -> dict:
@@ -218,8 +236,14 @@ if __name__ == "__main__":
         hut_lonlat = np.array(hut_points(args.huts))
         for name, values in approach_anchor_columns(approaches, records, geometry, hut_lonlat).items():
             columns[name] = ("i2", values)
+        exit_rows = exit_anchor_rows(approaches, index)
+        columns[f"{EXIT_PREFIX}edge_id"] = ("u4", np.array([r["edge_id"] for r in exit_rows], dtype="u4"))
+        columns[f"{EXIT_PREFIX}hut_id"] = ("u2", np.array([r["hut_id"] for r in exit_rows], dtype="u2"))
+        for name, values in approach_anchor_columns(exit_rows, records, geometry, hut_lonlat).items():
+            columns[EXIT_PREFIX + name] = ("i2", values)
         payload, column_manifest = binfmt.pack_columns(columns)
         growth = len(gzip.compress(payload, compresslevel=9)) - len(gzip.compress(plain_payload, compresslevel=9))
+        print(f"exit anchor rows: {len(exit_rows):,}", flush=True)
         print(f"anchor growth: {growth:+,} B gzipped", flush=True)
         Path(args.out_bin).parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_bin, "wb") as f:
@@ -231,7 +255,12 @@ if __name__ == "__main__":
         access_values = [r["access"] for r in approaches]
         manifest = {
             "rows": len(approaches),
-            "columns": column_manifest,
+            "columns": {k: v for k, v in column_manifest.items() if not k.startswith(EXIT_PREFIX)},
+            "exit_anchors": {
+                "rows": len(exit_rows),
+                "columns": {k[len(EXIT_PREFIX):]: v for k, v in column_manifest.items()
+                            if k.startswith(EXIT_PREFIX)},
+            },
             "access_values": access_values,
             "reverse_index": index,
         }

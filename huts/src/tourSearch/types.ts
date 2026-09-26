@@ -158,8 +158,16 @@ export interface HutEdgesData {
   records: HutEdgeRecord[]
 }
 
+/** Anchors of a start edge that has no approach row, keyed by edge id: exit legs walk these edges backwards. */
+export interface ExitAnchor {
+  hutIndex: number
+  anchorOffsets: number[]
+}
+
 export interface ApproachesData {
   records: ApproachRecord[]
+  /** Anchors of reverse-index edges without an approach row; absent when the payload ships none. */
+  exitAnchors?: ReadonlyMap<number, ExitAnchor>
   reverseIndex: {
     hut_to_starts: Record<string, ReverseIndexEntry[]>
     start_to_huts: Record<string, ReverseIndexEntry[]>
