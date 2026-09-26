@@ -1,3 +1,5 @@
+import { tokens } from '@/ui/tokens.js'
+
 export type HutOperator = 'av' | 'sonstige'
 
 export interface HutClass {
@@ -15,15 +17,14 @@ const OPERATOR_BADGE: Record<HutOperator, string> = {
   sonstige: 'SO',
 }
 
-// Colours distinguishable in both light and dark map tile contexts, distinct from AdminPage's
-// existing snapped/unsnapped green (#1b5e20/#43a047) and gray (#616161/#bdbdbd).
+// Operator colors: distinguishable on light map tiles, distinct from the admin view's green/gray.
 export const OPERATOR_COLOR: Record<HutOperator, string> = {
-  av: '#1565c0',
-  sonstige: '#6a1b9a',
+  av: tokens.hutAv,
+  sonstige: tokens.hutOther,
 }
 
 export const PARTNER_LABEL = 'Partnerbetrieb (Bergsteigerdorf)'
-export const PARTNER_COLOR = '#ef6c00'
+export const PARTNER_COLOR = tokens.hutPartner
 
 /** Full user-facing label, e.g. "Alpenverein (Selbstversorger)". */
 export function hutClassLabel(c: HutClass): string {

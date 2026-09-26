@@ -6,9 +6,7 @@ import { fileURLToPath } from 'node:url'
 const SRC = path.dirname(fileURLToPath(import.meta.url))
 
 /** Files not yet migrated; each migration task removes its files. Empty at the end. */
-const PENDING: string[] = [
-  'data/hutClass.ts',
-]
+const PENDING: string[] = []
 
 const EXCLUDED_FILES = new Set(['ui/tokens.ts', 'ui/theme.ts', 'vite-env.d.ts'])
 const EXCLUDED_DIRS = new Set(['adminPage', 'gpxEditor', 'testing', 'node_modules'])
