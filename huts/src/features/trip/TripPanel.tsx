@@ -1,4 +1,4 @@
-import { Box, Divider } from '@mui/material'
+import { Box } from '@mui/material'
 import type { AppData } from '@/data/buildAppData.js'
 import type { Trip } from '@/trip/trip.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
@@ -28,7 +28,7 @@ export interface TripPanelProps {
   onShare?: () => void
 }
 
-/** The open trip as three sections: header (name, totals, dates) and stages. */
+/** The open trip as two sections: header (name, totals, dates) and stages. */
 export default function TripPanel({
   trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onUnsave, onBack, backLabel, highlightedLeg, onHoverLeg,
   editor, editMode, onEditModeChange, warnings, onShare,
@@ -40,7 +40,6 @@ export default function TripPanel({
         trip={trip} tripLegs={tripLegs} hutOhrsByIndex={data.hutOhrsByIndex} isDraft={isDraft}
         onChange={onChange} onSave={onSave} onUnsave={onUnsave} onBack={onBack} backLabel={backLabel} onShare={onShare}
       />
-      <Divider />
       <StageList
         trip={trip} tripLegs={tripLegs} hutNameById={data.hutNameById} hutOhrsByIndex={data.hutOhrsByIndex}
         startLabel={startLabel} nightViews={nightViews} highlightedLeg={highlightedLeg} onHoverLeg={onHoverLeg}

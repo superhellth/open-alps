@@ -17,6 +17,7 @@ const theme = createTheme({
   typography: {
     fontFamily: fonts.body,
     h6: { fontFamily: fonts.signpost, fontWeight: 600, fontSize: rem(fontSize.xl) },
+    subtitle1: { fontFamily: fonts.signpost, fontWeight: 600, fontSize: rem(fontSize.md) },
     subtitle2: { fontFamily: fonts.signpost, fontWeight: 600, fontSize: rem(fontSize.sm) },
     body1: { fontSize: rem(fontSize.md) },
     body2: { fontSize: rem(fontSize.sm) },

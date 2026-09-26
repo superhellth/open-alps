@@ -57,69 +57,75 @@ export default function StageList({
 
   return (
     <Box sx={styles.root}>
-      <Box sx={styles.heading}>
-        <Typography variant="subtitle1" component="h2">Etappen</Typography>
-        <Button size="small" color="secondary" onClick={() => onEditModeChange(!editMode)}>
-          {editMode ? 'Fertig' : 'Bearbeiten'}
-        </Button>
-      </Box>
+      <Box sx={styles.stages}>
+        <Box sx={styles.heading}>
+          <Typography variant="subtitle1" component="h2">Etappen</Typography>
+          <Button size="small" color="secondary" onClick={() => onEditModeChange(!editMode)}>
+            {editMode ? 'Fertig' : 'Bearbeiten'}
+          </Button>
+        </Box>
 
-      <Box>
-        <RailRow node="dot" rail="from-dot" highlighted={highlightedLeg === 0}>
-          <Box data-node="start" sx={styles.endLine}>
-            <Typography variant="body2" sx={styles.endLabel}>Start: {startLabel(trip.start.startId)}</Typography>
-            {canEdit && <Button size="small" color="secondary" aria-label="Start ändern" onClick={() => editor.startEndpoint('start')}>ändern</Button>}
-          </Box>
-          {editing?.kind === 'start' && candidates}
-        </RailRow>
-
-        {addButton('first', '+ Etappe voranstellen')}
-
-        {trip.huts.map((_guid, i) => {
-          const hutIndex = tripLegs.hutIndices[i]
-          const changed = tripLegs.changed[i]
-          const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
-          const date = firstNight ? addUtcDays(firstNight, i) : null
-          const view = date ? nightViews?.[i] : undefined
-          const title = hutIndex === null ? 'Unbekannte Hütte' : hutNameById.get(hutIndex) ?? String(hutIndex)
-          const meta = changed ? CHANGED_TEXT
-            : ohrs && !ohrs.ohrsHutId ? <DirectBookingMark />
-            : view && (
-              <>
-                <NightChip view={view} />
-                {!editMode && date && ohrs?.ohrsHutId && <BookingLink hutName={title} ohrsHutId={ohrs.ohrsHutId} date={date} />}
-              </>
-            )
-          return (
-            <Box key={i}>
-              {leg(i)}
-              <StageNode
-                number={i + 1}
-                title={title} date={date && shortDate(date)} meta={meta} changed={changed}
-                railHighlight={{ above: highlightedLeg === i, below: highlightedLeg === i + 1 }}
-                edit={canEdit ? { trim: editor.trimAllowed(i), onSwap: () => editor.startSwap(i), onTrim: () => editor.trim(i) } : null}
-              >
-                {editing?.kind === 'swap' && editing.index === i && candidates}
-              </StageNode>
+        <Box>
+          <RailRow node="dot" rail="from-dot" highlighted={highlightedLeg === 0}>
+            <Box data-node="start" sx={styles.endLine}>
+              <Typography variant="body2" sx={styles.endLabel}>Start: {startLabel(trip.start.startId)}</Typography>
+              {canEdit && <Button size="small" color="secondary" aria-label="Start ändern" onClick={() => editor.startEndpoint('start')}>ändern</Button>}
             </Box>
-          )
-        })}
+            {editing?.kind === 'start' && candidates}
+          </RailRow>
 
-        {addButton('last', '+ Etappe anhängen')}
-        {leg(nights)}
+          {addButton('first', '+ Etappe voranstellen')}
 
-        <RailRow node="dot" rail="to-dot" highlightedAbove={highlightedLeg === nights}>
-          <Box data-node="exit" sx={styles.endLine}>
-            <Typography variant="body2" sx={styles.endLabel}>
-              {editor.car ? 'Zurück am Start' : `Ziel: ${startLabel(trip.exit.startId)}`}
-            </Typography>
-            {canEdit && !editor.car && <Button size="small" color="secondary" aria-label="Ziel ändern" onClick={() => editor.startEndpoint('exit')}>ändern</Button>}
-          </Box>
-          {editing?.kind === 'exit' && candidates}
-        </RailRow>
+          {trip.huts.map((_guid, i) => {
+            const hutIndex = tripLegs.hutIndices[i]
+            const changed = tripLegs.changed[i]
+            const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
+            const date = firstNight ? addUtcDays(firstNight, i) : null
+            const view = date ? nightViews?.[i] : undefined
+            const title = hutIndex === null ? 'Unbekannte Hütte' : hutNameById.get(hutIndex) ?? String(hutIndex)
+            const meta = changed ? CHANGED_TEXT
+              : ohrs && !ohrs.ohrsHutId ? <DirectBookingMark />
+              : view && (
+                <>
+                  <NightChip view={view} />
+                  {!editMode && date && ohrs?.ohrsHutId && <BookingLink hutName={title} ohrsHutId={ohrs.ohrsHutId} date={date} />}
+                </>
+              )
+            return (
+              <Box key={i}>
+                {leg(i)}
+                <StageNode
+                  number={i + 1}
+                  title={title} date={date && shortDate(date)} meta={meta} changed={changed}
+                  railHighlight={{ above: highlightedLeg === i, below: highlightedLeg === i + 1 }}
+                  edit={canEdit ? { trim: editor.trimAllowed(i), onSwap: () => editor.startSwap(i), onTrim: () => editor.trim(i) } : null}
+                >
+                  {editing?.kind === 'swap' && editing.index === i && candidates}
+                </StageNode>
+              </Box>
+            )
+          })}
+
+          {addButton('last', '+ Etappe anhängen')}
+          {leg(nights)}
+
+          <RailRow node="dot" rail="to-dot" highlightedAbove={highlightedLeg === nights}>
+            <Box data-node="exit" sx={styles.endLine}>
+              <Typography variant="body2" sx={styles.endLabel}>
+                {editor.car ? 'Zurück am Start' : `Ziel: ${startLabel(trip.exit.startId)}`}
+              </Typography>
+              {canEdit && !editor.car && <Button size="small" color="secondary" aria-label="Ziel ändern" onClick={() => editor.startEndpoint('exit')}>ändern</Button>}
+            </Box>
+            {editing?.kind === 'exit' && candidates}
+          </RailRow>
+        </Box>
       </Box>
 
-      {warnings.map((w) => <Typography key={w} variant="body2" role="alert">⚠ {w}</Typography>)}
+      {warnings.length > 0 && (
+        <Box sx={styles.warnings}>
+          {warnings.map((w) => <Typography key={w} variant="body2" role="alert">⚠ {w}</Typography>)}
+        </Box>
+      )}
     </Box>
   )
 }
