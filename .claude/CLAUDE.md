@@ -40,9 +40,9 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 
 `huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
 `features/discover/usePlannerSearch` runs the whole-graph search, results drawn as clustered
-count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx` swaps/extends/trims huts
-and changes start/exit) -> Plan nights (`features/trip/TripPanel.tsx`: per-night availability, hand-set booking status,
-start-date answers) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
+count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx`'s `useTripEditor` exposes swap/extend/trim/start/exit moves that `StageList` rows trigger in edit mode)
+-> Plan nights (`features/trip/TripPanel.tsx` = `TripHeader` + `StageList` + `TripFooter`: per-night availability and hand-set booking
+status behind each row's chevron, start-day chips) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).
 `features/discover/formState.ts` builds the `Query`; `features/discover/rankTours.ts`/`tourSearch/rankFit.ts` order results;
@@ -67,7 +67,8 @@ resolves is flagged "changed since saved" rather than substituted. Editor moves 
 `PlannerPage.tsx` only composes four hooks: `features/discover/useDiscover` (filter form, search, ranking and the
 result lists derived from them), `features/trip/useTripSession` (the open trip: legs, editor, share link, draft-discard
 confirmation), `features/map/useMapView` (live viewport, pre-trip view to restore, fit-to-bounds commands) and
-`features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). `PlannerMap` takes
+`features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). Hovering a stage row, a map leg (wide invisible hit lines in `LEG_HIT_PANE`) or a height-profile section sets `useTripSession`'s
+`highlightedLeg` and highlights that leg in all three places; the profile also reports a `{ legIndex, fraction }` cursor that `RouteLayer` draws as a dot. `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.
 Discover draws signposts, boards on masts standing on each tour's anchor (`tourSearch/tourAnchor.ts`: the candidate nearest half the tour's distance, viewport-clipped), placed by `features/map/placeSignposts.ts` (greedy in rank order: a colliding tour moves to its next anchor candidate, `tourSearch/tourAnchor.ts`'s `anchorCandidates`; a board whose foot stays in view is pinned (never moves or flips, may overhang the edge) and turns into a dot on its spot when it collides; a tour that fits nowhere is a foot dot whose hover shows its board, `SignpostMarker`), with round count bubbles below `ROUTE_REVEAL_ZOOM` clustering the tours at their unclipped default anchors (`features/map/clusterTours.ts`), so a bubble splits into boards where it stood; waypoint symbols from

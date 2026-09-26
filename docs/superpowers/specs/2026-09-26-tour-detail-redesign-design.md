@@ -1,7 +1,7 @@
 # Tour detail view redesign
 
 Date: 2026-09-26
-Status: approved design, not yet implemented
+Status: implemented
 Layer: `huts/` only (presentation and interaction). No pipeline or data-contract change.
 
 ## Problem
