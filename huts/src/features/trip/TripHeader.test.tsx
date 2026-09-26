@@ -38,26 +38,28 @@ describe('TripHeader', () => {
   it('calls back and share', () => {
     const { onBack, onShare } = renderHeader({ backLabel: '← Meine Touren' })
     fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
-    fireEvent.click(screen.getByRole('button', { name: /Teilen/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Teilen' }))
     expect(onBack).toHaveBeenCalled()
     expect(onShare).toHaveBeenCalled()
   })
   it('shows no share button without onShare', () => {
     renderHeader({ onShare: undefined })
-    expect(screen.queryByRole('button', { name: /Teilen/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Teilen' })).not.toBeInTheDocument()
   })
-  it('a draft is called "Neue Tour", has an Entwurf chip and a Speichern button, and cannot be renamed', () => {
-    const { onSave } = renderHeader({ isDraft: true })
-    expect(screen.getByText('Neue Tour')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Testtour' })).not.toBeInTheDocument()
-    expect(screen.getByText('Entwurf')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren, and can be renamed', () => {
+    const { onSave, onChange, trip } = renderHeader({ isDraft: true })
+    expect(screen.getByText(/^nicht gespeichert · 2 Nächte/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Zu Meine Touren' }))
     expect(onSave).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Testtour' }))
+    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Neu' } })
+    fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Enter' })
+    expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
   })
-  it('a saved trip has no Entwurf chip or Speichern button', () => {
+  it('a saved trip has no save button and no nicht gespeichert mark', () => {
     renderHeader()
-    expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/nicht gespeichert/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Zu Meine Touren' })).not.toBeInTheDocument()
   })
   it('renames in place: Enter commits, Escape cancels, blank or unchanged is ignored', () => {
     const { onChange, trip } = renderHeader()

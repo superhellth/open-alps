@@ -10,7 +10,6 @@ export function tripFromTour(tour: PlannerTour, ctx: {
   hutIds: readonly string[]
   startById: Map<number, StartPoint>
   hutNameById: Map<number, string>
-  startLabel: (startId: number) => string
   form: Pick<FormState, 'sacCeiling' | 'allowUngraded'>
   draft: TripDraft
 }): Trip | null {
@@ -21,7 +20,7 @@ export function tripFromTour(tour: PlannerTour, ctx: {
   const last = ctx.hutNameById.get(tour.huts[tour.huts.length - 1]) ?? '?'
   const official = tour.official
   return newTrip({
-    name: official ? official.name : `${ctx.startLabel(tour.startId)}: ${first} – ${last}`,
+    name: official ? official.name : `${first} – ${last}`,
     startDate: ctx.draft.startDate || null,
     partySize: ctx.draft.partySize,
     start: { startId: tour.startId, sourceType: start.sourceType as SourceType },

@@ -12,5 +12,6 @@ export const styles = {
   body: { display: 'flex', flexDirection: 'column', gap: space.inline, px: space.row, py: space.item, pr: space.section, fontFamily: SIGNPOST_FONT, color: tokens.ink },
   titleRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: space.item },
   stats: { fontSize: rem(fontSize.sm), display: 'flex', gap: space.item },
-  title: { fontWeight: 700, fontSize: rem(fontSize.lg) },
+  title: { fontWeight: 700, fontSize: rem(fontSize.lg), minWidth: 0, overflowWrap: 'anywhere' },
+  time: { fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 },
 } satisfies StyleMap

@@ -28,6 +28,12 @@ per-leg/per-route quality signals, revisit whether/how the frontend should surfa
 
 ## Low
 
+### Cluttered place names in huts, stations and parking
+
+Raw source names reach the UI: parking names that are whole signs, `;`-joined station variants,
+hut names with parenthesised alternates. Clean display names belong in the pipeline. Details:
+`docs/backlog/cluttered-place-names.md`.
+
 ### Same hut booking analysis for Die 7 schönsten AV-Hüttentouren
 
 ### Try to reintroduce a signpost feel to resultslist cards

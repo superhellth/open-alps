@@ -98,7 +98,7 @@ describe('SavedTripsList', () => {
   })
   it('opens the pinned draft row', () => {
     const { onOpenDraft } = renderWith([trip('a', 'Kaiser')], trip('d', 'Draft Trip'))
-    fireEvent.click(screen.getByText('Entwurf · nicht gespeichert'))
+    fireEvent.click(screen.getByText('Ungespeicherte Tour · öffnen'))
     expect(onOpenDraft).toHaveBeenCalled()
   })
   it('flags a trip with an unresolved hut as geändert', () => {

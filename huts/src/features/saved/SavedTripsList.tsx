@@ -81,7 +81,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
           role="button" tabIndex={0} onClick={onOpenDraft} onKeyDown={(e) => { if (e.key === 'Enter') onOpenDraft() }}
           sx={styles.draftRow}
         >
-          <Typography sx={styles.strong}>Entwurf · nicht gespeichert</Typography>
+          <Typography sx={styles.strong}>Ungespeicherte Tour · öffnen</Typography>
         </Box>
       )}
 

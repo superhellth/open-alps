@@ -7,9 +7,9 @@ export default function DiscardDraftDialog({ open, onDiscard, onCancel }: {
 }) {
   return (
     <Dialog open={open} onClose={onCancel}>
-      <DialogTitle>Entwurf verwerfen?</DialogTitle>
+      <DialogTitle>Ungespeicherte Tour verwerfen?</DialogTitle>
       <DialogContent>
-        <DialogContentText>Der aktuell offene Entwurf wurde geändert und geht dabei verloren.</DialogContentText>
+        <DialogContentText>Die offene Tour ist nicht gespeichert und wurde geändert. Die Änderungen gehen verloren.</DialogContentText>
       </DialogContent>
       <DialogActions>
         <Button onClick={onCancel}>Abbrechen</Button>

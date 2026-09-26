@@ -131,7 +131,7 @@ describe('PlannerPage', () => {
     // The trip panel replaces the results column, opened as a draft.
     expect(await screen.findByRole('button', { name: '← Ergebnisse' })).toBeInTheDocument()
     expect(screen.getAllByText('Hütte A').length).toBeGreaterThan(0)
-    expect(screen.getByText('Entwurf')).toBeInTheDocument()
+    expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
     expect(await screen.findByRole('button', { name: /Hütte A/ })).toBeInTheDocument()
@@ -140,7 +140,7 @@ describe('PlannerPage', () => {
   it('asks before replacing a dirty draft, and discards on confirm', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    expect(await screen.findByText('Entwurf')).toBeInTheDocument()
+    expect(await screen.findByText(/^nicht gespeichert ·/)).toBeInTheDocument()
 
     fireEvent.click(screen.getByText(/· 1 Pers\./))
     const partyFields = screen.getAllByLabelText('Personen')
@@ -152,10 +152,10 @@ describe('PlannerPage', () => {
     const row = await screen.findByRole('button', { name: /Hütte A/ })
     fireEvent.click(row)
 
-    expect(screen.getByText('Entwurf verwerfen?')).toBeInTheDocument()
+    expect(screen.getByText('Ungespeicherte Tour verwerfen?')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Verwerfen' }))
-    await waitFor(() => expect(screen.queryByText('Entwurf verwerfen?')).not.toBeInTheDocument())
-    expect(screen.getByText('Entwurf')).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByText('Ungespeicherte Tour verwerfen?')).not.toBeInTheDocument())
+    expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
   })
 
   it('replaces an unedited draft silently on a new pick', async () => {
@@ -164,15 +164,15 @@ describe('PlannerPage', () => {
     fireEvent.click(screen.getByRole('button', { name: '← Ergebnisse' }))
     const row = await screen.findByRole('button', { name: /Hütte A/ })
     fireEvent.click(row)
-    expect(screen.queryByText('Entwurf verwerfen?')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ungespeicherte Tour verwerfen?')).not.toBeInTheDocument()
   })
 
-  it('Speichern moves the draft into saved trips and clears the Entwurf badge', async () => {
+  it('Zu Meine Touren moves the draft into saved trips and clears the nicht gespeichert mark', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
-    expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Zu Meine Touren' }))
+    expect(screen.queryByText(/^nicht gespeichert ·/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Zu Meine Touren' })).not.toBeInTheDocument()
   })
 
   it('shows the fixed no-match hint and no markers when nothing matches', async () => {
@@ -261,9 +261,9 @@ describe('PlannerPage', () => {
   it('switching to Meine Touren while a draft trip is open keeps the draft pinned', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    expect(await screen.findByText('Entwurf')).toBeInTheDocument()
-    fireEvent.click(screen.getByText(/Meine Touren/))
-    expect(await screen.findByText('Entwurf · nicht gespeichert')).toBeInTheDocument()
+    expect(await screen.findByText(/^nicht gespeichert ·/)).toBeInTheDocument()
+    fireEvent.click(screen.getByText(/^Meine Touren \(/))
+    expect(await screen.findByText('Ungespeicherte Tour · öffnen')).toBeInTheDocument()
   })
 
   it('leaving edit mode cancels a pending edit and hides the map status bar', async () => {

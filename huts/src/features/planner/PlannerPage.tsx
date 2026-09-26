@@ -88,11 +88,11 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const pick = useCallback((tour: PlannerTour) => {
     rememberViewBeforeTrip()
     const trip = tripFromTour(tour, {
-      hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, startLabel, form, draft,
+      hutIds: data.graph.hutEdges.hutIds, startById: data.startById, hutNameById: data.hutNameById, form, draft,
     })
     if (!trip) return
     if (openDraft(trip)) setHoveredTourKeys(NO_TOURS)
-  }, [rememberViewBeforeTrip, data, startLabel, form, draft, openDraft, setHoveredTourKeys])
+  }, [rememberViewBeforeTrip, data, form, draft, openDraft, setHoveredTourKeys])
 
   function confirmDiscard() {
     confirmDiscardDraft()

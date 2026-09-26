@@ -19,6 +19,6 @@ describe('DiscardDraftDialog', () => {
 
   it('renders nothing interactable when closed', () => {
     render(<DiscardDraftDialog open={false} onDiscard={() => {}} onCancel={() => {}} />)
-    expect(screen.queryByText('Entwurf verwerfen?')).not.toBeInTheDocument()
+    expect(screen.queryByText('Ungespeicherte Tour verwerfen?')).not.toBeInTheDocument()
   })
 })

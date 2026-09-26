@@ -6,7 +6,6 @@ const ctx = {
   hutIds: ['{A}', '{B}', '{C}'],
   startById: new Map([[100, { name: 'Bahnhof X', sourceType: 1, lat: 0, lng: 0 }]]),
   hutNameById: new Map([[0, 'Hütte A'], [2, 'Hütte C']]),
-  startLabel: (id: number) => (id === 100 ? 'Bahnhof X' : `Startpunkt ${id}`),
   form: { sacCeiling: 3 as number | 'any', allowUngraded: true },
   draft: { startDate: '2026-07-10', endDate: '2026-07-12', partySize: 2 },
 }
@@ -24,7 +23,7 @@ describe('tripFromTour', () => {
     expect(t.partySize).toBe(2)
     expect(t.variant).toEqual({ sacCeiling: 3, allowUngraded: true })
     expect(t.nights).toEqual([{ status: 'open' }, { status: 'open' }])
-    expect(t.name).toBe('Bahnhof X: Hütte A – Hütte C')
+    expect(t.name).toBe('Hütte A – Hütte C')
     expect(t.source).toBeUndefined()
   })
   it('an unset difficulty ceiling is stored as null; an empty date as null', () => {

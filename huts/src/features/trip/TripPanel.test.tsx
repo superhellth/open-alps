@@ -46,10 +46,10 @@ describe('TripPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '← Meine Touren' }))
     expect(onBack).toHaveBeenCalled()
   })
-  it('shows the draft chip and saves', () => {
+  it('marks a draft nicht gespeichert and saves', () => {
     const { onSave } = renderPanel({ isDraft: true })
-    expect(screen.getByText('Entwurf')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
+    expect(screen.getByText(/^nicht gespeichert ·/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Zu Meine Touren' }))
     expect(onSave).toHaveBeenCalled()
   })
   it('a notes edit calls onChange with updated notes', () => {
