@@ -31,7 +31,7 @@ function renderHeader(over: Partial<Parameters<typeof TripHeader>[0]> = {}) {
 describe('TripHeader', () => {
   it('shows the trip name on the plate with nights, km and ascent/descent', () => {
     renderHeader()
-    expect(screen.getByRole('button', { name: 'Testtour' })).toBeInTheDocument()
+    expect(screen.getByText('Testtour')).toBeInTheDocument()
     expect(screen.getByText(/2 Nächte · \d+ km · ↑ .+ m ↓ .+ m/)).toBeInTheDocument()
     expect(screen.getByText(/Std$/)).toBeInTheDocument()
   })
@@ -46,17 +46,18 @@ describe('TripHeader', () => {
     renderHeader({ onShare: undefined })
     expect(screen.queryByRole('button', { name: 'Teilen' })).not.toBeInTheDocument()
   })
-  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren, and can be renamed', async () => {
-    const { onSave, onChange, trip } = renderHeader({ isDraft: true })
+  it('a draft shows its name, is marked nicht gespeichert, saves to Meine Touren under the name from the dialog', async () => {
+    const { onSave } = renderHeader({ isDraft: true })
     expect(screen.getByText(/^nicht gespeichert · 2 Nächte/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Mein Name' } })
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     expect(onSave).toHaveBeenCalledWith('Mein Name')
-    fireEvent.click(await screen.findByRole('button', { name: 'Testtour' }))
-    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Neu' } })
-    fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Enter' })
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
+  })
+  it('the name is not editable by clicking it', () => {
+    renderHeader()
+    fireEvent.click(screen.getByText('Testtour'))
+    expect(screen.queryByLabelText('Tourname')).not.toBeInTheDocument()
   })
   it('a saved trip shows Gespeichert instead of Merken and no nicht gespeichert mark', () => {
     renderHeader()
@@ -69,32 +70,6 @@ describe('TripHeader', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gespeichert' }))
     expect(onUnsave).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-  it('renames in place: Enter commits, Escape cancels, blank or unchanged is ignored', () => {
-    const { onChange, trip } = renderHeader()
-    const open = () => fireEvent.click(screen.getByRole('button', { name: 'Testtour' }))
-    open()
-    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Neu' } })
-    fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Enter' })
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Neu' })
-
-    vi.mocked(onChange).mockClear()
-    open()
-    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Verworfen' } })
-    fireEvent.keyDown(screen.getByLabelText('Tourname'), { key: 'Escape' })
-    expect(onChange).not.toHaveBeenCalled()
-
-    open()
-    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: '   ' } })
-    fireEvent.blur(screen.getByLabelText('Tourname'))
-    expect(onChange).not.toHaveBeenCalled()
-  })
-  it('commits a rename on blur', () => {
-    const { onChange, trip } = renderHeader()
-    fireEvent.click(screen.getByRole('button', { name: 'Testtour' }))
-    fireEvent.change(screen.getByLabelText('Tourname'), { target: { value: 'Per Blur' } })
-    fireEvent.blur(screen.getByLabelText('Tourname'))
-    expect(onChange).toHaveBeenLastCalledWith({ ...trip, name: 'Per Blur' })
   })
   it('edits date and party size through the date summary popover', () => {
     const { onChange, trip } = renderHeader()

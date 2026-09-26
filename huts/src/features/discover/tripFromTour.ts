@@ -6,6 +6,14 @@ import type { TripDraft } from './plannerState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 
+/** The name a trip gets without user input: the official tour's name, else "first hut – last hut". */
+export function autoTripName(
+  huts: { first: string; last: string },
+  official: { name: string } | undefined,
+): string {
+  return official ? official.name : `${huts.first} – ${huts.last}`
+}
+
 export function tripFromTour(tour: PlannerTour, ctx: {
   hutIds: readonly string[]
   startById: Map<number, StartPoint>
@@ -20,7 +28,7 @@ export function tripFromTour(tour: PlannerTour, ctx: {
   const last = ctx.hutNameById.get(tour.huts[tour.huts.length - 1]) ?? '?'
   const official = tour.official
   return newTrip({
-    name: official ? official.name : `${first} – ${last}`,
+    name: autoTripName({ first, last }, official),
     startDate: ctx.draft.startDate || null,
     partySize: ctx.draft.partySize,
     start: { startId: tour.startId, sourceType: start.sourceType as SourceType },

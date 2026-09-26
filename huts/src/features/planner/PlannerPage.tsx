@@ -25,7 +25,8 @@ import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { useMapView } from '@/features/map/useMapView.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
 import { createLegAnchorLookup } from '@/tourSearch/legAnchors.js'
-import { tripFromTour } from '@/features/discover/tripFromTour.js'
+import type { Trip } from '@/trip/trip.js'
+import { autoTripName, tripFromTour } from '@/features/discover/tripFromTour.js'
 import { useFirstVisitPrompt } from './useFirstVisitPrompt.js'
 import { useTripSession } from '@/features/trip/useTripSession.js'
 import { useSidebarNavigation } from './useSidebarNavigation.js'
@@ -93,6 +94,13 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     if (!trip) return
     if (openDraft(trip)) setHoveredTourKeys(NO_TOURS)
   }, [rememberViewBeforeTrip, data, form, draft, openDraft, setHoveredTourKeys])
+
+  function resetName(trip: Trip): string {
+    const hutIds = data.graph.hutEdges.hutIds
+    const nameOf = (guid: string) => data.hutNameById.get(hutIds.indexOf(guid)) ?? '?'
+    const official = trip.source ? data.officialTours.find((t) => t.tourId === trip.source?.tourId) : undefined
+    return autoTripName({ first: nameOf(trip.huts[0]), last: nameOf(trip.huts[trip.huts.length - 1]) }, official)
+  }
 
   function confirmDiscard() {
     confirmDiscardDraft()
@@ -183,7 +191,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
             <TripPanel
               trip={activeTrip} tripLegs={tripLegs} data={data} startLabel={startLabel}
               isDraft={isDraft} onSave={(name) => dispatch({ type: 'saveDraft', name })}
-              onUnsave={() => dispatch({ type: 'unsave', id: activeTrip.id })}
+              onUnsave={() => dispatch({ type: 'unsave', id: activeTrip.id, name: resetName(activeTrip) })}
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
               onBack={backFromTrip} backLabel={openedFrom === 'saved' ? '← Meine Touren' : '← Ergebnisse'}
               highlightedLeg={highlightedLeg} onHoverLeg={setHighlightedLeg}

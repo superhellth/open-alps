@@ -35,7 +35,7 @@ function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
 describe('TripPanel', () => {
   it('composes header, stages and notes', () => {
     renderPanel()
-    expect(screen.getByRole('button', { name: 'Testtour' })).toBeInTheDocument()
+    expect(screen.getByText('Testtour')).toBeInTheDocument()
     expect(screen.getByText(/2 Nächte/)).toBeInTheDocument()
     expect(screen.getByText('Hütte D')).toBeInTheDocument()
     expect(screen.getByText('Hütte E')).toBeInTheDocument()

@@ -7,7 +7,7 @@ export interface TripsState extends StoredTrips {
   /** The most recent deletion, kept so it can be undone. */
   deleted: { trip: Trip; index: number } | null
   /** The saved trip most recently turned back into the draft, and its list position, so it can be undone. */
-  unsaved: { id: string; index: number } | null
+  unsaved: { id: string; index: number; name: string } | null
 }
 
 export type TripsAction =
@@ -16,7 +16,7 @@ export type TripsAction =
   | { type: 'openDraft'; trip: Trip }
   | { type: 'updateDraft'; trip: Trip; now?: Date }
   | { type: 'saveDraft'; name?: string; now?: Date }
-  | { type: 'unsave'; id: string }
+  | { type: 'unsave'; id: string; /** Replaces the trip's name on its way back to a draft. */ name?: string }
   | { type: 'undoUnsave' }
   | { type: 'dismissUnsave' }
   | { type: 'setActive'; id: string }
@@ -76,18 +76,19 @@ export function tripsReducer(state: TripsState, action: TripsAction): TripsState
     case 'unsave': {
       const index = state.trips.findIndex((t) => t.id === action.id)
       if (index === -1) return state
-      const trip = state.trips[index]
+      const saved = state.trips[index]
+      const trip = action.name === undefined ? saved : { ...saved, name: action.name }
       return {
         ...state,
         trips: state.trips.filter((t) => t.id !== action.id),
         draft: trip, draftBaseline: trip, activeId: null, activeIsDraft: true,
-        unsaved: { id: trip.id, index },
+        unsaved: { id: trip.id, index, name: saved.name },
       }
     }
     case 'undoUnsave': {
       if (!state.unsaved || state.draft?.id !== state.unsaved.id) return state
       const trips = [...state.trips]
-      trips.splice(state.unsaved.index, 0, state.draft)
+      trips.splice(state.unsaved.index, 0, { ...state.draft, name: state.unsaved.name })
       const activeId = state.activeIsDraft ? state.draft.id : state.activeId
       return {
         ...state, trips, draft: null, draftBaseline: null, activeId, activeIsDraft: false, unsaved: null,

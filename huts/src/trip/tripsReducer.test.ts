@@ -89,17 +89,17 @@ describe('draft lifecycle', () => {
     expect(state.activeIsDraft).toBe(true)
     expect(state.activeId).toBeNull()
     expect(state.deleted).toBeNull()
-    expect(state.unsaved).toEqual({ id: t.id, index: 0 })
+    expect(state.unsaved).toEqual({ id: t.id, index: 0, name: t.name })
   })
 
   it('undoUnsave puts the draft back at its list position and reopens it as saved', () => {
     const [a, b] = [trip('a'), trip('b')]
     let state = tripsReducer(tripsReducer(empty, { type: 'create', trip: a }), { type: 'create', trip: b })
-    state = tripsReducer(state, { type: 'unsave', id: a.id })
-    state = tripsReducer(state, { type: 'updateDraft', trip: { ...a, name: 'Umbenannt' } })
+    state = tripsReducer(state, { type: 'unsave', id: a.id, name: 'Auto' })
+    expect(state.draft?.name).toBe('Auto')
     state = tripsReducer(state, { type: 'undoUnsave' })
     expect(state.trips.map((t) => t.id)).toEqual([a.id, b.id])
-    expect(state.trips[0].name).toBe('Umbenannt')
+    expect(state.trips[0].name).toBe(a.name)
     expect(state.draft).toBeNull()
     expect(state.activeId).toBe(a.id)
     expect(state.activeIsDraft).toBe(false)

@@ -1,5 +1,5 @@
 import { alpha, createTheme } from '@mui/material/styles'
-import { fontSize, fonts, opacity, rem, SIGNPOST_FONT, tokens } from './tokens.js'
+import { fontSize, fonts, opacity, rem, SIGNPOST_FONT, space, tokens } from './tokens.js'
 
 export { tokens, SIGNPOST_FONT }
 
@@ -28,6 +28,8 @@ const theme = createTheme({
       styleOverrides: { root: { backgroundColor: tokens.paper, color: tokens.ink, borderBottom: `2px solid ${tokens.ink}` } },
     },
     MuiPaper: { defaultProps: { elevation: 0 } },
+    // Buttons share the title's and content's inset instead of MUI's tighter default.
+    MuiDialogActions: { styleOverrides: { root: ({ theme }) => ({ padding: theme.spacing(0, space.section, space.section) }) } },
     MuiTabs: { styleOverrides: { indicator: { backgroundColor: tokens.signpost, height: 4 } } },
     MuiTab: {
       styleOverrides: {
