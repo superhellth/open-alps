@@ -1,5 +1,5 @@
 import { alpha, createTheme } from '@mui/material/styles'
-import { SIGNPOST_FONT, tokens } from './tokens.js'
+import { fontSize, fonts, opacity, rem, SIGNPOST_FONT, tokens } from './tokens.js'
 
 export { tokens, SIGNPOST_FONT }
 
@@ -15,9 +15,12 @@ const theme = createTheme({
   },
   shape: { borderRadius: 2 },
   typography: {
-    fontFamily: '"Barlow", system-ui, sans-serif',
-    h6: { fontFamily: SIGNPOST_FONT, fontWeight: 600 },
-    subtitle2: { fontFamily: SIGNPOST_FONT, fontWeight: 600 },
+    fontFamily: fonts.body,
+    h6: { fontFamily: fonts.signpost, fontWeight: 600, fontSize: rem(fontSize.xl) },
+    subtitle2: { fontFamily: fonts.signpost, fontWeight: 600, fontSize: rem(fontSize.sm) },
+    body1: { fontSize: rem(fontSize.md) },
+    body2: { fontSize: rem(fontSize.sm) },
+    caption: { fontSize: rem(fontSize.xs) },
   },
   components: {
     MuiAppBar: {
@@ -29,9 +32,9 @@ const theme = createTheme({
     MuiTab: {
       styleOverrides: {
         root: {
-          backgroundColor: alpha(tokens.ink, 0.05),
-          '&:hover': { backgroundColor: alpha(tokens.ink, 0.09) },
-          '&:not(.Mui-selected)': { color: alpha(tokens.ink, 0.6) },
+          backgroundColor: alpha(tokens.ink, opacity.hoverTint),
+          '&:hover': { backgroundColor: alpha(tokens.ink, opacity.hoverTintStrong) },
+          '&:not(.Mui-selected)': { color: alpha(tokens.ink, opacity.muted) },
           '&.Mui-selected': { backgroundColor: tokens.paper },
         },
       },
