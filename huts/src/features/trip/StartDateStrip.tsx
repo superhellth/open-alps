@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Box, Button, Typography } from '@mui/material'
+import { Box, Button } from '@mui/material'
 import { fetchAvailabilityByOffset } from '@/availability/fetchAvailability.js'
 import { addUtcDays } from '@/availability/formatDate.js'
 import { answerWindow, shiftAnswers } from '@/availability/startDateAnswer.js'
@@ -9,7 +9,8 @@ import type { Trip } from '@/trip/trip.js'
 import { styles } from './StartDateStrip.styles.js'
 
 const MAX_SHIFT = 3
-const VERDICT_TEXT = { bookable: '● alles frei', blocked: '✕ belegt', unclear: '? unklar' } as const
+const VERDICT_TEXT = { bookable: 'alles frei', blocked: 'belegt', unclear: 'unklar' } as const
+const VERDICT_MARK = { bookable: '●', blocked: '✕', unclear: '?' } as const
 
 /** Which start dates make the whole chain bookable. Reuses the per-date cached collectAll calls,
  *  so shifting by one more day only adds one or two fetches. */
@@ -35,24 +36,22 @@ export default function StartDateStrip({ trip, hutIndices, hutOhrsByIndex, onShi
   if (!trip.startDate) return null
   const first = new Date(trip.startDate)
   return (
-    <Box sx={styles.root}>
-      <Box sx={styles.header}>
-        <Typography variant="subtitle2" sx={{ flex: 1 }}>Startdatum verschieben</Typography>
-        <Button size="small" variant="outlined" color="secondary" onClick={() => onShift(-1)}>−1 Tag</Button>
-        <Button size="small" variant="outlined" color="secondary" onClick={() => onShift(1)}>+1 Tag</Button>
-      </Box>
-      <Box sx={styles.answers}>
-        {answers?.map((a) => (
+    <Box role="group" aria-label="Startdatum verschieben" sx={styles.chips}>
+      {answers?.map((a) => {
+        const day = addUtcDays(first, a.shiftDays).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', timeZone: 'UTC' })
+        const current = a.shiftDays === 0
+        return (
           <Button
-            key={a.shiftDays} size="small" variant={a.shiftDays === 0 ? 'contained' : 'outlined'} color={a.shiftDays === 0 ? 'primary' : 'secondary'}
-            onClick={() => onShift(a.shiftDays)} disabled={a.shiftDays === 0}
-            sx={{ textTransform: 'none', flexDirection: 'column', lineHeight: 1.2 }}
+            key={a.shiftDays} data-shift={a.shiftDays} size="small" sx={styles.chip}
+            variant={current ? 'contained' : 'outlined'} color={current ? 'primary' : 'secondary'}
+            disabled={current} onClick={() => onShift(a.shiftDays)}
+            aria-label={`${day}: ${VERDICT_TEXT[a.verdict]}`}
           >
-            <span>{addUtcDays(first, a.shiftDays).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' })}</span>
-            <span>{VERDICT_TEXT[a.verdict]}</span>
+            <span>{day}</span>
+            <span aria-hidden="true">{VERDICT_MARK[a.verdict]}</span>
           </Button>
-        ))}
-      </Box>
+        )
+      })}
     </Box>
   )
 }

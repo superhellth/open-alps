@@ -16,9 +16,9 @@ function makeTrip(overrides: Partial<Parameters<typeof newTrip>[0]> = {}) {
 }
 
 describe('TripDateSummary', () => {
-  it('shows "ohne Datum" with the party size when undated', () => {
+  it('shows "Datum wählen" with the party size when undated', () => {
     render(<TripDateSummary trip={makeTrip()} onChange={() => {}} />)
-    expect(screen.getByText('ohne Datum · 2 Pers.')).toBeInTheDocument()
+    expect(screen.getByText('Datum wählen · 2 Pers.')).toBeInTheDocument()
   })
 
   it('shows the date range and nights when dated', () => {

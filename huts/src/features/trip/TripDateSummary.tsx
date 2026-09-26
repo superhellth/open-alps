@@ -6,7 +6,7 @@ import { styles } from './TripDateSummary.styles.js'
 
 function summaryText(trip: Trip): string {
   const party = `${trip.partySize} Pers.`
-  if (!trip.startDate) return `ohne Datum · ${party}`
+  if (!trip.startDate) return `Datum wählen · ${party}`
   const [y, m, d] = trip.startDate.split('-').map(Number)
   const last = new Date(Date.UTC(y, m - 1, d + trip.huts.length))
   const fmt = (dt: Date) => dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })

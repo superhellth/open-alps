@@ -5,7 +5,9 @@ import { formatMeters } from '@/format/meters.js'
 import { styles } from './Signpost.styles.js'
 
 export interface SignpostProps {
-  title: string
+  title: ReactNode
+  /** One stats line under the title row, before the ascent/descent figures. */
+  subtitle?: string
   timeH?: number
   ascentM?: number
   descentM?: number
@@ -17,7 +19,7 @@ export interface SignpostProps {
 
 // The trail signpost: an arrow-shaped plate, destination left, walking time right. The one bold
 // element of the UI; everything around it stays flat.
-export default function Signpost({ title, timeH, ascentM, descentM, variant = 'plate', children }: SignpostProps) {
+export default function Signpost({ title, subtitle, timeH, ascentM, descentM, variant = 'plate', children }: SignpostProps) {
   const outline = variant === 'outline'
   const body = (
     <Box sx={styles.body}>
@@ -25,6 +27,7 @@ export default function Signpost({ title, timeH, ascentM, descentM, variant = 'p
         <Box component="span" sx={styles.title}>{title}</Box>
         {timeH !== undefined && <Box component="span" sx={{ fontWeight: 600 }}>{formatSignpostTime(timeH)}</Box>}
       </Box>
+      {subtitle && <Box sx={styles.stats}>{subtitle}</Box>}
       {(ascentM !== undefined || descentM !== undefined) && (
         <Box sx={styles.stats}>
           {ascentM !== undefined && <span>↑ {formatMeters(ascentM)}</span>}
