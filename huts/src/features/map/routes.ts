@@ -23,14 +23,6 @@ export function legLayer(legIndex: number, legCount: number): GeometryLayer {
   return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
 }
 
-/** Leg geometry with edgeId -1 is never fetched; the map draws a dashed straight line instead. */
-export function straightRoute(waypoints: RouteWaypoint[]): Route {
-  return {
-    waypoints,
-    legs: waypoints.slice(1).map(() => ({ edgeId: -1, reversed: false, layer: 'hut_edges' as const })),
-  }
-}
-
 function place(id: number, kind: 'hut' | 'start', ctx: RouteContext): RouteWaypoint | null {
   if (kind === 'hut') {
     const p = ctx.hutCoordsById.get(id)

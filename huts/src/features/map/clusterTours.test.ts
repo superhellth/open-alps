@@ -23,11 +23,10 @@ describe('createTourClusterer', () => {
     expect(items.map((m) => (m.kind === 'tour' ? m.key : '')).sort()).toEqual(['a', 'b', 'c', 'd'])
   })
 
-  it('lists the tour keys inside a cluster and a zoom that splits it', () => {
+  it('lists the tour keys inside a cluster', () => {
     const [cluster] = clusterer.clustersFor(WORLD, 2)
     if (cluster.kind !== 'cluster') throw new Error('expected a cluster')
     expect(clusterer.keysOf(cluster.clusterId).sort()).toEqual(['a', 'b', 'c', 'd'])
-    expect(clusterer.expansionZoom(cluster.clusterId)).toBeGreaterThan(2)
   })
 
   it('handles no tours', () => {

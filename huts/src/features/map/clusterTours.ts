@@ -13,7 +13,6 @@ export type MapMarker =
 
 export interface TourClusterer {
   clustersFor(bbox: [number, number, number, number], zoom: number): MapMarker[]
-  expansionZoom(clusterId: number): number
   keysOf(clusterId: number): string[]
 }
 
@@ -38,7 +37,6 @@ export function createTourClusterer(points: TourPoint[]): TourClusterer {
         return { kind: 'tour', key: props.key as string, count: 1, lat, lng }
       })
     },
-    expansionZoom: (clusterId) => index.getClusterExpansionZoom(clusterId),
     keysOf: (clusterId) => index.getLeaves(clusterId, Infinity).map((f) => (f.properties as PointProps).key),
   }
 }

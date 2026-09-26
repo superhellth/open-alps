@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { legLayer, straightRoute, tourAnchorOf, tourToRoute, tripToRoute } from './routes.js'
+import { legLayer, tourAnchorOf, tourToRoute, tripToRoute } from './routes.js'
 import type { RouteContext } from './routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
@@ -56,13 +56,6 @@ describe('waypoint stops', () => {
   it('gives an unclassified hut no stop instead of a guessed one', () => {
     const r = tourToRoute(chain(), ctx)!
     expect(r.waypoints[2]).toEqual({ lat: 47.2, lng: 11.2 })
-  })
-})
-
-describe('straightRoute', () => {
-  it('marks every leg as having no geometry so only straight lines draw', () => {
-    const r = straightRoute([{ lat: 1, lng: 1 }, { lat: 2, lng: 2 }, { lat: 3, lng: 3 }])
-    expect(r.legs.map((l) => l.edgeId)).toEqual([-1, -1])
   })
 })
 

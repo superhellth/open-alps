@@ -46,9 +46,3 @@ export const ALL_HUT_CLASSES: HutClass[] = [
 export function hutClassBadge(c: HutClass): string {
   return c.serviced ? OPERATOR_BADGE[c.operator] : `${OPERATOR_BADGE[c.operator]}·SV`
 }
-
-export type HutFill = 'filled' | 'outline'
-
-export function hutFill(c: HutClass): HutFill {
-  return c.serviced ? 'filled' : 'outline'
-}
