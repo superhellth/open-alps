@@ -1,5 +1,6 @@
 import type { Heading, TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { TourBoardLabel } from './tourBoard.js'
+import { marker } from '@/ui/tokens.js'
 
 export type Side = 'left' | 'right'
 export interface Pixel { x: number; y: number }
@@ -8,15 +9,6 @@ export interface Viewport { width: number; height: number }
 export interface PlaceTour { key: string; label: TourBoardLabel; candidates: TourAnchor[] }
 export interface Placement { key: string; kind: 'board' | 'dot'; lat: number; lng: number; side: Side }
 
-/** Board height and mast height in px (`--board-h`, `--mast-h` in map.css). */
-const BOARD_H = 26
-const MAST_H = 24
-/** Widest a board can be (`max-width` in map.css). */
-const BOARD_MAX_W = 220
-/** Horizontal padding, gap between time and ascent (map.css `.sign`). */
-const PAD_LEFT = 8
-const PAD_RIGHT = 16
-const GAP = 6
 /** Round-trip loop icon width (map.css `.loop svg`). */
 const LOOP_W = 14
 /** Free space kept around every placed board. */
@@ -24,12 +16,13 @@ const BOX_MARGIN = 4
 /** A dot keeps this far from every board foot and earlier dot. */
 const DOT_CLEARANCE = 8
 
-const BOARD_FONT = "600 0.8rem 'Barlow Semi Condensed', 'Barlow', sans-serif"
-
-/** Board width from its texts and loop icon, clamped to the CSS `max-width`. */
+/** Board width from its texts and loop icon, clamped to `marker.boardMaxW`. */
 export function boardWidth(label: TourBoardLabel, textWidth: (text: string) => number): number {
-  const loop = label.roundTrip ? LOOP_W + GAP : 0
-  return Math.min(BOARD_MAX_W, PAD_LEFT + loop + textWidth(label.text) + GAP + textWidth(label.detail) + PAD_RIGHT)
+  const loop = label.roundTrip ? LOOP_W + marker.boardGap : 0
+  return Math.min(
+    marker.boardMaxW,
+    marker.boardPadNear + loop + textWidth(label.text) + marker.boardGap + textWidth(label.detail) + marker.boardPadFar,
+  )
 }
 
 let canvasContext: CanvasRenderingContext2D | null | undefined
@@ -37,7 +30,7 @@ let canvasContext: CanvasRenderingContext2D | null | undefined
 function canvasTextWidth(text: string): number {
   if (canvasContext === undefined) {
     canvasContext = document.createElement('canvas').getContext('2d')
-    if (canvasContext) canvasContext.font = BOARD_FONT
+    if (canvasContext) canvasContext.font = marker.boardFont
   }
   return canvasContext ? canvasContext.measureText(text).width : text.length * 7
 }
@@ -51,7 +44,7 @@ interface Box { left: number; top: number; right: number; bottom: number }
 
 /** The board and its mast on foot `foot`. An east board's tail edge sits on the mast's outer edge and extends right; a west board mirrors it. */
 function boxOf(foot: Pixel, side: Side, width: number): Box {
-  const top = foot.y - MAST_H - BOARD_H
+  const top = foot.y - marker.mastH - marker.boardH
   return side === 'right'
     ? { left: foot.x - 1, right: foot.x - 1 + width, top, bottom: foot.y }
     : { left: foot.x + 1 - width, right: foot.x + 1, top, bottom: foot.y }

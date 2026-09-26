@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react'
 import { Box, Typography } from '@mui/material'
 import { tokens } from '@/ui/theme.js'
+import { space } from '@/ui/tokens.js'
 import type { TripElevation } from './useTripElevation.js'
 
 const WIDTH = 600
@@ -29,7 +30,7 @@ export default function HeightProfile({ elevation, highlightedLeg, onHoverLeg, o
   onHoverPosition: (point: { distanceKm: number } | null) => void
 }) {
   if (elevation.loading) {
-    return <Typography variant="body2" sx={{ p: 1 }}>Höhenprofil lädt …</Typography>
+    return <Typography variant="body2" sx={{ p: space.item }}>Höhenprofil lädt …</Typography>
   }
   if (elevation.points.length === 0) return null
 

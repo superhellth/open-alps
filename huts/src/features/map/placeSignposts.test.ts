@@ -4,6 +4,7 @@ import { boardWidth, measureBoard, placeSignposts } from './placeSignposts.js'
 import type { PlaceTour, Placement } from './placeSignposts.js'
 import type { TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { TourBoardLabel } from './tourBoard.js'
+import { marker } from '@/ui/tokens.js'
 
 const label = (text = 'x'): TourBoardLabel => ({ text, detail: '↑ 1 m', roundTrip: false, title: text })
 /** Identity-like projection: lng is x, lat is y in pixels. */
@@ -184,14 +185,15 @@ describe('placeSignposts with a previous placement', () => {
 describe('boardWidth', () => {
   const ten = (s: string) => s.length * 10
   it('adds padding, gap and both texts', () => {
-    // 8 left padding + 'ab' (20) + 6 gap + '↑ 1m' (40) + 16 right padding
-    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: false, title: '' }, ten)).toBe(90)
+    const expected = marker.boardPadNear + 20 + marker.boardGap + 40 + marker.boardPadFar
+    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: false, title: '' }, ten)).toBe(expected)
   })
-  it('clamps a long text to 220 px', () => {
-    expect(boardWidth({ text: 'x'.repeat(200), detail: '↑ 1 m', roundTrip: false, title: '' }, ten)).toBe(220)
+  it('clamps a long text to marker.boardMaxW', () => {
+    expect(boardWidth({ text: 'x'.repeat(200), detail: '↑ 1 m', roundTrip: false, title: '' }, ten)).toBe(marker.boardMaxW)
   })
   it('adds the loop icon and its gap for a round trip', () => {
-    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: true, title: '' }, ten)).toBe(110)
+    const plain = boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: false, title: '' }, ten)
+    expect(boardWidth({ text: 'ab', detail: '↑ 1m', roundTrip: true, title: '' }, ten)).toBe(plain + 14 + marker.boardGap)
   })
 })
 
@@ -200,7 +202,16 @@ describe('measureBoard', () => {
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null)
     const width = measureBoard(label('Kaunertal'))
     expect(width).toBeGreaterThan(30)
-    expect(width).toBeLessThanOrEqual(220)
+    expect(width).toBeLessThanOrEqual(marker.boardMaxW)
+    vi.restoreAllMocks()
+  })
+  it('measures in marker.boardFont', async () => {
+    vi.resetModules()
+    const ctx = { font: '', measureText: () => ({ width: 5 }) }
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(ctx as unknown as CanvasRenderingContext2D)
+    const fresh = await import('./placeSignposts.js')
+    fresh.measureBoard(label('Kaunertal'))
+    expect(ctx.font).toBe(marker.boardFont)
     vi.restoreAllMocks()
   })
 })

@@ -8,10 +8,6 @@ const SRC = path.dirname(fileURLToPath(import.meta.url))
 /** Files not yet migrated; each migration task removes its files. Empty at the end. */
 const PENDING: string[] = [
   'data/hutClass.ts',
-  'features/map/HeightProfile.tsx',
-  'features/map/TripMapLayers.styles.ts',
-  'features/map/map.css',
-  'features/map/placeSignposts.ts',
 ]
 
 const EXCLUDED_FILES = new Set(['ui/tokens.ts', 'ui/theme.ts', 'vite-env.d.ts'])

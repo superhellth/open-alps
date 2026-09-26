@@ -16,13 +16,13 @@
 .swap-signpost {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
-  padding: 3px 14px 3px 8px;
+  gap: var(--space-item);
+  padding: var(--space-inline) var(--marker-board-pad-far) var(--space-inline) var(--marker-board-pad-near);
   background: var(--color-signpost);
   color: var(--color-ink);
-  font: 600 0.8rem/1.2 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font: 600 var(--font-size-sm)/1.2 var(--font-signpost);
   font-variant-numeric: tabular-nums;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--marker-arrow-w)) 0, 100% 50%, calc(100% - var(--marker-arrow-w)) 100%, 0 100%);
   cursor: pointer;
 }
 
@@ -31,8 +31,8 @@
 /* Signpost markers. The marker element is 0x0 at the geographic point; boards and dots are absolutely
    positioned children. */
 .signpost-marker {
-  --board-h: 26px;
-  --mast-h: 24px;
+  --board-h: var(--marker-board-h);
+  --mast-h: var(--marker-mast-h);
 }
 /* Mast and foot: the foot dot sits on the anchor (the marker origin), the mast rises from it. */
 .signpost-marker .mast {
@@ -51,18 +51,18 @@
   top: calc((var(--mast-h) + var(--board-h)) * -1);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--marker-board-gap);
   box-sizing: border-box;
   height: var(--board-h);
-  padding: 0 16px 0 8px;
-  max-width: 220px;
+  padding: 0 var(--marker-board-pad-far) 0 var(--marker-board-pad-near);
+  max-width: var(--marker-board-max-w);
   background: var(--color-ink);
   color: var(--color-ink);
-  font: 600 0.8rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font: 600 var(--font-size-sm)/1 var(--font-signpost);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   cursor: pointer;
-  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - var(--marker-arrow-w)) 0, 100% 50%, calc(100% - var(--marker-arrow-w)) 100%, 0 100%);
 }
 /* Yellow face inset from the ink edge, clipped to the same arrow. */
 .signpost-marker .sign::before {
@@ -70,16 +70,16 @@
   position: absolute;
   inset: 2px;
   background: var(--color-signpost);
-  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%);
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 50%, calc(100% - 9px) 100%, 0 100%); /* design-exempt: face arrow is one px shallower than the board arrow */
 }
 .signpost-marker .sign > * { position: relative; }
 .signpost-marker .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .signpost-marker .detail { opacity: 0.75; }
 .signpost-marker .loop { display: flex; flex: none; }
 .signpost-marker .loop svg { width: 14px; height: 14px; fill: currentColor; }
-.signpost-marker .sign.side-left { left: 1px; transform: translateX(-100%); padding: 0 8px 0 16px; }
+.signpost-marker .sign.side-left { left: 1px; transform: translateX(-100%); padding: 0 var(--marker-board-pad-near) 0 var(--marker-board-pad-far); }
 .signpost-marker .sign.side-left,
-.signpost-marker .sign.side-left::before { clip-path: polygon(10px 0, 100% 0, 100% 100%, 10px 100%, 0 50%); }
+.signpost-marker .sign.side-left::before { clip-path: polygon(var(--marker-arrow-w) 0, 100% 0, 100% 100%, var(--marker-arrow-w) 100%, 0 50%); }
 
 /* Dot: a tour whose board found no room. An 8 px foot without a mast; the pseudo-element widens the hit area to 16 px. */
 .signpost-marker .dot {
@@ -98,13 +98,13 @@
 .signpost-marker .dot:focus-visible { outline: 3px solid var(--color-alpine-blue); outline-offset: 2px; }
 .signpost-marker:not(.dimmed):hover .sign,
 .signpost-marker.highlighted .sign { filter: drop-shadow(0 2px 6px color-mix(in srgb, var(--color-ink) 55%, transparent)); z-index: 1; }
-.signpost-marker .sign:hover::before { background: #fff; }
+.signpost-marker .sign:hover::before { background: var(--color-white); }
 .signpost-marker:not(.dimmed):hover .dot,
-.signpost-marker.highlighted .dot { background: #fff; }
+.signpost-marker.highlighted .dot { background: var(--color-white); }
 .signpost-marker.dimmed .sign,
 .signpost-marker.dimmed .mast,
 .signpost-marker.dimmed .foot,
-.signpost-marker.dimmed .dot { opacity: 0.45; }
+.signpost-marker.dimmed .dot { opacity: var(--opacity-dimmed); }
 
 /* Count bubble: a cluster, or any marker while zoomed out below the route reveal zoom. */
 .start-count-marker span {
@@ -117,7 +117,7 @@
   background: var(--color-signpost);
   color: var(--color-ink);
   border: 2px solid var(--color-ink);
-  font: 700 0.9rem/1 'Barlow Semi Condensed', 'Barlow', sans-serif;
+  font: 700 var(--font-size-sm)/1 var(--font-signpost);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: transform 0.1s ease-out, box-shadow 0.1s ease-out;
@@ -128,12 +128,12 @@
 }
 .start-count-marker:not(.dimmed):hover span,
 .start-count-marker.highlighted span {
-  background: #fff;
+  background: var(--color-white);
   transform: scale(1.2);
   box-shadow: 0 0 0 3px var(--color-signpost), 0 2px 8px color-mix(in srgb, var(--color-ink) 55%, transparent);
 }
 .start-count-marker.dimmed span {
-  opacity: 0.45;
+  opacity: var(--opacity-dimmed);
 }
 .start-count-marker.dimmed:hover span {
   transform: none;
