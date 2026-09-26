@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { boardWidth, measureBoard, placeSignposts } from './placeSignposts.js'
-import type { PlaceTour } from './placeSignposts.js'
+import type { PlaceTour, Placement } from './placeSignposts.js'
 import type { TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { TourBoardLabel } from './tourBoard.js'
 
@@ -113,6 +113,71 @@ describe('placeSignposts', () => {
     it('carry the heading side of their candidate', () => {
       expect(place([tour('a', [at(100, 100, 'west')])], wide)[0].side).toBe('left')
     })
+  })
+})
+
+describe('placeSignposts with a previous placement', () => {
+  const again = (tours: PlaceTour[], previous: Placement[], measure = fixed(100)) =>
+    placeSignposts(tours, project, measure, VIEWPORT, previous)
+  const board = (key: string, x: number, y: number, side: 'left' | 'right' = 'right'): Placement =>
+    ({ key, kind: 'board', lat: y, lng: x, side })
+
+  it('keeps a board on its previous candidate and side while it still fits', () => {
+    // Fresh, a would take 500,500 east; it stood at 500,700 west before.
+    const ps = again([tour('a', [at(500, 500), at(500, 700)])], [board('a', 500, 700, 'left')])
+    expect(ps).toEqual([board('a', 500, 700, 'left')])
+  })
+
+  it('places previous boards before better-ranked newcomers', () => {
+    const ps = again([tour('new', [at(500, 500)]), tour('old', [at(500, 500)])], [board('old', 500, 500)])
+    expect(byKey(ps, 'old').kind).toBe('board')
+    expect(byKey(ps, 'new').kind).toBe('dot')
+  })
+
+  it('keeps a previous board whose box overhangs the viewport while its foot is in view', () => {
+    // East from x 950 overhangs the right edge; fresh placement would flip it to the west side.
+    expect(again([tour('a', [at(950, 500)])], [board('a', 950, 500)])[0]).toEqual(board('a', 950, 500))
+  })
+
+  it('moves a previous board whose foot left the viewport, or whose candidate is gone', () => {
+    const out = again([tour('a', [at(500, 500), at(1200, 500)])], [board('a', 1200, 500)])
+    expect(out[0]).toMatchObject({ kind: 'board', lng: 500 })
+    const gone = again([tour('a', [at(500, 500)])], [board('a', 300, 300)])
+    expect(gone[0]).toMatchObject({ kind: 'board', lng: 500 })
+  })
+
+  it('turns a pinned board that collides with an earlier pinned board into a dot on its spot', () => {
+    // b could move to 500,800 but is pinned at 520,500, where a's board now covers it.
+    const ps = again(
+      [tour('a', [at(500, 500)]), tour('b', [at(520, 500), at(500, 800)])],
+      [board('a', 500, 500), board('b', 520, 500)],
+    )
+    expect(byKey(ps, 'a')).toEqual(board('a', 500, 500))
+    expect(byKey(ps, 'b')).toMatchObject({ kind: 'dot', lat: 500, lng: 520 })
+  })
+
+  it('never flips a pinned board to its other side', () => {
+    // a's west board overlaps b's pinned east board; a's east side would be clear, but a is pinned west.
+    const ps = again(
+      [tour('b', [at(400, 500)]), tour('a', [at(550, 500, 'east')])],
+      [board('b', 400, 500), board('a', 550, 500, 'left')],
+    )
+    expect(byKey(ps, 'a')).toMatchObject({ kind: 'dot', lng: 550 })
+  })
+
+  it('never lets an overhanging board take a new spot', () => {
+    expect(again([tour('a', [at(950, 500)])], [board('a', 500, 500)])[0].side).toBe('left')
+  })
+
+  it('keeps a dot on its previous candidate while it is clear', () => {
+    const wide = fixed(2000)
+    const prev: Placement = { key: 'a', kind: 'dot', lat: 100, lng: 300, side: 'right' }
+    expect(again([tour('a', [at(100, 100), at(300, 100)])], [prev], wide)[0]).toMatchObject({ kind: 'dot', lng: 300 })
+  })
+
+  it('tries a previous dot spot first when the tour now fits a board', () => {
+    const prev: Placement = { key: 'a', kind: 'dot', lat: 700, lng: 500, side: 'right' }
+    expect(again([tour('a', [at(500, 500), at(500, 700)])], [prev])[0]).toEqual(board('a', 500, 700))
   })
 })
 

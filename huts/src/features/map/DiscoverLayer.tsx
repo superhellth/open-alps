@@ -18,6 +18,7 @@ import { createStartClusterer, markerRadius } from './clusterStarts.js'
 import type { MapMarker } from './clusterStarts.js'
 import { dotHtml, escapeHtml, singleHtml } from './signpostHtml.js'
 import { measureBoard, placeSignposts } from './placeSignposts.js'
+import type { Placement } from './placeSignposts.js'
 import { tourBoardLabel } from './tourBoard.js'
 import { indexToursByEnd, indexToursByHut, indexToursByLeg, legKey, tierOf } from './tourMatch.js'
 import { makeStartLabel } from '@/data/labels.js'
@@ -48,10 +49,10 @@ const toursText = (n: number) => `In ${n} Touren`
 
 /** Below `ROUTE_REVEAL_ZOOM` one round yellow bubble per start point or cluster of start points carries the summed count; a click
  *  focuses the results list on those tours and zooms in. From `ROUTE_REVEAL_ZOOM` on each tour's board stands on a mast planted on
- *  one of its route's anchors (`placeSignposts`: rank order, a colliding tour moves to its next anchor candidate); a tour that fits
- *  nowhere shows as a foot dot whose hover, focus or list hover shows its board. Panning and zooming only re-place, they never
- *  re-search. Boards and dots pick their tour on click. A shared leg or hut click focuses the results list on its tours and flies
- *  to their bounds; the focused tours draw at the focused tier until the focus is dropped (show all tours, a map click, or
+ *  one of its route's anchors (`placeSignposts`: rank order, a colliding tour moves to its next anchor candidate, a board whose
+ *  foot stays in view is pinned and turns into a dot on its spot when it collides); a tour that fits nowhere shows as a foot
+ *  dot whose hover, focus or list hover shows its board. Panning and zooming only re-place, they never re-search. Boards and
+ *  dots pick their tour on click. A shared leg or hut click focuses the results list on its tours and flies to their bounds; the focused tours draw at the focused tier until the focus is dropped (show all tours, a map click, or
  *  zooming out past the zoom the click flew to); markers outside the focus fade like the search-running state.
  *  Past `ROUTE_REVEAL_ZOOM`, routes draw for every tour whose waypoints' bounding box overlaps the viewport,
  *  in three tiers (rest, focused, hovered); the focused and hovered tiers are display-only copies above the
@@ -116,10 +117,14 @@ export default function DiscoverLayer({
     return candidates.length > 0 ? [{ key, label: tourBoardLabel(tour, startById), candidates }] : []
   }), [routedTours, routeCtx, view.bbox, startById])
   const labelByKey = useMemo(() => new Map(placeableTours.map((t) => [t.key, t.label])), [placeableTours])
+  /** The last committed placement; the next one pins its boards that are still in view. */
+  const previousPlacements = useRef<Placement[]>([])
   const placements = useMemo(() => {
     const size = map.getSize()
-    return placeSignposts(placeableTours, (p) => map.latLngToContainerPoint([p.lat, p.lng]), measureBoard, { width: size.x, height: size.y })
+    const project = (p: { lat: number; lng: number }) => map.latLngToContainerPoint([p.lat, p.lng])
+    return placeSignposts(placeableTours, project, measureBoard, { width: size.x, height: size.y }, previousPlacements.current)
   }, [placeableTours, map])
+  useEffect(() => { previousPlacements.current = placements }, [placements])
   /** The pointer is on a signpost: its own board keeps full opacity. */
   const [pointerOnSignpost, setPointerOnSignpost] = useState(false)
   const toursByLeg = useMemo(() => indexToursByLeg(routedTours), [routedTours])

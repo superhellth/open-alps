@@ -53,8 +53,17 @@ No stacks, no spread.
   - Result: `{ key, kind: 'board' | 'dot', lat, lng, side: 'left' | 'right' }[]`, where `side` of a
     dot is its heading side (used for its preview).
 - **When.** On every view change (`moveend`/`zoomend`), where `DiscoverLayer` runs the anchor
-  clusterer today. Never while dragging. No hysteresis and no cap on the number of boards; the
-  collision test bounds density.
+  clusterer today. Never while dragging. No cap on the number of boards; the collision test bounds
+  density.
+- **Pinned boards.** `placeSignposts` takes the last placement. A board whose foot is still in the
+  viewport (and still one of its tour's candidates) is pinned: it never moves to another candidate
+  or flips side. Pinned boards are placed first, in rank order; each keeps its spot and side when
+  clear of the boards placed so far, and may overhang the viewport edge. A pinned board that now
+  collides (typically on zoom-out) becomes a dot on the same spot. All other tours are placed as
+  above, a previous dot trying its old spot first, so a dot that gets room grows into a board in
+  place. Placement therefore depends on the pan/zoom path: a board never migrates to a better anchor
+  while in view. Without pinning, every pan re-placed from scratch and one change cascaded down the
+  rank order.
 - **Below `ROUTE_REVEAL_ZOOM`** the start-point count bubbles are unchanged.
 
 ## 2. Rendering and interaction
