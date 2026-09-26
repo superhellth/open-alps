@@ -83,7 +83,7 @@ describe('DiscoverLayer route lines', () => {
   it('draws every in-view tour, with no cap', async () => {
     const many = Array.from({ length: 80 }, (_, i) => tour(1, [i]))
     const routeCtxMany = {
-      hutCoordsById: new Map(many.map((t, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
+      hutCoordsById: new Map(many.map((_, i) => [i, { lat: 47.3, lng: 12 + i * 0.0001 }])),
       startById, officialById: new Map(), hutClassByIndex: new Map(), legAnchors: () => null,
     }
     const { container: all } = renderLayer({ ...focusOn(...many), routeCtx: routeCtxMany }, 13)

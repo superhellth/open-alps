@@ -16,8 +16,8 @@ import { filterOfficial, sortTours } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import { usePlannerSearch } from './usePlannerSearch.js'
 
-/** Discover state: filter form, search, ranking, and the result lists derived from them. */
-/** `pointOf` places a tour on the map for the results list's viewport filter, the same point its count bubble clusters at. */
+/** Discover state: filter form, search, ranking, and the result lists derived from them. `pointOf` places a tour on the map
+ *  for the results list's viewport filter, the same point its count bubble clusters at. */
 export function useDiscover({ data, client, mapView, pointOf }: {
   data: AppData
   client: SearchClient
