@@ -1,9 +1,10 @@
 import type { ReactNode } from 'react'
 import { Box } from '@mui/material'
 import { formatDistanceKm } from '@/format/distance.js'
-import { formatMeters } from '@/format/meters.js'
+import { formatAscent, formatDescent } from '@/format/meters.js'
 import { formatSignpostTime } from '@/format/signpostTime.js'
 import type { Leg } from '@/tourSearch/types.js'
+import StatLine from '@/ui/StatLine.js'
 import RailRow from './Rail.js'
 import { styles } from './StageLeg.styles.js'
 
@@ -30,9 +31,11 @@ export default function StageLeg({ index, leg, highlighted, onHover, children }:
             <>
               <Box component="span" sx={styles.time}>{formatSignpostTime(leg.durationH)}</Box>
               <Box component="span" sx={styles.stats}>
-                <span>{formatDistanceKm(leg.distanceM)}</span>
-                <span>↑ {formatMeters(leg.ascentM)}</span>
-                <span>↓ {formatMeters(leg.descentM)}</span>
+                <StatLine>
+                  <span>{formatDistanceKm(leg.distanceM)}</span>
+                  <span>{formatAscent(leg.ascentM)}</span>
+                  <span>{formatDescent(leg.descentM)}</span>
+                </StatLine>
               </Box>
             </>
           )}

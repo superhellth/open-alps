@@ -5,7 +5,6 @@ import BookmarkIcon from '@mui/icons-material/Bookmark'
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder'
 import ShortcutIcon from '@mui/icons-material/Shortcut'
 import type { HutOhrs } from '@/data/buildAppData.js'
-import { formatMeters } from '@/format/meters.js'
 import type { Trip } from '@/trip/trip.js'
 import { summarizeLegs } from '@/trip/tripLegs.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
@@ -33,7 +32,6 @@ export interface TripHeaderProps {
 export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, onChange, onSave, onUnsave, onBack, backLabel, onShare }: TripHeaderProps) {
   const totals = summarizeLegs(tripLegs.legs)
   const km = Math.round(totals.distanceM / 1000).toLocaleString('de-DE')
-  const stats = `${trip.huts.length} Nächte · ${km} km · ↑ ${formatMeters(totals.ascentM)} ↓ ${formatMeters(totals.descentM)}`
   const [saving, setSaving] = useState(false)
 
   return (
@@ -49,7 +47,8 @@ export default function TripHeader({ trip, tripLegs, hutOhrsByIndex, isDraft, on
       </Box>
       <Signpost
         title={trip.name}
-        timeH={totals.durationH} subtitle={stats}
+        timeH={totals.durationH} stats={[`${trip.huts.length} Nächte`, `${km} km`]}
+        ascentM={totals.ascentM} descentM={totals.descentM}
       />
       <SaveTripDialog
         open={saving} initialName={trip.name}

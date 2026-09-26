@@ -23,9 +23,10 @@ describe('Signpost', () => {
     expect(screen.getByText('Alt').closest('[data-variant]')).toHaveAttribute('data-variant', 'outline')
     expect(screen.getByText('Hinweis')).toBeInTheDocument()
   })
-  it('renders a subtitle line and accepts a node as title', () => {
-    render(<Signpost title={<button>Umbenennen</button>} timeH={2} subtitle="4 Nächte · 58 km" />)
+  it('renders leading stats and accepts a node as title', () => {
+    render(<Signpost title={<button>Umbenennen</button>} timeH={2} stats={['4 Nächte', '58 km']} />)
     expect(screen.getByRole('button', { name: 'Umbenennen' })).toBeInTheDocument()
-    expect(screen.getByText('4 Nächte · 58 km')).toBeInTheDocument()
+    expect(screen.getByText('4 Nächte')).toBeInTheDocument()
+    expect(screen.getByText('58 km')).toBeInTheDocument()
   })
 })

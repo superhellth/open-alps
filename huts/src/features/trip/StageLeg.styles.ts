@@ -11,5 +11,5 @@ export const styles = {
   }),
   line: { py: space.item, px: space.item, display: 'flex', alignItems: 'baseline', gap: space.item, flexWrap: 'wrap', fontFamily: SIGNPOST_FONT, color: tokens.ink },
   time: { fontWeight: 600 },
-  stats: { display: 'flex', gap: space.inline, color: 'text.secondary', fontSize: rem(fontSize.sm) },
+  stats: { color: 'text.secondary', fontSize: rem(fontSize.sm) },
 } satisfies StyleMap

@@ -33,7 +33,10 @@ describe('TripHeader', () => {
   it('shows the trip name on the plate with nights, km and ascent/descent', () => {
     renderHeader()
     expect(screen.getByText('Testtour')).toBeInTheDocument()
-    expect(screen.getByText(/2 Nächte · \d+ km · ↑ .+ m ↓ .+ m/)).toBeInTheDocument()
+    expect(screen.getByText('2 Nächte')).toBeInTheDocument()
+    expect(screen.getByText(/^\d+ km$/)).toBeInTheDocument()
+    expect(screen.getByText(/^↑ .+ m$/)).toBeInTheDocument()
+    expect(screen.getByText(/^↓ .+ m$/)).toBeInTheDocument()
     expect(screen.getByText(/Std$/)).toBeInTheDocument()
   })
   it('calls back and share', () => {

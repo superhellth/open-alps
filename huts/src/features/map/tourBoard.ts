@@ -1,4 +1,5 @@
 import { formatDistanceKm } from '@/format/distance.js'
+import { formatAscent } from '@/format/meters.js'
 import { formatSignpostTime } from '@/format/signpostTime.js'
 import { makeStartLabel } from '@/data/labels.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
@@ -22,7 +23,7 @@ export function tourBoardLabel(tour: PlannerTour, startById: Map<number, StartPo
   const roundTrip = tour.exitStartId === tour.startId
   const time = formatSignpostTime(tour.totalDurationH)
   const distance = formatDistanceKm(tour.totalDistanceM)
-  const detail = `↑ ${Math.round(tour.totalAscentM).toLocaleString('de-DE')} m`
+  const detail = formatAscent(tour.totalAscentM)
   const route = roundTrip
     ? `${ROUND_TRIP_LABEL} ab ${startLabel(tour.startId)}`
     : `${startLabel(tour.startId)} → ${startLabel(tour.exitStartId)}`

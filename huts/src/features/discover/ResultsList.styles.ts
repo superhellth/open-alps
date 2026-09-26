@@ -22,7 +22,7 @@ export const styles = {
     }
   },
   chainRow: { display: 'flex', alignItems: 'baseline', gap: space.item, fontFamily: SIGNPOST_FONT, fontWeight: 600 },
-  statRow: { display: 'flex', flexWrap: 'nowrap', gap: space.group, color: 'text.secondary' },
+  statRow: { color: 'text.secondary' },
   officialRow: { display: 'flex', gap: space.inline, flexWrap: 'wrap' },
   showAll: { px: space.item, pt: space.item },
   emptyHint: { p: space.inset },

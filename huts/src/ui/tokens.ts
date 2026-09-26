@@ -12,8 +12,8 @@ export const tokens = {
 
 /** MUI spacing units (1 = 8 px). Each name states the relationship it expresses. */
 export const space = {
-  inline: 0.5, // icon ↔ label, parts of one chip, stats within one line
-  item: 1, // controls in one row, lines within one card or list entry
+  inline: 0.5, // icon ↔ label, parts of one chip
+  item: 1, // controls in one row, stats in one line, lines within one card or list entry
   row: 1.5, // vertical padding of a list entry
   group: 2, // between groups: filter blocks, list entries without dividers
   section: 3, // between sections of a panel

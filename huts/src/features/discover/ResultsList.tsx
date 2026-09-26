@@ -10,6 +10,8 @@ import { SORT_LABEL } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { formatDistanceKm } from '@/format/distance.js'
+import { formatAscent, formatDescent } from '@/format/meters.js'
+import StatLine from '@/ui/StatLine.js'
 import { styles } from './ResultsList.styles.js'
 
 const PAGE_SIZE = 25
@@ -118,13 +120,17 @@ export default function ResultsList({
                 {chain.foldedCount > 0 && <Chip size="small" label={`+${chain.foldedCount} Hütten`} sx={{ flexShrink: 0 }} />}
               </Box>
               <Box sx={styles.statRow}>
-                <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'duration') }}>{formatSignpostTime(tour.totalDurationH)}</span>
-                <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'distance') }}>{formatDistanceKm(tour.totalDistanceM)}</span>
+                <StatLine>
+                  <span style={statStyle(sortKey === 'duration')}>{formatSignpostTime(tour.totalDurationH)}</span>
+                  <span style={statStyle(sortKey === 'distance')}>{formatDistanceKm(tour.totalDistanceM)}</span>
+                </StatLine>
               </Box>
               <Typography variant="caption" color="text.secondary" component="div">
-                {tour.legs.length} Tage ·{' '}
-                <span style={{ whiteSpace: 'nowrap', ...statStyle(sortKey === 'ascent') }}>↑ {Math.round(tour.totalAscentM).toLocaleString('de-DE')} m</span>
-                {' '}· ↓ {Math.round(tour.totalDescentM).toLocaleString('de-DE')} m
+                <StatLine>
+                  <span>{tour.legs.length} Tage</span>
+                  <span style={statStyle(sortKey === 'ascent')}>{formatAscent(tour.totalAscentM)}</span>
+                  <span>{formatDescent(tour.totalDescentM)}</span>
+                </StatLine>
               </Typography>
               {tour.official && (
                 <Box sx={styles.officialRow}>
