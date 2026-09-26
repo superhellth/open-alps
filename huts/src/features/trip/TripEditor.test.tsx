@@ -39,7 +39,7 @@ describe('useTripEditor', () => {
   })
 
   it('is not editable while a night no longer resolves', () => {
-    const broken = { ...trip, huts: ['{A}', '{GONE}'], nights: trip.nights.slice(0, 2) }
+    const broken = { ...trip, huts: ['{A}', '{GONE}'] }
     const { result } = renderHook(() => useTripEditor({ ...defaultProps, trip: broken, tripLegs: legsFromTrip(data.graph, broken) }))
     expect(result.current.editable).toBe(false)
   })

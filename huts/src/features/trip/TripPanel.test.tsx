@@ -33,13 +33,12 @@ function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
 }
 
 describe('TripPanel', () => {
-  it('composes header, stages and notes', () => {
+  it('composes header and stages', () => {
     renderPanel()
     expect(screen.getByText('Testtour')).toBeInTheDocument()
     expect(screen.getByText(/2 Nächte/)).toBeInTheDocument()
     expect(screen.getByText('Hütte D')).toBeInTheDocument()
     expect(screen.getByText('Hütte E')).toBeInTheDocument()
-    expect(screen.getByLabelText('Notizen')).toBeInTheDocument()
   })
   it('goes back with the caller-supplied label', () => {
     const { onBack } = renderPanel({ backLabel: 'Meine Touren' })
@@ -52,21 +51,6 @@ describe('TripPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
     expect(onSave).toHaveBeenCalled()
-  })
-  it('a notes edit calls onChange with updated notes', () => {
-    const { onChange } = renderPanel()
-    fireEvent.change(screen.getByLabelText('Notizen'), { target: { value: 'Wetter prüfen' } })
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ notes: 'Wetter prüfen' }))
-  })
-  it('a night status change calls onChange with the updated night', () => {
-    const oneNight = newTrip({
-      name: 'Eine Nacht', startDate: '2026-07-10', partySize: 2, start: { startId: 100, sourceType: 1 }, huts: ['{D}'],
-      exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
-    }, new Date(), 'id2')
-    const { onChange } = renderPanel({ trip: oneNight })
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    fireEvent.click(screen.getByRole('button', { name: 'bestätigt' }))
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ nights: [{ status: 'confirmed' }] }))
   })
   it('forwards stage hover and the edit-mode toggle', () => {
     const { onHoverLeg, onEditModeChange, container } = renderPanel()

@@ -16,9 +16,9 @@ function fromBase64Url(text: string): string {
   return new TextDecoder().decode(Uint8Array.from(binary, (c) => c.charCodeAt(0)))
 }
 
-/** The itinerary only: id, timestamps and the sender's booking statuses stay behind. */
+/** The itinerary only: id and timestamps stay behind. */
 export function encodeTripToHash(trip: Trip): string {
-  const { id: _id, createdAt: _c, updatedAt: _u, nights: _n, ...itinerary } = trip
+  const { id: _id, createdAt: _c, updatedAt: _u, ...itinerary } = trip
   return SHARE_HASH_PREFIX + toBase64Url(JSON.stringify({ v: 1, t: itinerary }))
 }
 
@@ -28,11 +28,7 @@ export function decodeTripFromHash(hash: string, now: Date = new Date(), id: str
     const payload = JSON.parse(fromBase64Url(hash.slice(SHARE_HASH_PREFIX.length)))
     if (payload?.v !== 1 || typeof payload.t !== 'object' || payload.t === null) return null
     const iso = now.toISOString()
-    const huts: unknown = payload.t.huts
-    return parseTrip({
-      ...payload.t, id, createdAt: iso, updatedAt: iso,
-      nights: Array.isArray(huts) ? huts.map(() => ({ status: 'open' })) : [],
-    })
+    return parseTrip({ ...payload.t, id, createdAt: iso, updatedAt: iso })
   } catch {
     return null
   }

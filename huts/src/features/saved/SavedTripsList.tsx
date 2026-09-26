@@ -13,11 +13,6 @@ function dateRange(trip: Trip): string {
   return `ab ${d}.${m}.${y}`
 }
 
-function bookingSummary(trip: Trip): string {
-  const confirmed = trip.nights.filter((n) => n.status === 'confirmed').length
-  return `${confirmed}/${trip.nights.length} bestätigt`
-}
-
 export interface SavedTripsListProps {
   graph: TripGraph
   onOpen: (id: string) => void
@@ -27,8 +22,6 @@ export interface SavedTripsListProps {
   onHoverTrip: (id: string | null) => void
 }
 
-// Carries over TripsPage's list/export/import/rename/delete logic; per-night editing (booking
-// status, notes) moved to TripPanel/StageList, where the trip is visible on the map.
 export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, hoveredTripId, onHoverTrip }: SavedTripsListProps) {
   const { state, dispatch } = useTrips()
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null)
@@ -123,7 +116,7 @@ export default function SavedTripsList({ graph, onOpen, onOpenDraft, onPlanen, h
                       {changed && <Typography variant="caption" sx={styles.strong}>geändert</Typography>}
                     </Box>
                     <Typography variant="caption" color="text.secondary">
-                      {trip.huts.length} Nächte · {dateRange(trip)} · {trip.partySize} Pers. · {bookingSummary(trip)}
+                      {trip.huts.length} Nächte · {dateRange(trip)} · {trip.partySize} Pers.
                     </Typography>
                   </>
                 )}

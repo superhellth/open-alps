@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest'
 import { decodeTripFromHash, encodeTripToHash, shareUrl, SHARE_HASH_PREFIX } from './shareLink.js'
 import { newTrip } from './trip.js'
 
-const trip = { ...newTrip({
+const trip = newTrip({
   name: 'Kaisertour – Süd', startDate: '2026-07-10', partySize: 3, start: { startId: 100, sourceType: 1 },
   huts: ['{593D0233-85B0-4086-B762-D4E94ED3B2CF}', '{B}'], exit: { startId: 101, sourceType: 1 },
   variant: { sacCeiling: 3, allowUngraded: true }, source: { kind: 'official' as const, tourId: 4 },
-}, new Date('2026-06-01T00:00:00Z'), 'orig'), notes: 'Seil', nights: [{ status: 'confirmed' as const }, { status: 'requested' as const }] }
+}, new Date('2026-06-01T00:00:00Z'), 'orig')
 
 describe('share link', () => {
   it('round-trips the itinerary, including non-ASCII names', () => {
@@ -16,13 +16,9 @@ describe('share link', () => {
     const back = decodeTripFromHash(hash, new Date('2026-07-01T00:00:00Z'), 'copy')!
     expect(back).toMatchObject({
       id: 'copy', name: 'Kaisertour – Süd', startDate: '2026-07-10', partySize: 3, huts: trip.huts,
-      start: trip.start, exit: trip.exit, variant: trip.variant, source: trip.source, notes: 'Seil',
+      start: trip.start, exit: trip.exit, variant: trip.variant, source: trip.source,
     })
     expect(back.createdAt).toBe('2026-07-01T00:00:00.000Z')
-  })
-  it('does not carry the sender\'s booking statuses', () => {
-    const back = decodeTripFromHash(encodeTripToHash(trip))!
-    expect(back.nights).toEqual([{ status: 'open' }, { status: 'open' }])
   })
   it('rejects anything that is not a valid share hash', () => {
     expect(decodeTripFromHash('#admin')).toBeNull()

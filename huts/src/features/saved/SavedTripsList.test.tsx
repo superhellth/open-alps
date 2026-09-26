@@ -59,10 +59,6 @@ describe('SavedTripsList', () => {
     fireEvent.click(screen.getByText('Kaiser'))
     expect(onOpen).toHaveBeenCalledWith('a')
   })
-  it('shows a booking summary', () => {
-    renderWith()
-    expect(screen.getAllByText(/0\/2 bestätigt/).length).toBe(2)
-  })
   it('the ⋮ menu offers Umbenennen and Löschen', () => {
     renderWith()
     openMenu('a')

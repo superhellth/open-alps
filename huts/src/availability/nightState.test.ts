@@ -38,6 +38,6 @@ describe('nightText', () => {
     expect(nightText({ kind: 'few', places: 3 })).toBe('3 Plätze frei')
     expect(nightText({ kind: 'few', places: 1 })).toBe('1 Platz frei')
     expect(nightText({ kind: 'full' })).toBe('ausgebucht')
-    expect(nightText({ kind: 'unknown' })).toBe('Verfügbarkeit unbekannt – direkt anfragen')
+    expect(nightText({ kind: 'unknown' })).toBe('Plätze unbekannt')
   })
 })

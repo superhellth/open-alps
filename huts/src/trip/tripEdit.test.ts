@@ -40,12 +40,10 @@ describe('swapCandidates / applySwap', () => {
   it('returns nothing when a neighbour no longer resolves', () => {
     expect(swapCandidates(graph, mk(['{A}', '{GONE}', '{C}']), 0)).toEqual([])
   })
-  it('applySwap replaces the hut, resets that night and drops the official source', () => {
+  it('applySwap replaces the hut and drops the official source', () => {
     const trip = { ...mk(['{A}', '{B}', '{C}']), source: { kind: 'official' as const, tourId: 1 } }
-    trip.nights[1] = { status: 'confirmed' }
     const next = applySwap(graph, trip, 1, 5)
     expect(next.huts).toEqual(['{A}', '{X}', '{C}'])
-    expect(next.nights[1]).toEqual({ status: 'open' })
     expect(next.source).toBeUndefined()
   })
 })
@@ -60,7 +58,6 @@ describe('extendCandidates / applyExtend', () => {
   it('applyExtend appends a night and keeps start/exit when still linked', () => {
     const next = applyExtend(graph, mk(['{A}', '{B}', '{C}']), 'last', 3)!
     expect(next.huts).toEqual(['{A}', '{B}', '{C}', '{D}'])
-    expect(next.nights).toHaveLength(4)
     expect(next.exit).toEqual(station)
   })
   it('applyExtend repairs the exit to the fastest station exit when the old one is unreachable', () => {

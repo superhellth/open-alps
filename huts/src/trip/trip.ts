@@ -1,8 +1,6 @@
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
 import type { SourceType } from '../tourSearch/types.js'
 
-export type BookingStatus = 'open' | 'requested' | 'confirmed'
-
 export interface TripEndpoint {
   startId: number
   sourceType: SourceType
@@ -27,10 +25,7 @@ export interface Trip {
   huts: string[]
   exit: TripEndpoint
   variant: TripVariant
-  /** One entry per hut. */
-  nights: { status: BookingStatus }[]
   source?: { kind: 'official'; tourId: number }
-  notes?: string
 }
 
 export interface NewTripInput {
@@ -44,7 +39,6 @@ export interface NewTripInput {
   source?: Trip['source']
 }
 
-const BOOKING_STATUSES: readonly BookingStatus[] = ['open', 'requested', 'confirmed']
 const SOURCE_TYPES: readonly number[] = [SOURCE_TYPE_STATION, SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER]
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -54,7 +48,6 @@ export function newTrip(input: NewTripInput, now: Date = new Date(), id: string 
     id, name: input.name, createdAt: iso, updatedAt: iso,
     startDate: input.startDate, partySize: input.partySize,
     start: input.start, huts: [...input.huts], exit: input.exit, variant: input.variant,
-    nights: input.huts.map(() => ({ status: 'open' as const })),
     ...(input.source ? { source: input.source } : {}),
   }
 }
@@ -73,14 +66,12 @@ function parseEndpoint(v: unknown): TripEndpoint | null {
 /** Validates untrusted JSON (localStorage, share link, backup file). Null means "not a usable trip". */
 export function parseTrip(value: unknown): Trip | null {
   if (!isRecord(value)) return null
-  const { id, name, createdAt, updatedAt, startDate, partySize, huts, nights, variant, source, notes } = value
+  const { id, name, createdAt, updatedAt, startDate, partySize, huts, variant, source } = value
   if (typeof id !== 'string' || typeof name !== 'string') return null
   if (typeof createdAt !== 'string' || typeof updatedAt !== 'string') return null
   if (startDate !== null && (typeof startDate !== 'string' || !ISO_DATE.test(startDate))) return null
   if (typeof partySize !== 'number' || !Number.isInteger(partySize) || partySize < 1 || partySize > 25) return null
   if (!Array.isArray(huts) || !huts.every((h) => typeof h === 'string')) return null
-  if (!Array.isArray(nights) || nights.length !== huts.length) return null
-  if (!nights.every((n) => isRecord(n) && BOOKING_STATUSES.includes(n.status as BookingStatus))) return null
   if (!isRecord(variant) || typeof variant.allowUngraded !== 'boolean') return null
   if (variant.sacCeiling !== null && typeof variant.sacCeiling !== 'number') return null
   const start = parseEndpoint(value.start)
@@ -93,9 +84,7 @@ export function parseTrip(value: unknown): Trip | null {
   return {
     id, name, createdAt, updatedAt, startDate, partySize, start, exit,
     huts: huts as string[],
-    nights: (nights as { status: BookingStatus }[]).map((n) => ({ status: n.status })),
     variant: { sacCeiling: variant.sacCeiling as number | null, allowUngraded: variant.allowUngraded },
     ...(parsedSource ? { source: parsedSource } : {}),
-    ...(typeof notes === 'string' ? { notes } : {}),
   }
 }

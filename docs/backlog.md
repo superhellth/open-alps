@@ -12,6 +12,8 @@ priority first within each section. An item graduates out of here when it is res
 
 ## Medium
 
+### Explore: Snapping nodes to multiple trails, to avoid weird detours
+
 ### Close tours that start / end in nearby locations
 
 ### Avoid overlaps in displayed tours

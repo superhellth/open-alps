@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup, waitForElementToBeRemoved } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import StageList from './StageList.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
@@ -21,7 +21,7 @@ function renderList(t = trip(['{D}', '{E}']), overrides: Partial<Parameters<type
   const props = {
     trip: t, tripLegs: legsFromTrip(data.graph, t), hutNameById: data.hutNameById, hutOhrsByIndex: data.hutOhrsByIndex,
     startLabel: makeStartLabel(data.startById), nightViews: null, highlightedLeg: null, onHoverLeg: vi.fn(),
-    editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), onNightStatusChange: vi.fn(), ...overrides,
+    editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...overrides,
   }
   const view = render(<StageList {...props} />)
   return { ...props, container: view.container }
@@ -42,23 +42,9 @@ describe('StageList view mode', () => {
     renderList(trip(['{A}']), { editor: makeEditorStub({ car: true }) })
     expect(screen.getByText('Zurück am Start')).toBeInTheDocument()
   })
-  it('shows the date and the open booking status under the hut', () => {
+  it('shows the date of each night next to the hut', () => {
     renderList(trip(['{D}']))
     expect(screen.getByText(/10\.07\./)).toBeInTheDocument()
-    expect(screen.getByText('offen')).toBeInTheDocument()
-  })
-  it('shows a requested or confirmed night instead of its availability', () => {
-    const t = trip(['{D}', '{E}'])
-    t.nights[0].status = 'confirmed'
-    renderList(t, {
-      nightViews: [
-        { loading: false, availability: { kind: 'free', places: 12 } },
-        { loading: false, availability: { kind: 'free', places: 4 } },
-      ],
-    })
-    expect(screen.getByText('bestätigt')).toBeInTheDocument()
-    expect(screen.queryByText('12 Plätze frei')).not.toBeInTheDocument()
-    expect(screen.getByText('4 Plätze frei')).toBeInTheDocument()
   })
   it('shows availability with shape and text once night views exist, "unknown" distinct from "full"', () => {
     renderList(trip(['{D}', '{E}']), {
@@ -68,7 +54,7 @@ describe('StageList view mode', () => {
       ],
     })
     expect(screen.getByText('12 Plätze frei')).toBeInTheDocument()
-    expect(screen.getByText('Verfügbarkeit unbekannt – direkt anfragen')).toBeInTheDocument()
+    expect(screen.getByText('Plätze unbekannt')).toBeInTheDocument()
     expect(screen.queryByText('ausgebucht')).not.toBeInTheDocument()
   })
   it('marks a night that no longer resolves with a hollow node and the notice, and does not expand it', () => {
@@ -78,15 +64,13 @@ describe('StageList view mode', () => {
     expect(screen.getByLabelText('Details Etappe 1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Details Etappe 2')).not.toBeInTheDocument()
   })
-  it('hides booking detail until the hut is clicked, then shows link and status toggle', () => {
+  it('hides booking detail until the hut is clicked, then shows the booking link', async () => {
     renderList(trip(['{D}', '{E}']))
     expect(screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Buchungsstatus Nacht 1')).not.toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Details Etappe 1'))
     expect(screen.getByRole('link', { name: 'Auf hut-reservation.org buchen' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Buchungsstatus Nacht 1')).toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    expect(screen.queryByLabelText('Buchungsstatus Nacht 1')).not.toBeInTheDocument()
+    await waitForElementToBeRemoved(() => screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' }))
   })
   it('links a bookable hut for its own night and tells about direct-booking huts', () => {
     renderList(trip(['{A}', '{B}', '{C}', '{D}']))
@@ -95,18 +79,11 @@ describe('StageList view mode', () => {
     fireEvent.click(screen.getByLabelText('Details Etappe 1'))
     expect(screen.getByText(/Direktbuchung/)).toBeInTheDocument()
   })
-  it('an undated trip shows no date, no availability and no booking link, but still expands to the status toggle', () => {
+  it('an undated trip shows no date, no availability and no booking link', () => {
     renderList(trip(['{D}'], null), { nightViews: [{ loading: false, availability: { kind: 'free', places: 3 } }] })
     expect(screen.queryByText(/Plätze frei/)).not.toBeInTheDocument()
     fireEvent.click(screen.getByLabelText('Details Etappe 1'))
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Buchungsstatus Nacht 1')).toBeInTheDocument()
-  })
-  it('reports a status change from the expanded detail', () => {
-    const { onNightStatusChange } = renderList(trip(['{D}']))
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    fireEvent.click(screen.getByRole('button', { name: 'bestätigt' }))
-    expect(onNightStatusChange).toHaveBeenCalledWith(0, 'confirmed')
   })
   it('shows overlap warnings under the timeline', () => {
     renderList(trip(['{D}']), { warnings: ['Überschneidung mit Tour X'] })
@@ -217,17 +194,17 @@ describe('StageList edit mode', () => {
     expect(extend.container.querySelector('[data-node="exit"]')!.parentElement).not.toHaveTextContent('Hütte X')
   })
 
-  it('collapses expanded rows when the edit-mode toggle is pressed', () => {
+  it('collapses expanded rows when the edit-mode toggle is pressed', async () => {
     const t = trip(['{D}', '{E}'])
     const props = {
       trip: t, tripLegs: legsFromTrip(data.graph, t), hutNameById: data.hutNameById, hutOhrsByIndex: data.hutOhrsByIndex,
       startLabel: makeStartLabel(data.startById), nightViews: null, highlightedLeg: null, onHoverLeg: vi.fn(),
-      editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), onNightStatusChange: vi.fn(),
+      editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(),
     }
     const { rerender } = render(<StageList {...props} />)
     fireEvent.click(screen.getByLabelText('Details Etappe 1'))
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     rerender(<StageList {...props} editMode={false} />)
-    expect(screen.queryByLabelText('Buchungsstatus Nacht 1')).not.toBeInTheDocument()
+    await waitForElementToBeRemoved(() => screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' }))
   })
 })

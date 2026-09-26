@@ -8,19 +8,19 @@ import type { StageNodeProps } from './StageNode.js'
 afterEach(cleanup)
 
 const props = (over: Partial<StageNodeProps> = {}): StageNodeProps => ({
-  number: 2, title: 'Hütte B', meta: <span>Fr 12.07.</span>, changed: false, editMode: false,
+  number: 2, title: 'Hütte B', date: 'Fr., 12.07.', meta: <span>12 Plätze frei</span>, changed: false, editMode: false,
   expanded: false, onToggleExpanded: () => {}, edit: null, ...over,
 })
 
 describe('StageNode', () => {
-  it('shows number, title and the meta line, addressed by its 0-based night', () => {
+  it('shows number, title and date in one row, the meta line below, addressed by its 0-based night', () => {
     const { container } = render(<StageNode {...props()} />)
     expect(screen.getByText('2')).toBeInTheDocument()
-    expect(screen.getByText('Hütte B')).toBeInTheDocument()
-    expect(screen.getByText('Fr 12.07.')).toBeInTheDocument()
+    expect(screen.getByText('Hütte B').parentElement).toContainElement(screen.getByText('Fr., 12.07.'))
+    expect(screen.getByText('12 Plätze frei')).toBeInTheDocument()
     expect(container.querySelector('[data-night="1"]')).not.toBeNull()
   })
-  it('the whole face toggles the details and shows children when expanded', () => {
+  it('the whole face toggles the details and unfolds them when expanded', () => {
     const onToggleExpanded = vi.fn()
     const { rerender } = render(<StageNode {...props({ onToggleExpanded })} />)
     const face = screen.getByRole('button', { name: 'Details Etappe 2' })
@@ -28,7 +28,8 @@ describe('StageNode', () => {
     expect(face).toContainElement(screen.getByText('Hütte B'))
     fireEvent.click(face)
     expect(onToggleExpanded).toHaveBeenCalled()
-    rerender(<StageNode {...props({ expanded: true })}><span>Buchung</span></StageNode>)
+    expect(screen.queryByText('Buchung')).not.toBeInTheDocument()
+    rerender(<StageNode {...props({ expanded: true, detail: <span>Buchung</span> })} />)
     expect(screen.getByRole('button', { name: 'Details Etappe 2' })).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByText('Buchung')).toBeInTheDocument()
   })

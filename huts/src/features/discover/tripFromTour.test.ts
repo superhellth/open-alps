@@ -22,7 +22,6 @@ describe('tripFromTour', () => {
     expect(t.startDate).toBe('2026-07-10')
     expect(t.partySize).toBe(2)
     expect(t.variant).toEqual({ sacCeiling: 3, allowUngraded: true })
-    expect(t.nights).toEqual([{ status: 'open' }, { status: 'open' }])
     expect(t.name).toBe('Hütte A – Hütte C')
     expect(t.source).toBeUndefined()
   })

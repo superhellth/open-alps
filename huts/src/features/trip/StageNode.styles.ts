@@ -4,7 +4,11 @@ import type { StyleMap } from '@/ui/styleMap.js'
 import { fontSize, opacity, rem, space, tokens } from '@/ui/tokens.js'
 
 export const styles = {
-  root: { display: 'flex', flexDirection: 'column', gap: space.item },
+  /** The node's surface: tinted while open, so face and detail read as one card. */
+  root: (open: boolean): SxProps<Theme> => ({
+    display: 'flex', flexDirection: 'column', borderRadius: 1, transition: 'background-color 150ms',
+    background: open ? alpha(tokens.ink, opacity.hoverTint) : 'transparent',
+  }),
   head: { display: 'flex', alignItems: 'center', gap: space.item },
   /** The clickable face of a night: the whole name and state block toggles its booking detail. */
   toggle: {
@@ -16,8 +20,10 @@ export const styles = {
   text: { flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' },
   titleLine: { display: 'flex', alignItems: 'baseline', gap: space.item },
   number: { fontWeight: 700, color: 'text.secondary' },
-  title: { fontWeight: 700, fontSize: rem(fontSize.md), overflowWrap: 'anywhere' },
+  title: { flex: 1, minWidth: 0, fontWeight: 700, fontSize: rem(fontSize.md), overflowWrap: 'anywhere' },
+  date: { flexShrink: 0, color: 'text.secondary', fontSize: rem(fontSize.sm), whiteSpace: 'nowrap' },
   meta: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: space.item, color: 'text.secondary', fontSize: rem(fontSize.sm) },
-  chevron: (expanded: boolean): SxProps<Theme> => ({ transition: 'transform 150ms', transform: expanded ? 'rotate(180deg)' : 'none' }),
-  detail: { px: space.item },
+  chevron: (expanded: boolean): SxProps<Theme> => ({ alignSelf: 'center', transition: 'transform 150ms', transform: expanded ? 'rotate(180deg)' : 'none' }),
+  detail: { px: space.item, pt: space.inline, pb: space.item },
+  candidates: { px: space.item, pt: space.item },
 } satisfies StyleMap

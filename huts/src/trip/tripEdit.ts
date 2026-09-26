@@ -93,8 +93,7 @@ export function swapCandidates(graph: TripGraph, trip: Trip, index: number): Swa
 export function applySwap(graph: TripGraph, trip: Trip, index: number, hutIndex: number): Trip {
   const huts = [...trip.huts]
   huts[index] = graph.hutEdges.hutIds[hutIndex]
-  const nights = trip.nights.map((n, i) => (i === index ? { status: 'open' as const } : n))
-  return edited(trip, { huts, nights })
+  return edited(trip, { huts })
 }
 
 // ---- extend -----------------------------------------------------------------------------------
@@ -132,10 +131,8 @@ export function applyExtend(graph: TripGraph, trip: Trip, side: 'first' | 'last'
   const ends = connectEnds(graph, trip, sequence)
   if (!ends) return null
   const guid = graph.hutEdges.hutIds[hutIndex]
-  const open = { status: 'open' as const }
   return edited(trip, {
     huts: side === 'first' ? [guid, ...trip.huts] : [...trip.huts, guid],
-    nights: side === 'first' ? [open, ...trip.nights] : [...trip.nights, open],
     start: ends.start,
     exit: ends.exit,
   })
@@ -171,7 +168,6 @@ export function applyTrim(graph: TripGraph, trip: Trip, index: number): Trip | n
   const ends = connectEnds(graph, trip, trimmedIndices(indices, index))!
   return edited(trip, {
     huts: trip.huts.filter((_, i) => i !== index),
-    nights: trip.nights.filter((_, i) => i !== index),
     start: ends.start,
     exit: ends.exit,
   })

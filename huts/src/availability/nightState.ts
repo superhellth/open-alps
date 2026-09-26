@@ -27,6 +27,6 @@ export function nightText(a: NightAvailability): string {
     case 'full':
       return 'ausgebucht'
     case 'unknown':
-      return 'Verfügbarkeit unbekannt – direkt anfragen'
+      return 'Plätze unbekannt'
   }
 }

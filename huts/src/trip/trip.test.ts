@@ -9,12 +9,11 @@ const input = {
 }
 
 describe('newTrip', () => {
-  it('fills id/timestamps and one open night per hut', () => {
+  it('fills id and timestamps', () => {
     const t = newTrip(input, new Date('2026-06-01T10:00:00Z'), 'id-1')
     expect(t.id).toBe('id-1')
     expect(t.createdAt).toBe('2026-06-01T10:00:00.000Z')
     expect(t.updatedAt).toBe(t.createdAt)
-    expect(t.nights).toEqual([{ status: 'open' }, { status: 'open' }])
   })
 })
 
@@ -23,11 +22,12 @@ describe('parseTrip', () => {
   it('round-trips a valid trip through JSON', () => {
     expect(parseTrip(JSON.parse(JSON.stringify(good)))).toEqual(good)
   })
-  it('rejects non-objects, missing fields and a nights/huts length mismatch', () => {
+  it('drops the per-night booking statuses older trips carry', () => {
+    expect(parseTrip({ ...good, nights: [{ status: 'confirmed' }, { status: 'open' }] })).toEqual(good)
+  })
+  it('rejects non-objects and missing fields', () => {
     expect(parseTrip(null)).toBeNull()
     expect(parseTrip({ ...good, huts: 'x' })).toBeNull()
-    expect(parseTrip({ ...good, nights: [{ status: 'open' }] })).toBeNull()
-    expect(parseTrip({ ...good, nights: [{ status: 'nope' }, { status: 'open' }] })).toBeNull()
     expect(parseTrip({ ...good, start: { startId: 'x', sourceType: 1 } })).toBeNull()
   })
   it('rejects a party size outside 1-25 and a malformed date', () => {

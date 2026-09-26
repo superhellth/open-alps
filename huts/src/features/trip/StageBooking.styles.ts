@@ -3,5 +3,4 @@ import { space } from '@/ui/tokens.js'
 
 export const styles = {
   root: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: space.item },
-  statusButton: { textTransform: 'none', py: space.inline },
 } satisfies StyleMap

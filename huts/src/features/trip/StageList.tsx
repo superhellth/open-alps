@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Box, Button, Typography } from '@mui/material'
 import { addUtcDays } from '@/availability/formatDate.js'
 import type { HutOhrs } from '@/data/buildAppData.js'
-import type { BookingStatus, Trip } from '@/trip/trip.js'
+import type { Trip } from '@/trip/trip.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
 import CandidateList from './CandidateList.js'
 import NightChip from './NightChip.js'
@@ -27,7 +27,6 @@ export interface StageListProps {
   editor: TripEditor
   editMode: boolean
   onEditModeChange: (on: boolean) => void
-  onNightStatusChange: (night: number, status: BookingStatus) => void
   warnings?: string[]
 }
 
@@ -39,7 +38,7 @@ const shortDate = (d: Date) => d.toLocaleDateString('de-DE', { weekday: 'short',
  *  appear only in edit mode. Leg i arrives at night i, leg `huts.length` is the exit. */
 export default function StageList({
   trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, highlightedLeg, onHoverLeg,
-  editor, editMode, onEditModeChange, onNightStatusChange, warnings = [],
+  editor, editMode, onEditModeChange, warnings = [],
 }: StageListProps) {
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   const firstNight = trip.startDate ? new Date(trip.startDate) : null
@@ -88,29 +87,18 @@ export default function StageList({
           const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
           const date = firstNight ? addUtcDays(firstNight, i) : null
           const view = date ? nightViews?.[i] : undefined
-          const status = trip.nights[i].status
           const open = expanded.has(i) && !editMode && !changed
-          const meta = changed ? CHANGED_TEXT : (
-            <>
-              {date && <span>{shortDate(date)}</span>}
-              <NightChip status={status} view={view} />
-            </>
-          )
+          const meta = changed ? CHANGED_TEXT : view && <NightChip view={view} />
           return (
             <Box key={i}>
               {leg(i)}
               <StageNode
                 number={i + 1}
                 title={hutIndex === null ? 'Unbekannte Hütte' : hutNameById.get(hutIndex) ?? String(hutIndex)}
-                meta={meta} changed={changed} editMode={editMode} expanded={open} onToggleExpanded={() => toggle(i)}
+                date={date && shortDate(date)} meta={meta} changed={changed} editMode={editMode} expanded={open} onToggleExpanded={() => toggle(i)}
                 edit={canEdit ? { trim: editor.trimAllowed(i), onSwap: () => editor.startSwap(i), onTrim: () => editor.trim(i) } : null}
+                detail={<StageBooking date={date} ohrs={ohrs} />}
               >
-                {open && (
-                  <StageBooking
-                    night={i} date={date} ohrs={ohrs} view={view} status={status}
-                    onStatusChange={(s) => onNightStatusChange(i, s)}
-                  />
-                )}
                 {editing?.kind === 'swap' && editing.index === i && candidates}
               </StageNode>
             </Box>
