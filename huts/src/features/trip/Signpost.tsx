@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Box } from '@mui/material'
 import { formatSignpostTime } from '@/format/signpostTime.js'
+import { formatMeters } from '@/format/meters.js'
 import { styles } from './Signpost.styles.js'
 
 export interface SignpostProps {
@@ -13,7 +14,6 @@ export interface SignpostProps {
   children?: ReactNode
 }
 
-const meters = (m: number) => `${Math.round(m).toLocaleString('de-DE')} m`
 
 // The trail signpost: an arrow-shaped plate, destination left, walking time right. The one bold
 // element of the UI; everything around it stays flat.
@@ -27,8 +27,8 @@ export default function Signpost({ title, timeH, ascentM, descentM, variant = 'p
       </Box>
       {(ascentM !== undefined || descentM !== undefined) && (
         <Box sx={styles.stats}>
-          {ascentM !== undefined && <span>↑ {meters(ascentM)}</span>}
-          {descentM !== undefined && <span>↓ {meters(descentM)}</span>}
+          {ascentM !== undefined && <span>↑ {formatMeters(ascentM)}</span>}
+          {descentM !== undefined && <span>↓ {formatMeters(descentM)}</span>}
         </Box>
       )}
       {children}
