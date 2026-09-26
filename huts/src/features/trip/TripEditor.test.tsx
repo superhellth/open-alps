@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
-import { useState } from 'react'
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, renderHook, screen, fireEvent, cleanup } from '@testing-library/react'
-import '@testing-library/jest-dom/vitest'
+import { renderHook, cleanup } from '@testing-library/react'
 import { useTripEditor } from './TripEditor.js'
-import type { EditingState, TripEditorProps } from './TripEditor.js'
+import type { TripEditorProps } from './TripEditor.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
 import { newTrip } from '@/trip/trip.js'
-import { makeStartLabel } from '@/data/labels.js'
 
 afterEach(cleanup)
 
@@ -19,13 +16,7 @@ const trip = newTrip({
 }, new Date(), 'id')
 
 const defaultProps: TripEditorProps = {
-  graph: data.graph, trip, tripLegs: legsFromTrip(data.graph, trip), hutNameById: data.hutNameById,
-  startLabel: makeStartLabel(data.startById), editing: null, onEditing: () => {}, onChange: () => {},
-}
-
-function RowMenuHarness({ night, editing, onEditing, onChange }: { night: number; editing: EditingState; onEditing: (e: EditingState) => void; onChange: (t: typeof trip) => void }) {
-  const editor = useTripEditor({ ...defaultProps, editing, onEditing, onChange })
-  return <>{editor.renderRowMenu(night)}</>
+  graph: data.graph, trip, tripLegs: legsFromTrip(data.graph, trip), editing: null, onEditing: () => {}, onChange: () => {},
 }
 
 describe('useTripEditor', () => {
@@ -34,48 +25,61 @@ describe('useTripEditor', () => {
     const { result } = renderHook(() => useTripEditor({ ...defaultProps, trip: null, tripLegs: null, editing: { kind: 'swap', index: 1 }, onChange }))
     expect(result.current.candidates).toEqual([])
     expect(result.current.activeLabel).toBeNull()
-    expect(result.current.renderRowMenu(0)).toBeNull()
-    expect(result.current.renderEndpointMenu('start')).toBeNull()
-    expect(result.current.renderExtendButtons()).toBeNull()
+    expect(result.current.editable).toBe(false)
+    expect(result.current.trimAllowed(0).ok).toBe(false)
     result.current.pickCandidate({ hutIndex: 1 })
+    result.current.trim(0)
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('renderRowMenu offers Hütte tauschen and Hütte entfernen (disabled with reason when not allowed)', () => {
-    render(<RowMenuHarness night={2} editing={null} onEditing={() => {}} onChange={() => {}} />)
-    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 3'))
-    expect(screen.getByText('Hütte tauschen')).toBeInTheDocument()
-    // C: B-D has no edge -> disabled with reason appended to the label
-    expect(screen.getByText(/Hütte entfernen/)).toHaveTextContent('Keine direkte Verbindung zwischen den Nachbarhütten.')
-  })
-
-  it('choosing Hütte tauschen enters swap mode: candidates appear, picking one applies applySwap', () => {
-    const onChange = vi.fn()
-    function Wrapper() {
-      const [editing, setEditing] = useState<EditingState>(null)
-      return <RowMenuHarness night={1} editing={editing} onEditing={setEditing} onChange={onChange} />
-    }
-    render(<Wrapper />)
-    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 2'))
-    fireEvent.click(screen.getByText('Hütte tauschen'))
-    // Stage 1 (B) in [A,B,C,D]: prev A, next C -> X qualifies.
-    fireEvent.click(screen.getByRole('button', { name: /Hütte X/ }))
-    expect(onChange).toHaveBeenCalled()
-    expect(onChange.mock.calls[0][0].huts).toEqual(['{A}', '{X}', '{C}', '{D}'])
-  })
-
-  it('renderEndpointMenu("start") offers Anderen Start wählen and lists candidates as buttons', () => {
-    const { result } = renderHook(() => useTripEditor({ ...defaultProps, editing: { kind: 'start' } }))
-    render(<>{result.current.renderEndpointMenu('start')}</>)
-    expect(screen.getByText('Anderen Start wählen')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Bahnhof Y/ })).toBeInTheDocument()
-  })
-
-  it('renderExtendButtons offers Etappe voranstellen/anhängen only when the trip fully resolves', () => {
+  it('is editable when every night resolves and reports the trip mode', () => {
     const { result } = renderHook(() => useTripEditor(defaultProps))
-    render(<>{result.current.renderExtendButtons()}</>)
-    expect(screen.getByText('Etappe anhängen')).toBeInTheDocument()
-    expect(screen.getByText('Etappe voranstellen')).toBeInTheDocument()
+    expect(result.current.editable).toBe(true)
+    expect(result.current.car).toBe(false)
+  })
+
+  it('is not editable while a night no longer resolves', () => {
+    const broken = { ...trip, huts: ['{A}', '{GONE}'], nights: trip.nights.slice(0, 2) }
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, trip: broken, tripLegs: legsFromTrip(data.graph, broken) }))
+    expect(result.current.editable).toBe(false)
+  })
+
+  it('trimAllowed carries the reason when a hut cannot be removed', () => {
+    const { result } = renderHook(() => useTripEditor(defaultProps))
+    expect(result.current.trimAllowed(1).ok).toBe(true)
+    const blocked = result.current.trimAllowed(2)
+    expect(blocked).toEqual({ ok: false, reason: 'Keine direkte Verbindung zwischen den Nachbarhütten.' })
+  })
+
+  it('trim applies applyTrim', () => {
+    const onChange = vi.fn()
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onChange }))
+    result.current.trim(1)
+    expect(onChange.mock.calls[0][0].huts).toEqual(['{A}', '{C}', '{D}'])
+  })
+
+  it('start actions set the editing state, cancel clears it', () => {
+    const onEditing = vi.fn()
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onEditing }))
+    result.current.startSwap(2)
+    expect(onEditing).toHaveBeenLastCalledWith({ kind: 'swap', index: 2 })
+    result.current.startExtend('first')
+    expect(onEditing).toHaveBeenLastCalledWith({ kind: 'extend', side: 'first' })
+    result.current.startEndpoint('exit')
+    expect(onEditing).toHaveBeenLastCalledWith({ kind: 'exit' })
+    result.current.cancel()
+    expect(onEditing).toHaveBeenLastCalledWith(null)
+  })
+
+  it('a swap edit lists candidates and picking one applies applySwap and ends the edit', () => {
+    const onChange = vi.fn()
+    const onEditing = vi.fn()
+    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onChange, onEditing, editing: { kind: 'swap', index: 1 } }))
+    // Stage 1 (B) in [A,B,C,D]: prev A, next C -> X (index 5) qualifies.
+    expect(result.current.candidates.map((c) => c.hutIndex)).toContain(5)
+    result.current.pickCandidate({ hutIndex: 5 })
+    expect(onChange.mock.calls[0][0].huts).toEqual(['{A}', '{X}', '{C}', '{D}'])
+    expect(onEditing).toHaveBeenLastCalledWith(null)
   })
 
   it('start/exit candidates carry startId/sourceType, not hutIndex', () => {
@@ -98,13 +102,5 @@ describe('useTripEditor', () => {
     expect(result.current.candidates.length).toBeGreaterThan(0)
     result.current.pickCandidate({ hutIndex: result.current.candidates[0].hutIndex })
     expect(onChange).toHaveBeenCalled()
-  })
-
-  it('cancels an active edit', () => {
-    const onEditing = vi.fn()
-    const { result } = renderHook(() => useTripEditor({ ...defaultProps, onEditing, editing: { kind: 'swap', index: 1 } }))
-    render(<>{result.current.renderRowMenu(1)}</>)
-    fireEvent.click(screen.getByRole('button', { name: 'Abbrechen' }))
-    expect(onEditing).toHaveBeenCalledWith(null)
   })
 })

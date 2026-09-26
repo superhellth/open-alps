@@ -1,12 +1,17 @@
-import type { ReactNode } from 'react'
-import { Box, Link, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { useState } from 'react'
+import { Box, Button, Typography } from '@mui/material'
 import { addUtcDays } from '@/availability/formatDate.js'
-import { buildBookingLink } from '@/availability/bookingLink.js'
 import type { HutOhrs } from '@/data/buildAppData.js'
-import type { TripLegs } from '@/trip/tripLegs.js'
+import { formatMeters } from '@/format/meters.js'
+import { formatSignpostTime } from '@/format/signpostTime.js'
 import type { BookingStatus, Trip } from '@/trip/trip.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import AvailabilityMark from './AvailabilityMark.js'
-import Signpost from './Signpost.js'
+import CandidateList from './CandidateList.js'
+import StageBooking, { STATUS_LABEL } from './StageBooking.js'
+import StageRow from './StageRow.js'
+import { styles as rowStyles } from './StageRow.styles.js'
+import type { TripEditor } from './TripEditor.js'
 import type { NightView } from './useTripAvailability.js'
 import { styles } from './StageList.styles.js'
 
@@ -17,81 +22,129 @@ export interface StageListProps {
   hutOhrsByIndex: Map<number, HutOhrs>
   startLabel: (startId: number) => string
   nightViews: NightView[] | null
+  /** The leg hovered in the list, on the map or on the profile; its row gets the yellow bar. */
+  highlightedLeg: number | null
   onHoverLeg: (index: number | null) => void
-  renderStageControls?: (night: number) => ReactNode
-  onNightStatusChange?: (night: number, status: BookingStatus) => void
+  editor: TripEditor
+  editMode: boolean
+  onEditModeChange: (on: boolean) => void
+  onNightStatusChange: (night: number, status: BookingStatus) => void
   warnings?: string[]
 }
 
 const CHANGED_TEXT = 'Seit dem Speichern geändert – nicht mehr im Wegenetz'
-const STATUS_LABEL: Record<BookingStatus, string> = { open: 'offen', requested: 'angefragt', confirmed: 'bestätigt' }
+const shortDate = (d: Date) => d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', timeZone: 'UTC' })
 
+/** Start, one row per night (a leg and the night at its end), the descent, and the overlap warnings.
+ *  Booking detail is second level (chevron); editing controls appear only in edit mode. Stage row i
+ *  belongs to leg i, the descent row to leg `huts.length`; the start row has no leg. */
 export default function StageList({
-  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, onHoverLeg, renderStageControls, onNightStatusChange, warnings = [],
+  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, highlightedLeg, onHoverLeg,
+  editor, editMode, onEditModeChange, onNightStatusChange, warnings = [],
 }: StageListProps) {
+  const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set())
   const firstNight = trip.startDate ? new Date(trip.startDate) : null
-  const exitLeg = tripLegs.legs[trip.huts.length]
+  const nights = trip.huts.length
+  const exitLeg = tripLegs.legs[nights]
+  const canEdit = editMode && editor.editable
+  const editing = editor.editing
+  const candidates = <CandidateList editor={editor} hutNameById={hutNameById} startLabel={startLabel} />
+  const toggle = (i: number) => setExpanded((prev) => {
+    const next = new Set(prev)
+    if (!next.delete(i)) next.add(i)
+    return next
+  })
 
   return (
-    <Box sx={styles.list}>
-      {trip.huts.map((_guid, i) => {
-        const hutIndex = tripLegs.hutIndices[i]
-        const leg = tripLegs.legs[i]
-        const changed = tripLegs.changed[i]
-        const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
-        const view = nightViews?.[i]
-        return (
-          <Box key={i} data-stage={i} sx={styles.stage} onMouseEnter={() => onHoverLeg(i)} onMouseLeave={() => onHoverLeg(null)}>
-            <Typography variant="caption" color="text.secondary">
-              Etappe {i + 1}{firstNight ? ` · Nacht ${addUtcDays(firstNight, i).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })}` : ''}
-            </Typography>
-            <Signpost
-              variant={changed ? 'outline' : 'plate'}
+    <Box sx={styles.root}>
+      <Box sx={styles.heading}>
+        <Typography variant="subtitle1" component="h2">Etappen</Typography>
+        <Button size="small" color="secondary" onClick={() => { setExpanded(new Set()); onEditModeChange(!editMode) }}>
+          {editMode ? 'Fertig' : 'Bearbeiten'}
+        </Button>
+      </Box>
+
+      <Box sx={styles.rows}>
+        <Box>
+          <Box sx={styles.endLine}>
+            <Typography variant="body2" sx={styles.endLabel}>Start: {startLabel(trip.start.startId)}</Typography>
+            {canEdit && <Button size="small" color="secondary" aria-label="Start ändern" onClick={() => editor.startEndpoint('start')}>ändern</Button>}
+          </Box>
+          {editing?.kind === 'start' && candidates}
+        </Box>
+
+        {canEdit && (
+          <>
+            <Button size="small" color="secondary" sx={styles.addButton} onClick={() => editor.startExtend('first')}>+ Etappe voranstellen</Button>
+            {editing?.kind === 'extend' && editing.side === 'first' && candidates}
+          </>
+        )}
+
+        {trip.huts.map((_guid, i) => {
+          const hutIndex = tripLegs.hutIndices[i]
+          const leg = tripLegs.legs[i]
+          const changed = tripLegs.changed[i]
+          const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
+          const date = firstNight ? addUtcDays(firstNight, i) : null
+          const view = nightViews?.[i]
+          const open = expanded.has(i) && !editMode && !changed
+          const meta = changed ? CHANGED_TEXT : (
+            <>
+              {date && <span>{shortDate(date)}</span>}
+              {leg && <span>↑ {formatMeters(leg.ascentM)} ↓ {formatMeters(leg.descentM)}</span>}
+              {date && view && (view.loading ? <span>Verfügbarkeit lädt …</span> : <AvailabilityMark availability={view.availability} />)}
+              <span>{STATUS_LABEL[trip.nights[i].status]}</span>
+            </>
+          )
+          return (
+            <StageRow
+              key={i} number={i + 1}
               title={hutIndex === null ? 'Unbekannte Hütte' : hutNameById.get(hutIndex) ?? String(hutIndex)}
               timeH={!changed && leg ? leg.durationH : undefined}
-              ascentM={!changed && leg ? leg.ascentM : undefined}
-              descentM={!changed && leg ? leg.descentM : undefined}
+              meta={meta} changed={changed} highlighted={highlightedLeg === i} editMode={editMode}
+              expanded={open} onToggleExpanded={() => toggle(i)} onHover={(hovering) => onHoverLeg(hovering ? i : null)}
+              edit={canEdit ? { trim: editor.trimAllowed(i), onSwap: () => editor.startSwap(i), onTrim: () => editor.trim(i) } : null}
             >
-              {changed ? (
-                <Typography variant="body2">{CHANGED_TEXT}</Typography>
-              ) : (
-                <Box sx={styles.nightDetails}>
-                  {firstNight && view && (view.loading ? <Typography variant="body2">Verfügbarkeit lädt …</Typography> : <AvailabilityMark availability={view.availability} />)}
-                  {ohrs?.ohrsHutId && firstNight ? (
-                    <Link href={buildBookingLink(ohrs.ohrsHutId, addUtcDays(firstNight, i))} target="_blank" rel="noreferrer" color="inherit">
-                      Auf hut-reservation.org buchen
-                    </Link>
-                  ) : !ohrs?.ohrsHutId ? (
-                    <Typography variant="body2">Direktbuchung: die Hütte selbst kontaktieren.</Typography>
-                  ) : null}
-                </Box>
+              {open && (
+                <StageBooking
+                  night={i} date={date} ohrs={ohrs} view={view} status={trip.nights[i].status}
+                  onStatusChange={(status) => onNightStatusChange(i, status)}
+                />
               )}
-            </Signpost>
-            {onNightStatusChange && (
-              <ToggleButtonGroup
-                size="small" exclusive value={trip.nights[i].status} aria-label={`Buchungsstatus Nacht ${i + 1}`}
-                onChange={(_e, next: BookingStatus | null) => { if (next) onNightStatusChange(i, next) }}
-                sx={styles.statusGroup}
-              >
-                {(Object.keys(STATUS_LABEL) as BookingStatus[]).map((s) => (
-                  <ToggleButton key={s} value={s} sx={styles.statusButton}>{STATUS_LABEL[s]}</ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            )}
-            {renderStageControls?.(i)}
+              {editing?.kind === 'swap' && editing.index === i && candidates}
+            </StageRow>
+          )
+        })}
+
+        {canEdit && (
+          <>
+            <Button size="small" color="secondary" sx={styles.addButton} onClick={() => editor.startExtend('last')}>+ Etappe anhängen</Button>
+            {editing?.kind === 'extend' && editing.side === 'last' && candidates}
+          </>
+        )}
+
+        <Box
+          data-stage="exit" data-highlighted={highlightedLeg === nights} sx={rowStyles.row(highlightedLeg === nights, false)}
+          onMouseEnter={() => onHoverLeg(nights)} onMouseLeave={() => onHoverLeg(null)}
+        >
+          <Box sx={styles.endLine}>
+            <Typography variant="body2" sx={styles.endLabel}>
+              {editor.car ? 'Abstieg zum Start' : `Abstieg nach ${startLabel(trip.exit.startId)}`}
+            </Typography>
+            {exitLeg && <Typography variant="body2" component="span" sx={styles.time}>{formatSignpostTime(exitLeg.durationH)}</Typography>}
+            {canEdit && !editor.car && <Button size="small" color="secondary" aria-label="Ziel ändern" onClick={() => editor.startEndpoint('exit')}>ändern</Button>}
           </Box>
-        )
-      })}
-      {exitLeg && (
-        <Box>
-          <Typography variant="caption" color="text.secondary">Etappe {trip.huts.length + 1}</Typography>
-          <Signpost
-            title={`Abstieg: ${startLabel(trip.exit.startId)}`}
-            timeH={exitLeg.durationH} ascentM={exitLeg.ascentM} descentM={exitLeg.descentM}
-          />
+          {exitLeg && (
+            <Box sx={styles.meta}>
+              <span>↑ {formatMeters(exitLeg.ascentM)}</span>
+              <span>↓ {formatMeters(exitLeg.descentM)}</span>
+            </Box>
+          )}
+          {editing?.kind === 'exit' && candidates}
         </Box>
-      )}
-      {warnings.map((w) => <Typography key={w} variant="body2" role="alert">⚠ {w}</Typography>)}
+
+        {warnings.map((w) => <Typography key={w} variant="body2" role="alert">⚠ {w}</Typography>)}
+      </Box>
     </Box>
   )
 }

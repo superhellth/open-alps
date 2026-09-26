@@ -1,17 +1,8 @@
-import { useState } from 'react'
-import type { MouseEvent, ReactNode } from 'react'
-import { Box, Button, IconButton, Menu, MenuItem, Typography } from '@mui/material'
-import { formatSignpostTime } from '@/format/signpostTime.js'
-import {
-  applyEndpoint, applyExtend, applySwap, applyTrim, endpointCandidates, extendCandidates,
-  modeOfTrip, swapCandidates, trimAllowed,
-} from '@/trip/tripEdit.js'
-import type { EndpointCandidate } from '@/trip/tripEdit.js'
+import { applyEndpoint, applyExtend, applySwap, applyTrim, endpointCandidates, extendCandidates, modeOfTrip, swapCandidates, trimAllowed } from '@/trip/tripEdit.js'
+import type { EndpointCandidate, TrimCheck } from '@/trip/tripEdit.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
-import type { TripGraph } from '@/tourSearch/types.js'
-import type { SourceType } from '@/tourSearch/types.js'
+import type { SourceType, TripGraph } from '@/tourSearch/types.js'
 import type { Trip } from '@/trip/trip.js'
-import { styles } from './TripEditor.styles.js'
 
 export type EditingState =
   | { kind: 'swap'; index: number }
@@ -35,11 +26,27 @@ export interface TripEditorProps {
   graph: TripGraph
   trip: Trip | null
   tripLegs: TripLegs | null
-  hutNameById: Map<number, string>
-  startLabel: (startId: number) => string
   editing: EditingState
   onEditing: (editing: EditingState) => void
   onChange: (trip: Trip) => void
+}
+
+/** What the editor offers the trip panel: the current candidates and the moves that start, apply or cancel an edit. */
+export interface TripEditor {
+  editing: EditingState
+  /** false while a night no longer resolves; swaps, trims and extends are then unavailable. */
+  editable: boolean
+  /** Car trips exit where they started; the exit cannot be changed. */
+  car: boolean
+  candidates: CandidateMarker[]
+  pickCandidate: (arg: { hutIndex?: number; startId?: number }) => void
+  activeLabel: string | null
+  trimAllowed: (night: number) => TrimCheck
+  trim: (night: number) => void
+  startSwap: (night: number) => void
+  startExtend: (side: 'first' | 'last') => void
+  startEndpoint: (which: 'start' | 'exit') => void
+  cancel: () => void
 }
 
 const ACTIVE_LABEL = {
@@ -49,28 +56,24 @@ const ACTIVE_LABEL = {
   exit: () => 'Neues Ziel wählen',
 }
 
-/** All trip edits are moves inside the routing graph (tourSearch/tripEdit.ts); this only renders
- *  them and forwards the chosen move. Candidates render both as map markers (the caller places
- *  them via `candidates`/`pickCandidate`) and as buttons in the panel, so every edit works without
- *  the map. */
-export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, editing, onEditing, onChange }: TripEditorProps) {
-  const [rowMenu, setRowMenu] = useState<{ night: number; anchor: HTMLElement } | null>(null)
+const noop = () => {}
+
+/** All trip edits are moves inside the routing graph (trip/tripEdit.ts); this exposes the current
+ *  candidates and the actions the rows trigger. Candidates render both as map markers (the caller
+ *  places them via `candidates`/`pickCandidate`) and as buttons under the row (`CandidateList`),
+ *  so every edit works without the map. */
+export function useTripEditor({ graph, trip, tripLegs, editing, onEditing, onChange }: TripEditorProps): TripEditor {
+  const cancel = () => onEditing(null)
   if (!trip || !tripLegs) {
     return {
-      candidates: [] as CandidateMarker[],
-      pickCandidate: (_arg: { hutIndex?: number; startId?: number }): void => {},
-      activeLabel: null as string | null,
-      renderRowMenu: (_night: number): ReactNode => null,
-      renderEndpointMenu: (_which: 'start' | 'exit'): ReactNode => null,
-      renderExtendButtons: (): ReactNode => null,
+      editing, editable: false, car: false, candidates: [], pickCandidate: noop, activeLabel: null,
+      trimAllowed: () => ({ ok: false, reason: '' }), trim: noop, startSwap: noop, startExtend: noop, startEndpoint: noop, cancel,
     }
   }
-  const name = (h: number) => hutNameById.get(h) ?? String(h)
-  const resolvable = tripLegs.hutIndices.every((i) => i !== null)
-  const car = modeOfTrip(trip) === 'car'
+  const editable = tripLegs.hutIndices.every((i) => i !== null)
 
   let candidates: CandidateMarker[] = []
-  let pickCandidate = (_arg: { hutIndex?: number; startId?: number }): void => {}
+  let pickCandidate: TripEditor['pickCandidate'] = noop
 
   if (editing?.kind === 'swap') {
     candidates = swapCandidates(graph, trip, editing.index).map((c) => ({ hutIndex: c.hutIndex, legInH: c.legInH, legOutH: c.legOutH }))
@@ -89,7 +92,7 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
     }
   } else if (editing?.kind === 'start' || editing?.kind === 'exit') {
     const which = editing.kind
-    const list: EndpointCandidate[] = resolvable ? endpointCandidates(graph, trip, which) : []
+    const list: EndpointCandidate[] = editable ? endpointCandidates(graph, trip, which) : []
     candidates = list.map((c) => ({ startId: c.startId, sourceType: c.sourceType, legH: c.durationH }))
     pickCandidate = ({ startId }) => {
       const c = list.find((x) => x.startId === startId)
@@ -102,98 +105,16 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
     ? (editing.kind === 'swap' ? ACTIVE_LABEL.swap(editing.index) : ACTIVE_LABEL[editing.kind]())
     : null
 
-  const renderRowMenu = (night: number): ReactNode => {
-    if (!resolvable) return null
-    const trim = trimAllowed(graph, trip, night)
-    return (
-      <Box sx={styles.rowMenu}>
-        <IconButton size="small" aria-label={`Weitere Aktionen Etappe ${night + 1}`} onClick={(e: MouseEvent<HTMLElement>) => setRowMenu({ night, anchor: e.currentTarget })}>
-          <Typography component="span" sx={{ fontWeight: 700 }}>⋮</Typography>
-        </IconButton>
-        <Menu open={rowMenu?.night === night} anchorEl={rowMenu?.anchor ?? null} onClose={() => setRowMenu(null)}>
-          <MenuItem onClick={() => { onEditing({ kind: 'swap', index: night }); setRowMenu(null) }}>Hütte tauschen</MenuItem>
-          <MenuItem disabled={!trim.ok} onClick={() => { const next = applyTrim(graph, trip, night); if (next) onChange(next); setRowMenu(null) }}>
-            Hütte entfernen{!trim.ok ? ` (${trim.reason})` : ''}
-          </MenuItem>
-        </Menu>
-        {editing?.kind === 'swap' && editing.index === night && (
-          <Box sx={styles.swapCandidates}>
-            {candidates.length === 0 && <Typography variant="body2">Keine passende Hütte im Wegenetz.</Typography>}
-            {candidates.map((c) => (
-              <Button
-                key={c.hutIndex} size="small" variant="outlined" color="secondary"
-                sx={styles.candidateButton}
-                onClick={() => pickCandidate({ hutIndex: c.hutIndex })}
-              >
-                <span>{name(c.hutIndex!)}</span>
-                <span>{c.legInH !== undefined && `${formatSignpostTime(c.legInH)} · ${formatSignpostTime(c.legOutH ?? 0)}`}</span>
-              </Button>
-            ))}
-            <Button size="small" onClick={() => onEditing(null)}>Abbrechen</Button>
-          </Box>
-        )}
-      </Box>
-    )
+  return {
+    editing, editable, car: modeOfTrip(trip) === 'car', candidates, pickCandidate, activeLabel,
+    trimAllowed: (night) => trimAllowed(graph, trip, night),
+    trim: (night) => {
+      const next = applyTrim(graph, trip, night)
+      if (next) onChange(next)
+    },
+    startSwap: (night) => onEditing({ kind: 'swap', index: night }),
+    startExtend: (side) => onEditing({ kind: 'extend', side }),
+    startEndpoint: (which) => onEditing({ kind: which }),
+    cancel,
   }
-
-  const renderEndpointMenu = (which: 'start' | 'exit'): ReactNode => {
-    if (which === 'exit' && car) return null
-    const current = which === 'start' ? trip.start.startId : trip.exit.startId
-    return (
-      <Box sx={styles.endpointRow}>
-        <Typography variant="body2">
-          {which === 'start' ? 'Start' : 'Ende'}: {car && which === 'exit' ? 'wie Start' : startLabel(current)}
-        </Typography>
-        <Button size="small" color="secondary" disabled={!resolvable} onClick={() => onEditing({ kind: which })}>
-          {which === 'start' ? 'Anderen Start wählen' : 'Anderes Ziel wählen'}
-        </Button>
-        {editing?.kind === which && (
-          <Box sx={styles.endpointCandidates}>
-            {candidates.length === 0 && <Typography variant="body2">Keine Alternative im Wegenetz.</Typography>}
-            {candidates.map((c) => (
-              <Button
-                key={c.startId} size="small" variant="outlined" color="secondary"
-                sx={styles.candidateButton}
-                onClick={() => pickCandidate({ startId: c.startId })}
-              >
-                <span>{startLabel(c.startId!)}</span>
-                <span>{c.legH !== undefined && formatSignpostTime(c.legH)}</span>
-              </Button>
-            ))}
-            <Button size="small" onClick={() => onEditing(null)}>Abbrechen</Button>
-          </Box>
-        )}
-      </Box>
-    )
-  }
-
-  const renderExtendButtons = (): ReactNode => {
-    if (!resolvable) return null
-    return (
-      <Box sx={styles.extendColumn}>
-        <Box sx={styles.extendButtons}>
-          <Button size="small" color="secondary" onClick={() => onEditing({ kind: 'extend', side: 'first' })}>Etappe voranstellen</Button>
-          <Button size="small" color="secondary" onClick={() => onEditing({ kind: 'extend', side: 'last' })}>Etappe anhängen</Button>
-        </Box>
-        {editing?.kind === 'extend' && (
-          <Box sx={styles.extendCandidates}>
-            {candidates.length === 0 && <Typography variant="body2">Keine passende Hütte im Wegenetz.</Typography>}
-            {candidates.map((c) => (
-              <Button
-                key={c.hutIndex} size="small" variant="outlined" color="secondary"
-                sx={styles.candidateButton}
-                onClick={() => pickCandidate({ hutIndex: c.hutIndex })}
-              >
-                <span>{name(c.hutIndex!)}</span>
-                <span>{c.legH !== undefined && formatSignpostTime(c.legH)}</span>
-              </Button>
-            ))}
-            <Button size="small" onClick={() => onEditing(null)}>Abbrechen</Button>
-          </Box>
-        )}
-      </Box>
-    )
-  }
-
-  return { candidates, pickCandidate, renderRowMenu, renderEndpointMenu, renderExtendButtons, activeLabel }
 }

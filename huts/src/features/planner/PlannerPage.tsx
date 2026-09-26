@@ -73,7 +73,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   }, [visibleTours, routeCtx, setFocusTours, fitToPoints])
 
   const {
-    activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editor, highlightedLeg, setHighlightedLeg,
+    activeTrip, isDraft, tripLegs, mode, overlapWarnings, setEditing, editMode, setEditMode, editor, highlightedLeg, setHighlightedLeg,
     shareNote, setShareNote, shareFallback, share, pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom, candidateMarkers, candidateStartCoords, tripHuts, tripEnds, tripStopNames,
   } = useTripSession({ data, client, startLabel })
@@ -185,15 +185,8 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
               isDraft={isDraft} onSave={() => dispatch({ type: 'saveDraft' })}
               onChange={(trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip })}
               onBack={backFromTrip} backLabel={openedFrom === 'saved' ? '← Meine Touren' : '← Ergebnisse'}
-              onHoverLeg={setHighlightedLeg}
-              renderStageControls={editor.renderRowMenu}
-              endpointControls={
-                <Box sx={styles.filtersColumn}>
-                  {editor.renderEndpointMenu('start')}
-                  {editor.renderEndpointMenu('exit')}
-                </Box>
-              }
-              extendControls={editor.renderExtendButtons()}
+              highlightedLeg={highlightedLeg} onHoverLeg={setHighlightedLeg}
+              editor={editor} editMode={editMode} onEditModeChange={setEditMode}
               warnings={overlapWarnings} onShare={share}
             />
           )}

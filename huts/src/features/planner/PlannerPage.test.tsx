@@ -172,7 +172,7 @@ describe('PlannerPage', () => {
     await openFirstResult(container)
     fireEvent.click(screen.getByRole('button', { name: 'Speichern' }))
     expect(screen.queryByText('Entwurf')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Name')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Speichern' })).not.toBeInTheDocument()
   })
 
   it('shows the fixed no-match hint and no markers when nothing matches', async () => {
@@ -203,8 +203,8 @@ describe('PlannerPage', () => {
   it('the map status bar cancels the active candidate mode', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
-    fireEvent.click(screen.getByLabelText('Weitere Aktionen Etappe 1'))
-    fireEvent.click(screen.getByText('Hütte tauschen'))
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.click(screen.getByLabelText('Hütte tauschen Etappe 1'))
     const label = await screen.findByText('Neue Hütte für Etappe 1 wählen')
     const statusBar = label.parentElement!
     fireEvent.click(within(statusBar).getByRole('button', { name: 'Abbrechen' }))
@@ -264,5 +264,15 @@ describe('PlannerPage', () => {
     expect(await screen.findByText('Entwurf')).toBeInTheDocument()
     fireEvent.click(screen.getByText(/Meine Touren/))
     expect(await screen.findByText('Entwurf · nicht gespeichert')).toBeInTheDocument()
+  })
+
+  it('leaving edit mode cancels a pending edit and hides the map status bar', async () => {
+    const { container } = renderPlanner()
+    await openFirstResult(container)
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    fireEvent.click(screen.getByLabelText('Hütte tauschen Etappe 1'))
+    expect(await screen.findByText('Neue Hütte für Etappe 1 wählen')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Fertig' }))
+    await waitFor(() => expect(screen.queryByText('Neue Hütte für Etappe 1 wählen')).not.toBeInTheDocument())
   })
 })

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { AppData } from '@/data/buildAppData.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import { legsFromTrip } from '@/trip/tripLegs.js'
@@ -14,18 +14,29 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
   const { dispatch, activeTrip, isDraft, draftDirty } = useTrips()
   const [editing, setEditing] = useState<EditingState>(null)
   const [highlightedLeg, setHighlightedLeg] = useState<number | null>(null)
+  const [editMode, setEditModeState] = useState(false)
+  /** Turning edit mode off also cancels a pending edit. */
+  const setEditMode = useCallback((on: boolean) => {
+    setEditModeState(on)
+    if (!on) setEditing(null)
+  }, [])
   const [shareNote, setShareNote] = useState<string | null>(null)
   const [shareFallback, setShareFallback] = useState<string | null>(null)
   const [pendingPick, setPendingPick] = useState<Trip | null>(null)
   const [openedFrom, setOpenedFrom] = useState<'results' | 'saved'>('results')
 
   const tripLegs = useMemo(() => (activeTrip ? legsFromTrip(data.graph, activeTrip) : null), [activeTrip, data])
+  const tripId = activeTrip?.id ?? null
+  const nightCount = activeTrip?.huts.length ?? 0
+  // A different trip starts in view mode; a hovered row that vanished never fires mouseleave.
+  useEffect(() => { setEditModeState(false); setEditing(null) }, [tripId])
+  useEffect(() => { setHighlightedLeg(null) }, [tripId, nightCount])
   const mode: 'trip' | 'discover' = activeTrip && tripLegs ? 'trip' : 'discover'
   const overlapWarnings = useTripOverlaps(client, activeTrip, tripLegs)
 
   const editor = useTripEditor({
     graph: data.graph, trip: activeTrip, tripLegs,
-    hutNameById: data.hutNameById, startLabel, editing, onEditing: setEditing,
+    editing, onEditing: setEditing,
     onChange: (trip) => dispatch({ type: isDraft ? 'updateDraft' : 'update', trip }),
   })
 
@@ -94,7 +105,7 @@ export function useTripSession({ data, client, startLabel }: { data: AppData; cl
 
   return {
     activeTrip, isDraft, tripLegs, mode, overlapWarnings,
-    editing, setEditing, editor, highlightedLeg, setHighlightedLeg,
+    editing, setEditing, editMode, setEditMode, editor, highlightedLeg, setHighlightedLeg,
     shareNote, setShareNote, shareFallback, share,
     pendingPick, openDraft, confirmDiscardDraft, cancelPendingPick,
     openedFrom, setOpenedFrom,

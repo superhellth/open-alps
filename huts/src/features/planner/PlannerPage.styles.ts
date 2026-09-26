@@ -14,7 +14,6 @@ export const styles = {
     ...(raised && { borderTop: '1px solid', borderColor: 'divider', boxShadow: `0 -4px 8px -4px ${alpha(tokens.ink, opacity.shadow)}` }),
   }),
   resultsBadge: { pr: space.item },
-  filtersColumn: { display: 'flex', flexDirection: 'column', gap: space.item },
   shareFallback: { p: space.inset },
   mapPane: { flex: 1, minWidth: 0, position: 'relative' },
 } satisfies StyleMap

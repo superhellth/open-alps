@@ -1,14 +1,11 @@
-import type { ReactNode } from 'react'
-import { Box, Button, Chip, TextField, Typography } from '@mui/material'
+import { Box, Divider } from '@mui/material'
 import type { AppData } from '@/data/buildAppData.js'
-import { formatSignpostTime } from '@/format/signpostTime.js'
-import { summarizeLegs } from '@/trip/tripLegs.js'
-import type { TripLegs } from '@/trip/tripLegs.js'
-import { shiftStartDate } from '@/trip/trip.js'
 import type { BookingStatus, Trip } from '@/trip/trip.js'
+import type { TripLegs } from '@/trip/tripLegs.js'
 import StageList from './StageList.js'
-import StartDateStrip from './StartDateStrip.js'
-import TripDateSummary from './TripDateSummary.js'
+import TripFooter from './TripFooter.js'
+import TripHeader from './TripHeader.js'
+import type { TripEditor } from './TripEditor.js'
 import { useTripAvailability } from './useTripAvailability.js'
 import { styles } from './TripPanel.styles.js'
 
@@ -22,65 +19,37 @@ export interface TripPanelProps {
   onSave: () => void
   onBack: () => void
   backLabel: string
+  highlightedLeg: number | null
   onHoverLeg: (index: number | null) => void
-  renderStageControls?: (night: number) => ReactNode
-  /** Start/exit pickers, rendered above the stage list. */
-  endpointControls?: ReactNode
-  /** Extend-at-either-end controls, rendered below the stage list. */
-  extendControls?: ReactNode
+  editor: TripEditor
+  editMode: boolean
+  onEditModeChange: (on: boolean) => void
   warnings?: string[]
   onShare?: () => void
 }
 
+/** The open trip as three sections: header (name, totals, dates), stages, notes. */
 export default function TripPanel({
-  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, backLabel, onHoverLeg, renderStageControls, endpointControls, extendControls, warnings, onShare,
+  trip, tripLegs, data, startLabel, isDraft, onChange, onSave, onBack, backLabel, highlightedLeg, onHoverLeg,
+  editor, editMode, onEditModeChange, warnings, onShare,
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
-  const totals = summarizeLegs(tripLegs.legs)
-
   return (
     <Box sx={styles.root}>
-      <Box sx={styles.topRow}>
-        <Button size="small" color="secondary" onClick={onBack}>{backLabel}</Button>
-        {onShare && <Button size="small" color="secondary" onClick={onShare}>Link teilen</Button>}
-      </Box>
-
-      {isDraft ? (
-        <Box sx={styles.draftRow}>
-          <Chip label="Entwurf" size="small" color="secondary" />
-          <Button size="small" variant="contained" onClick={onSave}>Speichern</Button>
-        </Box>
-      ) : (
-        <TextField size="small" label="Name" value={trip.name} onChange={(e) => onChange({ ...trip, name: e.target.value })} />
-      )}
-
-      <Typography variant="body2" color="text.secondary">
-        {trip.huts.length} Nächte · {formatSignpostTime(totals.durationH)} · ↑ {Math.round(totals.ascentM).toLocaleString('de-DE')} m
-      </Typography>
-
-      <TripDateSummary trip={trip} onChange={onChange} />
-
-      <StartDateStrip
-        trip={trip} hutIndices={tripLegs.hutIndices} hutOhrsByIndex={data.hutOhrsByIndex}
-        onShift={(days) => onChange(shiftStartDate(trip, days))}
+      <TripHeader
+        trip={trip} tripLegs={tripLegs} hutOhrsByIndex={data.hutOhrsByIndex} isDraft={isDraft}
+        onChange={onChange} onSave={onSave} onBack={onBack} backLabel={backLabel} onShare={onShare}
       />
-
-      {endpointControls}
-
+      <Divider />
       <StageList
         trip={trip} tripLegs={tripLegs} hutNameById={data.hutNameById} hutOhrsByIndex={data.hutOhrsByIndex}
-        startLabel={startLabel} nightViews={nightViews} onHoverLeg={onHoverLeg}
-        renderStageControls={renderStageControls} warnings={warnings}
+        startLabel={startLabel} nightViews={nightViews} highlightedLeg={highlightedLeg} onHoverLeg={onHoverLeg}
+        editor={editor} editMode={editMode} onEditModeChange={onEditModeChange} warnings={warnings}
         onNightStatusChange={(night: number, status: BookingStatus) =>
           onChange({ ...trip, nights: trip.nights.map((n, i) => (i === night ? { status } : n)) })}
       />
-
-      <TextField
-        size="small" label="Notizen" multiline minRows={2} value={trip.notes ?? ''}
-        onChange={(e) => onChange({ ...trip, notes: e.target.value })}
-      />
-
-      {extendControls}
+      <Divider />
+      <TripFooter trip={trip} onChange={onChange} />
     </Box>
   )
 }

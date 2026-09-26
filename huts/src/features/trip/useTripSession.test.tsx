@@ -72,4 +72,36 @@ describe('useTripSession', () => {
     act(() => { result.current.session.openDraft(trip('d1', ['{D}', '{E}'])) })
     expect(result.current.session.tripStopNames).toEqual(['100', 'Hütte D', 'Hütte E', '100'])
   })
+
+  it('leaving edit mode cancels a pending edit', () => {
+    const { result } = setup()
+    act(() => { result.current.session.openDraft(trip('d1', ['{D}', '{E}'])) })
+    act(() => result.current.session.setEditMode(true))
+    act(() => result.current.session.setEditing({ kind: 'swap', index: 0 }))
+    expect(result.current.session.editMode).toBe(true)
+    expect(result.current.session.editing).toEqual({ kind: 'swap', index: 0 })
+    act(() => result.current.session.setEditMode(false))
+    expect(result.current.session.editMode).toBe(false)
+    expect(result.current.session.editing).toBeNull()
+  })
+
+  it('opening another trip resets edit mode, the pending edit and the hovered leg', () => {
+    const { result } = setup()
+    act(() => { result.current.session.openDraft(trip('d1', ['{D}', '{E}'])) })
+    act(() => result.current.session.setEditMode(true))
+    act(() => result.current.session.setEditing({ kind: 'swap', index: 0 }))
+    act(() => result.current.session.setHighlightedLeg(1))
+    act(() => { result.current.session.openDraft(trip('d2', ['{D}', '{E}'])) })
+    expect(result.current.session.editMode).toBe(false)
+    expect(result.current.session.editing).toBeNull()
+    expect(result.current.session.highlightedLeg).toBeNull()
+  })
+
+  it('drops the hovered leg when the trip loses a night (its row is gone, mouseleave never fires)', () => {
+    const { result } = setup()
+    act(() => { result.current.session.openDraft(trip('d1', ['{D}', '{E}'])) })
+    act(() => result.current.session.setHighlightedLeg(1))
+    act(() => result.current.trips.dispatch({ type: 'updateDraft', trip: trip('d1', ['{D}']) }))
+    expect(result.current.session.highlightedLeg).toBeNull()
+  })
 })
