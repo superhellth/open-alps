@@ -26,9 +26,9 @@ import { makeStartLabel } from '@/data/labels.js'
 import type { WaypointStop } from './types.js'
 import './map.css'
 
-/** Below this zoom, routes stay hidden and only markers show — tuned lower than the
- *  clusterer's own maxZoom (14) so routes appear before markers finish separating one-per-start. */
-export const ROUTE_REVEAL_ZOOM = 11
+/** Below this zoom only count bubbles show; from it on tour boards, route hover and waypoint symbols do. Lower than the
+ *  clusterer's own maxZoom (14), so boards appear before bubbles finish separating one-per-start. */
+const ROUTE_REVEAL_ZOOM = 11
 
 const iconCache = new Map<string, L.DivIcon>()
 function bubbleIcon(count: number, dimmed: boolean, highlighted: boolean): L.DivIcon {
@@ -57,13 +57,14 @@ const toursText = (n: number) => (n === 1 ? 'In 1 Tour' : `In ${n} Touren`)
  *  one of its route's anchors (`placeSignposts`: rank order, a colliding tour moves to its next anchor candidate, a board whose
  *  foot stays in view is pinned and turns into a dot on its spot when it collides); a tour that fits nowhere shows as a foot
  *  dot whose hover, focus or list hover shows its board. Panning and zooming only re-place, they never re-search. Boards and
- *  dots pick their tour on click. A shared leg or hut click focuses the results list on its tours and flies to their bounds; the focused tours draw at the focused tier until the focus is dropped (show all tours, a map click, or
- *  zooming out past the zoom the click flew to); markers outside the focus fade like the search-running state unless their tour is hovered.
- *  Past `ROUTE_REVEAL_ZOOM`, routes draw for every tour whose waypoints' bounding box overlaps the viewport,
- *  in three tiers (rest, focused, hovered); the focused and hovered tiers are display-only copies above the
- *  interactive rest lines, so mouseout always fires. Hovering a leg or hut hovers every visible tour containing
- *  it; clicking one focuses the list on those tours (a leg or hut in a single tour picks it). A board fades while its tour is
- *  hovered from anywhere but the signpost itself. */
+ *  dots pick their tour on click. A board fades while its tour is hovered from anywhere but the signpost itself.
+ *
+ *  Route lines draw only for hovered or focused tours; hut and end symbols draw for every tour whose waypoints' bounding box
+ *  overlaps the viewport, at that tour's tier (rest, focused, hovered). A drawn tour's lines are an interactive rest-tier copy
+ *  with display-only focused or hovered copies above it, so mouseout always fires. Hovering a leg or hut hovers every visible
+ *  tour containing it; clicking one picks the tour when it is the only one there, otherwise focuses the results list on those
+ *  tours and flies to their bounds. The focus lasts until it is dropped (show all tours, a map click, or zooming out past the
+ *  zoom the click flew to); markers outside the focus fade like the search-running state unless their tour is hovered. */
 export default function DiscoverLayer({
   groups, startById, dimmed, allTours, routeCtx, hutNameById, hoveredTourKeys, onHoverTours, onPickRoute, onNavigate,
   focusTours, onFocusTours, onViewChange,
@@ -78,12 +79,12 @@ export default function DiscoverLayer({
   hoveredTourKeys: ReadonlySet<string>
   onHoverTours: (keys: ReadonlySet<string>) => void
   onPickRoute: (tour: PlannerTour) => void
-  onNavigate?: () => void
+  onNavigate: () => void
   /** Tour keys the results list is limited to and the map highlights; null when unfocused. */
-  focusTours?: ReadonlySet<string> | null
+  focusTours: ReadonlySet<string> | null
   /** Sets the focus; null lifts it. */
-  onFocusTours?: (keys: string[] | null) => void
-  onViewChange?: (view: View) => void
+  onFocusTours: (keys: string[] | null) => void
+  onViewChange: (view: View) => void
 }) {
   const map = useMap()
   /** Zoom the map settled on when the focus was set; zooming out below it drops the focus. */
@@ -93,10 +94,10 @@ export default function DiscoverLayer({
     moveend: () => setView(currentView(map)),
     zoomend: () => {
       setView(currentView(map))
-      if (focusTours && map.getZoom() < focusZoom.current) onFocusTours?.(null)
+      if (focusTours && map.getZoom() < focusZoom.current) onFocusTours(null)
     },
   })
-  useEffect(() => { onViewChange?.(view) }, [view, onViewChange])
+  useEffect(() => { onViewChange(view) }, [view, onViewChange])
 
   const bubbleTourByKey = useMemo(() => new Map(groups.flatMap((g) => g.tours).map((t) => [tourKey(t), t])), [groups])
   /** A tour whose route does not resolve stands on its start point. */
@@ -141,7 +142,7 @@ export default function DiscoverLayer({
   const titleOfStop = (stop: WaypointStop) => (stop.type === 'hut' ? hutNameById.get(stop.hutId) ?? String(stop.hutId) : startLabel(stop.startId))
 
   const tiered = useMemo(() => routedTours.map((r) => ({
-    ...r, tier: tierOf(r.key, { hoveredKeys: hoveredTourKeys, focus: focusTours ?? null }),
+    ...r, tier: tierOf(r.key, { hoveredKeys: hoveredTourKeys, focus: focusTours }),
   })), [routedTours, hoveredTourKeys, focusTours])
   const drawn = useMemo(() => tiered.filter((t) => t.tier !== 'rest'), [tiered])
   const symbols = useMemo(() => collectSymbols(tiered), [tiered])
@@ -155,13 +156,13 @@ export default function DiscoverLayer({
   /** A shared leg or hut: one tour is picked, several focus the list on them. */
   const clickKeys = (keys: string[]) => {
     if (keys.length === 0) return
-    onNavigate?.()
+    onNavigate()
     if (keys.length === 1) {
       const tour = tourByKey.get(keys[0])
       if (tour) onPickRoute(tour)
       return
     }
-    onFocusTours?.(keys)
+    onFocusTours(keys)
     const bounds = boundsOfTours(keys.flatMap((k) => tourByKey.get(k) ?? []))
     if (bounds) zoomToBounds(bounds)
     else focusZoom.current = map.getZoom()
@@ -188,7 +189,7 @@ export default function DiscoverLayer({
 
   /** Flies to the bubble's tour anchors, where it splits into their boards. */
   const activate = (m: MapMarker) => {
-    onNavigate?.()
+    onNavigate()
     const bounds = L.latLngBounds(keysOf(m).flatMap((k) => pointByKey.get(k) ?? []))
     if (!bounds.isValid()) return
     const fit = map.getBoundsZoom(bounds, false, L.point(80, 80))
@@ -230,7 +231,7 @@ export default function DiscoverLayer({
             dimmed={dimmedMarker} highlighted={highlighted}
             fadedKeys={pointerOnSignpost || pointerOnStop ? NO_TOURS : hoveredTourKeys}
             onHoverMarker={(hovering) => { setPointerOnSignpost(hovering); onHoverTours(hovering ? new Set([p.key]) : NO_TOURS) }}
-            onActivate={() => { onNavigate?.(); onPickRoute(tour) }}
+            onActivate={() => { onNavigate(); onPickRoute(tour) }}
           />
         )
       })}

@@ -39,6 +39,7 @@ const focusOn = (...tours: PlannerTour[]) => ({ allTours: tours, focusTours: new
 
 const layerProps = {
   hutNameById: new Map<number, string>(), hoveredTourKeys: NO_TOURS, onHoverTours: () => {}, onPickRoute: () => {},
+  onNavigate: () => {}, focusTours: null, onFocusTours: () => {}, onViewChange: () => {},
 }
 
 function renderLayer(props: Partial<Parameters<typeof DiscoverLayer>[0]> = {}, zoom = 13, extra?: React.ReactNode) {
