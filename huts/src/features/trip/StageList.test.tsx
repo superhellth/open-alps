@@ -28,21 +28,37 @@ function renderList(t = trip(['{D}', '{E}']), overrides: Partial<Parameters<type
 }
 
 describe('StageList view mode', () => {
-  it('lists the start, one row per night and the descent, with signpost-style times', () => {
-    renderList(trip(['{A}']))
+  it('lists start, leg, hut, exit leg and destination in timeline order, with signpost-style times', () => {
+    const { container } = renderList(trip(['{A}']))
+    const order = [...container.querySelectorAll('[data-node], [data-leg], [data-night]')]
+      .map((el) => el.getAttribute('data-node') ?? (el.hasAttribute('data-leg') ? `leg${el.getAttribute('data-leg')}` : `night${el.getAttribute('data-night')}`))
+    expect(order).toEqual(['start', 'leg0', 'night0', 'leg1', 'exit'])
     expect(screen.getByText('Start: Bahnhof X')).toBeInTheDocument()
     expect(screen.getByText('Hütte A')).toBeInTheDocument()
-    expect(screen.getByText('Abstieg nach Bahnhof X')).toBeInTheDocument()
+    expect(screen.getByText('Ziel: Bahnhof X')).toBeInTheDocument()
     expect(screen.getAllByText(/Std$/).length).toBe(2)
   })
-  it('names a car trip descent "Abstieg zum Start"', () => {
+  it('names a car trip destination "Zurück am Start"', () => {
     renderList(trip(['{A}']), { editor: makeEditorStub({ car: true }) })
-    expect(screen.getByText('Abstieg zum Start')).toBeInTheDocument()
+    expect(screen.getByText('Zurück am Start')).toBeInTheDocument()
   })
-  it('shows date, ascent/descent and booking status on line 2', () => {
+  it('shows the date and the open booking status under the hut', () => {
     renderList(trip(['{D}']))
     expect(screen.getByText(/10\.07\./)).toBeInTheDocument()
     expect(screen.getByText('offen')).toBeInTheDocument()
+  })
+  it('shows a requested or confirmed night instead of its availability', () => {
+    const t = trip(['{D}', '{E}'])
+    t.nights[0].status = 'confirmed'
+    renderList(t, {
+      nightViews: [
+        { loading: false, availability: { kind: 'free', places: 12 } },
+        { loading: false, availability: { kind: 'free', places: 4 } },
+      ],
+    })
+    expect(screen.getByText('bestätigt')).toBeInTheDocument()
+    expect(screen.queryByText('12 Plätze frei')).not.toBeInTheDocument()
+    expect(screen.getByText('4 Plätze frei')).toBeInTheDocument()
   })
   it('shows availability with shape and text once night views exist, "unknown" distinct from "full"', () => {
     renderList(trip(['{D}', '{E}']), {
@@ -55,14 +71,14 @@ describe('StageList view mode', () => {
     expect(screen.getByText('Verfügbarkeit unbekannt – direkt anfragen')).toBeInTheDocument()
     expect(screen.queryByText('ausgebucht')).not.toBeInTheDocument()
   })
-  it('marks a night that no longer resolves with the outline and the notice, and does not expand it', () => {
+  it('marks a night that no longer resolves with a hollow node and the notice, and does not expand it', () => {
     const { container } = renderList(trip(['{A}', '{GONE}']))
     expect(screen.getByText('Seit dem Speichern geändert – nicht mehr im Wegenetz')).toBeInTheDocument()
     expect(container.querySelectorAll('[data-variant="outline"]').length).toBeGreaterThanOrEqual(1)
     expect(screen.getByLabelText('Details Etappe 1')).toBeInTheDocument()
     expect(screen.queryByLabelText('Details Etappe 2')).not.toBeInTheDocument()
   })
-  it('hides booking detail until the chevron expands it, then shows link and status toggle', () => {
+  it('hides booking detail until the hut is clicked, then shows link and status toggle', () => {
     renderList(trip(['{D}', '{E}']))
     expect(screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Buchungsstatus Nacht 1')).not.toBeInTheDocument()
@@ -92,34 +108,34 @@ describe('StageList view mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'bestätigt' }))
     expect(onNightStatusChange).toHaveBeenCalledWith(0, 'confirmed')
   })
-  it('shows overlap warnings under the exit row', () => {
+  it('shows overlap warnings under the timeline', () => {
     renderList(trip(['{D}']), { warnings: ['Überschneidung mit Tour X'] })
     expect(screen.getByRole('alert')).toHaveTextContent('Überschneidung mit Tour X')
   })
 })
 
 describe('StageList hover', () => {
-  it('a stage row hovers its own leg, the descent row hovers the last leg, the start row nothing', () => {
+  it('each leg row hovers its own leg; huts and endpoints hover nothing', () => {
     const { onHoverLeg, container } = renderList(trip(['{D}', '{E}']))
-    fireEvent.mouseEnter(screen.getByText('Hütte E').closest('[data-stage]')!)
+    fireEvent.mouseEnter(container.querySelector('[data-leg="1"]')!)
     expect(onHoverLeg).toHaveBeenLastCalledWith(1)
-    fireEvent.mouseLeave(screen.getByText('Hütte E').closest('[data-stage]')!)
+    fireEvent.mouseLeave(container.querySelector('[data-leg="1"]')!)
     expect(onHoverLeg).toHaveBeenLastCalledWith(null)
-    fireEvent.mouseEnter(container.querySelector('[data-stage="exit"]')!)
+    fireEvent.mouseEnter(container.querySelector('[data-leg="2"]')!)
     expect(onHoverLeg).toHaveBeenLastCalledWith(2)
     vi.mocked(onHoverLeg).mockClear()
-    fireEvent.mouseEnter(screen.getByText('Start: Bahnhof X'))
+    fireEvent.mouseEnter(container.querySelector('[data-night="0"]')!)
+    fireEvent.mouseEnter(container.querySelector('[data-node="start"]')!)
+    fireEvent.mouseEnter(container.querySelector('[data-node="exit"]')!)
     expect(onHoverLeg).not.toHaveBeenCalled()
   })
-  it('marks the row of the highlighted leg', () => {
+  it('marks the highlighted leg, including the exit leg', () => {
     const { container } = renderList(trip(['{D}', '{E}']), { highlightedLeg: 1 })
-    expect(container.querySelector('[data-stage="1"]')).toHaveAttribute('data-highlighted', 'true')
-    expect(container.querySelector('[data-stage="0"]')).toHaveAttribute('data-highlighted', 'false')
-    expect(container.querySelector('[data-stage="exit"]')).toHaveAttribute('data-highlighted', 'false')
-  })
-  it('marks the descent row when the last leg is highlighted', () => {
-    const { container } = renderList(trip(['{D}', '{E}']), { highlightedLeg: 2 })
-    expect(container.querySelector('[data-stage="exit"]')).toHaveAttribute('data-highlighted', 'true')
+    expect(container.querySelector('[data-leg="1"]')).toHaveAttribute('data-highlighted', 'true')
+    expect(container.querySelector('[data-leg="0"]')).toHaveAttribute('data-highlighted', 'false')
+    cleanup()
+    const exit = renderList(trip(['{D}', '{E}']), { highlightedLeg: 2 })
+    expect(exit.container.querySelector('[data-leg="2"]')).toHaveAttribute('data-highlighted', 'true')
   })
 })
 
@@ -133,7 +149,7 @@ describe('StageList edit mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fertig' }))
     expect(on.onEditModeChange).toHaveBeenCalledWith(false)
   })
-  it('shows swap, remove, extend and change controls and no chevrons', () => {
+  it('shows swap, remove, extend and change controls and no detail toggles', () => {
     renderList(trip(['{D}', '{E}']), { editMode: true })
     expect(screen.getByLabelText('Hütte tauschen Etappe 1')).toBeInTheDocument()
     expect(screen.getByLabelText('Hütte entfernen Etappe 2')).toBeInTheDocument()
@@ -180,25 +196,25 @@ describe('StageList edit mode', () => {
   it('shows a swap candidate list only under the swapped row and picks from it', () => {
     const editor = makeEditorStub({ editing: { kind: 'swap', index: 0 }, candidates: [{ hutIndex: 5, legInH: 2, legOutH: 3 }] })
     const { container } = renderList(trip(['{D}', '{E}']), { editMode: true, editor })
-    const first = container.querySelector('[data-stage="0"]')!
-    const second = container.querySelector('[data-stage="1"]')!
+    const first = container.querySelector('[data-night="0"]')!
+    const second = container.querySelector('[data-night="1"]')!
     expect(first).toHaveTextContent('Hütte X')
     expect(second).not.toHaveTextContent('Hütte X')
     fireEvent.click(screen.getByRole('button', { name: /Hütte X/ }))
     expect(editor.pickCandidate).toHaveBeenCalledWith({ hutIndex: 5, startId: undefined })
   })
-  it('shows start, extend and exit candidate lists under the row that started the edit', () => {
+  it('shows start, extend and exit candidate lists under the control that started the edit', () => {
     const list = { candidates: [{ startId: 101, legH: 1 }] }
     const { container } = renderList(trip(['{D}']), { editMode: true, editor: makeEditorStub({ editing: { kind: 'start' }, ...list }) })
-    expect(container.querySelector('[data-stage="0"]')).not.toHaveTextContent('Bahnhof Y')
+    expect(container.querySelector('[data-night="0"]')).not.toHaveTextContent('Bahnhof Y')
     expect(screen.getByRole('button', { name: /Bahnhof Y/ })).toBeInTheDocument()
     cleanup()
     const exit = renderList(trip(['{D}']), { editMode: true, editor: makeEditorStub({ editing: { kind: 'exit' }, ...list }) })
-    expect(exit.container.querySelector('[data-stage="exit"]')).toHaveTextContent('Bahnhof Y')
+    expect(exit.container.querySelector('[data-node="exit"]')!.parentElement).toHaveTextContent('Bahnhof Y')
     cleanup()
     const extend = renderList(trip(['{D}']), { editMode: true, editor: makeEditorStub({ editing: { kind: 'extend', side: 'last' }, candidates: [{ hutIndex: 5, legH: 1 }] }) })
     expect(screen.getByRole('button', { name: /Hütte X/ })).toBeInTheDocument()
-    expect(extend.container.querySelector('[data-stage="exit"]')).not.toHaveTextContent('Hütte X')
+    expect(extend.container.querySelector('[data-node="exit"]')!.parentElement).not.toHaveTextContent('Hütte X')
   })
 
   it('collapses expanded rows when the edit-mode toggle is pressed', () => {

@@ -40,9 +40,9 @@ Planen and Meine Touren share one provider stack above the router: `data/AppData
 
 `huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
 `features/discover/usePlannerSearch` runs the whole-graph search, results drawn as clustered
-count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx`'s `useTripEditor` exposes swap/extend/trim/start/exit moves that `StageList` rows trigger in edit mode)
+count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/TripEditor.tsx`'s `useTripEditor` exposes swap/extend/trim/start/exit moves that `StageList` hut nodes trigger in edit mode)
 -> Plan nights (`features/trip/TripPanel.tsx` = `TripHeader` + `StageList` + `TripFooter`: per-night availability and hand-set booking
-status behind each row's chevron; a "Wann?" calendar (`features/trip/TripDatePicker.tsx`, shared `ui/CalendarField`/`ui/MonthCalendar` with the filter bar) picks the arrival day: hovering a day moves the drawn stay onto it and marks each of its nights with that night's hut availability, `features/trip/useStayNights.ts`) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
+status behind a click on each hut node of the stage timeline (`StageNode`, legs between them are `StageLeg`); a "Wann?" calendar (`features/trip/TripDatePicker.tsx`, shared `ui/CalendarField`/`ui/MonthCalendar` with the filter bar) picks the arrival day: hovering a day moves the drawn stay onto it and marks each of its nights with that night's hut availability, `features/trip/useStayNights.ts`) -> Take along (share link, `trip/shareLink.ts`). The sidebar has three views
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).
 `features/discover/formState.ts` builds the `Query`; `features/discover/rankTours.ts`/`tourSearch/rankFit.ts` order results;
@@ -67,7 +67,7 @@ resolves is flagged "changed since saved" rather than substituted. Editor moves 
 `PlannerPage.tsx` only composes four hooks: `features/discover/useDiscover` (filter form, search, ranking and the
 result lists derived from them), `features/trip/useTripSession` (the open trip: legs, editor, share link, draft-discard
 confirmation), `features/map/useMapView` (live viewport, pre-trip view to restore, fit-to-bounds commands) and
-`features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). Hovering a stage row, a map leg (wide invisible hit lines in `LEG_HIT_PANE`) or a height-profile section sets `useTripSession`'s
+`features/planner/useSidebarNavigation` (sidebar view and the hash/trip transitions between views). Hovering a leg row of the `StageList` timeline, a map leg (wide invisible hit lines in `LEG_HIT_PANE`) or a height-profile section sets `useTripSession`'s
 `highlightedLeg` and highlights that leg in all three places; the profile also reports a `{ legIndex, fraction }` cursor that `RouteLayer` draws as a dot. `PlannerMap` takes
 `{ mode, commands }`: `mode` is a `MapMode` union (`discover` | `trip` | `saved`), each variant rendered by its own
 `*MapLayers` component in `features/map/`, and `commands` holds the route, view-restore and fit-bounds commands shared by all modes.

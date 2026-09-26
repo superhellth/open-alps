@@ -222,11 +222,11 @@ describe('PlannerPage', () => {
     await waitFor(() => expect(screen.queryByText('Neue Hütte für Etappe 1 wählen')).not.toBeInTheDocument())
   })
 
-  it('hovering a stage row highlights the matching leg on the height profile', async () => {
+  it('hovering a leg row highlights the matching leg on the height profile', async () => {
     const { container } = renderPlanner()
     await openFirstResult(container)
     const stage = await waitFor(() => {
-      const el = container.querySelector('[data-stage="0"]')
+      const el = container.querySelector('[data-leg="0"]')
       if (!el) throw new Error('stage not rendered yet')
       return el
     })

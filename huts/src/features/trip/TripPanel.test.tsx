@@ -28,8 +28,8 @@ function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
     onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: 'Ergebnisse', highlightedLeg: null, onHoverLeg: vi.fn(),
     editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...over,
   }
-  render(<TripPanel {...props} />)
-  return props
+  const { container } = render(<TripPanel {...props} />)
+  return { ...props, container }
 }
 
 describe('TripPanel', () => {
@@ -69,8 +69,8 @@ describe('TripPanel', () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ nights: [{ status: 'confirmed' }] }))
   })
   it('forwards stage hover and the edit-mode toggle', () => {
-    const { onHoverLeg, onEditModeChange } = renderPanel()
-    fireEvent.mouseEnter(screen.getByText('Hütte D').closest('[data-stage]')!)
+    const { onHoverLeg, onEditModeChange, container } = renderPanel()
+    fireEvent.mouseEnter(container.querySelector('[data-leg="0"]')!)
     expect(onHoverLeg).toHaveBeenCalledWith(0)
     fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
     expect(onEditModeChange).toHaveBeenCalledWith(true)
