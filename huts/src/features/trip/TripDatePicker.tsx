@@ -2,18 +2,21 @@ import { useState } from 'react'
 import { Box, Typography } from '@mui/material'
 import { stayVerdict } from '@/availability/stayNights.js'
 import type { NightVerdict, StayVerdict } from '@/availability/stayNights.js'
+import type { NightAvailability } from '@/availability/nightState.js'
 import type { HutOhrs } from '@/data/buildAppData.js'
 import { addIsoDays, daysBetween, formatDayMonthRange } from '@/format/dayMonth.js'
 import type { Trip } from '@/trip/trip.js'
 import CalendarField from '@/ui/CalendarField.js'
 import MonthCalendar from '@/ui/MonthCalendar.js'
+import { NightIcon } from './AvailabilityMark.js'
 import { usePrefetchAround, useStayNights } from './useStayNights.js'
 import { styles } from './TripDatePicker.styles.js'
 
 const NIGHT_TEXT: Record<NightVerdict, string> = { free: 'frei', full: 'belegt', unclear: 'unklar' }
-const NIGHT_MARK: Record<NightVerdict, string> = { free: '●', full: '✕', unclear: '?' }
+const NIGHT_ICON: Record<NightVerdict, NightAvailability['kind']> = { free: 'free', full: 'full', unclear: 'unknown' }
 const NIGHTS: NightVerdict[] = ['free', 'full', 'unclear']
-const STAY_TEXT: Record<StayVerdict, string> = { bookable: '● alles frei', blocked: '✕ belegt', unclear: '? unklar' }
+const STAY_TEXT: Record<StayVerdict, string> = { bookable: 'alles frei', blocked: 'belegt', unclear: 'unklar' }
+const STAY_ICON: Record<StayVerdict, NightAvailability['kind']> = { bookable: 'free', blocked: 'full', unclear: 'unknown' }
 
 interface TripDatePickerProps {
   trip: Trip
@@ -35,7 +38,7 @@ function TripCalendar({ trip, hutIndices, hutOhrsByIndex, onChange, close }: Tri
   const end = shown ? addIsoDays(shown, nights) : ''
   const mark = (iso: string) => {
     const verdict = shown ? verdicts?.[daysBetween(shown, iso)] : undefined
-    return verdict && <span data-night={verdict} aria-label={NIGHT_TEXT[verdict]}>{NIGHT_MARK[verdict]}</span>
+    return verdict && <Box component="span" data-night={verdict} aria-label={NIGHT_TEXT[verdict]} sx={styles.dayIcon}><NightIcon kind={NIGHT_ICON[verdict]} size="xs" /></Box>
   }
   return (
     <>
@@ -44,14 +47,18 @@ function TripCalendar({ trip, hutIndices, hutOhrsByIndex, onChange, close }: Tri
         initialDay={trip.startDate ?? ''} rangeStart={start} rangeEnd={end} dayMark={mark} onHoverDay={setHovered}
         onPickDay={(iso) => { onChange({ ...trip, startDate: iso }); close() }}
       />
-      <Typography variant="caption" color="text.secondary">
-        {!shown
-          ? 'Der Aufenthalt folgt dem Anreisetag.'
-          : `${formatDayMonthRange(start, end)}: ${verdicts === null ? 'wird geladen …' : STAY_TEXT[stayVerdict(verdicts)]}`}
-      </Typography>
+      {!shown ? (
+        <Typography variant="caption" color="text.secondary">Der Aufenthalt folgt dem Anreisetag.</Typography>
+      ) : verdicts === null ? (
+        <Typography variant="caption" color="text.secondary">{formatDayMonthRange(start, end)}: wird geladen …</Typography>
+      ) : (
+        <Typography variant="caption" color="text.secondary" sx={styles.iconText}>
+          {formatDayMonthRange(start, end)}: <NightIcon kind={STAY_ICON[stayVerdict(verdicts)]} size="sm" />{STAY_TEXT[stayVerdict(verdicts)]}
+        </Typography>
+      )}
       {shown && (
         <Typography variant="caption" color="text.secondary" sx={styles.legend}>
-          {NIGHTS.map((v) => <span key={v}>{NIGHT_MARK[v]} {NIGHT_TEXT[v]}</span>)}
+          {NIGHTS.map((v) => <Box component="span" key={v} sx={styles.iconText}><NightIcon kind={NIGHT_ICON[v]} size="sm" />{NIGHT_TEXT[v]}</Box>)}
         </Typography>
       )}
     </>

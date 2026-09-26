@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, fireEvent, cleanup, waitForElementToBeRemoved } from '@testing-library/react'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom/vitest'
 import StageList from './StageList.js'
 import { makeTestAppData } from '@/testing/testAppData.js'
@@ -57,32 +57,32 @@ describe('StageList view mode', () => {
     expect(screen.getByText('Plätze unbekannt')).toBeInTheDocument()
     expect(screen.queryByText('ausgebucht')).not.toBeInTheDocument()
   })
-  it('marks a night that no longer resolves with a hollow node and the notice, and does not expand it', () => {
-    const { container } = renderList(trip(['{A}', '{GONE}']))
+  it('marks a night that no longer resolves with a hollow node and the notice, without a booking link', () => {
+    const { container } = renderList(trip(['{D}', '{GONE}']), {
+      nightViews: [{ loading: false, availability: { kind: 'free', places: 3 } }, { loading: false, availability: { kind: 'unknown' } }],
+    })
     expect(screen.getByText('Seit dem Speichern geändert – nicht mehr im Wegenetz')).toBeInTheDocument()
     expect(container.querySelectorAll('[data-variant="outline"]').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByLabelText('Details Etappe 1')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Details Etappe 2')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-night="1"]')!.querySelector('a')).toBeNull()
   })
-  it('hides booking detail until the hut is clicked, then shows the booking link', async () => {
-    renderList(trip(['{D}', '{E}']))
-    expect(screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' })).not.toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    expect(screen.getByRole('link', { name: 'Auf hut-reservation.org buchen' })).toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    await waitForElementToBeRemoved(() => screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' }))
+  it('shows the booking link inline next to the availability of each dated bookable night', () => {
+    const { container } = renderList(trip(['{A}', '{B}', '{C}', '{D}']), {
+      nightViews: [0, 1, 2, 3].map(() => ({ loading: false, availability: { kind: 'free', places: 5 } })),
+    })
+    const night3 = container.querySelector('[data-night="3"]')!
+    expect(night3.querySelector('a')).toHaveAttribute('href', expect.stringContaining('/103/wizard?dateFrom=13.07.2026&dateTo=14.07.2026'))
+    expect(night3).toHaveTextContent('5 Plätze frei')
   })
-  it('links a bookable hut for its own night and tells about direct-booking huts', () => {
-    renderList(trip(['{A}', '{B}', '{C}', '{D}']))
-    fireEvent.click(screen.getByLabelText('Details Etappe 4'))
-    expect(screen.getByRole('link', { name: 'Auf hut-reservation.org buchen' })).toHaveAttribute('href', expect.stringContaining('/103/wizard?dateFrom=13.07.2026&dateTo=14.07.2026'))
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    expect(screen.getByText(/Direktbuchung/)).toBeInTheDocument()
+  it('names a direct-booking hut instead of its unknowable availability, without a link', () => {
+    const { container } = renderList(trip(['{A}']), { nightViews: [{ loading: false, availability: { kind: 'unknown' } }] })
+    const night = container.querySelector('[data-night="0"]')!
+    expect(night).toHaveTextContent('Direktbuchung – Hütte kontaktieren')
+    expect(night).not.toHaveTextContent('Plätze unbekannt')
+    expect(night.querySelector('a')).toBeNull()
   })
   it('an undated trip shows no date, no availability and no booking link', () => {
     renderList(trip(['{D}'], null), { nightViews: [{ loading: false, availability: { kind: 'free', places: 3 } }] })
     expect(screen.queryByText(/Plätze frei/)).not.toBeInTheDocument()
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
     expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
   it('shows overlap warnings under the timeline', () => {
@@ -92,6 +92,17 @@ describe('StageList view mode', () => {
 })
 
 describe('StageList hover', () => {
+  it('a highlighted leg lights its whole rail from dot to dot, nothing else', () => {
+    const { container } = renderList(trip(['{D}', '{E}']), { highlightedLeg: 1 })
+    const row = (i: number) => container.querySelector(`[data-night="${i}"]`)!.parentElement!.parentElement!
+    const night = (i: number, part: string) => row(i).querySelector(`[data-rail="${part}"]`)!
+    expect(night(0, 'below')).toHaveAttribute('data-highlighted', 'true')
+    expect(container.querySelector('[data-leg="1"] [data-rail="below"]')).toHaveAttribute('data-highlighted', 'true')
+    expect(night(1, 'above')).toHaveAttribute('data-highlighted', 'true')
+    expect(night(0, 'above')).toHaveAttribute('data-highlighted', 'false')
+    expect(night(1, 'below')).toHaveAttribute('data-highlighted', 'false')
+    expect(container.querySelectorAll('[data-rail][data-highlighted="true"]').length).toBe(3)
+  })
   it('each leg row hovers its own leg; huts and endpoints hover nothing', () => {
     const { onHoverLeg, container } = renderList(trip(['{D}', '{E}']))
     fireEvent.mouseEnter(container.querySelector('[data-leg="1"]')!)
@@ -126,15 +137,17 @@ describe('StageList edit mode', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fertig' }))
     expect(on.onEditModeChange).toHaveBeenCalledWith(false)
   })
-  it('shows swap, remove, extend and change controls and no detail toggles', () => {
-    renderList(trip(['{D}', '{E}']), { editMode: true })
+  it('shows swap, remove, extend and change controls and no booking links', () => {
+    renderList(trip(['{D}', '{E}']), {
+      editMode: true, nightViews: [0, 1].map(() => ({ loading: false, availability: { kind: 'free', places: 5 } })),
+    })
     expect(screen.getByLabelText('Hütte tauschen Etappe 1')).toBeInTheDocument()
     expect(screen.getByLabelText('Hütte entfernen Etappe 2')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ Etappe voranstellen' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '+ Etappe anhängen' })).toBeInTheDocument()
     expect(screen.getByLabelText('Start ändern')).toBeInTheDocument()
     expect(screen.getByLabelText('Ziel ändern')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Details Etappe 1')).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
   })
   it('a car trip cannot change its exit', () => {
     renderList(trip(['{D}']), { editMode: true, editor: makeEditorStub({ car: true }) })
@@ -194,17 +207,4 @@ describe('StageList edit mode', () => {
     expect(extend.container.querySelector('[data-node="exit"]')!.parentElement).not.toHaveTextContent('Hütte X')
   })
 
-  it('collapses expanded rows when the edit-mode toggle is pressed', async () => {
-    const t = trip(['{D}', '{E}'])
-    const props = {
-      trip: t, tripLegs: legsFromTrip(data.graph, t), hutNameById: data.hutNameById, hutOhrsByIndex: data.hutOhrsByIndex,
-      startLabel: makeStartLabel(data.startById), nightViews: null, highlightedLeg: null, onHoverLeg: vi.fn(),
-      editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(),
-    }
-    const { rerender } = render(<StageList {...props} />)
-    fireEvent.click(screen.getByLabelText('Details Etappe 1'))
-    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
-    rerender(<StageList {...props} editMode={false} />)
-    await waitForElementToBeRemoved(() => screen.queryByRole('link', { name: 'Auf hut-reservation.org buchen' }))
-  })
 })

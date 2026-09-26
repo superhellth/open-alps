@@ -40,7 +40,7 @@ describe('TripDatePicker', () => {
     expect(screen.getByRole('button', { name: '2026-07-10' }).querySelector('[data-night]')).toHaveAttribute('data-night', 'free')
     expect(screen.getByRole('button', { name: '2026-07-11' }).querySelector('[data-night]')).toHaveAttribute('data-night', 'full')
     expect(screen.getByRole('button', { name: '2026-07-12' }).querySelector('[data-night]')).toBeNull()
-    expect(screen.getByText('10.07. – 12.07.: ✕ belegt')).toBeInTheDocument()
+    expect(screen.getByText('10.07. – 12.07.: belegt')).toBeInTheDocument()
     const prefetch = spy.mock.calls.find((c) => c[2] === 8)!
     expect(prefetch[0].toISOString().slice(0, 10)).toBe('2026-07-06')
   })
@@ -51,7 +51,7 @@ describe('TripDatePicker', () => {
     fireEvent.mouseEnter(screen.getByRole('button', { name: '2026-07-11' }))
     expect(screen.getByRole('button', { name: '2026-07-10' })).toHaveAttribute('aria-pressed', 'false')
     expect(screen.getByRole('button', { name: '2026-07-13' })).toHaveAttribute('aria-pressed', 'true')
-    await waitFor(() => expect(screen.getByText('11.07. – 13.07.: ● alles frei')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('11.07. – 13.07.: alles frei')).toBeInTheDocument())
     expect(screen.getByRole('button', { name: '2026-07-12' }).querySelector('[data-night]')).toHaveAttribute('data-night', 'free')
     expect(screen.getByRole('button', { name: '2026-07-10' }).querySelector('[data-night]')).toBeNull()
   })
@@ -59,7 +59,7 @@ describe('TripDatePicker', () => {
     vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map([[1, new Set(['H0'])], [2, new Set(['H1'])]]))
     render(<TripDatePicker trip={trip('2026-07-10')} hutIndices={[0, null]} hutOhrsByIndex={ohrs} onChange={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /–/ }))
-    await waitFor(() => expect(screen.getByText('10.07. – 12.07.: ? unklar')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('10.07. – 12.07.: unklar')).toBeInTheDocument())
   })
   it('picking a day sets it as the first night and closes the calendar', async () => {
     vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())

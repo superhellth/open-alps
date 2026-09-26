@@ -14,7 +14,7 @@ const segment = (visible: boolean, highlighted: boolean): SxProps<Theme> => ({
 export const styles = {
   row: { display: 'grid', gridTemplateColumns: `${DOT + 4}px minmax(0, 1fr)`, columnGap: space.item },
   gutter: { display: 'flex', flexDirection: 'column', alignItems: 'center' },
-  above: (visible: boolean): SxProps<Theme> => ({ ...segment(visible, false), height: `${DOT_OFFSET}px`, flexShrink: 0 }),
+  above: (visible: boolean, highlighted: boolean): SxProps<Theme> => ({ ...segment(visible, highlighted), height: `${DOT_OFFSET}px`, flexShrink: 0 }),
   below: (visible: boolean, highlighted: boolean): SxProps<Theme> => ({ ...segment(visible, highlighted), flex: 1 }),
   dot: (hollow: boolean): SxProps<Theme> => ({
     width: `${DOT}px`, height: `${DOT}px`, borderRadius: '50%', flexShrink: 0, boxSizing: 'border-box',
