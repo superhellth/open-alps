@@ -53,7 +53,8 @@ const toursText = (n: number) => (n === 1 ? 'In 1 Tour' : `In ${n} Touren`)
 
 /** Below `ROUTE_REVEAL_ZOOM` round yellow bubbles cluster the tours at their default signpost anchors (`tourAnchor` unclipped),
  *  so crossing the reveal zoom splits a bubble into the boards standing where it stood; a click flies to its tours' anchors
- *  at the reveal zoom or closer, without focusing them. From `ROUTE_REVEAL_ZOOM` on each tour's board stands on a mast planted on
+ *  at the reveal zoom or closer, without focusing them. A tour hovered from the list dims the bubbles not holding it; a bubble
+ *  hovered on the map only highlights itself. From `ROUTE_REVEAL_ZOOM` on each tour's board stands on a mast planted on
  *  one of its route's anchors (`placeSignposts`: rank order, a colliding tour moves to its next anchor candidate, a board whose
  *  foot stays in view is pinned and turns into a dot on its spot when it collides); a tour that fits nowhere shows as a foot
  *  dot whose hover, focus or list hover shows its board. Panning and zooming only re-place, they never re-search. Boards and
@@ -134,6 +135,10 @@ export default function DiscoverLayer({
   const [pointerOnSignpost, setPointerOnSignpost] = useState(false)
   /** The pointer is on a hut or end symbol: the boards of its tours are highlighted, not stepped back. */
   const [pointerOnStop, setPointerOnStop] = useState(false)
+  /** Zoom at which the pointer entered a count bubble. A zoom change re-clusters the bubbles without a mouseout, so the
+   *  pointer counts as on a bubble only at that zoom; there the other bubbles keep full opacity. */
+  const [bubbleHoverZoom, setBubbleHoverZoom] = useState<number | null>(null)
+  const pointerOnBubble = bubbleHoverZoom === view.zoom
   const toursByLeg = useMemo(() => indexToursByLeg(routedTours), [routedTours])
   const toursByHut = useMemo(() => indexToursByHut(routedTours), [routedTours])
   const toursByEnd = useMemo(() => indexToursByEnd(routedTours), [routedTours])
@@ -203,14 +208,14 @@ export default function DiscoverLayer({
         const keys = keysOf(m)
         const outsideFocus = focusTours != null && !keys.some((k) => focusTours.has(k))
         const highlighted = keys.some((k) => hoveredTourKeys.has(k))
-        const dimmedMarker = dimmed || (!highlighted && (outsideFocus || hoverActive))
+        const dimmedMarker = dimmed || (!highlighted && (outsideFocus || (hoverActive && !pointerOnBubble)))
         return (
           <Marker
             key={markerKey(m)} position={[m.lat, m.lng]} icon={bubbleIcon(m.count, dimmedMarker, highlighted)}
             zIndexOffset={highlighted ? HOVER_Z_OFFSET : 0}
             eventHandlers={{
-              mouseover: () => onHoverTours(new Set(keys)),
-              mouseout: () => onHoverTours(NO_TOURS),
+              mouseover: () => { setBubbleHoverZoom(view.zoom); onHoverTours(new Set(keys)) },
+              mouseout: () => { setBubbleHoverZoom(null); onHoverTours(NO_TOURS) },
               click: () => activate(m),
             }}
           />

@@ -382,6 +382,32 @@ describe('DiscoverLayer signposts', () => {
     expect(onPickRoute).not.toHaveBeenCalled()
   })
 
+  it('a bubble hovered from the list dims the other bubbles, one hovered on the map does not', async () => {
+    const far = new Map([
+      [1, { name: null, sourceType: 1, lat: 47.3, lng: 12 }],
+      [2, { name: null, sourceType: 1, lat: 47.3, lng: 12.3 }],
+    ])
+    const a = tour(1, [10])
+    const b = tour(2, [11])
+    const props = { groups: [{ startId: 1, tours: [a] }, { startId: 2, tours: [b] }] as never, startById: far, routeCtx: { ...routeCtx, startById: far }, allTours: [a, b] }
+    const bubbles = (c: HTMLElement) => [...c.querySelectorAll('.start-count-marker')]
+    const dimmedCount = (c: HTMLElement) => bubbles(c).filter((el) => el.classList.contains('dimmed')).length
+
+    const { container: listHover } = renderLayer({ ...props, hoveredTourKeys: new Set([tourKey(a)]) }, 9)
+    expect(bubbles(listHover)).toHaveLength(2)
+    expect(dimmedCount(listHover)).toBe(1)
+    cleanup()
+
+    const { container: mapHover } = render(
+      <MapContainer center={[47.3, 12]} zoom={9} style={{ height: 400, width: 400 }}>
+        <FocusedLayer {...layerProps} {...props} dimmed={false} />
+      </MapContainer>,
+    )
+    fireEvent.mouseOver(bubbles(mapHover)[0])
+    await waitFor(() => expect(bubbles(mapHover).some((el) => el.classList.contains('highlighted'))).toBe(true))
+    expect(dimmedCount(mapHover)).toBe(0)
+  })
+
   it('highlights the marker of a start whose tour is hovered from the list', () => {
     const tours = stackTours(2)
     const { container } = render1(tours, { hoveredTourKeys: new Set([tourKey(tours[0])]) })
