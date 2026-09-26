@@ -32,7 +32,7 @@ function FitAllOnEntry({ active, routes }: { active: boolean; routes: Route[] })
   return null
 }
 
-// Every resolvable saved trip drawn as a thin muted route (RouteLayer's own dashed-segment
+// Every resolvable saved trip drawn as a thin route (RouteLayer's own dashed-segment
 // fallback covers geometry still loading or failed to fetch); an unresolvable trip has no route
 // to draw at all (tripToRoute returns null) and is skipped, matching the list's "geändert" row.
 export default function SavedTripsLayer({ active, trips, graph, routeCtx, hoveredTripId, onHoverTrip, onOpen }: SavedTripsLayerProps) {
@@ -50,8 +50,8 @@ export default function SavedTripsLayer({ active, trips, graph, routeCtx, hovere
       <FitAllOnEntry active={active} routes={entries.map((e) => e.route)} />
       {entries.map(({ trip, route }) => (
         <RouteLayer
-          key={trip.id} route={route} muted
-          dimmedOut={hoveredTripId !== null && hoveredTripId !== trip.id}
+          key={trip.id} route={route} thin
+          tier={hoveredTripId !== null && hoveredTripId !== trip.id ? 'rest' : 'hovered'}
           onHover={(hovering) => onHoverTrip(hovering ? trip.id : null)}
           onClick={() => onOpen(trip.id)}
         />

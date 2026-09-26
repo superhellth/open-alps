@@ -22,7 +22,7 @@ describe('RouteLayer', () => {
   })
 })
 
-describe('RouteLayer emphasis and dots', () => {
+describe('RouteLayer tier and dots', () => {
   const draw = (props: Partial<Parameters<typeof RouteLayer>[0]> = {}) => {
     vi.spyOn(geometry, 'loadLegGeometry').mockResolvedValue([[47, 11], [47.05, 11.05]])
     return render(<MapContainer center={[47, 11]} zoom={9}><RouteLayer route={route} {...props} /></MapContainer>)
@@ -36,13 +36,13 @@ describe('RouteLayer emphasis and dots', () => {
     expect(container.querySelectorAll('.leaflet-route-hovered-symbol-pane path').length).toBe(0)
   })
   it('draws the focused tier in its own panes', async () => {
-    const { container } = draw({ emphasis: 'focused', dots: false })
+    const { container } = draw({ tier: 'focused', thin: true, dots: false })
     await waitFor(() => expect(container.querySelectorAll('.leaflet-route-focused-line-pane path').length).toBeGreaterThan(0))
     expect(container.querySelectorAll('.leaflet-route-hovered-line-pane path').length).toBe(0)
   })
   it('reports the hovered leg index and position', async () => {
     const onHover = vi.fn()
-    const { container } = draw({ emphasis: 'rest', dots: false, onHover })
+    const { container } = draw({ tier: 'rest', thin: true, dots: false, onHover })
     await waitFor(() => expect(container.querySelectorAll('.leaflet-route-rest-line-pane path').length).toBeGreaterThan(0))
     fireEvent.mouseOver(container.querySelector('.leaflet-route-rest-line-pane path')!)
     expect(onHover).toHaveBeenCalledWith(true, expect.any(Number), expect.anything())

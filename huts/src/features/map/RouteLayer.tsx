@@ -31,18 +31,16 @@ function FitRoute({ positions }: { positions: [number, number][] }) {
 }
 
 /** A route as selected-route styling: signpost yellow over an ink casing. Legs still loading (or
- *  without geometry) are dashed straight lines between their huts. Discover passes `emphasis`
- *  (rest and focused are thin candidates, hovered is the bold single-tour style); without it,
- *  `muted` draws the thin candidate style and `dimmedOut` fades the route into the rest tier. */
-export default function RouteLayer({ route, highlightedLeg = null, fit = false, muted = false, dimmedOut = false, emphasis, dots = true, interactive = true, onHover, onClick }: {
+ *  without geometry) are dashed straight lines between their huts. `tier` picks the panes, `thin`
+ *  the candidate line widths. */
+export default function RouteLayer({ route, highlightedLeg = null, fit = false, tier = 'hovered', thin = false, dots = true, interactive = true, onHover, onClick }: {
   route: Route
   highlightedLeg?: number | null
   fit?: boolean
-  /** Thin candidate style instead of the bold selected-route style. Ignored when `emphasis` is set. */
-  muted?: boolean
-  /** Fades the route into the rest tier. Ignored when `emphasis` is set. */
-  dimmedOut?: boolean
-  emphasis?: EmphasisTier
+  /** Emphasis tier: picks the route's panes (opacity and stacking). */
+  tier?: EmphasisTier
+  /** Thin candidate style instead of the bold selected-route style. */
+  thin?: boolean
   /** false draws lines only (Discover draws waypoint symbols in a separate layer). */
   dots?: boolean
   /** false draws a display-only copy that never receives pointer events. */
@@ -53,8 +51,6 @@ export default function RouteLayer({ route, highlightedLeg = null, fit = false, 
   const positions = useMemo(() => route.waypoints.map((w): [number, number] => [w.lat, w.lng]), [route])
   const geometries = useLegGeometries(route)
   const segments = segmentsOf(positions, geometries)
-  const tier: EmphasisTier = emphasis ?? (dimmedOut ? 'rest' : 'hovered')
-  const thin = emphasis ? emphasis !== 'hovered' : muted
   const baseWidth = thin ? 2 : 4
   const map = useMap()
   ensureRoutePanes(map)

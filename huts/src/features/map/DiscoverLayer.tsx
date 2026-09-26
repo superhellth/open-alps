@@ -236,7 +236,7 @@ export default function DiscoverLayer({
       })}
       {drawn.map(({ key, route }) => (
         <RouteLayer
-          key={key} route={route} emphasis="rest" dots={false}
+          key={key} route={route} tier="rest" thin dots={false}
           onHover={(hovering, i, at) => {
             const lk = legKey(route.legs[i])
             hoverKeys(hovering ? (lk ? toursByLeg.get(lk) ?? [key] : [key]) : null, at)
@@ -246,8 +246,8 @@ export default function DiscoverLayer({
       ))}
       {/* The focused and hovered tiers are display-only copies above the rest tier; the interactive
           layers underneath never change, so their mouseout always fires. */}
-      {tiered.filter((t) => t.tier === 'focused').map(({ key, route }) => <RouteLayer key={`f-${key}`} route={route} emphasis="focused" dots={false} interactive={false} />)}
-      {tiered.filter((t) => t.tier === 'hovered').map(({ key, route }) => <RouteLayer key={`h-${key}`} route={route} emphasis="hovered" dots={false} interactive={false} />)}
+      {tiered.filter((t) => t.tier === 'focused').map(({ key, route }) => <RouteLayer key={`f-${key}`} route={route} tier="focused" thin dots={false} interactive={false} />)}
+      {tiered.filter((t) => t.tier === 'hovered').map(({ key, route }) => <RouteLayer key={`h-${key}`} route={route} tier="hovered" dots={false} interactive={false} />)}
       <WaypointLayer
         symbols={symbols}
         onHoverStop={(stop, at) => { setPointerOnStop(stop !== null); hoverKeys(stop === null ? null : toursOfStop(stop), at, stop === null ? undefined : titleOfStop(stop)) }}
