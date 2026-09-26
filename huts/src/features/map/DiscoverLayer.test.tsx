@@ -219,6 +219,15 @@ describe('DiscoverLayer marker focus', () => {
     expect(container.querySelector('.signpost-marker.dimmed')).not.toBeNull()
   })
 
+  it('a hovered tour outside the focus shows its signpost undimmed', async () => {
+    const { container } = renderFocused()
+    await focusViaBoard(container)
+    await waitFor(() => expect(container.querySelector('.signpost-marker.dimmed')).not.toBeNull())
+    const outside = container.querySelector('.signpost-marker.dimmed')!
+    fireEvent.mouseOver(outside.querySelector('.sign')!)
+    await waitFor(() => expect(outside.classList.contains('dimmed')).toBe(false))
+  })
+
   it('keeps the focus through a drag and through zooming that stays at or above the click zoom, drops it below', async () => {
     vi.spyOn(L.Map.prototype, 'getBoundsZoom').mockReturnValue(13)
     const { container } = renderFocused()
@@ -329,7 +338,7 @@ describe('DiscoverLayer signposts', () => {
     ])
     const hovered = tour(1, [10])
     const groups = [{ startId: 1, tours: [hovered, tour(1, [11])] }, { startId: 2, tours: [tour(2, [10]), tour(2, [11]), tour(2, [12])] }] as never
-    const { container } = renderLayer({ groups, startById: close, allTours: [hovered], hoveredTourKeys: new Set([tourKey(hovered)]) }, 9)
+    const { container } = renderLayer({ groups, startById: close, routeCtx: { ...routeCtx, startById: close }, allTours: [hovered], hoveredTourKeys: new Set([tourKey(hovered)]) }, 9)
     expect(container.querySelector('.signpost-marker')).toBeNull()
     const bubble = container.querySelector('.start-count-marker') as HTMLElement
     expect(bubble.textContent).toBe('5')
@@ -356,13 +365,19 @@ describe('DiscoverLayer signposts', () => {
     expect(L.DomUtil.getPosition(el).y).toBeCloseTo(expected.y, 0)
   })
 
-  it('a one-tour bubble below the reveal zoom focuses the list instead of picking the tour', () => {
+  it('a bubble click flies to its tours\' anchors at the reveal zoom, without focusing or picking', () => {
+    const fly = vi.spyOn(L.Map.prototype, 'flyTo').mockReturnThis()
     const t = tour(1, [10, 11])
     const onPickRoute = vi.fn()
     const onFocusTours = vi.fn()
-    const { container } = render1([t], { onPickRoute, onFocusTours }, 9)
+    const ctx = { ...routeCtx, legAnchors: () => [{ lat: 47.35, lng: 12.05 }] }
+    const { container } = renderLayer({ groups: [{ startId: 1, tours: [t] }] as never, allTours: [t], routeCtx: ctx, onPickRoute, onFocusTours }, 9)
     fireEvent.click(container.querySelector('.start-count-marker')!)
-    expect(onFocusTours).toHaveBeenCalledWith([tourKey(t)], false)
+    expect(fly).toHaveBeenCalledTimes(1)
+    const [center, zoom] = fly.mock.calls[0]
+    expect(L.latLng(center as L.LatLngExpression).equals(L.latLng(47.35, 12.05))).toBe(true)
+    expect(zoom).toBeGreaterThanOrEqual(11)
+    expect(onFocusTours).not.toHaveBeenCalled()
     expect(onPickRoute).not.toHaveBeenCalled()
   })
 

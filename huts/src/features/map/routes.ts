@@ -74,6 +74,15 @@ export function tourAnchorOf(tour: PlannerTour, route: Route, ctx: RouteContext,
   return tourAnchor(anchorRouteOf(tour, route), ctx.legAnchors, bbox)
 }
 
+const WORLD: Bbox = [-180, -90, 180, 90]
+
+/** Where the tour stands on the map before any viewport clipping: its default signpost anchor, or its start point when
+ *  the route does not resolve. Count bubbles cluster tours at this point and the results list tests it against the view. */
+export function tourMapPoint(tour: PlannerTour, ctx: RouteContext): { lat: number; lng: number } | null {
+  const route = tourToRoute(tour, ctx)
+  return (route && tourAnchorOf(tour, route, ctx, WORLD)) ?? ctx.startById.get(tour.startId) ?? null
+}
+
 /** Every anchor of the tour's route in `bbox`, nearest half the tour's distance first: the places its signpost may stand. */
 export function tourAnchorCandidatesOf(tour: PlannerTour, route: Route, ctx: RouteContext, bbox: Bbox): TourAnchor[] {
   return anchorCandidates(anchorRouteOf(tour, route), ctx.legAnchors, bbox)

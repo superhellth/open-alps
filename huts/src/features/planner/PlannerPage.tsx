@@ -19,7 +19,7 @@ import SavedTripsList from '@/features/saved/SavedTripsList.js'
 import SidebarHeader from './SidebarHeader.js'
 import TripPanel from '@/features/trip/TripPanel.js'
 import { makeStartLabel } from '@/data/labels.js'
-import { tourWaypoints, tripToRoute } from '@/features/map/routes.js'
+import { tourMapPoint, tourWaypoints, tripToRoute } from '@/features/map/routes.js'
 import type { RouteContext } from '@/features/map/routes.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { useMapView } from '@/features/map/useMapView.js'
@@ -48,13 +48,6 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   const [importDismissed, setImportDismissed] = useState(false)
   const [hoveredTripId, setHoveredTripId] = useState<string | null>(null)
 
-  const {
-    form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
-    search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours, focusRoutes, setFocusRoutes,
-    hoveredTourKeys, setHoveredTourKeys,
-  } = useDiscover({ data, client, mapView })
-
-  const startLabel = useMemo(() => makeStartLabel(data.startById), [data])
   const routeCtx = useMemo<RouteContext>(() => ({
     hutCoordsById: data.hutCoordsById, startById: data.startById,
     officialById: new Map(data.officialTours.map((t) => [t.tourId, t])),
@@ -64,6 +57,15 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
       hutCoordsById: data.hutCoordsById, officialTours: data.officialTours,
     }),
   }), [data])
+  const tourPoint = useCallback((tour: PlannerTour) => tourMapPoint(tour, routeCtx), [routeCtx])
+
+  const {
+    form, patchForm, draft, patchDraft, sort, tab: discoverTab, setTab: setDiscoverTab, erweitertOpen, setErweitertOpen,
+    search, tours, visibleTours, groups, viewTours, focusTours, setFocusTours,
+    hoveredTourKeys, setHoveredTourKeys,
+  } = useDiscover({ data, client, mapView, pointOf: tourPoint })
+
+  const startLabel = useMemo(() => makeStartLabel(data.startById), [data])
 
   const showAllTours = useCallback(() => {
     setFocusTours(null)
@@ -111,14 +113,14 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
     }
     return {
       kind: 'discover', groups, dimmed: search.status === 'searching', startById: data.startById,
-      allTours: visibleTours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours, focusRoutes,
+      allTours: visibleTours, routeCtx, hutNameById: data.hutNameById, hoveredTourKeys, focusTours,
       onNavigate: () => { dismissPrompt(); setDiscoverTab('results') },
-      onFocusTours: (keys, routes = true) => { setFocusTours(keys && new Set(keys)); setFocusRoutes(routes) },
+      onFocusTours: (keys) => setFocusTours(keys && new Set(keys)),
       onViewChange: setMapView, onHoverTours: setHoveredTourKeys, onPickRoute: pick,
     }
   }, [sidebarView, mode, tripLegs, state.trips, data, routeCtx, hoveredTripId, openSavedTrip, tripHuts, tripEnds, candidateMarkers, candidateStartCoords,
-    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, visibleTours, hoveredTourKeys, focusTours, focusRoutes,
-    dismissPrompt, setDiscoverTab, setFocusTours, setFocusRoutes, setMapView, setHoveredTourKeys, pick])
+    editor.activeLabel, editor.pickCandidate, setEditing, setHighlightedLeg, groups, search.status, visibleTours, hoveredTourKeys, focusTours,
+    dismissPrompt, setDiscoverTab, setFocusTours, setMapView, setHoveredTourKeys, pick])
   const mapCommands = useMemo<MapCommands>(() => ({
     route: mode === 'trip' ? tripRoute : null, fitRoute: mode === 'trip', highlightedLeg, restoreView, fitBounds,
     onMapClick: () => { dismissPrompt(); setFocusTours(null) },

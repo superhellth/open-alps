@@ -17,7 +17,13 @@ import type { SortDir, SortKey } from './rankTours.js'
 import { usePlannerSearch } from './usePlannerSearch.js'
 
 /** Discover state: filter form, search, ranking, and the result lists derived from them. */
-export function useDiscover({ data, client, mapView }: { data: AppData; client: SearchClient; mapView: View | null }) {
+/** `pointOf` places a tour on the map for the results list's viewport filter, the same point its count bubble clusters at. */
+export function useDiscover({ data, client, mapView, pointOf }: {
+  data: AppData
+  client: SearchClient
+  mapView: View | null
+  pointOf: (tour: PlannerTour) => { lat: number; lng: number } | null
+}) {
   const [form, setForm] = useState<FormState>(DEFAULT_FORM)
   const [draft, setDraft] = useState<TripDraft>(DEFAULT_DRAFT)
   const [sortKey, setSortKey] = useState<SortKey>('fit')
@@ -25,8 +31,6 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   const [tab, setTab] = useState<'filters' | 'results'>('filters')
   const [erweitertOpen, setErweitertOpen] = useState(false)
   const [focusTours, setFocusTours] = useState<Set<string> | null>(null)
-  /** Whether the focused tours draw their routes; a bubble click focuses without drawing them. */
-  const [focusRoutes, setFocusRoutes] = useState(true)
   const [hoveredTourKeys, setHoveredTourKeys] = useState<ReadonlySet<string>>(NO_TOURS)
 
   const patchForm = useCallback((patch: Partial<FormState>) => setForm((f) => ({ ...f, ...patch })), [])
@@ -52,20 +56,21 @@ export function useDiscover({ data, client, mapView }: { data: AppData; client: 
   const rankedTours = useMemo(
     () => sortTours(visibleTours, sortKey, sortDir, { targets: rankTargetsFromForm(form, legCountRange, dayCountTarget), ohrsIdByHutIndex, freeByOffset: search.freeByOffset }),
     [visibleTours, sortKey, sortDir, form, legCountRange, dayCountTarget, ohrsIdByHutIndex, search.freeByOffset])
+  const pointByKey = useMemo(() => new Map(visibleTours.map((t) => [tourKey(t), pointOf(t)])), [visibleTours, pointOf])
   const viewTours = useMemo(() => {
     if (focusTours) return rankedTours.filter((t) => focusTours.has(tourKey(t)))
     if (!mapView) return rankedTours
     return rankedTours.filter((t) => {
-      const s = data.startById.get(t.startId)
-      return s !== undefined && inBbox(s, mapView.bbox)
+      const p = pointByKey.get(tourKey(t))
+      return p != null && inBbox(p, mapView.bbox)
     })
-  }, [rankedTours, mapView, data, focusTours])
+  }, [rankedTours, mapView, pointByKey, focusTours])
 
   return {
     form, patchForm, draft, patchDraft,
     sort: { key: sortKey, dir: sortDir, setKey: setSortKey, setDir: setSortDir },
     tab, setTab, erweitertOpen, setErweitertOpen,
     search, tours, visibleTours, groups, viewTours,
-    focusTours, setFocusTours, focusRoutes, setFocusRoutes, hoveredTourKeys, setHoveredTourKeys,
+    focusTours, setFocusTours, hoveredTourKeys, setHoveredTourKeys,
   }
 }
