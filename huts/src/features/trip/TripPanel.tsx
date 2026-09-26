@@ -40,13 +40,13 @@ export default function TripPanel({
 
   return (
     <Box sx={styles.root}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+      <Box sx={styles.topRow}>
         <Button size="small" color="secondary" onClick={onBack}>{backLabel}</Button>
         {onShare && <Button size="small" color="secondary" onClick={onShare}>Link teilen</Button>}
       </Box>
 
       {isDraft ? (
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+        <Box sx={styles.draftRow}>
           <Chip label="Entwurf" size="small" color="secondary" />
           <Button size="small" variant="contained" onClick={onSave}>Speichern</Button>
         </Box>

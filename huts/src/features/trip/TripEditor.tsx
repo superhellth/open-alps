@@ -106,7 +106,7 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
     if (!resolvable) return null
     const trim = trimAllowed(graph, trip, night)
     return (
-      <Box sx={{ mt: 0.5 }}>
+      <Box sx={styles.rowMenu}>
         <IconButton size="small" aria-label={`Weitere Aktionen Etappe ${night + 1}`} onClick={(e: MouseEvent<HTMLElement>) => setRowMenu({ night, anchor: e.currentTarget })}>
           <Typography component="span" sx={{ fontWeight: 700 }}>⋮</Typography>
         </IconButton>
@@ -140,7 +140,7 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
     if (which === 'exit' && car) return null
     const current = which === 'start' ? trip.start.startId : trip.exit.startId
     return (
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+      <Box sx={styles.endpointRow}>
         <Typography variant="body2">
           {which === 'start' ? 'Start' : 'Ende'}: {car && which === 'exit' ? 'wie Start' : startLabel(current)}
         </Typography>
@@ -170,13 +170,13 @@ export function useTripEditor({ graph, trip, tripLegs, hutNameById, startLabel, 
   const renderExtendButtons = (): ReactNode => {
     if (!resolvable) return null
     return (
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box sx={styles.extendColumn}>
+        <Box sx={styles.extendButtons}>
           <Button size="small" color="secondary" onClick={() => onEditing({ kind: 'extend', side: 'first' })}>Etappe voranstellen</Button>
           <Button size="small" color="secondary" onClick={() => onEditing({ kind: 'extend', side: 'last' })}>Etappe anhängen</Button>
         </Box>
         {editing?.kind === 'extend' && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+          <Box sx={styles.extendCandidates}>
             {candidates.length === 0 && <Typography variant="body2">Keine passende Hütte im Wegenetz.</Typography>}
             {candidates.map((c) => (
               <Button

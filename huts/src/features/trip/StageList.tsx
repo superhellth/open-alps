@@ -33,7 +33,7 @@ export default function StageList({
   const exitLeg = tripLegs.legs[trip.huts.length]
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+    <Box sx={styles.list}>
       {trip.huts.map((_guid, i) => {
         const hutIndex = tripLegs.hutIndices[i]
         const leg = tripLegs.legs[i]
@@ -41,7 +41,7 @@ export default function StageList({
         const ohrs = hutIndex === null ? undefined : hutOhrsByIndex.get(hutIndex)
         const view = nightViews?.[i]
         return (
-          <Box key={i} data-stage={i} onMouseEnter={() => onHoverLeg(i)} onMouseLeave={() => onHoverLeg(null)}>
+          <Box key={i} data-stage={i} sx={styles.stage} onMouseEnter={() => onHoverLeg(i)} onMouseLeave={() => onHoverLeg(null)}>
             <Typography variant="caption" color="text.secondary">
               Etappe {i + 1}{firstNight ? ` · Nacht ${addUtcDays(firstNight, i).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', timeZone: 'UTC' })}` : ''}
             </Typography>
@@ -53,7 +53,7 @@ export default function StageList({
               descentM={!changed && leg ? leg.descentM : undefined}
             >
               {changed ? (
-                <Typography variant="body2" sx={{ mt: 0.5 }}>{CHANGED_TEXT}</Typography>
+                <Typography variant="body2">{CHANGED_TEXT}</Typography>
               ) : (
                 <Box sx={styles.nightDetails}>
                   {firstNight && view && (view.loading ? <Typography variant="body2">Verfügbarkeit lädt …</Typography> : <AvailabilityMark availability={view.availability} />)}
@@ -71,10 +71,10 @@ export default function StageList({
               <ToggleButtonGroup
                 size="small" exclusive value={trip.nights[i].status} aria-label={`Buchungsstatus Nacht ${i + 1}`}
                 onChange={(_e, next: BookingStatus | null) => { if (next) onNightStatusChange(i, next) }}
-                sx={{ mt: 0.5 }}
+                sx={styles.statusGroup}
               >
                 {(Object.keys(STATUS_LABEL) as BookingStatus[]).map((s) => (
-                  <ToggleButton key={s} value={s} sx={{ textTransform: 'none', py: 0.25 }}>{STATUS_LABEL[s]}</ToggleButton>
+                  <ToggleButton key={s} value={s} sx={styles.statusButton}>{STATUS_LABEL[s]}</ToggleButton>
                 ))}
               </ToggleButtonGroup>
             )}

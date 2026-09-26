@@ -6,6 +6,7 @@ import { answerWindow, shiftAnswers } from '@/availability/startDateAnswer.js'
 import type { ShiftAnswer } from '@/availability/startDateAnswer.js'
 import type { HutOhrs } from '@/data/buildAppData.js'
 import type { Trip } from '@/trip/trip.js'
+import { styles } from './StartDateStrip.styles.js'
 
 const MAX_SHIFT = 3
 const VERDICT_TEXT = { bookable: '● alles frei', blocked: '✕ belegt', unclear: '? unklar' } as const
@@ -34,13 +35,13 @@ export default function StartDateStrip({ trip, hutIndices, hutOhrsByIndex, onShi
   if (!trip.startDate) return null
   const first = new Date(trip.startDate)
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+    <Box sx={styles.root}>
+      <Box sx={styles.header}>
         <Typography variant="subtitle2" sx={{ flex: 1 }}>Startdatum verschieben</Typography>
         <Button size="small" variant="outlined" color="secondary" onClick={() => onShift(-1)}>−1 Tag</Button>
         <Button size="small" variant="outlined" color="secondary" onClick={() => onShift(1)}>+1 Tag</Button>
       </Box>
-      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+      <Box sx={styles.answers}>
         {answers?.map((a) => (
           <Button
             key={a.shiftDays} size="small" variant={a.shiftDays === 0 ? 'contained' : 'outlined'} color={a.shiftDays === 0 ? 'primary' : 'secondary'}

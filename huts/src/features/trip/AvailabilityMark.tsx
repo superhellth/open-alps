@@ -2,6 +2,7 @@ import { Box } from '@mui/material'
 import { nightText } from '@/availability/nightState.js'
 import type { NightAvailability } from '@/availability/nightState.js'
 import { tokens } from '@/ui/theme.js'
+import { space } from '@/ui/tokens.js'
 
 const SHAPE = { free: 'filled', few: 'half', full: 'crossed', unknown: 'question' } as const
 
@@ -35,7 +36,7 @@ function Shape({ shape }: { shape: (typeof SHAPE)[keyof typeof SHAPE] }) {
 
 export default function AvailabilityMark({ availability }: { availability: NightAvailability }) {
   return (
-    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: space.inline }}>
       <Shape shape={SHAPE[availability.kind]} />
       <span>{nightText(availability)}</span>
     </Box>

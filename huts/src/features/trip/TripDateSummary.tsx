@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { MouseEvent } from 'react'
 import { Box, Button, Popover, TextField } from '@mui/material'
 import type { Trip } from '@/trip/trip.js'
+import { styles } from './TripDateSummary.styles.js'
 
 function summaryText(trip: Trip): string {
   const party = `${trip.partySize} Pers.`
@@ -23,7 +24,7 @@ export default function TripDateSummary({ trip, onChange }: { trip: Trip; onChan
         {summaryText(trip)}
       </Button>
       <Popover open={anchor !== null} anchorEl={anchor} onClose={() => setAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}>
-        <Box sx={{ p: 2, display: 'flex', gap: 1 }}>
+        <Box sx={styles.popover}>
           <TextField
             size="small" type="date" label="Startdatum (erste Nacht)" value={trip.startDate ?? ''}
             slotProps={{ inputLabel: { shrink: true } }}

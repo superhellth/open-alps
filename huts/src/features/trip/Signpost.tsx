@@ -26,7 +26,7 @@ export default function Signpost({ title, timeH, ascentM, descentM, variant = 'p
         {timeH !== undefined && <Box component="span" sx={{ fontWeight: 600 }}>{formatSignpostTime(timeH)}</Box>}
       </Box>
       {(ascentM !== undefined || descentM !== undefined) && (
-        <Box sx={{ fontSize: '0.85rem', display: 'flex', gap: 1.5 }}>
+        <Box sx={styles.stats}>
           {ascentM !== undefined && <span>↑ {meters(ascentM)}</span>}
           {descentM !== undefined && <span>↓ {meters(descentM)}</span>}
         </Box>
