@@ -2,7 +2,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import { MapContainer } from 'react-leaflet'
-import WaypointLayer, { collectSymbols } from './WaypointLayer.js'
+import WaypointLayer from './WaypointLayer.js'
+import { collectSymbols } from './waypointSymbols.js'
 import type { Route, WaypointStop } from './types.js'
 
 afterEach(cleanup)
