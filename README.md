@@ -1,7 +1,9 @@
-# open-alps
+<img src="huts/public/favicon.svg" alt="" width="64" align="right" />
 
-A map-first planner for multi-day hut tours in the Austrian and Bavarian Alps. Say how you get
-there, how many nights and how long you want to walk each day; open-alps suggests hut-to-hut tours over
+# Wegweiser
+
+`open-alps` · a map-first planner for multi-day hut tours in the Austrian and Bavarian Alps. Say how you get
+there, how many nights and how long you want to walk each day; Wegweiser suggests hut-to-hut tours over
 real trails, lets you reshape them stage by stage, checks bed availability for your dates and hands
 you a share link.
 
