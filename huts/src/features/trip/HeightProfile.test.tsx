@@ -42,23 +42,19 @@ describe('HeightProfile', () => {
     expect(screen.queryByText('Höhenprofil lädt …')).not.toBeInTheDocument()
   })
 
-  it('names the start, each hut and the exit at the night boundaries', () => {
+  it('marks the start, each hut and the exit with a dot on the line', () => {
     draw()
-    const labels = screen.getAllByTestId('stop-label').map((n) => n.textContent)
-    expect(labels).toEqual(['Bahnhof X', 'Hütte A', 'Bahnhof X'])
-  })
-
-  it('centres each hut name on its night line', () => {
-    draw()
+    const dots = screen.getAllByTestId('stop-dot')
+    expect(dots).toHaveLength(3)
     const separator = screen.getByTestId('night-separator')
-    const hutLabel = screen.getAllByTestId('stop-label')[1]
-    expect(hutLabel).toHaveAttribute('x', separator.getAttribute('x1'))
-    expect(hutLabel).toHaveAttribute('text-anchor', 'middle')
+    expect(dots[1]).toHaveAttribute('cx', separator.getAttribute('x1'))
+    expect(dots[1]).toHaveAttribute('cy', separator.getAttribute('y1'))
   })
 
-  it('falls back to the stage number when a hut name does not fit between its neighbours', () => {
-    draw({ stops: ['Bahnhof X', 'Sehr lange Hüttenbezeichnung am Gletscherrand', 'Bahnhof X'] })
-    expect(screen.getAllByTestId('stop-label')[1]).toHaveTextContent(/^1$/)
+  it('names start and destination in the caption while idle, without stop labels in the chart', () => {
+    draw({ stops: ['Bahnhof Mayrhofen', 'Hütte A', 'Parkplatz Schlegeisspeicher'] })
+    expect(screen.getByTestId('profile-caption')).toHaveTextContent('Bahnhof Mayrhofen → Parkplatz Schlegeisspeicher')
+    expect(screen.queryByTestId('stop-label')).not.toBeInTheDocument()
   })
 
   it('labels only the lowest and highest elevation, without grid lines', () => {
@@ -101,15 +97,17 @@ describe('HeightProfile', () => {
     expect(onHoverPosition).toHaveBeenLastCalledWith(null)
   })
 
-  it('shows a readout with km, elevation and stage while hovering, "Abstieg" on the exit leg', () => {
+  it('reads out km, elevation and stage in the caption while hovering, "Abstieg" on the exit leg', () => {
     draw()
     const svg = screen.getByTestId('profile-svg')
+    const caption = screen.getByTestId('profile-caption')
     fireEvent.mouseMove(svg, { clientX: plotPx(0.163 / 1.5) })
-    expect(screen.getByText(`km 0,2 · ${(1000).toLocaleString('de-DE')} m · Etappe 1`)).toBeInTheDocument()
+    expect(caption).toHaveTextContent(`km 0,2 · ${(1000).toLocaleString('de-DE')} m · Etappe 1: Bahnhof X → Hütte A`)
     expect(screen.getByTestId('profile-cursor')).toBeInTheDocument()
     fireEvent.mouseMove(svg, { clientX: plotPx(1.2 / 1.5) })
-    expect(screen.getByText(`km 1,2 · ${(1400).toLocaleString('de-DE')} m · Abstieg`)).toBeInTheDocument()
+    expect(caption).toHaveTextContent(`km 1,2 · ${(1400).toLocaleString('de-DE')} m · Abstieg: Hütte A → Bahnhof X`)
     fireEvent.mouseLeave(svg)
+    expect(caption).toHaveTextContent('Bahnhof X → Bahnhof X')
     expect(screen.queryByTestId('profile-cursor')).not.toBeInTheDocument()
   })
 

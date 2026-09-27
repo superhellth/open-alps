@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  PROFILE_HEIGHT, PROFILE_MARGINS, elevationAxis, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, placeStopLabels, truncateLabel,
+  PROFILE_HEIGHT, PROFILE_MARGINS, elevationAxis, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, profileCaption,
 } from './profileScale.js'
 import type { ElevationPoint } from './useTripElevation.js'
 
@@ -72,36 +72,23 @@ describe('nearestPoint', () => {
   })
 })
 
-describe('truncateLabel / formatKm', () => {
-  it('keeps a label that fits and ellipsizes one that does not', () => {
-    expect(truncateLabel('Hütte', 200)).toBe('Hütte')
-    expect(truncateLabel('Kaiserhaus am See', 52)).toMatch(/…$/)
-    expect(truncateLabel('Kaiserhaus am See', 52).length).toBeLessThanOrEqual(8)
+describe('profileCaption', () => {
+  const stops = ['Bahnhof', 'Hütte A', 'Hütte B', 'Parkplatz']
+  it('names start and destination while idle', () => {
+    expect(profileCaption(stops, null)).toBe('Bahnhof → Parkplatz')
   })
-  it('drops the label when there is no room', () => {
-    expect(truncateLabel('Hütte', 4)).toBe('')
-    expect(truncateLabel('Hütte', -10)).toBe('')
+  it('reads out km, elevation, stage and its stops while hovering', () => {
+    expect(profileCaption(stops, { km: 12.44, elevationM: 2310.4, legIndex: 1 }))
+      .toBe(`km 12,4 · ${(2310).toLocaleString('de-DE')} m · Etappe 2: Hütte A → Hütte B`)
   })
-  it('formats km with one German decimal', () => {
-    expect(formatKm(18.24)).toBe('18,2')
-    expect(formatKm(0)).toBe('0,0')
+  it('calls the exit leg "Abstieg"', () => {
+    expect(profileCaption(stops, { km: 20, elevationM: 900, legIndex: 2 })).toMatch(/· Abstieg: Hütte B → Parkplatz$/)
   })
 })
 
-describe('placeStopLabels', () => {
-  it('centres hut names exactly on their lines', () => {
-    const labels = placeStopLabels([40, 200, 400, 560], ['Start', 'Hütte A', 'Hütte B', 'Ende'], 600)
-    expect(labels.slice(1, 3)).toEqual([{ x: 200, text: 'Hütte A' }, { x: 400, text: 'Hütte B' }])
-  })
-  it('falls back to the stage number, then to nothing, when a hut name does not fit', () => {
-    const labels = placeStopLabels([0, 40, 60, 100], ['S', 'Hütte A', 'Hütte B', 'E'], 100)
-    expect(labels[1].text).toBe('1')
-    expect(placeStopLabels([0, 50, 50, 100], ['S', 'A', 'B', 'E'], 100)[1].text).toBe('')
-  })
-  it('shifts the start and exit names inside the width and ellipsizes them to their space', () => {
-    const [start, , end] = placeStopLabels([10, 300, 590], ['Bahnhof', 'Hütte', 'Parkplatz'], 600, 6)
-    expect(start).toEqual({ x: 21, text: 'Bahnhof' })
-    expect(end.x + (end.text.length * 6) / 2).toBeLessThanOrEqual(600)
-    expect(placeStopLabels([0, 100], ['Bahnhof Mayrhofen', 'Ende'], 200, 6)[0].text).toMatch(/…$/)
+describe('formatKm', () => {
+  it('formats km with one German decimal', () => {
+    expect(formatKm(18.24)).toBe('18,2')
+    expect(formatKm(0)).toBe('0,0')
   })
 })

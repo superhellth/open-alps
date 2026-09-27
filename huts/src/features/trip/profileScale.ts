@@ -1,8 +1,16 @@
+import { formatMeters } from '@/format/meters.js'
 import type { ElevationPoint } from './useTripElevation.js'
 
 export const PROFILE_HEIGHT = 140
-/** Room for the min/max elevation labels (left), stop names (top) and km labels (bottom). */
-export const PROFILE_MARGINS = { left: 40, right: 8, top: 18, bottom: 22 }
+/** Stop dot radius and stroke: 12 px across, the stage list's rail dot. */
+export const STOP_DOT_R = 5
+export const STOP_DOT_STROKE = 2
+/** How far a stop dot reaches past its centre. */
+export const STOP_DOT_REACH = STOP_DOT_R + STOP_DOT_STROKE / 2
+/** Gap between the elevation labels and the reach of the start dot. */
+export const ELEVATION_LABEL_GAP = 4
+/** Room for the min/max elevation labels (left, clear of the start dot), the stop dots (top, right) and km labels (bottom). */
+export const PROFILE_MARGINS = { left: 36 + ELEVATION_LABEL_GAP + STOP_DOT_REACH, right: 8, top: 8, bottom: 22 }
 
 export interface ElevationAxis {
   lo: number
@@ -75,36 +83,19 @@ export function nearestPoint(points: ElevationPoint[], km: number): ElevationPoi
   return points.reduce((best, p) => (Math.abs(p.distanceKm - km) < Math.abs(best.distanceKm - km) ? p : best))
 }
 
-/** Cuts `text` to fit `widthPx` at an average glyph width of `charPx`, ending in "…"; '' when nothing fits. */
-export function truncateLabel(text: string, widthPx: number, charPx = 6.5): string {
-  const max = Math.floor(widthPx / charPx)
-  if (text.length <= max) return text
-  if (max <= 1) return ''
-  return `${text.slice(0, max - 1)}…`
+export interface ProfileHover {
+  km: number
+  elevationM: number
+  legIndex: number
 }
 
-export interface StopLabel {
-  x: number
-  text: string
-}
-
-/** Stop labels centred on their night lines at `xs`. Each label owns the space up to halfway to its
- *  neighbours. A hut name that does not fit there falls back to its stage number, or '' when that
- *  does not fit either. The start and exit names shift inwards to stay inside `width` and are
- *  ellipsized to their space. */
-export function placeStopLabels(xs: number[], names: string[], width: number, charPx = 6.5, gapPx = 6): StopLabel[] {
-  const last = xs.length - 1
-  return xs.map((x, i) => {
-    const lo = i === 0 ? 0 : (xs[i - 1] + x) / 2 + gapPx / 2
-    const hi = i === last ? width : (x + xs[i + 1]) / 2 - gapPx / 2
-    if (i === 0 || i === last) {
-      const text = truncateLabel(names[i] ?? '', hi - lo, charPx)
-      const half = (text.length * charPx) / 2
-      return { x: Math.min(hi - half, Math.max(lo + half, x)), text }
-    }
-    const text = [names[i] ?? '', String(i)].find((t) => x - (t.length * charPx) / 2 >= lo && x + (t.length * charPx) / 2 <= hi) ?? ''
-    return { x, text }
-  })
+/** The line above the chart: the trip's start and destination while idle; while hovering, the
+ *  cursor's km and elevation, then its stage and the stops that stage runs between. */
+export function profileCaption(stops: string[], hover: ProfileHover | null): string {
+  if (!hover) return `${stops[0] ?? ''} → ${stops.at(-1) ?? ''}`
+  const { km, elevationM, legIndex } = hover
+  const stage = legIndex === stops.length - 2 ? 'Abstieg' : `Etappe ${legIndex + 1}`
+  return `km ${formatKm(km)} · ${formatMeters(elevationM)} · ${stage}: ${stops[legIndex] ?? ''} → ${stops[legIndex + 1] ?? ''}`
 }
 
 export const formatKm = (km: number) => km.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
