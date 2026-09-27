@@ -1,10 +1,15 @@
 import sys
 from pathlib import Path
 
+from shapely.geometry import box
+from shapely.prepared import prep
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
-from downloads.fetch_stations_parking import LAYERS, _area_to_point, dedupe_stop_positions  # noqa: E402
+from downloads.fetch_stations_parking import (  # noqa: E402
+    LAYERS, _area_to_point, dedupe_stop_positions,
+)
 
 
 def _layer(name):

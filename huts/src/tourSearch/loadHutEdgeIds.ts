@@ -1,6 +1,6 @@
 import type { HutEdgeIdsData } from './types.js'
 
-interface HutEdgeIdsManifest {
+export interface HutEdgeIdsManifest {
   rows: number
   k: number
   edge_id_count: number[]
@@ -11,18 +11,7 @@ interface HutEdgeIdsManifest {
   suffix_bytes: number
 }
 
-/** Loads a <basename>.bin/.json pair built by pipeline/phases/postprocessing/build_edge_ids.py -
- *  the trail-segment identity the "avoid overlapping tracks" search-time check needs (spec §2 of
- *  docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md, extended to start_edges
- *  by docs/superpowers/specs/2026-09-04-approach-exit-overlap-avoidance-design.md §2). Fetched
- *  wholesale, not lazily per-leg like geometry: the overlap check runs during search, before any
- *  tour is chosen. edgeId indexes into this exactly like it indexes into hut-edge-payload.bin /
- *  approaches.bin (same row order). build_edge_ids.py is generic over its --edges-dir, so the same
- *  manifest/binary shape serves both hut_edges and start_edges - hence one implementation here. */
-async function loadEdgeIdsData(baseUrl: string, binName: string, jsonName: string): Promise<HutEdgeIdsData> {
-  const manifest: HutEdgeIdsManifest = await (await fetch(`${baseUrl}/${jsonName}`)).json()
-  const buffer = await (await fetch(`${baseUrl}/${binName}`)).arrayBuffer()
-
+export function buildEdgeIdsData(manifest: HutEdgeIdsManifest, buffer: ArrayBuffer): HutEdgeIdsData {
   const sortedOffsets = new Array<number>(manifest.rows + 1)
   sortedOffsets[0] = 0
   for (let i = 0; i < manifest.rows; i++) {
@@ -49,6 +38,20 @@ async function loadEdgeIdsData(baseUrl: string, binName: string, jsonName: strin
       return suffixView.subarray(edgeId * k, edgeId * k + manifest.suffix_count[edgeId])
     },
   }
+}
+
+/** Loads a <basename>.bin/.json pair built by pipeline/phases/postprocessing/build_edge_ids.py -
+ *  the trail-segment identity the "avoid overlapping tracks" search-time check needs (spec §2 of
+ *  docs/superpowers/specs/2026-08-29-avoid-overlapping-tracks-design.md, extended to start_edges
+ *  by docs/superpowers/specs/2026-09-04-approach-exit-overlap-avoidance-design.md §2). Fetched
+ *  wholesale, not lazily per-leg like geometry: the overlap check runs during search, before any
+ *  tour is chosen. edgeId indexes into this exactly like it indexes into hut-edge-payload.bin /
+ *  approaches.bin (same row order). build_edge_ids.py is generic over its --edges-dir, so the same
+ *  manifest/binary shape serves both hut_edges and start_edges - hence one implementation here. */
+async function loadEdgeIdsData(baseUrl: string, binName: string, jsonName: string): Promise<HutEdgeIdsData> {
+  const manifest: HutEdgeIdsManifest = await (await fetch(`${baseUrl}/${jsonName}`)).json()
+  const buffer = await (await fetch(`${baseUrl}/${binName}`)).arrayBuffer()
+  return buildEdgeIdsData(manifest, buffer)
 }
 
 export function loadHutEdgeIdsData(baseUrl = '/data'): Promise<HutEdgeIdsData> {

@@ -26,7 +26,7 @@ def write_edge_records(records: list, out_dir: Path, write_edge_ids: bool = Fals
     constrained hub-edge variant routing the same polyline as FAST_ANY) doesn't grow the geometry
     file linearly for zero new information.
 
-    write_edge_ids: True to also write out_dir/edge_ids.npy - each record's FULL base-edge-id set,
+    write_edge_ids: True to also write out_dir/edge-ids.npy - each record's FULL base-edge-id set,
     deduped and sorted ascending, concatenated across records in record order. RECORD_DTYPE's
     edge_id_offset/edge_id_count slice into it; prefix_ids/suffix_ids (fixed-width K_TRAVERSAL,
     -1-padded) live directly on RECORD_DTYPE."""
@@ -82,7 +82,7 @@ def write_edge_records(records: list, out_dir: Path, write_edge_ids: bool = Fals
     binfmt.save_array(out_dir / "records.npy", records_arr)
     binfmt.save_array(out_dir / "geometry.npy", geometry_arr)
     if write_edge_ids:
-        binfmt.save_array(out_dir / "edge_ids.npy", np.array(flat_edge_ids, dtype="i4"))
+        binfmt.save_array(out_dir / "edge-ids.npy", np.array(flat_edge_ids, dtype="i4"))
 
 
 def write_access_distances(rows: list, path: Path) -> None:

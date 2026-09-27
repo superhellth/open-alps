@@ -18,8 +18,11 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.geo import haversine_m  # noqa: E402
-from lib.pipeline import OSM_DIR, PUBLIC_DATA_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.anchors import ANCHOR_FRACTIONS, decode_row, distance_to_polyline_m  # noqa: E402
+from lib.geo import haversine_m, hut_points  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    BUILD_DIR, EDGE_LAYER_DIRNAMES, PUBLIC_DATA_DIR, QUALITY_DIR, RAW_DIR, load_config,
+)  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 from postprocessing.build_approach_table import gather_candidates, parse_variant_names  # noqa: E402
@@ -32,10 +35,43 @@ _SOURCE_TYPE_NAME = {
 }
 
 EDGE_PAYLOAD_LAYERS = [
-    ("hut_edges", "hut-edge-payload.json", "hut-edge-geometry.json", "hut-edge-geometry.bin"),
-    ("start_edges", None, "start-edge-geometry.json", "start-edge-geometry.bin"),
-    ("tour_edges", None, "tour-edge-geometry.json", "tour-edge-geometry.bin"),
+    ("hut_edges", "payload.json", "geometry.json", "geometry.bin"),
+    ("start_edges", None, "geometry.json", "geometry.bin"),
 ]
+
+
+ANCHOR_SAMPLE_ROWS = 500
+
+
+def check_anchors_on_path(layer_name: str, anchors: list, polylines: list, tolerance_m: float,
+                          max_flagged: int) -> dict:
+    """Every sampled decoded anchor lies within tolerance_m of its edge's full-resolution polyline.
+    anchors[i] is (k, 2) lon/lat, polylines[i] is (n, 2) lon/lat."""
+    flagged = []
+    for i, (points, poly) in enumerate(zip(anchors, polylines)):
+        for k, (lon, lat) in enumerate(points):
+            d = distance_to_polyline_m(lon, lat, poly)
+            if d > tolerance_m:
+                flagged.append({"layer": layer_name, "sample": i, "anchor": k, "distance_m": d})
+    return build_check(
+        f"anchors_on_path_{layer_name}", {"tolerance_m": tolerance_m}, checked=len(anchors),
+        flagged_rows=flagged, baseline=0, max_flagged_rows=max_flagged,
+        sort_key=lambda r: r["distance_m"],
+    )
+
+
+def _polyline(records, geometry, row):
+    off, cnt = int(records[row]["geom_offset"]), int(records[row]["geom_count"])
+    piece = geometry[off:off + cnt]
+    return np.column_stack([piece["lon"], piece["lat"]])
+
+
+def _sample_rows(n_rows: int) -> range:
+    return range(0, n_rows, max(1, n_rows // ANCHOR_SAMPLE_ROWS))
+
+
+def _present_fractions(columns: dict) -> tuple:
+    return tuple(f for f in ANCHOR_FRACTIONS if f"a{int(round(f * 100))}_dlat" in columns)
 
 
 def check_approach_coverage(candidates_by_hut: dict, approach_columns: dict, n_huts: int,
@@ -98,21 +134,11 @@ def check_manifest_agreement(layer_name: str, n_records: int, payload_rows: int,
     )
 
 
-def check_tours_json_geometry(tours: list, point_counts: list, max_flagged: int) -> dict:
-    """tours.json's matched legs (edgeId != null) equal the tour geometry manifest's row count."""
-    matched = sum(1 for t in tours for leg in t["legs"] if leg.get("edgeId") is not None)
-    flagged = [] if matched == len(point_counts) else [{
-        "reason": "matched_legs_vs_geometry_rows", "matched_legs": matched,
-        "geometry_rows": len(point_counts)}]
-    return build_check("tours_json_geometry", {}, checked=matched, flagged_rows=flagged,
-                       baseline=0, max_flagged_rows=max_flagged)
-
-
 def check_shipped_straightness(layer_name: str, point_counts: list, geometry_points: list,
                                 lengths_m: list, min_length_m: float, straightness_threshold: float,
                                 max_points: int, max_flagged: int) -> dict:
     """§4.4.3: over the SIMPLIFIED shipped geometry (build_edge_tiles.py's output, not the raw
-    hut_edges/geometry.npy), flag edges >= min_length_m with straightness >= straightness_threshold
+    hut-edges/geometry.npy), flag edges >= min_length_m with straightness >= straightness_threshold
     and fewer than max_points points. straightness = endpoint-to-endpoint distance / edge length."""
     flagged = []
     for i in range(len(point_counts)):
@@ -138,13 +164,12 @@ def check_shipped_straightness(layer_name: str, point_counts: list, geometry_poi
     )
 
 
-def check_public_copy_freshness(public_files: list, osm_dir: Path, public_dir: Path,
-                                 max_flagged: int) -> dict:
-    """§4.4.4: every name present in huts/public/data/ and byte-identical (via hash, not a full
-    diff) to its data/osm/ source."""
+def check_public_copy_freshness(public_files: list, public_dir: Path, max_flagged: int) -> dict:
+    """§4.4.4: every public file present in huts/public/data/ and byte-identical (via hash, not a
+    full diff) to its source in data/. public_files: (source path, public file name) pairs."""
     flagged = []
-    for name in public_files:
-        src = osm_dir / name
+    for src, name in public_files:
+        src = Path(src)
         dst = public_dir / name
         if not src.exists():
             continue  # not built yet - not this check's concern (copy_public_data already skips it)
@@ -175,33 +200,35 @@ def main(argv=None):
     pp_cfg = q.get("postprocessing", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--osm-dir", default=str(OSM_DIR))
+    parser.add_argument("--raw-dir", default=str(RAW_DIR))
+    parser.add_argument("--build-dir", default=str(BUILD_DIR))
     parser.add_argument("--public-dir", default=str(PUBLIC_DATA_DIR))
     parser.add_argument("--out", default=str(QUALITY_DIR / "postprocessing.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     parser.add_argument("--min-length-m", type=float, default=pp_cfg.get("minLengthM", 300))
     parser.add_argument("--straightness-threshold", type=float,
                          default=pp_cfg.get("straightnessThreshold", 0.97))
+    parser.add_argument("--anchor-tolerance-m", type=float, default=pp_cfg.get("anchorToleranceM", 25.0))
     parser.add_argument("--max-points-for-straightness-flag", type=int,
                          default=pp_cfg.get("maxPointsForStraightnessFlag", 4))
     args = parser.parse_args(argv)
 
-    osm_dir, public_dir = Path(args.osm_dir), Path(args.public_dir)
+    raw_dir, build_dir, public_dir = Path(args.raw_dir), Path(args.build_dir), Path(args.public_dir)
 
     with phase(SCRIPT_NAME, "check_postprocessing"):
         checks = []
 
-        with open(osm_dir / "huts.geojson", encoding="utf-8") as f:
+        with open(raw_dir / "huts.geojson", encoding="utf-8") as f:
             n_huts = len(json.load(f)["features"])
-        start_records = binfmt.load_array(osm_dir / "start_edges" / "records.npy", mmap=False)
-        with open(osm_dir / "start_points_id_table.json", encoding="utf-8") as f:
+        start_records = binfmt.load_array(build_dir / "start-edges" / "records.npy", mmap=False)
+        with open(build_dir / "start-points" / "start-points-id-table.json", encoding="utf-8") as f:
             id_table = json.load(f)
         variant_ids = parse_variant_names(",".join(config["approach"]["variants"]))
         candidates_by_hut = gather_candidates(start_records, id_table, variant_ids)
 
-        with open(osm_dir / "approaches.json", encoding="utf-8") as f:
+        with open(build_dir / "start-edges" / "approaches.json", encoding="utf-8") as f:
             approach_manifest = json.load(f)
-        with open(osm_dir / "approaches.bin", "rb") as f:
+        with open(build_dir / "start-edges" / "approaches.bin", "rb") as f:
             approach_payload = f.read()
         approach_columns = _unpack_columns(approach_payload, approach_manifest["columns"],
                                             approach_manifest["rows"])
@@ -209,19 +236,55 @@ def main(argv=None):
         print(f"approach_coverage: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged", flush=True)
         checks.append(c)
 
+        huts_lonlat = np.array(hut_points(raw_dir / "huts.geojson"))
+
+        def report_anchors(layer_name, anchors, polylines):
+            c = check_anchors_on_path(layer_name, anchors, polylines, args.anchor_tolerance_m,
+                                      args.max_flagged_rows)
+            print(f"anchors_on_path[{layer_name}]: {c['summary']['flagged']:,} / "
+                  f"{c['summary']['checked']:,} flagged", flush=True)
+            checks.append(c)
+
+        hut_dir = build_dir / "hut-edges"
+        if (hut_dir / "payload.json").exists() and (hut_dir / "payload.bin").exists() \
+                and (hut_dir / "geometry.npy").exists():
+            manifest = json.loads((hut_dir / "payload.json").read_text(encoding="utf-8"))
+            cols = _unpack_columns((hut_dir / "payload.bin").read_bytes(), manifest["columns"], manifest["rows"])
+            if "a50_dlat" in cols:
+                recs = binfmt.load_array(hut_dir / "records.npy", mmap=False)
+                geom = binfmt.load_array(hut_dir / "geometry.npy", mmap=False)
+                rows = _sample_rows(manifest["rows"])
+                fractions = _present_fractions(cols)
+                report_anchors(
+                    "hut_edges",
+                    [decode_row(cols, i, huts_lonlat[int(cols["from_id"][i])], fractions) for i in rows],
+                    [_polyline(recs, geom, i) for i in rows])
+
+        start_geometry_path = build_dir / "start-edges" / "geometry.npy"
+        if "a50_dlat" in approach_columns and start_geometry_path.exists():
+            geom = binfmt.load_array(start_geometry_path, mmap=False)
+            rows = _sample_rows(approach_manifest["rows"])
+            fractions = _present_fractions(approach_columns)
+            report_anchors(
+                "start_edges",
+                [decode_row(approach_columns, i, huts_lonlat[int(approach_columns["hut_id"][i])], fractions)
+                 for i in rows],
+                [_polyline(start_records, geom, int(approach_columns["edge_id"][i])) for i in rows])
+
         for layer_name, payload_manifest_name, geometry_manifest_name, geometry_bin_name in EDGE_PAYLOAD_LAYERS:
-            records_path = osm_dir / layer_name / "records.npy"
+            layer_dir = build_dir / EDGE_LAYER_DIRNAMES[layer_name]
+            records_path = layer_dir / "records.npy"
             if not records_path.exists():
                 continue
             n_records = len(binfmt.load_array(records_path, mmap=False))
 
             payload_rows = None
-            if payload_manifest_name and (osm_dir / payload_manifest_name).exists():
-                with open(osm_dir / payload_manifest_name, encoding="utf-8") as f:
+            if payload_manifest_name and (layer_dir / payload_manifest_name).exists():
+                with open(layer_dir / payload_manifest_name, encoding="utf-8") as f:
                     payload_rows = json.load(f)["rows"]
 
-            geometry_manifest_path = osm_dir / geometry_manifest_name
-            geometry_bin_path = osm_dir / geometry_bin_name
+            geometry_manifest_path = layer_dir / geometry_manifest_name
+            geometry_bin_path = layer_dir / geometry_bin_name
             if not geometry_manifest_path.exists() or not geometry_bin_path.exists():
                 continue
             with open(geometry_manifest_path, "rb") as f:
@@ -258,18 +321,10 @@ def main(argv=None):
                   f"{c['summary']['checked']:,} flagged", flush=True)
             checks.append(c)
 
-            if layer_name == "tour_edges" and (osm_dir / "tours.json").exists():
-                with open(osm_dir / "tours.json", encoding="utf-8") as f:
-                    tours = json.load(f)
-                c = check_tours_json_geometry(tours, point_counts, args.max_flagged_rows)
-                print(f"tours_json_geometry: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
-                      flush=True)
-                checks.append(c)
-
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
         import dodo  # local import: avoids a module-load-order cycle with dag/quality.py at
                      # import time, since dodo.py itself imports dag.quality
-        c = check_public_copy_freshness(dodo.PUBLIC_FILES, osm_dir, public_dir, args.max_flagged_rows)
+        c = check_public_copy_freshness(dodo.PUBLIC_FILES, public_dir, args.max_flagged_rows)
         print(f"public_copy_freshness: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
               flush=True)
         checks.append(c)

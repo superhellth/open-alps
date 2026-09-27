@@ -1,10 +1,17 @@
+import { cachedPromise } from '@/lib/cachedPromise.js'
+
 /**
  * Byte-range-fetchable per-edge trail geometry (docs/superpowers/specs/2026-08-27-tour-geometry-design.md
- * §A/§E): <layer>-geometry.bin is every edge's [lon, lat] points (simplified for hut_edges/start_edges, raw GPX for tour_edges), back to back in
+ * §A/§E): <layer>-geometry.bin is every edge's simplified [lon, lat] points, back to back in
  * edge_id order, each point an f4 pair (8 bytes, no framing) - <layer>-geometry.json's
  * point_counts gives each edge's point count, from which a byte range is a prefix sum.
  */
-export type GeometryLayer = 'hut_edges' | 'start_edges' | 'tour_edges'
+export type GeometryLayer = 'hut_edges' | 'start_edges'
+
+/** Layer of a generated leg: approach and exit are start edges, everything between hut edges. */
+export function legLayer(legIndex: number, legCount: number): GeometryLayer {
+  return legIndex === 0 || legIndex === legCount - 1 ? 'start_edges' : 'hut_edges'
+}
 
 interface GeometryManifest {
   point_counts: number[]
@@ -22,27 +29,21 @@ const POINT_BYTES = 8 // f4 lon + f4 lat
 const LAYER_FILES: Record<GeometryLayer, { json: string; bin: string }> = {
   hut_edges: { json: 'hut-edge-geometry.json', bin: 'hut-edge-geometry.bin' },
   start_edges: { json: 'start-edge-geometry.json', bin: 'start-edge-geometry.bin' },
-  tour_edges: { json: 'tour-edge-geometry.json', bin: 'tour-edge-geometry.bin' },
 }
 
 let manifestCache = new Map<GeometryLayer, Promise<LayerState>>()
 let legCache = new Map<string, Promise<[number, number][]>>()
 
 function loadLayerState(layer: GeometryLayer, baseUrl: string): Promise<LayerState> {
-  let cached = manifestCache.get(layer)
-  if (!cached) {
-    cached = (async () => {
-      const manifest: GeometryManifest = await (await fetch(`${baseUrl}/${LAYER_FILES[layer].json}`)).json()
-      const offsets = new Array<number>(manifest.point_counts.length + 1)
-      offsets[0] = 0
-      for (let i = 0; i < manifest.point_counts.length; i++) {
-        offsets[i + 1] = offsets[i] + manifest.point_counts[i]
-      }
-      return { offsets, wholeFileFetch: null }
-    })()
-    manifestCache.set(layer, cached)
-  }
-  return cached
+  return cachedPromise(manifestCache, layer, async () => {
+    const manifest: GeometryManifest = await (await fetch(`${baseUrl}/${LAYER_FILES[layer].json}`)).json()
+    const offsets = new Array<number>(manifest.point_counts.length + 1)
+    offsets[0] = 0
+    for (let i = 0; i < manifest.point_counts.length; i++) {
+      offsets[i + 1] = offsets[i] + manifest.point_counts[i]
+    }
+    return { offsets, wholeFileFetch: null }
+  })
 }
 
 function decodePoints(buffer: ArrayBuffer, byteOffset: number, pointCount: number): [number, number][] {
@@ -72,11 +73,16 @@ async function fetchLegPoints(layer: GeometryLayer, edgeId: number, baseUrl: str
   if (res.status === 206) {
     return decodePoints(await res.arrayBuffer(), 0, pointCount)
   }
+  if (res.status !== 200) throw new Error(`${url}: HTTP ${res.status}`)
 
   // Host ignored Range and answered 200 with the entire body - do not retry with another Range
   // request. Decode this leg out of the full body, and cache the full body itself so this
   // (large) download happens at most once per layer per session.
-  if (!state.wholeFileFetch) state.wholeFileFetch = res.arrayBuffer()
+  if (!state.wholeFileFetch) {
+    const body = res.arrayBuffer()
+    state.wholeFileFetch = body
+    body.catch(() => { if (state.wholeFileFetch === body) state.wholeFileFetch = null })
+  }
   return decodePoints(await state.wholeFileFetch, byteStart, pointCount)
 }
 
@@ -86,13 +92,7 @@ export async function loadLegGeometry(
   reversed: boolean,
   baseUrl = '/data',
 ): Promise<[number, number][]> {
-  const cacheKey = `${layer}:${edgeId}`
-  let cached = legCache.get(cacheKey)
-  if (!cached) {
-    cached = fetchLegPoints(layer, edgeId, baseUrl)
-    legCache.set(cacheKey, cached)
-  }
-  const points = await cached
+  const points = await cachedPromise(legCache, `${layer}:${edgeId}`, () => fetchLegPoints(layer, edgeId, baseUrl))
   return reversed ? [...points].reverse() : points
 }
 

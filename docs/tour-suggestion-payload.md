@@ -13,7 +13,7 @@ query-time backend.
 
 ## 1. `hut-edge-payload.bin` + `hut-edge-payload.json`
 
-Built by `pipeline/phases/postprocessing/build_edge_payload.py` from `hut_edges/records.npy`. One
+Built by `pipeline/phases/postprocessing/build_edge_payload.py` from `hut-edges/records.npy`. One
 row per `(unordered hut pair, variant)` — see §3 "Direction" for why unordered.
 
 `hut-edge-payload.json` is the manifest: `rows` (row count), `columns` (`{name: {dtype, offset}}`,
@@ -38,6 +38,9 @@ each column separately, don't assume a struct-of-rows layout.
 | `ungraded_m` | f4 | metres with neither an explicit `sac_scale` nor an implied grade (spec C4) |
 | `inferred_m` | f4 | metres graded via the physical-implication table, not an explicit tag — kept separate from `ungraded_m` because the two support different claims |
 | `snap_m` | f4 | total hub-to-trail snap gap across both ends — already folded into `distance_m`/`ascent_m`/`descent_m`; shipped so a client can flag a large-snap edge as approximate |
+| `a50_dlat`, `a50_dlng` | i2 | anchor at 50 % of the edge's full-resolution arc length, stored direction, as an offset from the `from_id` hut's coordinate in `huts.geojson` in units of 1e-4° (≈ 11 m N–S, ≈ 7.6 m E–W at 47° N). The pipeline asserts no overflow; `check_postprocessing` asserts sampled anchors lie within 25 m of the polyline. The reference is arithmetic only: the geometry's endpoints may differ from the hut coordinate by `snap_m`. The client stands a tour's signpost on one of these anchors. |
+
+**Anchor growth** (measured on the last rebuild, gzipped): three fractions (25 / 50 / 75 %) grew the two payloads by +66 KB (`hut-edge-payload`) and +32 KB (`approaches`), above the +60 KB gate, so only the 50 % anchor ships: +22.6 KB and +11.3 KB. `ANCHOR_FRACTIONS` in `pipeline/lib/anchors.py` sets the shipped fractions; the client reads whatever anchor columns the payload carries.
 
 **Geometry is not in this payload.** Path polylines stay in `hut-edges.pmtiles`, fetched lazily
 only for tours the user actually opens — the payload above is metadata-only, meant to be loaded
@@ -70,8 +73,8 @@ few thousand rows) and can't go stale relative to direction.
 
 ## 3. Direction: the graph is undirected, reversal is a client-side synthesis
 
-`hut_edges/records.npy` stores **one record per unordered pair per variant** — for AT+Bayern,
-6,067 unique unordered pairs, zero cases with both `u→v` and `v→u` stored. `start_edges/` (feeding
+`hut-edges/records.npy` stores **one record per unordered pair per variant** — for AT+Bayern,
+6,067 unique unordered pairs, zero cases with both `u→v` and `v→u` stored. `start-edges/` (feeding
 the approach table, §6) is one-directional: every record is `access-point → hut`.
 
 Reversing a hut-edge record for display (B→A when the stored record is A→B) is the client's job.
@@ -81,8 +84,9 @@ The reverse-traversal contract:
   `inferred_m`.
 - **Swapped**: `ascent_m` ↔ `descent_m`.
 - **Recomputed**: duration (§2, from the swapped ascent/descent).
+- **Reversed**: the 50 % anchor stays; when 25 % / 75 % anchors ship they swap.
 - **Reversed for display**: geometry and elevation profile (both fetched separately, from
-  `hut-edges.pmtiles` and `hut_edges/profiles.npy` respectively — neither lives in this payload).
+  `hut-edges.pmtiles` and `hut-edges/profiles.npy` respectively — neither lives in this payload).
 
 **Known approximation, not a bug to fix here:** under the old road-penalized *distance* cost, the
 cheapest A→B path was provably the cheapest B→A path, so one stored record was lossless in both
@@ -145,7 +149,7 @@ client-chosen ceiling in between with the same guarantee (spec C9).
 
 ## 6. `approaches.bin` + `approaches.json`
 
-Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start_edges/records.npy`
+Built by `pipeline/phases/postprocessing/build_approach_table.py` from `start-edges/records.npy`
 (92,426 raw records over 27,261 parkings + 3,025 stations for AT+Bayern — not shippable as-is).
 Two things, because a client needs both a small per-hut table and a way to answer "does this loop
 close":
@@ -156,7 +160,7 @@ Alpenverein ArcGIS layer's `OBJECTID` for `TYPE_PARTNER` rows — same field, tw
 spaces depending on `source_type`, exceeds u4 range either way), `source_type` (u1,
 `binfmt.TYPE_PARKING`/`TYPE_STATION`/`TYPE_PARTNER`), `variant` (u1, one of `binfmt.VARIANT_*` —
 today only `VARIANT_FAST_ANY` rows are ever candidates, see below), `access_unknown` (u1,
-boolean), `distance_m`/`ascent_m`/`descent_m` (f4).
+boolean), `distance_m`/`ascent_m`/`descent_m` (f4), plus the same anchor columns as §1 (`a50_dlat`, `a50_dlng`, i2), cut from the row's start-edge geometry (`access point → hut`) and referenced to the row's hut (`hut_id`). Reverse-index edges that no approach row covers (exit legs) get anchors from a side table in the same `approaches.bin`: `approaches.json`'s `exit_anchors` holds its own `rows` count and `columns` manifest (`edge_id` u4, `hut_id` u2, `a50_dlat`/`a50_dlng` i2, absolute byte offsets into the same buffer), one row per such edge in edge-id order, cut and referenced like the approach anchors. The client looks an exit leg's anchors up by `edge_id`, falling back to the chord point only for a payload without the table.
 
 Row selection is a matrix, not a top-k: every gathered candidate is bucketed into a cell keyed by
 `(source_type, variant, duration_bucket)` — `duration_bucket` from `config.approach
@@ -191,7 +195,7 @@ required" reads this array by row index, not the binary payload.
 **Loop-closure reverse index** (`approaches.json`'s `reverse_index`, JSON, not in the binary): the
 client's car mode requires exit start-point == entry start-point, and a tour's first and last hut's
 approach-table rows essentially never share a start id on their own — a naive intersection would
-annihilate the result set. So every `start_edges` record whose start point appears in *any* hut's
+annihilate the result set. So every `start-edges` record whose start point appears in *any* hut's
 retained approach ships here too (all variants — closure needs whatever the client already has
 open, not just the configured approach-candidate variants), keyed both ways:
 `hut_to_starts[hut_id]` and `start_to_huts[start_id]`, each a list of `{hut_id, start_id,

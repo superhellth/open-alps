@@ -17,7 +17,7 @@ type) rather than trying to match build_approach_table.py's eventual DIN-duratio
 deliberately worse distance_m proxy as the upper bound - see spec B4).
 
 Usage: python pipeline/phases/postprocessing/select_approach_pairs.py [--k 20]
-Requires data/osm/access_distances.npy (build_hub_edges.py's output).
+Requires data/build/access-edges/access-distances.npy (build_hub_edges.py's output).
 """
 
 import argparse
@@ -29,7 +29,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import ACCESS_EDGES_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "select_approach_pairs.py"
@@ -68,11 +68,11 @@ def select_pairs(access_distances: np.ndarray, k: int) -> np.ndarray:
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--access-distances", default=str(OSM_DIR / "access_distances.npy"),
-                         help="path to build_hub_edges.py's access_distances.npy")
+    parser.add_argument("--access-distances", default=str(ACCESS_EDGES_DIR / "access-distances.npy"),
+                         help="path to build_hub_edges.py's access-distances.npy")
     parser.add_argument("--k", type=int, default=config["approach"].get("selectK", 20),
                          help="candidates retained per (hut, source type) before build_approach_table.py's own re-rank (see pipeline.config.json's approach.selectK)")
-    parser.add_argument("--out", default=str(OSM_DIR / "selected_access_pairs.npy"),
+    parser.add_argument("--out", default=str(ACCESS_EDGES_DIR / "selected-access-pairs.npy"),
                          help="path to write the selected pair list")
     args = parser.parse_args()
 

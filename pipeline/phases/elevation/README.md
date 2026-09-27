@@ -6,7 +6,7 @@ polyline `graph_building/build_hub_edges.py` computed, filling in the `ascent_m`
 
 ## `build_dem_vrt.py`
 
-- Reads `data/dem/fetch_manifest.json` (written by `phases/downloads/fetch_dem.py`).
+- Reads `data/raw/dem/fetch_manifest.json` (written by `phases/downloads/fetch_dem.py`).
 - For each manifest region, calls that region's provider's `to_4326_vrt(tile_paths, region_vrt)`
   (reprojects into EPSG:4326), then `lib/pipeline.py`'s `normalize_colorinterp()` (forces
   `ColorInterp=Gray` on every region VRT so a mismatched interpretation isn't silently dropped by
@@ -33,7 +33,7 @@ polyline `graph_building/build_hub_edges.py` computed, filling in the `ascent_m`
 ## `sample_base_elevation.py` (base-graph Phase A — DEM sampling)
 
 No params besides `--base-graph-dir`/`--dem`. Reads `dem.tif` and the base graph's
-`nodes.npy`/`cell_index.npy`/`interior.npy`, writes `node_ele.npy`/`interior_ele.npy`.
+`nodes.npy`/`cell-index.npy`/`interior.npy`, writes `node-ele.npy`/`interior-ele.npy`.
 
 Loops **per grid cell** (`lib/grid.py`), not per edge and never as one whole-raster window: reads
 one windowed `dem.tif` slice per cell (buffered 0.2km for bilinear's 1-pixel neighbourhood), then
@@ -45,14 +45,14 @@ CSR convention `nodes.npy` is already sorted by.
 Split out from what used to be one `add_base_elevation.py` script specifically because this half
 never reads `--smoothing-kernel-m` — see `compute_edge_profiles.py` below.
 
-- **doit wiring**: `file_dep=[base_graph/manifest.json, dem.tif]`,
-  `targets=[base_graph/node_ele.npy, base_graph/interior_ele.npy]`. No `TaskOptionsChanged` needed
+- **doit wiring**: `file_dep=[base-graph/manifest.json, dem.tif]`,
+  `targets=[base-graph/node-ele.npy, base-graph/interior-ele.npy]`. No `TaskOptionsChanged` needed
   (no params to track).
 
 ## `compute_edge_profiles.py` (base-graph Phase B — per-edge smoothing/time_s/ascent-descent)
 
 Params: `--smoothing-kernel-m` (default `config.dem.smoothingKernelM`). Reads
-`node_ele.npy`/`interior_ele.npy` (Phase A's output) plus `nodes.npy`/`interior.npy`/`edges.npy`,
+`node-ele.npy`/`interior-ele.npy` (Phase A's output) plus `nodes.npy`/`interior.npy`/`edges.npy`,
 rewrites `edges.npy` in place with `time_s`/`ascent_m`/`descent_m` filled in.
 
 Per base-graph edge (Python loop — smoothing is an inherently per-edge local operation, a global
@@ -66,33 +66,33 @@ hysteresis; `eleNoiseThresholdM` is retired, the kernel width is the replacement
 every edge's smoothed profile at once.
 
 `edges.npy` can't be this task's declared `doit` target (`build_base_graph` already owns it, and
-`doit` forbids two tasks sharing a target) — `base_graph/edge_profiles.stamp` is the completion
-signal instead, same pattern `build_hub_edges` uses `node_ele.npy` for its `task_dep` on this task.
+`doit` forbids two tasks sharing a target) — `base-graph/edge-profiles.stamp` is the completion
+signal instead, same pattern `build_hub_edges` uses `node-ele.npy` for its `task_dep` on this task.
 
 - **doit wiring**: `task_dep=[sample_base_elevation]`,
-  `file_dep=[base_graph/node_ele.npy, base_graph/interior_ele.npy]`,
-  `targets=[base_graph/edge_profiles.stamp]`, `uptodate=[TaskOptionsChanged()]` — a
+  `file_dep=[base-graph/node-ele.npy, base-graph/interior-ele.npy]`,
+  `targets=[base-graph/edge-profiles.stamp]`, `uptodate=[TaskOptionsChanged()]` — a
   `--smoothing-kernel-m` retune reruns this task alone, never `sample_base_elevation`.
 
-## `build_profiles.py` (display-only profiles for hut_edges/ and start_edges/)
+## `build_profiles.py` (display-only profiles for hut-edges/ and start-edges/)
 
 Params: `--profile-points` (default `config.dem.profilePoints`, 30). Never opens the DEM: every
-point's elevation is looked up in `sample_base_elevation.py`'s already-persisted `node_ele.npy`/
-`interior_ele.npy` by exact (quantized) coordinate identity — routing and display read the same
+point's elevation is looked up in `sample_base_elevation.py`'s already-persisted `node-ele.npy`/
+`interior-ele.npy` by exact (quantized) coordinate identity — routing and display read the same
 numbers (spec B2/B3). A record's own hub/access-point endpoints and any mid-chain hub-snap point
 never match that lookup (they aren't base-graph points at all); both are filled by carrying the
 nearest matched neighbour's elevation along the polyline, an approximation acceptable for a
 DISPLAY profile only, never the routing cost.
 
 Interpolates onto `--profile-points` evenly-spaced distances per record and writes
-`hut_edges/profiles.npy` / `start_edges/profiles.npy`, plus `profile_offset`/`profile_count`
+`hut-edges/profiles.npy` / `start-edges/profiles.npy`, plus `profile_offset`/`profile_count`
 written back into the two `records.npy` in place. Exists as its own script specifically so
 retuning `--profile-points` is cheap (no re-route, no DEM read) — `sample_base_elevation.py`/
 `compute_edge_profiles.py` stay untouched by it.
 
 - **doit wiring**: `task_dep=[build_hub_edges]` (for the in-place `records.npy` rewrite, not
-  visible to doit's file-hash check alone), `file_dep=[interior_ele.npy, hut_edges/records.npy,
-  start_edges/records.npy]`, `targets=[hut_edges/profiles.npy, start_edges/profiles.npy]`,
+  visible to doit's file-hash check alone), `file_dep=[interior-ele.npy, hut-edges/records.npy,
+  start-edges/records.npy]`, `targets=[hut-edges/profiles.npy, start-edges/profiles.npy]`,
   `uptodate=[False]` — always reruns when selected, seconds either way.
 
 ## Timing instrumentation

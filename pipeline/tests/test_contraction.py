@@ -21,8 +21,9 @@ def _chain_fixture():
     edges_sac_rank = np.array([1, 1, -1, 2], dtype=np.int8)
     edges_via_ferrata = np.array([False, False, False, True])
     edges_constrained_ok = np.array([False, True, True, True])
+    edges_downgraded = np.array([False, True, False, False])
     return coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred, \
-        edges_sac_rank, edges_via_ferrata, edges_constrained_ok
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok, edges_downgraded
 
 
 def test_straight_chain_collapses_to_one_edge():
@@ -47,6 +48,11 @@ def test_contraction_ors_via_ferrata_along_chain():
     assert result.edges_via_ferrata[0] == True  # noqa: E712
 
 
+def test_contraction_ors_downgraded_along_chain():
+    result = contract_structural(*_chain_fixture())
+    assert bool(result.edges_downgraded[0]) is True
+
+
 def test_contraction_preserves_interior_polyline_in_order():
     result = contract_structural(*_chain_fixture())
     interior = result.interior_coords[0]
@@ -65,10 +71,11 @@ def test_junction_node_is_not_contracted():
     edges_sac_rank = np.array([-1, -1, -1], dtype=np.int8)
     edges_via_ferrata = np.array([False, False, False])
     edges_constrained_ok = np.array([False, False, False])
+    edges_downgraded = np.array([False, False, False])
 
     result = contract_structural(
         coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred,
-        edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok, edges_downgraded,
     )
 
     assert len(result.coords) == 4  # nothing contracted away
@@ -87,6 +94,7 @@ def test_contract_sums_grading_metres_along_a_chain():
         edges_sac_rank=np.array([-1, 1], dtype=np.int8),
         edges_via_ferrata=np.array([False, False]),
         edges_constrained_ok=np.array([False, True]),
+        edges_downgraded=np.array([False, False]),
         progress_every=0,
     )
     assert contracted.edges_ungraded_m[0] == 100.0
@@ -108,10 +116,11 @@ def test_isolated_cycle_with_no_junction_is_not_silently_dropped():
     edges_sac_rank = np.array([1, 1, 1], dtype=np.int8)
     edges_via_ferrata = np.array([False, False, False])
     edges_constrained_ok = np.array([True, True, True])
+    edges_downgraded = np.array([False, True, False])
 
     result = contract_structural(
         coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded, edges_inferred,
-        edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
+        edges_sac_rank, edges_via_ferrata, edges_constrained_ok, edges_downgraded,
     )
 
     # Today (before the fix): result.coords has 0 rows, result.edges_u has 0 entries - the whole
@@ -123,3 +132,4 @@ def test_isolated_cycle_with_no_junction_is_not_silently_dropped():
     assert result.edges_u[0] == result.edges_v[0]  # self-loop
     assert abs(result.edges_dist[0] - 300.0) < 1e-6
     assert len(result.interior_coords[0]) == 2  # the other two ring nodes
+    assert bool(result.edges_downgraded[0]) is True  # OR-folded around the ring too

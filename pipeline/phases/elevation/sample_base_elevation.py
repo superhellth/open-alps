@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Samples data/dem/dem.tif per BASE-GRAPH NODE and INTERIOR POINT (spec B2 Phase A), not per
+"""Samples data/raw/dem/dem.tif per BASE-GRAPH NODE and INTERIOR POINT (spec B2 Phase A), not per
 record - see compute_edge_profiles.py for the per-edge smoothing/time_s/ascent-descent pass this
 feeds into. Split into its own script because it's the half of the old add_base_elevation.py that
 --smoothing-kernel-m has no effect on: retuning the kernel used to force a full DEM resample too,
@@ -7,13 +7,13 @@ even though the kernel only ever touches the smoothing step downstream.
 
 Why per grid cell and not one big window: nodes.npy holds 6.85M post-contraction junctions and the
 shape lives in interior.npy (33.1M points), spread across the whole base graph's bbox. This script
-reads data/dem/dem.tif PER GRID CELL (cell_index.npy + lib/grid.py), never as one
+reads data/raw/dem/dem.tif PER GRID CELL (cell-index.npy + lib/grid.py), never as one
 74008x39276 window.
 
 Sampling is BILINEAR against the materialized DEM (one cached gdal pass upstream in
 build_dem_vrt.py), replacing the old nearest-neighbour np.floor sampling.
 
-Persists node_ele.npy (f4 x 6.85M, 27 MB) and interior_ele.npy (f4 x 33.1M, 132 MB) so
+Persists node-ele.npy (f4 x 6.85M, 27 MB) and interior-ele.npy (f4 x 33.1M, 132 MB) so
 compute_edge_profiles.py and every display path can avoid reopening the DEM.
 """
 
@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, RAW_DEM_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "sample_base_elevation.py"
@@ -117,9 +117,9 @@ def _sample_all_points(dem_path, nodes, cell_index, interior, grid, timer: StepT
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
-    parser.add_argument("--dem", default=str(DEM_DIR / "dem.tif"),
+    parser.add_argument("--dem", default=str(RAW_DEM_DIR / "dem.tif"),
                         help="path to the materialized DEM GeoTIFF (build_dem_vrt.py's output)")
     args = parser.parse_args(argv)
 
@@ -130,7 +130,7 @@ def main(argv=None):
             manifest = binfmt.load_manifest(base_graph_dir / "manifest.json")
             grid = Grid(manifest["bbox"], manifest["tile_size_km"])
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
-            cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy", mmap=False)
+            cell_index = binfmt.load_array(base_graph_dir / "cell-index.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
 
         print(f"sampling DEM over {len(nodes):,} nodes / {len(interior):,} interior points "
@@ -138,9 +138,9 @@ def main(argv=None):
         node_ele, interior_ele = _sample_all_points(args.dem, nodes, cell_index, interior, grid, timer)
 
         with timer.step("write"):
-            binfmt.save_array(base_graph_dir / "node_ele.npy", node_ele)
-            binfmt.save_array(base_graph_dir / "interior_ele.npy", interior_ele)
-        print(f"written {base_graph_dir / 'node_ele.npy'}, {base_graph_dir / 'interior_ele.npy'}",
+            binfmt.save_array(base_graph_dir / "node-ele.npy", node_ele)
+            binfmt.save_array(base_graph_dir / "interior-ele.npy", interior_ele)
+        print(f"written {base_graph_dir / 'node-ele.npy'}, {base_graph_dir / 'interior-ele.npy'}",
               flush=True)
         meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)

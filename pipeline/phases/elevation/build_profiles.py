@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Builds display-only elevation profiles for hut_edges/ and start_edges/ records, interpolated
+"""Builds display-only elevation profiles for hut-edges/ and start-edges/ records, interpolated
 onto config["dem"]["profilePoints"] evenly-spaced distances per record (spec B4). Never opens the
 DEM: every point's elevation comes from sample_base_elevation.py's already-persisted
-base_graph/{node_ele.npy, interior_ele.npy} (spec B2/B3 - routing and display read the same
+base-graph/{node-ele.npy, interior-ele.npy} (spec B2/B3 - routing and display read the same
 numbers), looked up by exact (quantized) coordinate identity - the same coordinate-identity
 attribution technique analysis/grading_coverage.py already uses to attribute a stored polyline
 back onto OSM segments.
@@ -16,8 +16,8 @@ Retuning --profile-points is meant to be cheap (no re-route, no DEM read) - this
 owns that retune path; sample_base_elevation.py/compute_edge_profiles.py stay untouched by it.
 
 Usage: python pipeline/phases/elevation/build_profiles.py [--profile-points 30]
-Requires data/osm/base_graph/{node_ele.npy,interior_ele.npy} (sample_base_elevation.py) and
-data/osm/{hut_edges,start_edges}/{records.npy,geometry.npy} (build_hub_edges.py).
+Requires data/build/base-graph/{node-ele.npy,interior-ele.npy} (sample_base_elevation.py) and
+data/build/{hut-edges,start-edges}/{records.npy,geometry.npy} (build_hub_edges.py).
 """
 
 import argparse
@@ -29,7 +29,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.geo import haversine_m_vec_pairs as _haversine_m_vec_pairs  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, HUT_EDGES_DIR, START_EDGES_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_profiles.py"
@@ -148,8 +148,12 @@ def _process_edge_set(edge_dir: Path, lookup_keys, lookup_values, profile_points
 def main(argv=None):
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
+    parser.add_argument("--hut-edges-dir", default=str(HUT_EDGES_DIR),
+                        help="hut-edge set (build_hub_edges.py's output) to add display profiles to")
+    parser.add_argument("--start-edges-dir", default=str(START_EDGES_DIR),
+                        help="start-edge set (build_access_edges.py's output) to add display profiles to")
     parser.add_argument("--profile-points", type=int, default=config["dem"].get("profilePoints", 30),
                         help="number of evenly-spaced points to interpolate each edge's display elevation profile onto (see pipeline.config.json's dem.profilePoints)")
     args = parser.parse_args(argv)
@@ -160,12 +164,12 @@ def main(argv=None):
         with timer.step("load_lookup"):
             nodes = binfmt.load_array(base_graph_dir / "nodes.npy", mmap=False)
             interior = binfmt.load_array(base_graph_dir / "interior.npy", mmap=False)
-            node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy", mmap=False)
-            interior_ele = binfmt.load_array(base_graph_dir / "interior_ele.npy", mmap=False)
+            node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy", mmap=False)
+            interior_ele = binfmt.load_array(base_graph_dir / "interior-ele.npy", mmap=False)
             lookup_keys, lookup_values = build_elevation_lookup(nodes, interior, node_ele, interior_ele)
 
-        for name in ("hut_edges", "start_edges"):
-            edge_dir = OSM_DIR / name
+        for edge_dir in (Path(args.hut_edges_dir), Path(args.start_edges_dir)):
+            name = edge_dir.name
             if not (edge_dir / "records.npy").exists():
                 print(f"skipping {edge_dir} (not built yet)", flush=True)
                 continue

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Standalone analysis script - not part of the doit task graph, not imported by any phase
-script. Reports the road_m / distance_m distribution over the already-computed hut_edges/ and
-start_edges/ records.
+script. Reports the road_m / distance_m distribution over the already-computed hut-edges/ and
+start-edges/ records.
 
 Answers open question 1 of docs/superpowers/specs/2026-08-22-tour-suggestion-backend.md: is the
 `ROAD_*` variant column worth building? Dropping roadPenaltyFactor (spec A3) leaves nothing
@@ -16,7 +16,7 @@ bad settles the question early, and a low floor settles nothing and defers to th
 re-run (spec H, "post-rebuild measurements"). Re-run this script unchanged after the rebuild to
 get the real figure; the two runs are directly comparable.
 
-Requires data/osm/hut_edges/records.npy and data/osm/start_edges/records.npy
+Requires data/build/hut-edges/records.npy and data/build/start-edges/records.npy
 (build_hub_edges.py). Writes data/analysis/road_share.json.
 
 Runtime: seconds. Reads records.npy only - never touches geometry.npy or the DEM.
@@ -33,9 +33,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BUILD_DIR, DATA_DIR, EDGE_LAYER_DIRNAMES, load_config  # noqa: E402
 
-DATA_DIR = OSM_DIR.parent
 OUT_PATH = DATA_DIR / "analysis" / "road_share.json"
 PERCENTILES = (5, 25, 50, 75, 90, 95, 99)
 
@@ -81,7 +80,7 @@ def by_sac_rank(records, share):
 
 
 def load(name, thresholds):
-    path = OSM_DIR / name / "records.npy"
+    path = BUILD_DIR / EDGE_LAYER_DIRNAMES[name] / "records.npy"
     if not path.exists():
         print(f"skipping {name}: {path} not found", flush=True)
         return None

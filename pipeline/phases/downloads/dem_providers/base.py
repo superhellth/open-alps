@@ -16,7 +16,8 @@ from typing import Protocol
 class DemProvider(Protocol):
     def fetch(self, provider_config: dict, raw_dir: Path) -> list[Path]:
         """Downloads whatever raw tiles/files this source needs for provider_config's region
-        (bbox, or a named region key - each provider defines its own provider_config shape) into
+        (provider_config["area"], a shapely (Multi)Polygon in EPSG:4326, for providers that need an
+        extent - each provider defines its own provider_config shape) into
         raw_dir, skipping any that already exist there. Returns the paths it downloaded or found
         already present, in no particular order."""
         ...

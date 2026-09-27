@@ -2,8 +2,8 @@
 
 import json
 
-from lib.doit_support import cli_param, pipeline_task, tracking_param
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config
+from lib.doit_support import pipeline_task, tracking_param
+from lib.pipeline import HUB_RANGE_DIR, RAW_DEM_DIR, RAW_DIR, RAW_OSM_DIR, load_config
 
 CONFIG = load_config()
 REGION_NAMES = [r["name"] for r in CONFIG["regions"]]
@@ -18,8 +18,8 @@ def task_download_extracts():
             tracking_param("regions_json", str, json.dumps(CONFIG["regions"], sort_keys=True)),
         ],
         targets=(
-            [OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
-            + [OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES]
+            [RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
+            + [RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES]
         ),
     )
 
@@ -30,30 +30,29 @@ def task_fetch_huts():
         # Depends on download_extracts.py's .poly outputs (same downloads/ phase, not the usual
         # downloads->preprocessing direction) because the AT+Bavaria coverage filter needs the
         # real admin-boundary polygon Geofabrik ships alongside each extract - see lib/poly.py.
-        file_dep=[OSM_DIR / "raw" / f"{n}.poly" for n in REGION_NAMES],
-        targets=[OSM_DIR / "huts.geojson", OSM_DIR / "partner_betriebe.geojson"],
+        file_dep=[RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES],
+        targets=[RAW_DIR / "huts.geojson", RAW_DIR / "partner_betriebe.geojson"],
     )
 
 
 def task_fetch_stations_parking():
     return pipeline_task(
         "phases/downloads/fetch_stations_parking.py",
-        file_dep=[OSM_DIR / "raw" / f"{n}-latest.osm.pbf" for n in REGION_NAMES],
-        targets=[OSM_DIR / "stations.geojson", OSM_DIR / "parking.geojson"],
+        file_dep=[RAW_OSM_DIR / f"{n}-latest.osm.pbf" for n in REGION_NAMES]
+        + [RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES],
+        targets=[RAW_DIR / "stations.geojson", RAW_DIR / "parking.geojson"],
     )
 
 
 def task_fetch_dem():
     return pipeline_task(
         "phases/downloads/fetch_dem.py",
-        # dem/bbox: config["dem"] (provider name + provider-specific nested config) and
-        # config["bbox"] are read directly by fetch_dem.py - neither is a sensible CLI flag.
-        # max_edge_km IS a real flag: it sizes bavaria-dgm5's per-hut buffer (composite.py's
-        # fetch_regions), so it must invalidate this task too, not just the trail/hub-range tasks.
-        params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
+        # config["dem"] (provider name + provider-specific nested config) is read directly by
+        # fetch_dem.py - not a sensible CLI flag. The hub range (hub-range.geojson) defines the
+        # area to cover; the .poly files clip regions that carry a "boundary".
+        file_dep=[HUB_RANGE_DIR / "hub-range.geojson"] + [RAW_OSM_DIR / f"{n}.poly" for n in REGION_NAMES],
         tracking_params=[
             tracking_param("dem_json", str, json.dumps(CONFIG["dem"], sort_keys=True)),
-            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
         ],
-        targets=[DEM_DIR / "fetch_manifest.json"],
+        targets=[RAW_DEM_DIR / "fetch_manifest.json"],
     )

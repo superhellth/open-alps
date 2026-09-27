@@ -39,12 +39,12 @@ from dag.elevation import (  # noqa: E402,F401
 )
 from dag.graph_building import (  # noqa: E402,F401
     task_build_access_edges, task_build_base_graph, task_build_hub_edges,
-    task_gather_route_subgraphs, task_match_tour_edges, task_snap_hubs,
+    task_gather_route_subgraphs, task_snap_hubs,
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
     task_build_hut_edge_tiles, task_build_start_edge_ids, task_build_start_edge_tiles,
-    task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_build_trail_tiles,
     task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
@@ -53,10 +53,13 @@ from dag.preprocessing import (  # noqa: E402,F401
 )
 from dag.quality import (  # noqa: E402,F401
     task_check_elevation, task_check_graph_building, task_check_postprocessing,
-    task_check_preprocessing, task_check_tour_matching, task_quality_summary,
+    task_check_preprocessing, task_quality_summary,
 )
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
-from lib.pipeline import DATA_DIR, OSM_DIR, PUBLIC_DATA_DIR  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    DATA_DIR, HUT_EDGES_DIR, PUBLIC_DATA_DIR, RAW_DIR, SNAPPING_DIR, START_EDGES_DIR,
+    TRAILS_DIR,
+)
 from lib.timing import phase  # noqa: E402
 
 DOIT_CONFIG = {
@@ -88,12 +91,10 @@ DOIT_CONFIG = {
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
         "select_approach_pairs", "build_access_edges",
-        "match_tour_edges", "check_tour_matching",
         "build_profiles",
         "check_graph_building",
         "check_elevation",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
-        "build_tour_edge_tiles",
         "build_approach_table", "build_edge_payload", "build_edge_ids", "build_start_edge_ids",
         "copy_public_data",
         "check_postprocessing",
@@ -101,40 +102,34 @@ DOIT_CONFIG = {
     ],
 }
 
+# (source under data/, file name under huts/public/data/) - the public names are the app's
+# contract (docs/tour-suggestion-payload.md) and do not follow data/build/'s naming convention.
 PUBLIC_FILES = [
-    "huts.geojson",
-    "hut-edges.pmtiles",
-    "hut-edge-stats.json",
-    "hut-edge-geometry.bin",
-    "hut-edge-geometry.json",
-    "hut-edge-elevation.bin",
-    "hut-edge-elevation.json",
-    "start-edges.pmtiles",
-    "start-edge-geometry.bin",
-    "start-edge-geometry.json",
-    "start-edge-elevation.bin",
-    "start-edge-elevation.json",
-    "trails.pmtiles",
-    "stations.geojson",
-    "parking.geojson",
-    "unsnapped_huts.json",
-    "approaches.bin",
-    "approaches.json",
-    "hut-edge-payload.bin",
-    "hut-edge-payload.json",
-    "hut-edge-ids.bin",
-    "hut-edge-ids.json",
-    "start-edge-ids.bin",
-    "start-edge-ids.json",
-    "partner_betriebe.geojson",
-    "tours.json",
-    "tour-edges.pmtiles",
-    "tour-edge-stats.json",
-    "tour-edge-geometry.bin",
-    "tour-edge-geometry.json",
-    "tour-edge-elevation.bin",
-    "tour-edge-elevation.json",
-    "tour-match-gaps.json",
+    (RAW_DIR / "huts.geojson", "huts.geojson"),
+    (HUT_EDGES_DIR / "edges.pmtiles", "hut-edges.pmtiles"),
+    (HUT_EDGES_DIR / "stats.json", "hut-edge-stats.json"),
+    (HUT_EDGES_DIR / "geometry.bin", "hut-edge-geometry.bin"),
+    (HUT_EDGES_DIR / "geometry.json", "hut-edge-geometry.json"),
+    (HUT_EDGES_DIR / "elevation.bin", "hut-edge-elevation.bin"),
+    (HUT_EDGES_DIR / "elevation.json", "hut-edge-elevation.json"),
+    (START_EDGES_DIR / "edges.pmtiles", "start-edges.pmtiles"),
+    (START_EDGES_DIR / "geometry.bin", "start-edge-geometry.bin"),
+    (START_EDGES_DIR / "geometry.json", "start-edge-geometry.json"),
+    (START_EDGES_DIR / "elevation.bin", "start-edge-elevation.bin"),
+    (START_EDGES_DIR / "elevation.json", "start-edge-elevation.json"),
+    (TRAILS_DIR / "trails.pmtiles", "trails.pmtiles"),
+    (RAW_DIR / "stations.geojson", "stations.geojson"),
+    (RAW_DIR / "parking.geojson", "parking.geojson"),
+    (SNAPPING_DIR / "unsnapped-huts.json", "unsnapped_huts.json"),
+    (START_EDGES_DIR / "approaches.bin", "approaches.bin"),
+    (START_EDGES_DIR / "approaches.json", "approaches.json"),
+    (HUT_EDGES_DIR / "payload.bin", "hut-edge-payload.bin"),
+    (HUT_EDGES_DIR / "payload.json", "hut-edge-payload.json"),
+    (HUT_EDGES_DIR / "ids.bin", "hut-edge-ids.bin"),
+    (HUT_EDGES_DIR / "ids.json", "hut-edge-ids.json"),
+    (START_EDGES_DIR / "ids.bin", "start-edge-ids.bin"),
+    (START_EDGES_DIR / "ids.json", "start-edge-ids.json"),
+    (RAW_DIR / "partner_betriebe.geojson", "partner_betriebe.geojson"),
 ]
 
 
@@ -148,19 +143,18 @@ def task_copy_public_data():
 
         with phase("dodo.py", "copy_public_data"):
             PUBLIC_DATA_DIR.mkdir(parents=True, exist_ok=True)
-            for name in PUBLIC_FILES:
-                src = OSM_DIR / name
+            for src, name in PUBLIC_FILES:
                 if not src.exists():
                     print(f"  skip {name} (not built yet)")
                     continue
                 shutil.copy2(src, PUBLIC_DATA_DIR / name)
                 print(f"  {src} -> {PUBLIC_DATA_DIR / name}")
 
-    deps = [rel(OSM_DIR / name) for name in PUBLIC_FILES if (OSM_DIR / name).exists()] or [
-        rel(OSM_DIR / name) for name in PUBLIC_FILES
+    deps = [rel(src) for src, _ in PUBLIC_FILES if src.exists()] or [
+        rel(src) for src, _ in PUBLIC_FILES
     ]
     return {
         "actions": [copy_all],
         "file_dep": deps,
-        "targets": [rel(PUBLIC_DATA_DIR / name) for name in PUBLIC_FILES],
+        "targets": [rel(PUBLIC_DATA_DIR / name) for _, name in PUBLIC_FILES],
     }

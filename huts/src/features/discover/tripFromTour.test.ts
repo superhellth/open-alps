@@ -1,0 +1,35 @@
+import { describe, it, expect } from 'vitest'
+import { tripFromTour } from './tripFromTour.js'
+import type { PlannerTour } from '@/tourSearch/plannerTour.js'
+
+const ctx = {
+  hutIds: ['{A}', '{B}', '{C}'],
+  startById: new Map([[100, { name: 'Bahnhof X', sourceType: 1, lat: 0, lng: 0 }]]),
+  hutNameById: new Map([[0, 'Hütte A'], [2, 'Hütte C']]),
+  form: { sacCeiling: 3 as number | 'any', allowUngraded: true },
+  draft: { startDate: '2026-07-10', endDate: '2026-07-12', partySize: 2 },
+}
+const chain: PlannerTour = {
+  huts: [0, 2], startId: 100, exitStartId: 100, totalDurationH: 10, totalAscentM: 0, totalDescentM: 0, totalDistanceM: 0, legs: [],
+}
+
+describe('tripFromTour', () => {
+  it('stores GUIDs and start ids, copies date, party and the difficulty variant from the search', () => {
+    const t = tripFromTour(chain, ctx)!
+    expect(t.huts).toEqual(['{A}', '{C}'])
+    expect(t.start).toEqual({ startId: 100, sourceType: 1 })
+    expect(t.exit).toEqual({ startId: 100, sourceType: 1 })
+    expect(t.startDate).toBe('2026-07-10')
+    expect(t.partySize).toBe(2)
+    expect(t.variant).toEqual({ sacCeiling: 3, allowUngraded: true })
+    expect(t.name).toBe('Hütte A – Hütte C')
+  })
+  it('an unset difficulty ceiling is stored as null; an empty date as null', () => {
+    const t = tripFromTour(chain, { ...ctx, form: { sacCeiling: 'any', allowUngraded: false }, draft: { startDate: '', endDate: '', partySize: 1 } })!
+    expect(t.variant).toEqual({ sacCeiling: null, allowUngraded: false })
+    expect(t.startDate).toBeNull()
+  })
+  it('is null when a start point is unknown', () => {
+    expect(tripFromTour({ ...chain, startId: 5 }, ctx)).toBeNull()
+  })
+})

@@ -44,7 +44,7 @@ from pathlib import Path
 import orjson
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import TRAILS_DIR, load_config  # noqa: E402
 from lib.tippecanoe import build_pmtiles  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
@@ -94,9 +94,9 @@ if __name__ == "__main__":
     tiles_config = config.get("trailTiles", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+    parser.add_argument("--trails", default=str(TRAILS_DIR / "trails.osm.pbf"),
                         help="merged trails.osm.pbf to render as the raw-trail vector-tile layer")
-    parser.add_argument("--out", default=str(OSM_DIR / "trails.pmtiles"),
+    parser.add_argument("--out", default=str(TRAILS_DIR / "trails.pmtiles"),
                         help="path to write the output PMTiles archive")
     parser.add_argument("--min-zoom", type=int, default=tiles_config.get("minZoom", 6),
                         help="lowest zoom level tippecanoe builds tiles for (see pipeline.config.json's trailTiles.minZoom)")
@@ -105,8 +105,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     trails_pbf = Path(args.trails)
-    filtered = OSM_DIR / "trails.geojsons"  # tippecanoe recognizes this extension as a JSON sequence
-    mbtiles = OSM_DIR / "trails.mbtiles"
+    filtered = TRAILS_DIR / "trails.geojsons"  # tippecanoe recognizes this extension as a JSON sequence
+    mbtiles = TRAILS_DIR / "trails.mbtiles"
     out_path = Path(args.out)
 
     # Splits the three costs: the osmium export + per-feature tag rewrite (ours, Python), tippecanoe

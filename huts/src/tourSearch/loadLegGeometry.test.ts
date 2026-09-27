@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { loadLegGeometry, _resetLegGeometryCachesForTests } from './loadLegGeometry.js'
+import { legLayer, loadLegGeometry, _resetLegGeometryCachesForTests } from './loadLegGeometry.js'
 
 // [lon, lat] pairs per synthetic edge, matching the pipeline's on-disk point order.
 const EDGE0: [number, number][] = [[11.0, 47.0], [11.25, 47.25]]
@@ -100,20 +100,50 @@ describe('loadLegGeometry', () => {
     expect(binFetchCount).toBe(1)
   })
 
-  it('supports the tour_edges layer via tour-edge-geometry.bin/.json', async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === '/data/tour-edge-geometry.json') {
+  it('retries a leg whose fetch failed instead of caching the failure', async () => {
+    let binFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      binFetchCount++
+      if (binFetchCount === 1) return Promise.reject(new TypeError('Failed to fetch'))
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
+
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('Failed to fetch')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
+
+  it('retries the layer manifest after a failed manifest fetch', async () => {
+    let manifestFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) {
+        manifestFetchCount++
+        if (manifestFetchCount === 1) return Promise.reject(new TypeError('Failed to fetch'))
         return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
       }
-      if (url === '/data/tour-edge-geometry.bin') {
-        return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
-      }
-      throw new Error(`unexpected fetch ${url}`)
-    })
-    vi.stubGlobal('fetch', fetchMock)
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
 
-    const points = await loadLegGeometry('tour_edges', 0, false)
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('Failed to fetch')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
 
-    expect(points).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  it('rejects an error status instead of decoding its body as the whole file, then retries', async () => {
+    let binFetchCount = 0
+    vi.stubGlobal('fetch', vi.fn((url: string) => {
+      if (url.endsWith('.json')) return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
+      binFetchCount++
+      if (binFetchCount === 1) return Promise.resolve({ status: 503, arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)) } as Response)
+      return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 16)) } as Response)
+    }))
+
+    await expect(loadLegGeometry('hut_edges', 0, false)).rejects.toThrow('503')
+    expect(await loadLegGeometry('hut_edges', 0, false)).toEqual([[47.0, 11.0], [47.25, 11.25]])
+  })
+})
+
+describe('legLayer', () => {
+  it('uses start_edges for approach and exit, hut_edges between', () => {
+    expect([0, 1, 2].map((i) => legLayer(i, 3))).toEqual(['start_edges', 'hut_edges', 'start_edges'])
   })
 })

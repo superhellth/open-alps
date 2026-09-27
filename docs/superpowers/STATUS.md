@@ -21,21 +21,32 @@ new row when a new spec is written.
 | 2026-08-28 | [Hut classification (AV / sonstige / Selbstversorger / Partnerbetrieb)](specs/2026-08-28-hut-classification-design.md) | done |
 | 2026-08-29 | [Avoid Overlapping Tracks](specs/2026-08-29-avoid-overlapping-tracks-design.md) | done |
 | 2026-08-29 | [Hut-type frontend consumption](specs/2026-08-29-hut-type-frontend-design.md) | done |
-| 2026-08-29 | [Official ÖAV/DAV Tours Integration](specs/2026-08-29-official-tours-integration-design.md) | done |
-| 2026-08-30 | [Tour Folder Ingestion](specs/2026-08-30-tour-folder-ingestion-design.md) | done (matching superseded by 2026-09-14-gpx-hut-snap) |
+| 2026-08-29 | [Official ÖAV/DAV Tours Integration](specs/2026-08-29-official-tours-integration-design.md) | removed 2026-09-27 |
+| 2026-08-30 | [Tour Folder Ingestion](specs/2026-08-30-tour-folder-ingestion-design.md) | removed 2026-09-27 (matching superseded by 2026-09-14-gpx-hut-snap) |
 | 2026-09-01 | [Corridor HMM Map Matching](specs/2026-09-01-corridor-hmm-map-matching-design.md) | superseded by 2026-09-14-gpx-hut-snap |
 | 2026-09-01 | [doit DAG status CLI](specs/2026-09-01-doit-dag-status-cli-design.md) | done |
 | 2026-09-01 | [Hut-availability-based routing](specs/2026-09-01-hut-availability-routing-design.md) | done |
-| 2026-09-01 | [Official Tours — Frontend Integration](specs/2026-09-01-official-tours-frontend-design.md) | done |
+| 2026-09-01 | [Official Tours — Frontend Integration](specs/2026-09-01-official-tours-frontend-design.md) | removed 2026-09-27 |
 | 2026-09-02 | [Data Quality Monitoring Layer](specs/2026-09-02-data-quality-monitoring-design.md) | done |
 | 2026-09-02 | [Scaling `build_hub_edges` to a bus-stop-sized access-point set](specs/2026-09-02-hub-edge-scaling-design.md) | done |
-| 2026-09-03 | [`data/` directory restructure](specs/2026-09-03-data-directory-restructure-design.md) | **in progress** |
+| 2026-09-03 | [`data/` directory restructure](specs/2026-09-03-data-directory-restructure-design.md) | done |
 | 2026-09-03 | [Steep-terrain time model](specs/2026-09-03-steep-terrain-time-model-design.md) | done |
 | 2026-09-03 | [Approach table: duration/source-type/variant matrix](specs/2026-09-03-approach-table-duration-matrix-design.md) | done |
 | 2026-09-03 | [Byte-range-fetchable elevation profiles for hut/start/tour edges](specs/2026-09-03-elevation-profile-geometry-split-design.md) | done |
 | 2026-09-04 | [Extend overlap avoidance to approach/exit legs](specs/2026-09-04-approach-exit-overlap-avoidance-design.md) | done |
-| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | **in progress** |
-| 2026-09-04 | [Stable hut/leg references for persistence](specs/2026-09-04-stable-tour-ids-design.md) | **in progress** |
-| 2026-09-14 | [GPX-only tour matching](specs/2026-09-14-gpx-hut-snap-design.md) | done |
-| 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | done |
-| 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | done |
+| 2026-09-04 | [Trip Planner Reenvision — Frontend Design](specs/2026-09-04-trip-planner-reenvision-design.md) | done |
+| 2026-09-04 | [Stable hut/leg references for persistence](specs/2026-09-04-stable-tour-ids-design.md) | superseded by 2026-09-04-trip-planner-reenvision (trips store hut GUIDs and re-derive legs) |
+| 2026-09-14 | [GPX-only tour matching](specs/2026-09-14-gpx-hut-snap-design.md) | removed 2026-09-27 |
+| 2026-09-18 | [GPX editor](specs/2026-09-18-gpx-editor-design.md) | removed 2026-09-27 |
+| 2026-09-18 | [Merging hut-trip-planner into open-alps: GPX-only official tours](specs/2026-09-18-hut-trip-planner-merge-design.md) | removed 2026-09-27 |
+| 2026-09-19 | [Derive every spatial extent from the hub range](specs/2026-09-19-derive-extents-from-hub-range-design.md) | done |
+| 2026-09-21 | [Planner UI iteration](specs/2026-09-21-planner-ui-iteration-design.md) | done |
+| 2026-09-22 | [Sidebar navigation: drop the app bar, fold Meine Touren into the planner](specs/2026-09-22-sidebar-navigation-design.md) | done |
+| 2026-09-23 | [Tour-hut booking study](specs/2026-09-23-tour-hut-booking-study-design.md) | done |
+| 2026-09-23 | [Tour bottleneck-hut study](specs/2026-09-23-tour-bottleneck-design.md) | done |
+| 2026-09-25 | [Frontend refactor: layered structure, feature folders, one styling system](specs/2026-09-25-frontend-refactor-design.md) | done |
+| 2026-09-25 | [Discover map: signpost markers, real symbols, emphasis tiers](specs/2026-09-25-discover-map-signposts-design.md) | done (stacks/spread superseded by 2026-09-26 signpost placement) |
+| 2026-09-26 | [Discover map: signposts stand on their tour](specs/2026-09-26-signpost-route-anchors-design.md) | done (§4 stacks superseded by 2026-09-26 signpost placement) |
+| 2026-09-26 | [Discover map: signpost placement instead of stacks](specs/2026-09-26-signpost-placement-design.md) | done |
+| 2026-09-26 | [Design tokens: spacing, type scale, colors](specs/2026-09-26-design-tokens-design.md) | done |
+| 2026-09-26 | [Tour detail view redesign](specs/2026-09-26-tour-detail-redesign-design.md) | done |

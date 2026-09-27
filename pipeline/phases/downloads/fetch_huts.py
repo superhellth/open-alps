@@ -35,12 +35,10 @@ import sys
 import urllib.request
 from pathlib import Path
 
-from shapely.geometry import Point
-from shapely.prepared import prep
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
-from lib.poly import region_boundary  # noqa: E402
+from lib.pipeline import RAW_DIR, load_config  # noqa: E402
+from lib.poly import filter_to_boundary, load_region_boundary  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "fetch_huts.py"
@@ -71,7 +69,7 @@ def classify_hut(kategorie_nr, verein_nr):
 def split_features(features):
     """Splits ArcGIS features (each {"attributes": {...}, "geometry": {"x", "y"}}) into
     (hut_features, partner_features) - plain GeoJSON Feature dicts, in the input order within
-    each list. Hut features carry hutType/serviced/elevation/ohrsHutId/tenantCode properties;
+    each list. Huts without a GUID are dropped. Hut features carry hutType/serviced/elevation/ohrsHutId/tenantCode properties;
     ohrsHutId is null for direct-booking-only huts (docs/alpenverein-api.md §1). Partner features
     keep the same minimal {id, name} shape stations.geojson/parking.geojson already use, with "id"
     set to the ArcGIS layer's OBJECTID (an int) - not the "id" attribute, which is a GUID string
@@ -88,6 +86,8 @@ def split_features(features):
                 "properties": {"id": a["OBJECTID"], "name": a["name"]},
                 "geometry": geometry,
             })
+        elif not a.get("id"):
+            continue  # no GUID -> no stable identity for trips to reference
         else:
             huts.append({
                 "type": "Feature",
@@ -106,23 +106,15 @@ def _write_feature_collection(path, features):
         json.dump({"type": "FeatureCollection", "features": features}, fh)
 
 
-def filter_to_boundary(features, prepared_boundary):
-    """Keeps only ArcGIS features with a geometry falling inside prepared_boundary (a
-    shapely.prepared.prep()-wrapped (Multi)Polygon) - drops records with no geometry at all, and
-    records outside the real AT+Bavaria coverage area (see module docstring)."""
-    return [
-        f for f in features
-        if f.get("geometry")
-        and prepared_boundary.contains(Point(f["geometry"]["x"], f["geometry"]["y"]))
-    ]
+def _arcgis_xy(feature):
+    geometry = feature.get("geometry")
+    return (geometry["x"], geometry["y"]) if geometry else None
 
 
 if __name__ == "__main__":
     config = load_config()
-    raw_dir = OSM_DIR / "raw"
-    poly_paths = [raw_dir / f"{r['name']}.poly" for r in config["regions"]]
-    huts_out_path = OSM_DIR / "huts.geojson"
-    partner_out_path = OSM_DIR / "partner_betriebe.geojson"
+    huts_out_path = RAW_DIR / "huts.geojson"
+    partner_out_path = RAW_DIR / "partner_betriebe.geojson"
 
     url = (
         "https://services1.arcgis.com/PHS4LHADrqt5glC9/arcgis/rest/services/"
@@ -135,13 +127,13 @@ if __name__ == "__main__":
         with urllib.request.urlopen(url) as res:
             data = json.load(res)
 
-    boundary = prep(region_boundary(poly_paths))
-    features = filter_to_boundary(data["features"], boundary)
+    features = filter_to_boundary(data["features"], load_region_boundary(config), _arcgis_xy)
     print(f"records inside AT+Bavaria boundary: {len(features)}")
 
     hut_features, partner_features = split_features(features)
     print(f"huts: {len(hut_features)}, partner betriebe: {len(partner_features)}")
 
+    RAW_DIR.mkdir(parents=True, exist_ok=True)
     _write_feature_collection(huts_out_path, hut_features)
     _write_feature_collection(partner_out_path, partner_features)
     print(f"written {huts_out_path}")

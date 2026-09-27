@@ -26,7 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    BASE_GRAPH_DIR, RAW_DIR, ROUTE_SUBGRAPHS_DIR, START_POINTS_DIR, load_config,
+)  # noqa: E402
 from lib.progress import ProgressTracker  # noqa: E402
 from lib.subgraph import gather_padded_subgraph, save_local_subgraph  # noqa: E402
 from lib.timing import phase  # noqa: E402
@@ -41,10 +43,13 @@ def cell_dir_for(out_dir: Path, cell_id: int) -> Path:
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "route_subgraphs"),
+    parser.add_argument("--out-dir", default=str(ROUTE_SUBGRAPHS_DIR),
                         help="directory to write the persisted per-cell padded subgraph gathers into")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"), help="hut list (fetch_huts.py's output)")
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"),
+                         help="start-point array (filter_start_points.py's output)")
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
                         help="longest hut-to-hut trail distance kept as an edge, used to size each cell's padded buffer (see pipeline.config.json's graph.maxEdgeKm)")
     args = parser.parse_args()
@@ -52,7 +57,7 @@ if __name__ == "__main__":
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    hub_cells = set(bucket_by_cell(load_all_hubs(OSM_DIR), grid))
+    hub_cells = set(bucket_by_cell(load_all_hubs(Path(args.huts), Path(args.start_points)), grid))
 
     out_dir = Path(args.out_dir)
     total = len(hub_cells)

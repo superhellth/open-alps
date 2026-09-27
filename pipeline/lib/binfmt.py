@@ -18,7 +18,7 @@ EDGE_DTYPE = np.dtype([
     ("u", "i8"), ("v", "i8"), ("dist", "f8"), ("road_m", "f8"),
     ("ungraded_m", "f8"), ("inferred_m", "f8"),
     ("time_s", "f8"), ("ascent_m", "f4"), ("descent_m", "f4"),
-    ("sac_rank", "i1"), ("via_ferrata", "bool"), ("constrained_ok", "bool"),
+    ("sac_rank", "i1"), ("via_ferrata", "bool"), ("constrained_ok", "bool"), ("downgraded", "bool"),
     ("interior_offset", "i8"), ("interior_count", "i4"), ("edge_id", "i8"),
 ])
 COORD_DTYPE = np.dtype([("lon", "f8"), ("lat", "f8")])
@@ -36,7 +36,7 @@ RECORD_DTYPE = np.dtype([
     ("profile_offset", "i8"), ("profile_count", "i4"),
     # Trail-segment identity for the "avoid overlapping tracks" check (docs/superpowers/specs/
     # 2026-08-29-avoid-overlapping-tracks-design.md). edge_id_offset/count index a per-record
-    # ascending-sorted slice of hut_edges/edge_ids.npy (the FULL base-edge-id set, for the
+    # ascending-sorted slice of hut-edges/edge-ids.npy (the FULL base-edge-id set, for the
     # non-adjacent-leg overlap check). prefix_ids/suffix_ids are the first/last K_TRAVERSAL ids in
     # TRAVERSAL order (prefix: outward from from_id: suffix: outward from to_id, i.e. the last-K
     # run reversed) - needed because the shared-hub exemption (spec §4) has to walk inward from a
@@ -61,7 +61,7 @@ PROFILE_DTYPE = np.dtype("f4")
 # Persisted hub->base-graph snap (snap_hubs.py's output, consumed by build_hub_edges.py). Keyed
 # by global ids that stay valid across ANY subgraph gather - node/edge local indices (as returned
 # by snap_hub_to_subgraph) are only meaningful within the one LocalSubgraph they were computed
-# against, but global_node_id (a row index into base_graph/nodes.npy, same as
+# against, but global_node_id (a row index into base-graph/nodes.npy, same as
 # LocalSubgraph.global_node_ids) and global_edge_id (EDGE_DTYPE's own "edge_id" field) are stable
 # regardless of which cell/buffer gathered them - see lib/hub_snap.py's reconstruct_local_snaps.
 SNAP_KIND_NODE = 0
@@ -80,16 +80,6 @@ HUB_SNAP_DTYPE = np.dtype([
     ("gap_m", "f8"), ("gap_dz_m", "f8"),
 ])
 
-# tour_edges/records.npy - one row per matched official-tour leg. Geometry and profile are slices
-# (offset/count) of tour_edges/geometry.npy (COORD_DTYPE) and tour_edges/profiles.npy (PROFILE_DTYPE).
-TOUR_LEG_DTYPE = np.dtype([
-    ("from_id", "i8"), ("to_id", "i8"), ("from_type", "u1"), ("to_type", "u1"),
-    ("distance_m", "f4"), ("ascent_m", "f4"), ("descent_m", "f4"), ("duration_s", "f4"),
-    ("max_ele_m", "f4"),
-    ("geom_offset", "i8"), ("geom_count", "i4"),
-    ("profile_offset", "i8"), ("profile_count", "i4"),
-])
-
 TYPE_HUT = 0
 TYPE_STATION = 1
 TYPE_PARKING = 2
@@ -97,7 +87,7 @@ TYPE_PARKING = 2
 # 2026-08-28-hut-classification-design.md) - private guesthouses/pensions, not Alpine Club huts.
 # Routed one-directionally to huts exactly like TYPE_STATION/TYPE_PARKING (fetch_huts.py splits
 # them out of huts.geojson into partner_betriebe.geojson; filter_start_points.py loads that file
-# as a third access-point layer). start_points.npy's "osm_id" field holds the ArcGIS layer's
+# as a third access-point layer). start-points.npy's "osm_id" field holds the ArcGIS layer's
 # OBJECTID for this type, not a real OSM id - see filter_start_points.py's _load_arcgis_layer docstring.
 TYPE_PARTNER = 3
 
@@ -120,11 +110,10 @@ UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profi
 
 # Split into three independent tracking params (one per dtype each cares about) so bumping one
 # doesn't force-rerun tasks that don't touch that dtype - see pipeline/dag/graph_building.py.
-EDGE_SCHEMA_VERSION = 2
+EDGE_SCHEMA_VERSION = 3
 SNAP_SCHEMA_VERSION = 2
 RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
 ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)
-TOUR_LEG_SCHEMA_VERSION = 1  # tracking param of match_tour_edges only; bump on TOUR_LEG_DTYPE changes
 
 
 def save_array(path: Path, array: np.ndarray) -> None:

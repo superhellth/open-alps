@@ -15,7 +15,9 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    BASE_GRAPH_DIR, BUILD_DIR, EDGE_LAYER_DIRNAMES, QUALITY_DIR, load_config,
+)  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -44,7 +46,7 @@ def check_elevation_range(node_ele: np.ndarray, interior_ele: np.ndarray, plausi
 
 
 def check_unresolved_sentinels(edges: np.ndarray, max_flagged: int) -> dict:
-    """§4.2.2: base_graph/edges.npy rows still holding binfmt.UNSET after compute_edge_profiles."""
+    """§4.2.2: base-graph/edges.npy rows still holding binfmt.UNSET after compute_edge_profiles."""
     bad = (
         (edges["time_s"] == binfmt.UNSET) | (edges["ascent_m"] == binfmt.UNSET)
         | (edges["descent_m"] == binfmt.UNSET)
@@ -115,8 +117,8 @@ def main(argv=None):
     elevation_cfg = q.get("elevation", {})
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--edges-root", default=str(OSM_DIR))
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR))
+    parser.add_argument("--build-dir", default=str(BUILD_DIR))
     parser.add_argument("--out", default=str(QUALITY_DIR / "elevation.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     parser.add_argument("--plausible-range-min-m", type=float,
@@ -127,14 +129,14 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     base_graph_dir = Path(args.base_graph_dir)
-    edges_root = Path(args.edges_root)
+    build_dir = Path(args.build_dir)
     profile_points = config["dem"]["profilePoints"]
 
     with phase(SCRIPT_NAME, "check_elevation"):
         checks = []
 
-        node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy", mmap=False)
-        interior_ele = binfmt.load_array(base_graph_dir / "interior_ele.npy", mmap=False)
+        node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy", mmap=False)
+        interior_ele = binfmt.load_array(base_graph_dir / "interior-ele.npy", mmap=False)
         c = check_elevation_range(node_ele, interior_ele,
                                    (args.plausible_range_min_m, args.plausible_range_max_m),
                                    args.max_flagged_rows)
@@ -151,7 +153,7 @@ def main(argv=None):
         checks.append(c)
 
         for layer_name in EDGE_LAYERS:
-            edge_dir = edges_root / layer_name
+            edge_dir = build_dir / EDGE_LAYER_DIRNAMES[layer_name]
             records_path, profiles_path = edge_dir / "records.npy", edge_dir / "profiles.npy"
             if not records_path.exists() or not profiles_path.exists():
                 continue

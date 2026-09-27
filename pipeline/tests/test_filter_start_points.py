@@ -78,7 +78,7 @@ def test_load_layer_reads_top_level_feature_id(tmp_path):
     # osmium export --add-unique-id=type_id (fetch_stations_parking.py) puts the id on the
     # Feature itself as "<type-char><digits>" (e.g. "n8091317"), not inside "properties" -
     # regression test for the bug where _load_layer looked in properties and silently dropped
-    # every feature, leaving start_points.npy empty.
+    # every feature, leaving start-points.npy empty.
     fc = {
         "type": "FeatureCollection",
         "features": [

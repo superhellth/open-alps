@@ -20,9 +20,9 @@ graph_building.build_hub_edges.snap_hub_to_subgraph, lib.cell_igraph.build_igrap
 path_for, lib.variants.edge_mask, lib.speed.edge_time_s / din_duration_h. Never reimplements
 routing itself.
 
-Requires data/osm/base_graph/ WITH add_base_elevation.py already run (time_s/ascent_m/descent_m/
+Requires data/build/base-graph/ WITH add_base_elevation.py already run (time_s/ascent_m/descent_m/
 node_ele.npy/interior_ele.npy populated - a probe run before that measures a graph that no longer
-represents what will be built) and data/osm/huts.geojson.
+represents what will be built) and data/raw/huts.geojson.
 
 Runtime: minutes at the default 200-pair sample (--pairs), linear in it.
 
@@ -46,7 +46,7 @@ from lib import binfmt, speed, variants  # noqa: E402
 from lib.cell_igraph import build_igraph_with_snaps, path_for  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.geo import hut_points  # noqa: E402
-from lib.pipeline import DATA_DIR, OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, DATA_DIR, RAW_DIR, load_config  # noqa: E402
 from lib.subgraph import gather_padded_subgraph  # noqa: E402
 from graph_building.build_hub_edges import snap_hub_to_subgraph  # noqa: E402
 
@@ -167,8 +167,8 @@ def _cell_elevation_spread(base_graph_dir: Path) -> dict:
     """Per-cell (max - min) node elevation, used only to stratify pair sampling toward varied
     terrain - not a routing input. nodes.npy is grouped by cell (cell_index.npy gives each cell's
     contiguous slice), and node_ele.npy (add_base_elevation.py) is aligned 1:1 with nodes.npy."""
-    cell_index = binfmt.load_array(base_graph_dir / "cell_index.npy")
-    node_ele = binfmt.load_array(base_graph_dir / "node_ele.npy")
+    cell_index = binfmt.load_array(base_graph_dir / "cell-index.npy")
+    node_ele = binfmt.load_array(base_graph_dir / "node-ele.npy")
     spreads = {}
     for cid in range(len(cell_index)):
         start, count = int(cell_index["start_offset"][cid]), int(cell_index["count"][cid])
@@ -230,13 +230,13 @@ def _haversine_km(lon1, lat1, lon2, lat2) -> float:
 
 def run_probe(n_pairs: int, seed: int, direction_sample: int) -> dict:
     config = load_config()
-    base_graph_dir = OSM_DIR / "base_graph"
+    base_graph_dir = BASE_GRAPH_DIR
     manifest = binfmt.load_manifest(base_graph_dir / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
     max_edge_km = config["graph"]["maxEdgeKm"]
     max_snap_m = config["graph"]["maxSnapM"]
 
-    hut_coords = hut_points(OSM_DIR / "huts.geojson")
+    hut_coords = hut_points(RAW_DIR / "huts.geojson")
     huts = [{"id": i, "lon": lon, "lat": lat} for i, (lon, lat) in enumerate(hut_coords)]
     huts_by_cell = {}
     for h in huts:

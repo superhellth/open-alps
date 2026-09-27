@@ -44,15 +44,12 @@ def edge_mask(local_edges, variant):
     is_ungraded = sac_rank < 0
     if variant.require_graded:
         if variant.allow_ungraded:
-            # constrained_ok is unconditionally False for every ungraded-tier edge (it folds
-            # tier != ungraded together with via-ferrata/downgrade-tag exclusion into one flag),
-            # so it can't tell "genuinely ungraded, otherwise fine" apart from "graded but
-            # safety-excluded". Handled separately here: ungraded-tier edges are let through
-            # (except via ferrata, always forbidden); a GRADED edge still needs constrained_ok -
-            # a downgrade tag on a known grade is still honoured, only "we don't know the grade
-            # at all" is relaxed by this row.
+            # constrained_ok can't serve here: it is False for any chain with one ungraded
+            # segment, including a chain whose other segments are graded T1-T3. This row only
+            # relaxes "we don't know the grade", so it forbids via ferrata and downgrade tags
+            # (both OR-folded along the chain) and leaves the ceiling to the sac_rank check below.
             mask &= ~local_edges["via_ferrata"]
-            mask &= local_edges["constrained_ok"] | is_ungraded
+            mask &= ~local_edges["downgraded"]
         else:
             # constrained_ok already folds ungraded / via ferrata / downgrade tags, AND-ed along
             # every contracted chain (lib/contraction.py) - one bad segment poisons the edge.

@@ -10,6 +10,9 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import shapely
+from shapely.geometry import box
+
 BASE_URL = "https://copernicus-dem-30m.s3.amazonaws.com"
 
 
@@ -19,14 +22,27 @@ def tile_name(lat: int, lon: int) -> str:
     return f"Copernicus_DSM_COG_10_{ns}{abs(lat):02d}_00_{ew}{abs(lon):03d}_00_DEM"
 
 
+def tiles_for_area(area) -> list[tuple[int, int]]:
+    """Every whole-degree (lat, lon) tile whose box intersects area (a shapely (Multi)Polygon in
+    EPSG:4326), in ascending latitude-then-longitude order. Touching tiles count, so a node on the
+    area's boundary is covered."""
+    min_lng, min_lat, max_lng, max_lat = area.bounds
+    candidates = [
+        (lat, lon)
+        for lat in range(math.floor(min_lat), math.floor(max_lat) + 1)
+        for lon in range(math.floor(min_lng), math.floor(max_lng) + 1)
+    ]
+    shapely.prepare(area)
+    boxes = [box(lon, lat, lon + 1, lat + 1) for lat, lon in candidates]
+    hits = shapely.intersects(area, boxes)
+    return [t for t, hit in zip(candidates, hits) if hit]
+
+
 def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
-    bbox = provider_config["bbox"]
+    """provider_config["area"]: shapely (Multi)Polygon in EPSG:4326 the tiles must cover."""
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    lat_range = range(math.floor(bbox["minLat"]), math.floor(bbox["maxLat"]) + 1)
-    lon_range = range(math.floor(bbox["minLng"]), math.floor(bbox["maxLng"]) + 1)
-
-    names = [(lat, lon) for lat in lat_range for lon in lon_range]
+    names = tiles_for_area(provider_config["area"])
     tile_paths = []
     for i, (lat, lon) in enumerate(names):
         name = tile_name(lat, lon)

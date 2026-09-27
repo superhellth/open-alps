@@ -1,0 +1,41 @@
+import { describe, it, expect } from 'vitest'
+import { newTrip, parseTrip } from './trip.js'
+
+const input = {
+  name: 'Testtour', startDate: '2026-07-10', partySize: 2,
+  start: { startId: 100, sourceType: 1 as const }, huts: ['{A}', '{B}'],
+  exit: { startId: 100, sourceType: 1 as const },
+  variant: { sacCeiling: 3, allowUngraded: true },
+}
+
+describe('newTrip', () => {
+  it('fills id and timestamps', () => {
+    const t = newTrip(input, new Date('2026-06-01T10:00:00Z'), 'id-1')
+    expect(t.id).toBe('id-1')
+    expect(t.createdAt).toBe('2026-06-01T10:00:00.000Z')
+    expect(t.updatedAt).toBe(t.createdAt)
+  })
+})
+
+describe('parseTrip', () => {
+  const good = newTrip(input, new Date('2026-06-01T10:00:00Z'), 'id-1')
+  it('round-trips a valid trip through JSON', () => {
+    expect(parseTrip(JSON.parse(JSON.stringify(good)))).toEqual(good)
+  })
+  it('drops the per-night booking statuses older trips carry', () => {
+    expect(parseTrip({ ...good, nights: [{ status: 'confirmed' }, { status: 'open' }] })).toEqual(good)
+  })
+  it('rejects non-objects and missing fields', () => {
+    expect(parseTrip(null)).toBeNull()
+    expect(parseTrip({ ...good, huts: 'x' })).toBeNull()
+    expect(parseTrip({ ...good, start: { startId: 'x', sourceType: 1 } })).toBeNull()
+  })
+  it('rejects a party size outside 1-25 and a malformed date', () => {
+    expect(parseTrip({ ...good, partySize: 0 })).toBeNull()
+    expect(parseTrip({ ...good, partySize: 26 })).toBeNull()
+    expect(parseTrip({ ...good, startDate: '10.07.2026' })).toBeNull()
+  })
+  it('accepts a null start date', () => {
+    expect(parseTrip({ ...good, startDate: null })?.startDate).toBeNull()
+  })
+})

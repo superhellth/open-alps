@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 """B5/B6 of docs/superpowers/specs/2026-09-02-hub-edge-scaling-design.md: materializes full path
-geometry ONLY for the pairs select_approach_pairs.py selected, writing the final start_edges/. This
+geometry ONLY for the pairs select_approach_pairs.py selected, writing the final start-edges/. This
 is the second (and last) igraph pass over each cell's cached subgraph - build_hub_edges.py's own
-first pass already proved which pairs are within max_edge_km (access_distances.npy); this one pays
+first pass already proved which pairs are within max_edge_km (access-distances.npy); this one pays
 for get_shortest_paths only on the survivors.
 
 Routes with huts as sources, same direction as build_hub_edges.py (A1), then reorients each result
-into the access->hut storage convention every consumer of start_edges/ expects (A3: reverse
+into the access->hut storage convention every consumer of start-edges/ expects (A3: reverse
 path.coords, swap ascent_m/descent_m, THEN fold_endpoint_snaps with (access_snap, hut_snap) order -
 see route_selected_pairs_for_cell's docstring for why the order matters).
 
 Usage: python pipeline/phases/graph_building/build_access_edges.py [--max-edge-km 30] [--workers N]
-Requires data/osm/selected_access_pairs.npy (select_approach_pairs.py), data/osm/hub_snaps.npy +
-hub_snap_interior.npy (snap_hubs.py), data/osm/route_subgraphs/ (gather_route_subgraphs.py).
+Requires data/build/access-edges/selected-access-pairs.npy (select_approach_pairs.py),
+data/build/snapping/hub-snaps.npy + hub-snap-interior.npy (snap_hubs.py),
+data/build/route-subgraphs/ (gather_route_subgraphs.py).
 """
 
 import argparse
@@ -30,7 +31,10 @@ from lib.cell_igraph import accumulate_path, build_base_igraph_arrays, build_igr
 from lib.edge_output import fold_endpoint_snaps, write_edge_records  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.hubs import bucket_by_cell, load_all_hubs  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import (  # noqa: E402
+    ACCESS_EDGES_DIR, BASE_GRAPH_DIR, RAW_DIR, ROUTE_SUBGRAPHS_DIR, SNAPPING_DIR, START_EDGES_DIR,
+    START_POINTS_DIR, load_config,
+)  # noqa: E402
 from lib.progress import ProgressTracker, run_pool  # noqa: E402
 from lib.subgraph import load_local_subgraph  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
@@ -47,10 +51,10 @@ def route_selected_pairs_for_cell(subgraph, hut_sources: list, selected_targets_
     dict, ...]} - EXACTLY the targets select_approach_pairs.py kept for that hut; a hut with an
     empty or missing list here is simply not routed.
 
-    max_edge_km: select_approach_pairs.py already filtered candidates on access_distances.npy's
+    max_edge_km: select_approach_pairs.py already filtered candidates on access-distances.npy's
     dist-weighted cutoff, but the path materialized here is TIME-shortest (weights="weight") and
     can exceed that cap once its own distance_m is computed (same C8 divergence build_hub_edges.py
-    guards against for hut_edges) - re-checked below on the final, snap-gap-inclusive distance_m.
+    guards against for hut-edges) - re-checked below on the final, snap-gap-inclusive distance_m.
 
     Returns (records, n_unreachable_skipped). records: one dict per materialized record,
     access->hut oriented (A3): the path is walked hut->access (matching build_hub_edges.py's own
@@ -178,11 +182,16 @@ def _run_cell(args):
 if __name__ == "__main__":
     config = load_config()
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph-dir", default=str(OSM_DIR / "base_graph"))
-    parser.add_argument("--route-subgraphs-dir", default=str(OSM_DIR / "route_subgraphs"))
-    parser.add_argument("--selected-pairs", default=str(OSM_DIR / "selected_access_pairs.npy"))
-    parser.add_argument("--out-dir", default=str(OSM_DIR),
-                         help="directory to write start_edges/ into")
+    parser.add_argument("--base-graph-dir", default=str(BASE_GRAPH_DIR))
+    parser.add_argument("--route-subgraphs-dir", default=str(ROUTE_SUBGRAPHS_DIR))
+    parser.add_argument("--selected-pairs", default=str(ACCESS_EDGES_DIR / "selected-access-pairs.npy"))
+    parser.add_argument("--snaps-dir", default=str(SNAPPING_DIR),
+                         help="directory holding snap_hubs.py's persisted hub-snap cache")
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"), help="hut list (fetch_huts.py's output)")
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"),
+                         help="start-point array (filter_start_points.py's output)")
+    parser.add_argument("--out-dir", default=str(START_EDGES_DIR),
+                         help="directory to write the start-edge set into")
     parser.add_argument("--max-edge-km", type=float, default=config["graph"]["maxEdgeKm"],
                          help="longest hut-to-access trail distance kept as an edge (see pipeline.config.json's graph.maxEdgeKm)")
     parser.add_argument("--workers", type=int, default=None)
@@ -191,16 +200,16 @@ if __name__ == "__main__":
     manifest = binfmt.load_manifest(Path(args.base_graph_dir) / "manifest.json")
     grid = Grid(manifest["bbox"], manifest["tile_size_km"])
 
-    all_hubs_flat = load_all_hubs(OSM_DIR)
+    all_hubs_flat = load_all_hubs(Path(args.huts), Path(args.start_points))
     hub_by_key = {(h["type"], h["id"]): h for h in all_hubs_flat}
     huts_by_cell = bucket_by_cell([h for h in all_hubs_flat if h["type"] == binfmt.TYPE_HUT], grid)
 
     selected = binfmt.load_array(Path(args.selected_pairs), mmap=False)
     print(f"selected pairs to materialize: {len(selected):,}", flush=True)
 
-    hub_snaps_arr = binfmt.load_array(Path(args.out_dir) / "hub_snaps.npy", mmap=False)
+    hub_snaps_arr = binfmt.load_array(Path(args.snaps_dir) / "hub-snaps.npy", mmap=False)
     hub_snap_interior_arr = binfmt.load_array(
-        Path(args.out_dir) / "hub_snap_interior.npy", mmap=False
+        Path(args.snaps_dir) / "hub-snap-interior.npy", mmap=False
     )
     persisted_snaps = hub_snap.load_persisted_snaps(hub_snaps_arr, hub_snap_interior_arr)
 
@@ -259,6 +268,5 @@ if __name__ == "__main__":
     print(f"materialized access edges: {len(access_records)} "
           f"({total_unreachable_skipped} unreachable pairs skipped)", flush=True)
 
-    out_dir = Path(args.out_dir)
-    write_edge_records(access_records, out_dir / "start_edges", write_edge_ids=True)
-    print(f"written {out_dir / 'start_edges'}")
+    write_edge_records(access_records, Path(args.out_dir), write_edge_ids=True)
+    print(f"written {args.out_dir}")

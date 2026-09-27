@@ -10,6 +10,7 @@ Usage: python pipeline/phases/graph_building/build_base_graph.py [--tile-size-km
 """
 
 import argparse
+import math
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from lib.contraction import contract_structural  # noqa: E402
 from lib.geo import haversine_m_vec_pairs as haversine_m_vec  # noqa: E402
 from lib.grid import Grid  # noqa: E402
 from lib.memtrace import rss_sampler  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR, TRAILS_DIR, load_config  # noqa: E402
 from lib.timing import StepTimer, phase  # noqa: E402
 
 SCRIPT_NAME = "build_base_graph.py"
@@ -43,6 +44,7 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_dist = []
         self.edges_road, self.edges_ungraded, self.edges_inferred = [], [], []
         self.edges_sac_rank, self.edges_via_ferrata, self.edges_constrained_ok = [], [], []
+        self.edges_downgraded = []
         self.progress_every = progress_every
         self.n_ways = 0
 
@@ -73,10 +75,9 @@ class WayGraphHandler(osmium.SimpleHandler):
         is_road = highway in self.road_tags
         grade = grading.classify_way(tags)
         is_via_ferrata = highway == "via_ferrata" or "via_ferrata_scale" in tags
+        downgraded = grading.excluded_from_constrained(tags)
         constrained_ok = (
-            grade.tier != grading.TIER_UNGRADED
-            and not is_via_ferrata
-            and not grading.excluded_from_constrained(tags)
+            grade.tier != grading.TIER_UNGRADED and not is_via_ferrata and not downgraded
         )
         n_edges = len(nodes) - 1
         zeros = [0.0] * n_edges
@@ -91,6 +92,7 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_sac_rank.extend([grade.sac_rank] * n_edges)
         self.edges_via_ferrata.extend([is_via_ferrata] * n_edges)
         self.edges_constrained_ok.extend([constrained_ok] * n_edges)
+        self.edges_downgraded.extend([downgraded] * n_edges)
 
         self.n_ways += 1
         if self.progress_every and self.n_ways % self.progress_every == 0:
@@ -110,7 +112,7 @@ def stream_osm(trails_path, config):
 
 
 def handler_to_arrays(handler, timer: StepTimer = None):
-    """The ten numpy arrays contract_structural takes, in order. Split out from contract() so
+    """The eleven numpy arrays contract_structural takes, in order. Split out from contract() so
     main() can drop the handler - and with it ~12 GB of now-dead raw Python lists (40M coord
     tuples, 41M-element int/float lists) - BEFORE contraction starts rather than after. See
     docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md."""
@@ -127,6 +129,7 @@ def handler_to_arrays(handler, timer: StepTimer = None):
             np.array(handler.edges_sac_rank, dtype=np.int8),
             np.array(handler.edges_via_ferrata, dtype=bool),
             np.array(handler.edges_constrained_ok, dtype=bool),
+            np.array(handler.edges_downgraded, dtype=bool),
         )
 
 
@@ -141,8 +144,21 @@ def contract(*raw_args, progress_every: int = 20_000):
     return contracted
 
 
-def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = None):
+def grid_extent(coords) -> dict:
+    """Bounding box of coords (an (n, 2) lon/lat array) snapped outward to whole degrees. The grid
+    origin therefore only moves when the data crosses a whole-degree line, which keeps cell ids
+    stable across rebuilds."""
+    return {
+        "minLng": float(math.floor(coords[:, 0].min())),
+        "maxLng": float(math.ceil(coords[:, 0].max())),
+        "minLat": float(math.floor(coords[:, 1].min())),
+        "maxLat": float(math.ceil(coords[:, 1].max())),
+    }
+
+
+def pack_and_write(contracted, tile_size_km, out_dir, timer: StepTimer = None):
     timer = timer if timer is not None else StepTimer()
+    bbox = grid_extent(contracted.coords)
     # --- assign cell ids, re-sort nodes by cell so cell_index.npy addresses a contiguous slice ---
     # Steps below never nest, so StepTimer.summary()'s percentages stay a real split of the run.
     with timer.step("pack_nodes"):
@@ -192,6 +208,7 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
         edges_arr["sac_rank"] = contracted.edges_sac_rank
         edges_arr["via_ferrata"] = contracted.edges_via_ferrata
         edges_arr["constrained_ok"] = contracted.edges_constrained_ok
+        edges_arr["downgraded"] = contracted.edges_downgraded
         edges_arr["interior_offset"] = interior_offsets
         edges_arr["interior_count"] = interior_counts
         edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id
@@ -210,11 +227,11 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
         # can't take edges.npy as a file_dep, since it rewrites that file in place). Dropped BEFORE
         # edges.npy is written, so a crash mid-write still leaves the stamp gone rather than
         # vouching for sentinel weights.
-        (out_dir / "edge_profiles.stamp").unlink(missing_ok=True)
+        (out_dir / "edge-profiles.stamp").unlink(missing_ok=True)
         binfmt.save_array(out_dir / "nodes.npy", nodes_arr)
-        binfmt.save_array(out_dir / "cell_index.npy", cell_index)
-        binfmt.save_array(out_dir / "node_edge_index.npy", node_edge_index)
-        binfmt.save_array(out_dir / "node_edge_ids.npy", node_edge_ids)
+        binfmt.save_array(out_dir / "cell-index.npy", cell_index)
+        binfmt.save_array(out_dir / "node-edge-index.npy", node_edge_index)
+        binfmt.save_array(out_dir / "node-edge-ids.npy", node_edge_ids)
         binfmt.save_array(out_dir / "edges.npy", edges_arr)
         binfmt.save_array(out_dir / "interior.npy", interior_arr)
     binfmt.save_manifest(out_dir / "manifest.json", {
@@ -230,9 +247,9 @@ def pack_and_write(contracted, bbox, tile_size_km, out_dir, timer: StepTimer = N
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--trails", default=str(OSM_DIR / "trails.osm.pbf"),
+    parser.add_argument("--trails", default=str(TRAILS_DIR / "trails.osm.pbf"),
                         help="merged trails.osm.pbf to stream and contract into the base graph")
-    parser.add_argument("--out-dir", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--out-dir", default=str(BASE_GRAPH_DIR),
                         help="directory to write the persisted base graph arrays into")
     parser.add_argument("--tile-size-km", type=float, default=config["graph"]["tileSizeKm"],
                         help="grid cell size (km) each node is assigned to, for later per-cell lookup by build_hub_edges.py (see pipeline.config.json's graph.tileSizeKm)")
@@ -251,8 +268,7 @@ def main(argv=None):
         with timer.step("contract"):
             contracted = contract(*raw_args)
         del raw_args
-        pack_and_write(contracted, config["bbox"], args.tile_size_km, args.out_dir,
-                       timer=timer)
+        pack_and_write(contracted, args.tile_size_km, args.out_dir, timer=timer)
         meta.update(timer.as_meta())
     print(f"step totals: {timer.summary()}", flush=True)
 

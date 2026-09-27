@@ -4,6 +4,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
+from shapely.geometry import MultiPolygon, box  # noqa: E402
+
 from downloads.dem_providers import bavaria_dgm  # noqa: E402
 
 
@@ -26,22 +28,25 @@ def test_tiles_for_utm_bounds_spans_grid():
     assert result == ["589_5256", "590_5256", "589_5257", "590_5257"]
 
 
-def test_tiles_for_bbox_transforms_and_covers_expected_grid():
-    # A small real bbox in Bavaria's alpine south (~10.50-10.55E, 47.55-47.58N). Expected UTM32N
-    # bounds hand-verified via rasterio.warp.transform_bounds:
-    # (612797.28, 5267376.77, 616623.69, 5270784.69) -> easting cells 612..616, northing
-    # cells 5267..5270 -> 5 x 4 = 20 tiles.
-    bbox = {"minLng": 10.50, "maxLng": 10.55, "minLat": 47.55, "maxLat": 47.58}
+def test_tiles_for_area_only_returns_tiles_touching_the_polygon():
+    # Square ~10.50-10.55E, 47.55-47.58N (alpine south): its UTM32N bounds span easting cells
+    # 612..616 x northing cells 5267..5270 (hand-verified via rasterio.warp.transform_bounds).
+    area = box(10.50, 47.55, 10.55, 47.58)
 
-    result = bavaria_dgm.tiles_for_bbox(bbox)
+    result = bavaria_dgm.tiles_for_area(area)
 
-    assert len(result) == 20
-    assert "612_5267" in result
-    assert "616_5270" in result
-    assert all(
-        tile_id.split("_")[0].isdigit() and tile_id.split("_")[1].isdigit()
-        for tile_id in result
-    )
+    assert "612_5267" in result and "616_5270" in result
+    assert len(result) <= 20
+    assert all(t.split("_")[0].isdigit() and t.split("_")[1].isdigit() for t in result)
+
+
+def test_tiles_for_area_skips_empty_space_between_pieces():
+    # Two small pieces ~100 km apart: a bounding rectangle would cover thousands of tiles.
+    area = MultiPolygon([box(10.50, 47.55, 10.51, 47.56), box(10.50, 48.55, 10.51, 48.56)])
+
+    result = bavaria_dgm.tiles_for_area(area)
+
+    assert 0 < len(result) < 100
 
 
 def test_tile_url_uses_bayernwolke_direct_tile_download():

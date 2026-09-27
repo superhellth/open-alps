@@ -29,8 +29,8 @@ split (lib/edge_split.py), which have a snap point as one endpoint - are counted
 separately as `unmatched_m` rather than silently folded into any tier. Read the match rate before
 reading anything else; a low rate invalidates the per-edge numbers.
 
-Requires data/osm/trails.osm.pbf (merge_trails.py) and data/osm/hut_edges/ (build_hub_edges.py);
---start-edges additionally requires data/osm/start_edges/.
+Requires data/build/trails/trails.osm.pbf (merge_trails.py) and data/build/hut-edges/ (build_hub_edges.py);
+--start-edges additionally requires data/build/start-edges/.
 
 Runtime: ~20-25 min, dominated by the single osmium pass over trails.osm.pbf (~16 min, the same
 stream build_base_graph.py pays). Peak RSS ~3-4 GB (the segment lookup table is ~440 MB of
@@ -56,9 +56,8 @@ import build_base_graph as bbg  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt, grading  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import DATA_DIR, HUT_EDGES_DIR, START_EDGES_DIR, TRAILS_DIR, load_config  # noqa: E402
 
-DATA_DIR = OSM_DIR.parent
 OUT_PATH = DATA_DIR / "analysis" / "grading_coverage.json"
 
 # --- The proposed tier table (spec C4). Ranks are SAC ranks, matching grading.SAC_SCALE_RANK. ---
@@ -371,7 +370,7 @@ def network_report(h):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start-edges", action="store_true",
-                    help="also attribute start_edges/ (109M geometry points, adds ~5 min)")
+                    help="also attribute start-edges/ (109M geometry points, adds ~5 min)")
     ap.add_argument("--no-attribution", action="store_true",
                     help="network-wide tier mass only; skips the segment lookup table")
     ap.add_argument("--leg-budget-km", type=float, default=12.0,
@@ -379,7 +378,7 @@ def main():
                          "12 km ~ 5 h leg proxy")
     args = ap.parse_args()
 
-    trails = OSM_DIR / "trails.osm.pbf"
+    trails = TRAILS_DIR / "trails.osm.pbf"
     if not trails.exists():
         raise SystemExit(f"missing {trails} - run merge_trails.py first")
 
@@ -404,15 +403,15 @@ def main():
         handler.key_a = handler.key_b = None  # free the array.array copies before the pass
         handler.seg_tier = handler.seg_rank = handler.seg_excluded = None
 
-        hut_recs = binfmt.load_array(OSM_DIR / "hut_edges" / "records.npy", mmap=False)
-        hut_geom = binfmt.load_array(OSM_DIR / "hut_edges" / "geometry.npy", mmap=True)
+        hut_recs = binfmt.load_array(HUT_EDGES_DIR / "records.npy", mmap=False)
+        hut_geom = binfmt.load_array(HUT_EDGES_DIR / "geometry.npy", mmap=True)
         hut_attr = attribute_edges(hut_recs, hut_geom, lookup, "hut_edges")
         result["hut_edges"] = summarize_attr(hut_attr, hut_recs)
         result["connectivity_gate"] = connectivity_gate(hut_recs, hut_attr, args.leg_budget_km)
 
         if args.start_edges:
-            st_recs = binfmt.load_array(OSM_DIR / "start_edges" / "records.npy", mmap=False)
-            st_geom = binfmt.load_array(OSM_DIR / "start_edges" / "geometry.npy", mmap=True)
+            st_recs = binfmt.load_array(START_EDGES_DIR / "records.npy", mmap=False)
+            st_geom = binfmt.load_array(START_EDGES_DIR / "geometry.npy", mmap=True)
             st_attr = attribute_edges(st_recs, st_geom, lookup, "start_edges")
             result["start_edges"] = summarize_attr(st_attr, st_recs)
 

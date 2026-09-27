@@ -1,0 +1,65 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { render, screen, fireEvent, cleanup } from '@testing-library/react'
+import '@testing-library/jest-dom/vitest'
+import TripPanel from './TripPanel.js'
+import { makeTestAppData } from '@/testing/testAppData.js'
+import { makeEditorStub } from '@/testing/editorStub.js'
+import { legsFromTrip } from '@/trip/tripLegs.js'
+import { newTrip } from '@/trip/trip.js'
+import { makeStartLabel } from '@/data/labels.js'
+import * as availability from '@/availability/fetchAvailability.js'
+import * as detail from '@/availability/fetchHutDetail.js'
+
+vi.mock('@/tourSearch/loadLegElevation.js', () => ({ loadLegElevation: vi.fn(async () => []) }))
+
+afterEach(() => { cleanup(); vi.restoreAllMocks() })
+
+const data = makeTestAppData()
+const trip = newTrip({
+  name: 'Testtour', startDate: '2026-07-10', partySize: 2, start: { startId: 100, sourceType: 1 }, huts: ['{D}', '{E}'],
+  exit: { startId: 100, sourceType: 1 }, variant: { sacCeiling: null, allowUngraded: false },
+}, new Date(), 'id')
+
+function renderPanel(over: Partial<Parameters<typeof TripPanel>[0]> = {}) {
+  vi.spyOn(availability, 'fetchAvailabilityByOffset').mockResolvedValue(new Map())
+  vi.spyOn(detail, 'fetchHutDetail').mockResolvedValue({ hutId: 1, hutName: '', calendarDays: [] })
+  const t = over.trip ?? trip
+  const props = {
+    trip: t, tripLegs: legsFromTrip(data.graph, t), data, startLabel: makeStartLabel(data.startById), isDraft: false,
+    onChange: vi.fn(), onSave: vi.fn(), onUnsave: vi.fn(), onBack: vi.fn(), backLabel: 'Ergebnisse', highlightedLeg: null, onHoverLeg: vi.fn(),
+    stopNames: ['Start', 'Hütte D', 'Hütte E', 'Start'], onHoverProfile: vi.fn(),
+    editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...over,
+  }
+  const { container } = render(<TripPanel {...props} />)
+  return { ...props, container }
+}
+
+describe('TripPanel', () => {
+  it('composes header and stages', () => {
+    renderPanel()
+    expect(screen.getByText('Testtour')).toBeInTheDocument()
+    expect(screen.getByText(/2 Nächte/)).toBeInTheDocument()
+    expect(screen.getByText('Hütte D')).toBeInTheDocument()
+    expect(screen.getByText('Hütte E')).toBeInTheDocument()
+  })
+  it('goes back with the caller-supplied label', () => {
+    const { onBack } = renderPanel({ backLabel: 'Meine Touren' })
+    fireEvent.click(screen.getByRole('button', { name: 'Meine Touren' }))
+    expect(onBack).toHaveBeenCalled()
+  })
+  it('offers Merken for a draft and saves', () => {
+    const { onSave } = renderPanel({ isDraft: true })
+    expect(screen.getByRole('button', { name: 'Merken' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Merken' }))
+    expect(onSave).toHaveBeenCalled()
+  })
+  it('forwards stage hover and the edit-mode toggle', () => {
+    const { onHoverLeg, onEditModeChange, container } = renderPanel()
+    fireEvent.mouseEnter(container.querySelector('[data-leg="0"]')!)
+    expect(onHoverLeg).toHaveBeenCalledWith(0)
+    fireEvent.click(screen.getByRole('button', { name: 'Bearbeiten' }))
+    expect(onEditModeChange).toHaveBeenCalledWith(true)
+  })
+})

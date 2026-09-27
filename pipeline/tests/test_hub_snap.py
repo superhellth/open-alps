@@ -22,7 +22,7 @@ def _line_subgraph(global_node_ids, edge_id):
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, edge_id)
+                False, 0, 0, edge_id)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array(global_node_ids), local_nodes=nodes, local_edges=edges,
@@ -44,7 +44,7 @@ def test_edge_snap_dz_uses_the_real_interior_elevation_not_an_endpoint_blend():
     interior[0] = (0.0045, 0.0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 1, 7)
+                False, 0, 1, 7)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
@@ -74,8 +74,8 @@ def test_node_snap_round_trips_through_pack_and_load(tmp_path):
     assert persisted.global_node_id == 100   # global_node_ids[0]
 
     hub_snap.pack_hub_snaps({(TYPE_HUT, 1): persisted}, tmp_path)
-    arr = binfmt.load_array(tmp_path / "hub_snaps.npy", mmap=False)
-    interior_arr = binfmt.load_array(tmp_path / "hub_snap_interior.npy", mmap=False)
+    arr = binfmt.load_array(tmp_path / "hub-snaps.npy", mmap=False)
+    interior_arr = binfmt.load_array(tmp_path / "hub-snap-interior.npy", mmap=False)
     reloaded = hub_snap.load_persisted_snaps(arr, interior_arr)
     assert reloaded[(TYPE_HUT, 1)].global_node_id == 100
 
@@ -90,8 +90,8 @@ def test_edge_split_snap_round_trips_through_pack_and_load(tmp_path):
     assert persisted.global_edge_id == 7   # local_edges["edge_id"][0], NOT the local index 0
 
     hub_snap.pack_hub_snaps({(TYPE_HUT, 2): persisted}, tmp_path)
-    arr = binfmt.load_array(tmp_path / "hub_snaps.npy", mmap=False)
-    interior_arr = binfmt.load_array(tmp_path / "hub_snap_interior.npy", mmap=False)
+    arr = binfmt.load_array(tmp_path / "hub-snaps.npy", mmap=False)
+    interior_arr = binfmt.load_array(tmp_path / "hub-snap-interior.npy", mmap=False)
     reloaded = hub_snap.load_persisted_snaps(arr, interior_arr)
     got = reloaded[(TYPE_HUT, 2)]
     assert got.global_edge_id == 7
@@ -117,7 +117,7 @@ def test_reconstruct_local_snaps_survives_a_different_subgraph_ordering():
     nodes[2] = (0.009, 0.0, 0)   # global id 101
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (1, 2, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 7)
+                False, 0, 0, 7)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     large_subgraph = LocalSubgraph(
         global_node_ids=np.array([99, 100, 101]), local_nodes=nodes, local_edges=edges,
@@ -176,3 +176,95 @@ def test_nearest_node_on_an_empty_subgraph_reports_no_candidate():
     idx, dist_m = hub_snap._nearest_node(empty, hub_lon=0.0, hub_lat=0.0)
     assert idx is None
     assert dist_m == float("inf")
+
+
+def _random_subgraph(rng, n_nodes=60, n_edges=120, span_deg=0.06):
+    # Mix of short wiggly edges and a few very long straight ones (one segment >1km), so the
+    # index's per-segment subdivision is exercised, not just vertex proximity.
+    nodes = np.zeros(n_nodes, dtype=binfmt.NODE_DTYPE)
+    nodes["lon"] = 11.0 + rng.uniform(0, span_deg, n_nodes)
+    nodes["lat"] = 47.0 + rng.uniform(0, span_deg, n_nodes)
+    edges = np.zeros(n_edges, dtype=binfmt.EDGE_DTYPE)
+    interior_pts = []
+    for i in range(n_edges):
+        u, v = rng.choice(n_nodes, 2, replace=False)
+        n_int = 0 if i % 5 == 0 else int(rng.integers(1, 12))
+        lon0, lat0 = nodes["lon"][u], nodes["lat"][u]
+        lon1, lat1 = nodes["lon"][v], nodes["lat"][v]
+        ts = np.sort(rng.uniform(0, 1, n_int))
+        for t in ts:
+            interior_pts.append((lon0 + t * (lon1 - lon0) + rng.normal(0, 3e-4),
+                                 lat0 + t * (lat1 - lat0) + rng.normal(0, 3e-4)))
+        edges[i]["u"], edges[i]["v"] = u, v
+        edges[i]["dist"] = 500.0
+        edges[i]["interior_offset"] = len(interior_pts) - n_int
+        edges[i]["interior_count"] = n_int
+        edges[i]["edge_id"] = 1000 + i
+    interior = np.zeros(len(interior_pts), dtype=binfmt.COORD_DTYPE)
+    if interior_pts:
+        interior["lon"] = [p[0] for p in interior_pts]
+        interior["lat"] = [p[1] for p in interior_pts]
+    return LocalSubgraph(
+        global_node_ids=np.arange(n_nodes), local_nodes=nodes, local_edges=edges,
+        interior=interior,
+        local_node_ele=rng.uniform(1000, 1100, n_nodes).astype(np.float32),
+        interior_ele=rng.uniform(1000, 1100, len(interior)).astype(np.float32),
+    )
+
+
+def _outcome(r):
+    if isinstance(r, hub_snap.SnapRejection):
+        return ("rej", r.reason, round(r.gap_m, 6), round(r.dz_m, 6))
+    if r.node_index is not None:
+        return ("node", r.node_index, round(r.gap_m, 6), round(r.gap_dz_m, 6))
+    return ("edge", r.edge_local_index, r.split.split_coord, round(r.gap_m, 6),
+            round(r.gap_dz_m, 6))
+
+
+def test_candidate_index_snaps_identically_to_scanning_every_edge(monkeypatch):
+    rng = np.random.default_rng(0)
+    subgraph = _random_subgraph(rng)
+    hubs = [(11.0 + rng.uniform(-0.005, 0.065), 47.0 + rng.uniform(-0.005, 0.065),
+             float(rng.uniform(1000, 1100))) for _ in range(400)]
+    # Include hubs sitting exactly on / very near an existing edge's midpoint.
+    for e in subgraph.local_edges[:40]:
+        u, v = subgraph.local_nodes[e["u"]], subgraph.local_nodes[e["v"]]
+        hubs.append(((u["lon"] + v["lon"]) / 2 + 1e-5, (u["lat"] + v["lat"]) / 2 + 1e-5, 1050.0))
+
+    for max_snap_m in (30.0, 100.0, 400.0):
+        indexed = [_outcome(hub_snap.snap_hub_to_subgraph(
+            subgraph, lon, lat, max_snap_m, hub_ele_m=ele, max_snap_ascent_m=25.0))
+            for lon, lat, ele in hubs]
+        with monkeypatch.context() as m:
+            m.setattr(hub_snap, "_candidate_edges_near",
+                      lambda sg, lon, lat, r: list(range(len(sg.local_edges))))
+            brute = [_outcome(hub_snap.snap_hub_to_subgraph(
+                subgraph, lon, lat, max_snap_m, hub_ele_m=ele, max_snap_ascent_m=25.0))
+                for lon, lat, ele in hubs]
+        assert indexed == brute
+        assert any(o[0] == "edge" for o in indexed)
+
+
+def test_candidate_index_finds_a_hub_beside_the_middle_of_a_very_long_segment():
+    # One 4.5km straight edge, no interior vertices: the hub is ~2km from either endpoint, so a
+    # vertex-only index would need a ~2km search radius to find it.
+    nodes = np.zeros(2, dtype=binfmt.NODE_DTYPE)
+    nodes[0] = (0.0, 0.0, 0)
+    nodes[1] = (0.04, 0.0, 0)
+    edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
+    edges[0]["u"], edges[0]["v"], edges[0]["edge_id"] = 0, 1, 5
+    subgraph = LocalSubgraph(
+        global_node_ids=np.array([0, 1]), local_nodes=nodes, local_edges=edges,
+        interior=np.zeros(0, dtype=binfmt.COORD_DTYPE),
+        local_node_ele=np.zeros(2, dtype=np.float32),
+        interior_ele=np.zeros(0, dtype=np.float32),
+    )
+    assert hub_snap._candidate_edges_near(subgraph, 0.02, 0.0004, 100.0) == [0]
+    assert hub_snap._candidate_edges_near(subgraph, 0.02, 0.0030, 100.0) == []
+
+
+def test_candidate_set_stays_small_when_a_long_segment_exists_elsewhere():
+    rng = np.random.default_rng(1)
+    subgraph = _random_subgraph(rng)
+    n = len(hub_snap._candidate_edges_near(subgraph, 11.03, 47.03, 100.0))
+    assert n < len(subgraph.local_edges) // 4

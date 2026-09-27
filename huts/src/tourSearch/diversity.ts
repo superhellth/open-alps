@@ -31,21 +31,35 @@ function hutOverlapFraction(a: { huts: number[] }, b: { huts: number[] }): numbe
 
 /** Fixed, not tunable: the "Variantenvielfalt" UI knob that used to feed this was measured to be a
  *  no-op — 0.3, 0.5 and 0.8 all returned the same chains on the shipped payload (2-4 legs, SAC 3),
- *  because the start-point rule below already caps results at one tour per start point and tours
- *  from *different* start points rarely share huts. The threshold itself is not a no-op (dropping
- *  it entirely lets ~16% more car chains through, all of them same-hut-set permutations), so it
- *  stays — as a constant. */
+ *  because the start-point rule of the 'global' scope already caps results at one tour per start
+ *  point and tours from *different* start points rarely share huts. The threshold itself is not a
+ *  no-op (dropping it entirely lets ~16% more car chains through, all of them same-hut-set
+ *  permutations), so it stays — as a constant. */
 const HUT_OVERLAP_THRESHOLD = 0.5
 
 export function suppressSimilar<T extends { huts: number[]; startId: number; totalDurationH: number }>(
   chains: T[],
+  { scope = 'global' }: { scope?: 'global' | 'perStart' } = {},
 ): T[] {
   const accepted: T[] = []
+  if (scope === 'global') {
+    for (const candidate of chains) {
+      const tooSimilar = accepted.some(
+        (a) => a.startId === candidate.startId || hutOverlapFraction(a, candidate) > HUT_OVERLAP_THRESHOLD,
+      )
+      if (!tooSimilar) accepted.push(candidate)
+    }
+    return accepted
+  }
+  // perStart: similarity is judged only among tours of the same start point, so a start point can
+  // list several distinct tours while near-identical hut sets are still collapsed.
+  const acceptedByStart = new Map<number, T[]>()
   for (const candidate of chains) {
-    const tooSimilar = accepted.some(
-      (a) => a.startId === candidate.startId || hutOverlapFraction(a, candidate) > HUT_OVERLAP_THRESHOLD,
-    )
-    if (!tooSimilar) accepted.push(candidate)
+    const peers = acceptedByStart.get(candidate.startId) ?? []
+    if (peers.some((a) => hutOverlapFraction(a, candidate) > HUT_OVERLAP_THRESHOLD)) continue
+    peers.push(candidate)
+    acceptedByStart.set(candidate.startId, peers)
+    accepted.push(candidate)
   }
   return accepted
 }

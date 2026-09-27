@@ -1,9 +1,7 @@
-"""Hub-range geometry: extracting the lng/lat points a DEM-tile buffer or trail clip is built
-from (hut_points), and the real-world-radius circle/union math
-(circle_polygon, hub_range_polygon) that turns those points into a coverage shape - shared by
-compute_hub_range.py (filter_trails.py's clip) and dem_providers/composite.py (bavaria-dgm5's
-per-hut tile buffer), which must derive the same radius from the same HUB_RANGE_SAFETY_MARGIN or
-the two shapes silently drift apart (docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md)."""
+"""Hub-range geometry: extracting the lng/lat points a trail clip is built from (hut_points), and
+the real-world-radius circle/union math (circle_polygon, hub_range_polygon) that turns those
+points into the coverage shape compute_hub_range.py writes. filter_trails.py's clip and
+fetch_dem.py's tile selection both read that one polygon."""
 
 import json
 import math
@@ -13,38 +11,21 @@ from shapely.geometry import Polygon
 from shapely.ops import unary_union
 
 
-def hut_points(huts_path, filter_bbox=None):
-    """Returns every [lng, lat] in huts_path (script 05's output), narrowed to filter_bbox if
-    given. huts.geojson holds every hut in the pipeline's whole scope (both Austria and Bavaria),
-    so filter_bbox picks out the huts that actually belong to one region (e.g. Bavaria's rough
-    state boundary)."""
+def hut_points(huts_path):
+    """Returns every [lng, lat] in huts_path (script 05's output)."""
     with open(huts_path, encoding="utf-8") as f:
         huts_fc = json.load(f)
 
-    points = []
-    for feat in huts_fc["features"]:
-        lng, lat = feat["geometry"]["coordinates"]
-        if filter_bbox is not None and not (
-            filter_bbox["minLng"] <= lng <= filter_bbox["maxLng"]
-            and filter_bbox["minLat"] <= lat <= filter_bbox["maxLat"]
-        ):
-            continue
-        points.append([lng, lat])
-
+    points = [list(feat["geometry"]["coordinates"]) for feat in huts_fc["features"]]
     if not points:
-        raise ValueError(f"no huts found inside filter_bbox {filter_bbox} in {huts_path}")
+        raise ValueError(f"no huts found in {huts_path}")
     return points
 
 
 # Safety margin applied by callers ON TOP OF graph.maxEdgeKm before passing radius_km to
-# circle_polygon()/hub_range_polygon() (compute_hub_range.py) and into bavaria-dgm5's per-hut
-# tile buffer (dem_providers/composite.py) - the ONE place both sides' radius is derived from, so
-# they cannot independently drift the way the old bufferKm/bufferDeg mismatch did
-# (docs/superpowers/specs/2026-08-22-hub-range-dem-coverage.md). Covers circle_polygon's
+# circle_polygon()/hub_range_polygon() (compute_hub_range.py). Covers circle_polygon's
 # n_points=32 polygon-approximation shortfall at the flat spots between vertices
-# (cos(pi/32) ~= 0.9952, ~0.5% under the true radius there) plus a little headroom - tile-grid
-# quantization (bavaria_dgm.tiles_for_utm_bounds) already rounds outward and needs no
-# compensation.
+# (cos(pi/32) ~= 0.9952, ~0.5% under the true radius there) plus a little headroom.
 HUB_RANGE_SAFETY_MARGIN = 1.01
 
 

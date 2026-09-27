@@ -5,7 +5,9 @@ from shapely.geometry import Point
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from lib.poly import parse_poly_file, region_boundary  # noqa: E402
+from shapely.geometry import box  # noqa: E402
+
+from lib.poly import filter_to_boundary, parse_poly_file, region_boundary  # noqa: E402
 
 _SQUARE_NO_HOLE = """test_square
 1
@@ -81,3 +83,20 @@ def test_region_boundary_unions_multiple_files(tmp_path):
     assert boundary.contains(Point(5.0, 5.0))
     assert boundary.contains(Point(25.0, 5.0))
     assert not boundary.contains(Point(15.0, 5.0))  # gap between the two squares
+
+
+def _feature_xy(feature):
+    return feature.get("xy")
+
+
+def test_filter_to_boundary_keeps_only_features_inside():
+    inside = {"name": "in", "xy": (0.5, 0.5)}
+    outside = {"name": "out", "xy": (2.0, 0.5)}
+
+    kept = filter_to_boundary([inside, outside], box(0, 0, 1, 1), _feature_xy)
+
+    assert [f["name"] for f in kept] == ["in"]
+
+
+def test_filter_to_boundary_drops_features_without_a_point():
+    assert filter_to_boundary([{"name": "none"}], box(0, 0, 1, 1), _feature_xy) == []

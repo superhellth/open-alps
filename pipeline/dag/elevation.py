@@ -13,7 +13,7 @@ DEM read (spec B4) - so its file_dep excludes the DEM and it never depends on sa
 """
 
 from lib.doit_support import cli_param, pipeline_task
-from lib.pipeline import DEM_DIR, OSM_DIR, load_config
+from lib.pipeline import BASE_GRAPH_DIR, HUT_EDGES_DIR, RAW_DEM_DIR, START_EDGES_DIR, load_config
 
 CONFIG = load_config()
 
@@ -21,8 +21,8 @@ CONFIG = load_config()
 def task_build_dem_vrt():
     return pipeline_task(
         "phases/elevation/build_dem_vrt.py",
-        file_dep=[DEM_DIR / "fetch_manifest.json"],
-        targets=[DEM_DIR / "dem.vrt", DEM_DIR / "dem.tif"],
+        file_dep=[RAW_DEM_DIR / "fetch_manifest.json"],
+        targets=[RAW_DEM_DIR / "dem.vrt", RAW_DEM_DIR / "dem.tif"],
     )
 
 
@@ -31,8 +31,8 @@ def task_sample_base_elevation():
         "phases/elevation/sample_base_elevation.py",
         # spec B5: the elevation pass genuinely needs the DEM, so declare it - the previous
         # numbering-convention-only ordering let a stale dem.tif through silently.
-        file_dep=[OSM_DIR / "base_graph" / "manifest.json", DEM_DIR / "dem.tif"],
-        targets=[OSM_DIR / "base_graph" / "node_ele.npy", OSM_DIR / "base_graph" / "interior_ele.npy"],
+        file_dep=[BASE_GRAPH_DIR / "manifest.json", RAW_DEM_DIR / "dem.tif"],
+        targets=[BASE_GRAPH_DIR / "node-ele.npy", BASE_GRAPH_DIR / "interior-ele.npy"],
     )
 
 
@@ -55,16 +55,16 @@ def task_compute_edge_profiles():
             cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
         ],
         task_dep=["sample_base_elevation"],
-        file_dep=[OSM_DIR / "base_graph" / "node_ele.npy", OSM_DIR / "base_graph" / "interior_ele.npy"],
+        file_dep=[BASE_GRAPH_DIR / "node-ele.npy", BASE_GRAPH_DIR / "interior-ele.npy"],
         # edges.npy is rewritten in place but can't be this task's target (build_base_graph already
         # owns it, and doit forbids two tasks sharing one target) - this stamp is the completion
         # signal downstream tasks key off of instead.
-        targets=[OSM_DIR / "base_graph" / "edge_profiles.stamp"],
+        targets=[BASE_GRAPH_DIR / "edge-profiles.stamp"],
     )
 
 
 def task_build_profiles():
-    # Genuinely was seconds until start_edges grew to ~235k records / ~200M geometry points
+    # Genuinely was seconds until start-edges grew to ~235k records / ~200M geometry points
     # (2026-08-27), at which point the point-at-a-time _fill_unmatched loop dominated the runtime
     # (~800s of an ~830s run, data/timings.jsonl) - fixed by vectorizing it. Check
     # timings.jsonl's hut_edges_s/start_edges_s split before assuming this stays cheap.
@@ -72,13 +72,13 @@ def task_build_profiles():
         "phases/elevation/build_profiles.py",
         params=[cli_param("profile_points", "profile-points", int,
                           CONFIG["dem"].get("profilePoints", 30))],
-        # start_edges/ is now build_access_edges' target, not build_hub_edges' (spec
+        # start-edges/ is now build_access_edges' target, not build_hub_edges' (spec
         # 2026-09-02-hub-edge-scaling-design.md B1/B7) - same "mutates records.npy in place
         # without declaring it as a target" reasoning as before, just against the new owner.
         task_dep=["build_hub_edges", "build_access_edges"],
         file_dep=[
-            OSM_DIR / "base_graph" / "interior_ele.npy",
-            OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "start_edges" / "records.npy",
+            BASE_GRAPH_DIR / "interior-ele.npy",
+            HUT_EDGES_DIR / "records.npy", START_EDGES_DIR / "records.npy",
         ],
         # records.npy is rewritten in place (profile_offset/profile_count filled) but not listed as
         # a target - build_hub_edges/build_access_edges already own it. profiles.npy is the only
@@ -86,6 +86,6 @@ def task_build_profiles():
         # this task rather than relying on a shared target/file_dep link to wait for the in-place
         # rewrite.
         targets=[
-            OSM_DIR / "hut_edges" / "profiles.npy", OSM_DIR / "start_edges" / "profiles.npy",
+            HUT_EDGES_DIR / "profiles.npy", START_EDGES_DIR / "profiles.npy",
         ],
     )

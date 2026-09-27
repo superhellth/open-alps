@@ -2,7 +2,7 @@
 
 Offline precompute pipeline for the hut-to-hut trail graph. This directory (`pipeline.config.json`,
 scripts, this file) is the tracked source; its raw/generated inputs and outputs live in the
-sibling `data/` dir (`data/osm/`, `data/dem/`), which is entirely gitignored — regenerate it via
+sibling `data/` dir (`data/raw/` for fetched inputs, `data/build/<component>/` for computed outputs), which is entirely gitignored — regenerate it via
 `doit` (see "Reproducing from scratch" below) rather than expecting it to be present after a fresh
 clone. Rationale for the pipeline's design choices lives in `docs/osm-trail-pipeline.md`; this file
 is the practical "how to reproduce it" index. For what each script actually does — data structures,
@@ -14,7 +14,6 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 
 ```json
 {
-  "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 },
   "regions": [
     { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf" },
     { "name": "bayern", "url": "https://download.geofabrik.de/europe/germany/bayern-latest.osm.pbf" }
@@ -36,12 +35,12 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
 (`dem.providerConfig.regions` elided above for brevity — see the `dem` bullet below and the real
 `pipeline.config.json` for the full shape.)
 
-- `bbox` — coarse scope used by DEM provider config and `lib/geo.py`'s hut-point pre-filter; not
-  what filters the ArcGIS hut pull (see `regions`' `polyUrl` below).
 - `regions` — one Geofabrik extract per entry (`url` + `polyUrl`, its `.poly` admin-boundary file);
   `download_extracts.py`/`filter_trails.py`/`merge_trails.py` loop over this list, and
-  `fetch_huts.py` filters the AV hut catalog to the union of every `polyUrl` boundary (`lib/poly.py`)
-  instead of `bbox`, so adding a region (e.g. Switzerland) is adding
+  `fetch_huts.py` filters the AV hut catalog to the union of every `polyUrl` boundary (`lib/poly.py`);
+  `fetch_stations_parking.py` and `check_preprocessing.py` use the same union. There is no
+  hand-typed bounding box: the area to cover is the hub range (`hub-range.geojson`), and the base
+  graph grid extent is derived from the graph's nodes. So adding a region (e.g. Switzerland) is adding
   `{ "name": "switzerland", "url": "...", "polyUrl": "..." }` here.
 - `trailTagFilter` — the `osmium tags-filter` expression `filter_trails.py` applies.
 - `graph.maxEdgeKm` / `graph.maxSnapM` / `graph.maxSnapAscentM` — defaults for
@@ -57,7 +56,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     horizontal one: a candidate snap point is also rejected if it sits more than this far above or
     below the hub's own DEM elevation, since a horizontally-close trail node can still be on a
     different terrace/switchback. Every rejection is reported, not silently dropped — see
-    `unsnapped_huts.json`.
+    `data/build/snapping/unsnapped-huts.json`.
   - **`maxEdgeKm`** (kilometers, default 30) — the longest hut-to-hut trail distance (walking
     distance along the graph, not beeline) that's kept as an edge. It's a deliberate cutoff, not
     just a performance knob: a hut-to-hut edge is meant to represent one day-hike leg, so anything
@@ -65,7 +64,7 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     osm-trail-pipeline.md` for why). It also bounds the search — each hub's shortest-path query is
     capped at this distance, so raising it increases both edge count and runtime.
   - **`tileSizeKm`** (kilometers, default 60) — the cell size `build_hub_edges.py`'s `Grid`
-    (`lib/grid.py`) partitions the bbox into; one worker process handles one cell, each mmap-
+    (`lib/grid.py`) partitions the base graph's extent into; one worker process handles one cell, each mmap-
     slicing only its own padded region (cell + `maxEdgeKm` buffer) of the persisted base graph
     (`lib/subgraph.py`). 60km ≈ 2× `maxEdgeKm`, giving each tile a core-to-buffer area ratio that
     keeps per-tile work non-trivial relative to the fixed buffer overhead. Also read by
@@ -88,27 +87,24 @@ All hyperparameters live in one place: **`pipeline/pipeline.config.json`**.
     meta-provider (`dem_providers/composite.py`), which resolves each configured region's own
     provider and stitches their per-region VRTs into one final `dem.vrt` — even a one-region scope
     is just `regions` with a single entry, so there's no separate single-provider code path or
-    config field. Region order matters where two regions' bboxes overlap — see `composite.py`'s
-    own docstring for which one wins. Each region is `{"provider": "...", "bbox": {...}, ...that
+    config field. Region order matters where two regions' areas overlap — see `composite.py`'s
+    own docstring for which one wins. Each region is `{"provider": "...", "boundary": "<region name>"?, ...that
     provider's own config keys}`. Registered providers (`pipeline/phases/downloads/dem_providers/`):
     - **`copernicus-glo-30`** — global 30m coverage (AWS Open Data, no auth). `providerConfig: {}`
-      (uses the top-level `bbox`). The safe default; systematically underestimates ascent/descent
+      (downloads every 1°×1° tile intersecting the hub range). The safe default; systematically underestimates ascent/descent
       on switchback-heavy alpine trails because 30m can't resolve terrain that narrow (see
       `docs/osm-trail-pipeline.md`).
     - **`at-bev-dgm`** — Austria's national 10m DGM (data.gv.at, CC-BY-4.0, Lambert/EPSG:31287).
       `providerConfig: {"downloadUrl": "<confirmed direct .zip URL>"}` — single ~1.9GB national
-      file, not tiled, so `bbox` in its config is unused metadata.
+      file, not tiled, so no extent is needed.
     - **`bavaria-dgm5`** — Bavaria's 5m DGM (geodaten.bayern.de, CC BY 4.0, UTM32N/EPSG:25832),
       served as one small (~200KB) direct-download zip per 1km tile; tile IDs are computed from
-      `providerConfig.bbox` (no tile-index file needed), so keeping that bbox tight matters: see
-      `bboxFromHuts` below.
-  - **`bboxFromHuts`** (per-region, `composite` only, default false) — a region's `bbox` is
-    normally just a coarse political-boundary filter used to pick out which huts belong to that
-    region (`data/osm/huts.geojson` covers the pipeline's *whole* scope, both countries). Setting
-    `bboxFromHuts: true` tightens the box actually fetched down to those huts' real extent (+
-    `bufferDeg`, default 0.05°) instead of the full political box — matters for request-per-tile
-    providers like `bavaria-dgm5`, whose full state bbox is ~80,000 1km tiles even though huts
-    only exist in the southern Alpine strip near the Austrian border.
+      the area to cover (no tile-index file needed): every 1km tile intersecting it.
+  - **Region area** — each region covers the hub range (`data/build/hub-range/hub-range.geojson`,
+    the same polygon `filter_trails.py` clips trails to, so DEM coverage of every base-graph node
+    holds by construction). An optional `"boundary": "<name of a config.regions entry>"` clips it
+    to that country's `.poly` first (`bavaria-dgm5` uses `"bayern"`); an empty intersection
+    raises.
   - **`smoothingKernelM`** (meters, default 30) — `compute_edge_profiles.py`'s
     distance-weighted triangular smoothing kernel width applied to each base edge's elevation
     profile before summing `ascent_m`/`descent_m` as plain signed-delta sums. Replaces the old

@@ -54,21 +54,24 @@ def test_elevation_profile_interpolates_onto_n_points():
 
 
 def test_main_processes_only_hut_and_start_edges(tmp_path, monkeypatch):
-    # tour_edges/ (written with its own profiles by match_tour_edges) is ignored even when present.
+    # an unrelated edge-set directory is ignored even when present.
     import build_profiles as bp_module
 
     processed = []
     monkeypatch.setattr(bp_module, "_process_edge_set", lambda edge_dir, *a, **kw: processed.append(edge_dir.name))
-    monkeypatch.setattr(bp_module, "OSM_DIR", tmp_path)
-    for name in ("hut_edges", "start_edges", "tour_edges"):
+    for name in ("hut-edges", "start-edges", "tour-edges"):
         (tmp_path / name).mkdir()
         binfmt.save_array(tmp_path / name / "records.npy", np.zeros(0, dtype=binfmt.RECORD_DTYPE))
-    (tmp_path / "base_graph").mkdir()
+    (tmp_path / "base-graph").mkdir()
     for arr_name in ("nodes.npy", "interior.npy"):
-        binfmt.save_array(tmp_path / "base_graph" / arr_name, np.zeros(0, dtype=binfmt.COORD_DTYPE))
-    for arr_name in ("node_ele.npy", "interior_ele.npy"):
-        binfmt.save_array(tmp_path / "base_graph" / arr_name, np.zeros(0, dtype=binfmt.PROFILE_DTYPE))
+        binfmt.save_array(tmp_path / "base-graph" / arr_name, np.zeros(0, dtype=binfmt.COORD_DTYPE))
+    for arr_name in ("node-ele.npy", "interior-ele.npy"):
+        binfmt.save_array(tmp_path / "base-graph" / arr_name, np.zeros(0, dtype=binfmt.PROFILE_DTYPE))
 
-    bp_module.main(["--base-graph-dir", str(tmp_path / "base_graph")])
+    bp_module.main([
+        "--base-graph-dir", str(tmp_path / "base-graph"),
+        "--hut-edges-dir", str(tmp_path / "hut-edges"),
+        "--start-edges-dir", str(tmp_path / "start-edges"),
+    ])
 
-    assert set(processed) == {"hut_edges", "start_edges"}
+    assert set(processed) == {"hut-edges", "start-edges"}

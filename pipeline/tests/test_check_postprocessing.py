@@ -9,8 +9,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
 from quality.check_postprocessing import (  # noqa: E402
-    check_approach_coverage, check_manifest_agreement, check_public_copy_freshness,
-    check_shipped_straightness, check_tours_json_geometry,
+    check_anchors_on_path, check_approach_coverage, check_manifest_agreement, check_public_copy_freshness,
+    check_shipped_straightness,
 )
 
 
@@ -101,45 +101,49 @@ def test_shipped_straightness_skips_short_edges():
 
 
 def test_public_copy_freshness_flags_mismatched_hash(tmp_path):
-    osm_dir = tmp_path / "osm"
+    src_dir = tmp_path / "src"
     public_dir = tmp_path / "public"
-    osm_dir.mkdir()
+    src_dir.mkdir()
     public_dir.mkdir()
-    (osm_dir / "huts.geojson").write_bytes(b"fresh")
+    (src_dir / "huts.geojson").write_bytes(b"fresh")
     (public_dir / "huts.geojson").write_bytes(b"stale")
-    check = check_public_copy_freshness(["huts.geojson"], osm_dir, public_dir, max_flagged=500)
+    check = check_public_copy_freshness(
+        [(src_dir / "huts.geojson", "huts.geojson")], public_dir, max_flagged=500)
     assert check["summary"]["flagged"] == 1
     assert check["flagged"][0]["reason"] == "content_mismatch"
 
 
 def test_public_copy_freshness_flags_missing_public_file(tmp_path):
-    osm_dir = tmp_path / "osm"
+    src_dir = tmp_path / "src"
     public_dir = tmp_path / "public"
-    osm_dir.mkdir()
+    src_dir.mkdir()
     public_dir.mkdir()
-    (osm_dir / "huts.geojson").write_bytes(b"fresh")
-    check = check_public_copy_freshness(["huts.geojson"], osm_dir, public_dir, max_flagged=500)
+    (src_dir / "huts.geojson").write_bytes(b"fresh")
+    check = check_public_copy_freshness(
+        [(src_dir / "huts.geojson", "huts.geojson")], public_dir, max_flagged=500)
     assert check["flagged"][0]["reason"] == "missing_in_public"
 
 
 def test_public_copy_freshness_clean_case_flags_nothing(tmp_path):
-    osm_dir = tmp_path / "osm"
+    src_dir = tmp_path / "src"
     public_dir = tmp_path / "public"
-    osm_dir.mkdir()
+    src_dir.mkdir()
     public_dir.mkdir()
     content = b"identical"
-    (osm_dir / "huts.geojson").write_bytes(content)
+    (src_dir / "huts.geojson").write_bytes(content)
     (public_dir / "huts.geojson").write_bytes(content)
-    check = check_public_copy_freshness(["huts.geojson"], osm_dir, public_dir, max_flagged=500)
+    check = check_public_copy_freshness(
+        [(src_dir / "huts.geojson", "huts.geojson")], public_dir, max_flagged=500)
     assert check["summary"]["flagged"] == 0
 
 
-def test_tours_json_geometry_clean_when_matched_legs_equal_geometry_rows():
-    tours = [{"legs": [{"edgeId": 0}, {"edgeId": None}, {"edgeId": 1}]}]
-    assert check_tours_json_geometry(tours, [3, 4], max_flagged=500)["summary"]["flagged"] == 0
+def test_anchors_on_path_passes_points_on_the_line():
+    poly = np.array([[11.0, 47.0], [11.4, 47.0]])
+    c = check_anchors_on_path("hut_edges", [np.array([[11.1, 47.0], [11.2, 47.0]])], [poly], 25.0, 500)
+    assert c["summary"]["flagged"] == 0 and c["summary"]["checked"] == 1
 
 
-def test_tours_json_geometry_flags_a_row_count_mismatch():
-    tours = [{"legs": [{"edgeId": 0}, {"edgeId": 1}]}]
-    check = check_tours_json_geometry(tours, [3], max_flagged=500)
-    assert check["flagged"][0]["reason"] == "matched_legs_vs_geometry_rows"
+def test_anchors_on_path_flags_a_point_off_the_line():
+    poly = np.array([[11.0, 47.0], [11.4, 47.0]])
+    c = check_anchors_on_path("hut_edges", [np.array([[11.2, 47.01]])], [poly], 25.0, 500)
+    assert c["summary"]["flagged"] == 1

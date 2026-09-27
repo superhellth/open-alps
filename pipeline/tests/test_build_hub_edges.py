@@ -40,7 +40,7 @@ def _line_subgraph():
     # u, v, dist, road_m, ungraded_m, inferred_m, time_s, ascent_m, descent_m, sac_rank,
     # via_ferrata, constrained_ok, interior_offset, interior_count, edge_id
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -80,7 +80,7 @@ def _line_subgraph_with_interior():
     interior[1] = (0.006, 0.0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 2, 0)  # interior_offset=0, count=2
+                False, 0, 2, 0)  # interior_offset=0, count=2
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
@@ -187,11 +187,11 @@ def test_vertical_check_is_skipped_without_a_hub_elevation():
 
 
 def test_unsnapped_report_records_every_rejection(tmp_path):
-    write_unsnapped_report(tmp_path / "unsnapped_huts.json", [
+    write_unsnapped_report(tmp_path / "unsnapped-huts.json", [
         SnapRejection(hub_id=7, name="Schuesselkar-Biwak", gap_m=250.0, dz_m=258.0,
                       reason="vertical_offset"),
     ])
-    got = json.loads((tmp_path / "unsnapped_huts.json").read_text(encoding="utf-8"))
+    got = json.loads((tmp_path / "unsnapped-huts.json").read_text(encoding="utf-8"))
     assert got[0]["reason"] == "vertical_offset"
     assert got[0]["dz_m"] == 258.0
 
@@ -205,7 +205,7 @@ def test_snap_gap_dz_mid_chain_interpolates_along_the_edge():
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -283,7 +283,7 @@ def test_snap_gap_climb_lands_in_ascent_not_only_distance():
     nodes[0] = (0.0, 0.0, 0)
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
-    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 0.0, -1, False, True, 0, 0, 0)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 0.0, 0.0, -1, False, True, False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -433,9 +433,9 @@ def _two_edge_subgraph():
     nodes[2] = (0.018, 0.0, 0)
     edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 100.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     edges[1] = (1, 2, 1000.0, 0.0, 0.0, 0.0, 200.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 1)
+                False, 0, 0, 1)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
@@ -489,7 +489,7 @@ def _line_subgraph_t2_graded():
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, 2, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -564,7 +564,7 @@ def test_a_variant_with_no_obeying_path_emits_no_record():
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     # ungraded (sac_rank -1, constrained_ok False) - unroutable under any constrained row
     edges[0] = (0, 1, 1000.0, 0.0, 1000.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False,
-                False, 0, 0, 0)
+                False, False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -596,8 +596,8 @@ def _col_subgraph():
     edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
     # u, v, dist, road_m, ungraded_m, inferred_m, time_s, ascent_m, descent_m, sac_rank,
     # via_ferrata, constrained_ok, interior_offset, interior_count, edge_id
-    edges[0] = (0, 1, 1000.0, 0.0, 100.0, 0.0, 500.0, 500.0, 0.0, -1, False, True, 0, 0, 0)
-    edges[1] = (1, 2, 1000.0, 0.0, 0.0, 50.0, 300.0, 0.0, 300.0, -1, False, True, 0, 0, 1)
+    edges[0] = (0, 1, 1000.0, 0.0, 100.0, 0.0, 500.0, 500.0, 0.0, -1, False, True, False, 0, 0, 0)
+    edges[1] = (1, 2, 1000.0, 0.0, 0.0, 50.0, 300.0, 0.0, 300.0, -1, False, True, False, 0, 0, 1)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
@@ -734,7 +734,7 @@ def _one_edge_subgraph_for_split():
     nodes["lon"] = [11.0, 11.01]
     nodes["lat"] = [47.0, 47.0]
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
-    edges[0] = (0, 1, 700.0, 0.0, 0.0, 0.0, 700.0, 50.0, 20.0, 1, False, True, 0, 0, 7)
+    edges[0] = (0, 1, 700.0, 0.0, 0.0, 0.0, 700.0, 50.0, 20.0, 1, False, True, False, 0, 0, 7)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]),
         local_nodes=nodes,

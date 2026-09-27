@@ -52,7 +52,7 @@ describe('AdminPage hut classification', () => {
     const markersBefore = container.querySelectorAll('path.leaflet-interactive')
     const countBefore = markersBefore.length
 
-    await userEvent.click(screen.getByLabelText('Sonstige Hütte'))
+    await userEvent.click(screen.getByLabelText('Sonstige'))
 
     const markersAfter = container.querySelectorAll('path.leaflet-interactive')
     // Dimming must not remove markers from the DOM.

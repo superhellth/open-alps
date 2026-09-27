@@ -31,15 +31,15 @@ python pipeline/analysis/<script>.py
 ## `snap_stats.py` — how hubs attach to the base graph
 
 Quantifies `snap_hub_to_subgraph()`'s three outcomes (existing-node, mid-chain split, unsnapped)
-over the real hub set, and how many already-computed `hut_edges`/`start_edges` would lose an
+over the real hub set, and how many already-computed `hut-edges`/`start-edges` would lose an
 endpoint if mid-chain snapping were replaced by a simpler node-or-drop rule.
 
-Requires `data/osm/base_graph/`, plus `hut_edges/` + `start_edges/` for the edge-impact section.
+Requires `data/build/base-graph/`, plus `hut-edges/` + `start-edges/` for the edge-impact section.
 Writes `data/analysis/snap_stats.json`.
 
-## `reconstruct_raw_graph.py` — un-contract `base_graph/` back to raw
+## `reconstruct_raw_graph.py` — un-contract `base-graph/` back to raw
 
-Rebuilds the pre-contraction node/edge arrays from the persisted `base_graph/`, by expanding each
+Rebuilds the pre-contraction node/edge arrays from the persisted `base-graph/`, by expanding each
 chain edge back into its `u -> interior[...] -> v` segments. Exists so contraction can be measured
 at any graph size without re-running `stream_osm` (914s per attempt, `data/timings.jsonl`).
 
@@ -62,7 +62,7 @@ approaches RAM means memory-bound, and a parallelism fix would be aimed at the w
 `--profile-fraction` swaps the sweep for one `cProfile` run at a small fraction, to attribute the
 walk's cost to specific call sites.
 
-Requires `data/osm/base_graph/`. Appends to `data/contraction_scaling.jsonl` (one JSON line per
+Requires `data/build/base-graph/`. Appends to `data/contraction_scaling.jsonl` (one JSON line per
 subset, so a killed run keeps its completed measurements) and writes `data/contraction.prof`.
 
 Background: `docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md`, and the design
@@ -72,7 +72,7 @@ it was written to test, `docs/superpowers/specs/2026-08-20-tiled-contraction-des
 
 Streams `trails.osm.pbf` once, classifies every way into the explicit / physically-implied /
 ungraded tiers proposed in `docs/superpowers/specs/2026-08-22-tour-suggestion-backend.md` §C4, and
-reports the tier mass **by length** network-wide *and* attributed onto the stored `hut_edges/`
+reports the tier mass **by length** network-wide *and* attributed onto the stored `hut-edges/`
 paths by exact OSM-node-pair matching. The output that matters is the connectivity gate: how many
 huts lose their last connection when the constrained rows' `ungraded_m == 0` rule is added on top
 of a plain `sac_rank` cap. That is the cheap preview of the sizing probe's "ungraded blocker rate",
@@ -83,13 +83,13 @@ The one script here whose classifier has no production counterpart to call — t
 being proposed, not something under `phases/` to measure. If adopted, it moves into
 `build_base_graph.py`'s way handler and this script should import it from there instead.
 
-Requires `data/osm/trails.osm.pbf` and `data/osm/hut_edges/`; `--start-edges` also needs
-`start_edges/`. Writes `data/analysis/grading_coverage.json`. **~20-25 min** (the osmium pass
+Requires `data/build/trails/trails.osm.pbf` and `data/build/hut-edges/`; `--start-edges` also needs
+`start-edges/`. Writes `data/analysis/grading_coverage.json`. **~20-25 min** (the osmium pass
 dominates), peak RSS ~3-4 GB; `--no-attribution` drops to ~17 min and ~1 GB.
 
 ## `road_share.py` — is the `ROAD_*` variant column worth building?
 
-`road_m / distance_m` distribution over the stored `hut_edges/` and `start_edges/` records,
+`road_m / distance_m` distribution over the stored `hut-edges/` and `start-edges/` records,
 length-weighted and cross-tabbed by `sac_rank`. Bounds the regression from dropping
 `roadPenaltyFactor` (spec §A3), which currently has no number under it at all.
 
@@ -97,7 +97,7 @@ Measured under the *distance* cost with the penalty still active, so it is a **f
 time-based cost both removes the penalty and rewards roads for being fast. Re-run unchanged after
 the Part 1 rebuild for the real figure; the two runs are directly comparable.
 
-Requires `hut_edges/records.npy` + `start_edges/records.npy`. Writes `data/analysis/road_share.json`.
+Requires `hut-edges/records.npy` + `start-edges/records.npy`. Writes `data/analysis/road_share.json`.
 Seconds.
 
 ## `payload_sizing.py` — how big are the three client payloads really?
@@ -113,7 +113,7 @@ variant copies are identical. `motor_vehicle` is not measurable — `fetch_stati
 `keep_fields` does not let it through, which the script reports as a build prerequisite rather than
 silently ignoring.
 
-Requires `hut_edges/records.npy`, `start_edges/records.npy`, `parking.geojson`, `stations.geojson`.
+Requires `hut-edges/records.npy`, `start-edges/records.npy`, `data/raw/parking.geojson`, `data/raw/stations.geojson`.
 Writes `data/analysis/payload_sizing.json`. Seconds.
 
 ## `routing_probe.py` — the sizing probe that gates the variant rebuild (spec §H)
@@ -142,7 +142,7 @@ scratch, since a naive per-pair rebuild measured ~15s/pair and would have blown 
 at 200 pairs. Cell count is bounded (46 cells with huts today), so wall time plateaus well under
 the pair count.
 
-Requires `data/osm/base_graph/` **with `add_base_elevation.py` already run** (routes on `time_s`,
-needs `node_ele.npy`) and `data/osm/huts.geojson`. Writes `data/analysis/routing_probe.json`.
+Requires `data/build/base-graph/` **with `add_base_elevation.py` already run** (routes on `time_s`,
+needs `node-ele.npy`) and `data/raw/huts.geojson`. Writes `data/analysis/routing_probe.json`.
 **Minutes** at the default `--pairs 200` (~46 cell-graph builds dominate, ~12s each); linear in
 `--pairs` only through the (cheap) per-pair Dijkstra calls once past ~46 pairs.

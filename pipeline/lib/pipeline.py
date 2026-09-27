@@ -1,5 +1,5 @@
 """Config reader plus small shared filesystem helpers used across pipeline scripts
-(pipeline.config.json is still the one source of truth for hyperparameters: bbox, regions, tag
+(pipeline.config.json is still the one source of truth for hyperparameters: regions, tag
 filter, graph thresholds)."""
 
 import json
@@ -20,11 +20,25 @@ REPO_ROOT = SCRIPTS_DIR.parent
 # native Windows and WSL for the identical file, which broke caching across a pixi/WSL migration
 # the same way an unresolved worktree path used to. See rel()'s own docstring in dodo.py.
 DATA_DIR = (REPO_ROOT / "data").resolve()
-OSM_DIR = DATA_DIR / "osm"
-DEM_DIR = DATA_DIR / "dem"
+RAW_DIR = DATA_DIR / "raw"      # fetched, external inputs (dag/downloads.py's outputs)
+BUILD_DIR = DATA_DIR / "build"  # computed intermediates and outputs, one subdirectory per graph component
+RAW_OSM_DIR = RAW_DIR / "osm"
+RAW_DEM_DIR = RAW_DIR / "dem"
+TRAILS_DIR = BUILD_DIR / "trails"
+HUB_RANGE_DIR = BUILD_DIR / "hub-range"
+START_POINTS_DIR = BUILD_DIR / "start-points"
+BASE_GRAPH_DIR = BUILD_DIR / "base-graph"
+SNAPPING_DIR = BUILD_DIR / "snapping"
+ROUTE_SUBGRAPHS_DIR = BUILD_DIR / "route-subgraphs"
+ACCESS_EDGES_DIR = BUILD_DIR / "access-edges"
+HUT_EDGES_DIR = BUILD_DIR / "hut-edges"
+START_EDGES_DIR = BUILD_DIR / "start-edges"
+# check_* reports label an edge set "hut_edges"; its directory under a build dir is the hyphenated name
+EDGE_LAYER_DIRNAMES = {
+    "hut_edges": "hut-edges", "start_edges": "start-edges",
+}
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
 PUBLIC_DATA_DIR = REPO_ROOT / "huts" / "public" / "data"
-TOURS_DIR = SCRIPTS_DIR / "tours"
 QUALITY_DIR = DATA_DIR / "quality"
 
 

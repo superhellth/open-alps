@@ -23,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib.geo import hut_points  # noqa: E402
 from lib.grid import KM_PER_DEG_LAT  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.pipeline import RAW_DIR, START_POINTS_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 SCRIPT_NAME = "filter_start_points.py"
@@ -157,11 +157,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     with phase(SCRIPT_NAME, "filter_start_points"):
-        hut_coords = np.array(hut_points(OSM_DIR / "huts.geojson"))
+        hut_coords = np.array(hut_points(RAW_DIR / "huts.geojson"))
         all_points = (
-            _load_osm_export_layer(OSM_DIR / "stations.geojson", "station")
-            + _load_osm_export_layer(OSM_DIR / "parking.geojson", "parking")
-            + _load_arcgis_layer(OSM_DIR / "partner_betriebe.geojson", "partner_betrieb")
+            _load_osm_export_layer(RAW_DIR / "stations.geojson", "station")
+            + _load_osm_export_layer(RAW_DIR / "parking.geojson", "parking")
+            + _load_arcgis_layer(RAW_DIR / "partner_betriebe.geojson", "partner_betrieb")
         )
         print(f"start-point candidates: {len(all_points)}")
 
@@ -186,8 +186,9 @@ if __name__ == "__main__":
         for i, p in enumerate(kept):
             arr[i] = (p["lon"], p["lat"], p["osm_id"], type_code[p["type"]])
 
-        binfmt.save_array(OSM_DIR / "start_points.npy", arr)
+        START_POINTS_DIR.mkdir(parents=True, exist_ok=True)
+        binfmt.save_array(START_POINTS_DIR / "start-points.npy", arr)
         id_table = build_id_table(kept)
-        with open(OSM_DIR / "start_points_id_table.json", "w", encoding="utf-8") as f:
+        with open(START_POINTS_DIR / "start-points-id-table.json", "w", encoding="utf-8") as f:
             json.dump(id_table, f)
-    print(f"written {OSM_DIR / 'start_points.npy'}")
+    print(f"written {START_POINTS_DIR / 'start-points.npy'}")

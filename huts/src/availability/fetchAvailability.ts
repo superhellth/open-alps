@@ -29,8 +29,9 @@ export async function fetchAvailabilityByOffset(
   startDate: Date,
   numOfPeople: number,
   maxOffsetDays: number,
+  fromOffsetDays = 1,
 ): Promise<FreeByOffset> {
-  const offsets = Array.from({ length: maxOffsetDays }, (_, i) => i + 1)
+  const offsets = Array.from({ length: Math.max(0, maxOffsetDays - fromOffsetDays + 1) }, (_, i) => i + fromOffsetDays)
   const entries = await Promise.all(
     offsets.map(async (offset) => {
       const dateStr = formatOhrsDate(startDate, offset)

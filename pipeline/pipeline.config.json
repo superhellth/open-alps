@@ -1,5 +1,4 @@
 {
-  "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 },
   "regions": [
     { "name": "austria", "url": "https://download.geofabrik.de/europe/austria-latest.osm.pbf",
       "polyUrl": "https://download.geofabrik.de/europe/austria.poly" },
@@ -19,18 +18,10 @@
   "dem": {
     "providerConfig": {
       "regions": [
-        {
-          "provider": "copernicus-glo-30",
-          "bbox": { "minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6 }
-        },
-        {
-          "provider": "bavaria-dgm5",
-          "bbox": { "minLng": 8.9, "maxLng": 13.9, "minLat": 47.2, "maxLat": 50.6 },
-          "bboxFromHuts": true
-        },
+        { "provider": "copernicus-glo-30" },
+        { "provider": "bavaria-dgm5", "boundary": "bayern" },
         {
           "provider": "at-bev-dgm",
-          "bbox": { "minLng": 9.5, "maxLng": 17.2, "minLat": 46.3, "maxLat": 49.0 },
           "downloadUrl": "https://gis.ktn.gv.at/OGD/Geographie_Planung/ogd-10m-at.zip"
         }
       ]

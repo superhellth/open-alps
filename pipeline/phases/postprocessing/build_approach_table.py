@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Reduces start_edges/records.npy (spec E1/E2) to a shippable approach/exit table.
+"""Reduces start-edges/records.npy (spec E1/E2) to a shippable approach/exit table.
 
-27,261 parkings and 3,025 stations exist and start_edges/records.npy holds 92,426 records - neither
+27,261 parkings and 3,025 stations exist and start-edges/records.npy holds 92,426 records - neither
 is shippable or seedable as-is. This writes two things instead:
 
 1. The k-best-per-hut approach table (E1): "k fastest" is wrong on purpose - the fastest edge into
@@ -16,9 +16,9 @@ is shippable or seedable as-is. This writes two things instead:
 
 2. The loop-closure reverse index (E2): the client's car mode requires exit start-point == entry
    start-point, and the k~=3 tables of the first and last hut essentially never share a start id -
-   a post-filter would annihilate the result set. So every start_edges record whose start point
+   a post-filter would annihilate the result set. So every start-edges record whose start point
    appears in ANY hut's retained approach ships too, keyed both hut->starts and start->huts. Size
-   is bounded above by the whole start_edges table (~92,426 rows), which cannot break the payload
+   is bounded above by the whole start-edges table (~92,426 rows), which cannot break the payload
    budget even unfiltered.
 
 Only variant FAST_ANY records are candidates for the approach table (an approach is a fastest,
@@ -29,6 +29,7 @@ Usage: python pipeline/phases/postprocessing/build_approach_table.py
 """
 
 import argparse
+import gzip
 import json
 import sys
 from collections import defaultdict
@@ -39,7 +40,9 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
 from lib import speed  # noqa: E402
-from lib.pipeline import OSM_DIR, load_config  # noqa: E402
+from lib.anchors import edge_anchor_columns  # noqa: E402
+from lib.geo import hut_points  # noqa: E402
+from lib.pipeline import RAW_DIR, START_EDGES_DIR, START_POINTS_DIR, load_config  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 config = load_config()
@@ -48,6 +51,32 @@ _SOURCE_TYPE_NAME = {
     binfmt.TYPE_PARKING: "parking", binfmt.TYPE_STATION: "station",
     binfmt.TYPE_PARTNER: "partner_betrieb",
 }
+
+
+# Columns of the exit-anchor side table share approaches.bin with the approach columns under this
+# prefix; the manifest lists them separately, without it, under "exit_anchors".
+EXIT_PREFIX = "exit_"
+
+
+def approach_anchor_columns(approaches: list, records: np.ndarray, geometry: np.ndarray,
+                            hut_lonlat: np.ndarray) -> dict:
+    """Anchor columns for the approach rows: each row's start edge geometry, offsets from its hut."""
+    row_ids = np.array([r["edge_id"] for r in approaches], dtype=np.int64)
+    ref = hut_lonlat[np.array([r["hut_id"] for r in approaches], dtype=np.int64)]
+    return edge_anchor_columns(records, geometry, row_ids, ref)
+
+
+def exit_anchor_rows(approaches: list, index: dict) -> list:
+    """Reverse-index edges no approach row covers, one row per edge in edge-id order. Exit legs
+    walk these edges backwards, so they need anchors too; edges shared with an approach row
+    already have them there."""
+    covered = {r["edge_id"] for r in approaches}
+    rows = {}
+    for entries in index["hut_to_starts"].values():
+        for e in entries:
+            if e["edge_id"] not in covered:
+                rows[e["edge_id"]] = {"edge_id": e["edge_id"], "hut_id": e["hut_id"]}
+    return [rows[edge_id] for edge_id in sorted(rows)]
 
 
 def gather_candidates(records: np.ndarray, id_table: dict, variant_ids: set) -> dict:
@@ -150,9 +179,9 @@ def parse_variant_names(csv: str) -> set:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "start_edges"),
-                        help="directory holding start_edges/ records (build_hub_edges.py's output)")
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"),
+    parser.add_argument("--edges-dir", default=str(START_EDGES_DIR),
+                        help="directory holding start-edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--id-table", default=str(START_POINTS_DIR / "start-points-id-table.json"),
                         help="path to the start-point id table (build_edge_ids.py's output)")
     parser.add_argument(
         "--duration-buckets-h", type=str,
@@ -165,9 +194,11 @@ if __name__ == "__main__":
         help="comma-separated binfmt.VARIANT_NAMES values eligible as approach candidates "
              "(see pipeline.config.json's approach.variants)",
     )
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "approaches.bin"),
+    parser.add_argument("--huts", default=str(RAW_DIR / "huts.geojson"),
+                        help="path to the hut master-data GeoJSON")
+    parser.add_argument("--out-bin", default=str(START_EDGES_DIR / "approaches.bin"),
                         help="path to write the packed approach-table binary")
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "approaches.json"),
+    parser.add_argument("--out-manifest", default=str(START_EDGES_DIR / "approaches.json"),
                         help="path to write the approach-table manifest")
     args = parser.parse_args()
 
@@ -180,7 +211,7 @@ if __name__ == "__main__":
             id_table = json.load(f)
 
         approaches, index = build_tables(records, id_table, duration_buckets, variant_ids)
-        print(f"start_edges records: {len(records):,}", flush=True)
+        print(f"start-edges records: {len(records):,}", flush=True)
         print(f"approach rows (buckets={duration_buckets}, variants={sorted(variant_ids)}): "
               f"{len(approaches):,}", flush=True)
         print(f"reverse index: {len(index['hut_to_starts']):,} huts, "
@@ -200,7 +231,20 @@ if __name__ == "__main__":
             "ascent_m": ("f4", np.array([r["ascent_m"] for r in approaches], dtype="f4")),
             "descent_m": ("f4", np.array([r["descent_m"] for r in approaches], dtype="f4")),
         }
+        plain_payload, _ = binfmt.pack_columns(columns)
+        geometry = binfmt.load_array(Path(args.edges_dir) / "geometry.npy")
+        hut_lonlat = np.array(hut_points(args.huts))
+        for name, values in approach_anchor_columns(approaches, records, geometry, hut_lonlat).items():
+            columns[name] = ("i2", values)
+        exit_rows = exit_anchor_rows(approaches, index)
+        columns[f"{EXIT_PREFIX}edge_id"] = ("u4", np.array([r["edge_id"] for r in exit_rows], dtype="u4"))
+        columns[f"{EXIT_PREFIX}hut_id"] = ("u2", np.array([r["hut_id"] for r in exit_rows], dtype="u2"))
+        for name, values in approach_anchor_columns(exit_rows, records, geometry, hut_lonlat).items():
+            columns[EXIT_PREFIX + name] = ("i2", values)
         payload, column_manifest = binfmt.pack_columns(columns)
+        growth = len(gzip.compress(payload, compresslevel=9)) - len(gzip.compress(plain_payload, compresslevel=9))
+        print(f"exit anchor rows: {len(exit_rows):,}", flush=True)
+        print(f"anchor growth: {growth:+,} B gzipped", flush=True)
         Path(args.out_bin).parent.mkdir(parents=True, exist_ok=True)
         with open(args.out_bin, "wb") as f:
             f.write(payload)
@@ -211,7 +255,12 @@ if __name__ == "__main__":
         access_values = [r["access"] for r in approaches]
         manifest = {
             "rows": len(approaches),
-            "columns": column_manifest,
+            "columns": {k: v for k, v in column_manifest.items() if not k.startswith(EXIT_PREFIX)},
+            "exit_anchors": {
+                "rows": len(exit_rows),
+                "columns": {k[len(EXIT_PREFIX):]: v for k, v in column_manifest.items()
+                            if k.startswith(EXIT_PREFIX)},
+            },
             "access_values": access_values,
             "reverse_index": index,
         }

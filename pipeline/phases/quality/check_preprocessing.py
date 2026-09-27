@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Read-only checks over phases/preprocessing/ output (spec docs/superpowers/specs/
-2026-09-02-data-quality-monitoring-design.md §4.1): start_points.npy integrity and its coverage
-in start_points_id_table.json. Never mutates its inputs; always exits 0 (spec §3).
+2026-09-02-data-quality-monitoring-design.md §4.1): start-points.npy integrity and its coverage
+in start-points-id-table.json, plus region containment of the fetched source layers (huts,
+stations, parking, partner betriebe). Never mutates its inputs; always exits 0 (spec §3).
 
 Usage: python pipeline/phases/quality/check_preprocessing.py
 """
@@ -12,10 +13,12 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import shapely
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR, QUALITY_DIR, load_config  # noqa: E402
+from lib.pipeline import QUALITY_DIR, RAW_DIR, START_POINTS_DIR, load_config  # noqa: E402
+from lib.poly import load_region_boundary  # noqa: E402
 from lib.quality_report import build_check, write_report  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
@@ -27,14 +30,13 @@ _TYPE_NAMES = {
 }
 
 
-def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagged: int) -> dict:
-    """§4.1.1: coordinates finite, inside bbox, and no (type, osm_id) duplicate rows."""
+def check_start_point_integrity(start_points: np.ndarray, region, max_flagged: int) -> dict:
+    """§4.1.1: coordinates finite, inside region (the union of the configured .poly boundaries, a
+    shapely (Multi)Polygon), and no (type, osm_id) duplicate rows."""
     lon, lat = start_points["lon"], start_points["lat"]
     finite = np.isfinite(lon) & np.isfinite(lat)
-    in_bbox = (
-        (lon >= bbox["minLng"]) & (lon <= bbox["maxLng"])
-        & (lat >= bbox["minLat"]) & (lat <= bbox["maxLat"])
-    )
+    in_region = np.zeros(len(start_points), dtype=bool)
+    in_region[finite] = shapely.contains_xy(region, lon[finite], lat[finite])
 
     flagged = []
     for i in np.nonzero(~finite)[0]:
@@ -42,11 +44,11 @@ def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagge
             "row": int(i), "type": _TYPE_NAMES.get(int(start_points[i]["type"]), "?"),
             "osm_id": int(start_points[i]["osm_id"]), "reason": "non_finite",
         })
-    for i in np.nonzero(finite & ~in_bbox)[0]:
+    for i in np.nonzero(finite & ~in_region)[0]:
         flagged.append({
             "row": int(i), "type": _TYPE_NAMES.get(int(start_points[i]["type"]), "?"),
             "osm_id": int(start_points[i]["osm_id"]), "lon": float(lon[i]), "lat": float(lat[i]),
-            "reason": "outside_bbox",
+            "reason": "outside_region",
         })
 
     seen = {}
@@ -66,8 +68,28 @@ def check_start_point_integrity(start_points: np.ndarray, bbox: dict, max_flagge
     )
 
 
+def check_source_layer_in_region(layer: str, features: list, region, max_flagged: int) -> dict:
+    """Every point feature of a fetched source layer (huts, stations, parking, partner_betriebe)
+    lies inside region, a shapely (Multi)Polygon. Flags features with no coordinates too."""
+    flagged = []
+    for i, feat in enumerate(features):
+        geometry = feat.get("geometry")
+        coords = geometry.get("coordinates") if geometry else None
+        if not coords:
+            flagged.append({"row": i, "id": feat.get("id"), "reason": "no_geometry"})
+        elif not shapely.contains_xy(region, coords[0], coords[1]):
+            flagged.append({
+                "row": i, "id": feat.get("id", feat.get("properties", {}).get("id")),
+                "lon": float(coords[0]), "lat": float(coords[1]), "reason": "outside_region",
+            })
+    return build_check(
+        f"source_layer_in_region_{layer}", {}, checked=len(features), flagged_rows=flagged,
+        baseline=0, max_flagged_rows=max_flagged,
+    )
+
+
 def check_id_table_coverage(start_points: np.ndarray, id_table: dict, max_flagged: int) -> dict:
-    """§4.1.2: every start_points.npy row's osm_id must resolve in its layer of the id table."""
+    """§4.1.2: every start-points.npy row's osm_id must resolve in its layer of the id table."""
     flagged = []
     for i in range(len(start_points)):
         type_name = _TYPE_NAMES.get(int(start_points[i]["type"]))
@@ -88,8 +110,8 @@ def main(argv=None):
     max_flagged_default = config.get("quality", {}).get("maxFlaggedRows", 500)
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start-points", default=str(OSM_DIR / "start_points.npy"))
-    parser.add_argument("--id-table", default=str(OSM_DIR / "start_points_id_table.json"))
+    parser.add_argument("--start-points", default=str(START_POINTS_DIR / "start-points.npy"))
+    parser.add_argument("--id-table", default=str(START_POINTS_DIR / "start-points-id-table.json"))
     parser.add_argument("--out", default=str(QUALITY_DIR / "preprocessing.json"))
     parser.add_argument("--max-flagged-rows", type=int, default=max_flagged_default)
     args = parser.parse_args(argv)
@@ -99,8 +121,17 @@ def main(argv=None):
         with open(args.id_table, encoding="utf-8") as f:
             id_table = json.load(f)
 
+        region = load_region_boundary(config)
         checks = []
-        c = check_start_point_integrity(start_points, config["bbox"], args.max_flagged_rows)
+        for layer in ("huts", "stations", "parking", "partner_betriebe"):
+            with open(RAW_DIR / f"{layer}.geojson", encoding="utf-8") as f:
+                features = json.load(f)["features"]
+            c = check_source_layer_in_region(layer, features, region, args.max_flagged_rows)
+            print(f"{c['check']}: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
+                  flush=True)
+            checks.append(c)
+
+        c = check_start_point_integrity(start_points, region, args.max_flagged_rows)
         print(f"start_point_integrity: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
               flush=True)
         checks.append(c)

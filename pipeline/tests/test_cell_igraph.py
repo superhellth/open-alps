@@ -24,7 +24,7 @@ def _one_edge_subgraph(u: int, v: int, ascent_m: float, descent_m: float) -> Loc
 
     local_edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     local_edges[0] = (u, v, 1000.0, 0.0, 0.0, 0.0, 1000.0, ascent_m, descent_m,
-                       1, False, True, 0, 1, 42)
+                       1, False, True, False, 0, 1, 42)
 
     interior = np.zeros(1, dtype=binfmt.COORD_DTYPE)
     interior[0] = (10.0066, 50.0)  # near node 1's side, when walked u(1)->v(0)

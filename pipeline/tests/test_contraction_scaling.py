@@ -55,11 +55,11 @@ def test_profile_one_writes_a_prof_file_and_returns_a_table(tmp_path):
         edges_sac_rank=np.array([2, -1], dtype=np.int8),
         edges_via_ferrata=np.array([False, True]),
         edges_constrained_ok=np.array([True, True]),
+        edges_downgraded=np.array([False, False]),
         interior_coords=[[(11.05, 47.05)], []],
     )
     graph_dir = tmp_path / "base_graph"
-    bbg.pack_and_write(contracted, {"minLng": 8.9, "maxLng": 17.2,
-                                    "minLat": 46.3, "maxLat": 50.6}, 60.0, graph_dir)
+    bbg.pack_and_write(contracted, 60.0, graph_dir)
 
     prof_path = tmp_path / "contraction.prof"
     table = profile_one(graph_dir, fraction=1.0, out_path=prof_path)

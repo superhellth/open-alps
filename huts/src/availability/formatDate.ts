@@ -7,3 +7,8 @@ export function formatOhrsDate(date: Date, offsetDays = 0): string {
   const mm = String(d.getUTCMonth() + 1).padStart(2, '0')
   return `${dd}.${mm}.${d.getUTCFullYear()}`
 }
+
+/** UTC-safe day arithmetic, the same one formatOhrsDate uses. */
+export function addUtcDays(date: Date, days: number): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + days))
+}

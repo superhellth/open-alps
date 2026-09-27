@@ -19,8 +19,11 @@ File shape (whitespace-delimited "lng lat" pairs, one ring per section):
 
 A ring name starting with "!" is a hole, subtracted from the union of the outer rings."""
 
-from shapely.geometry import Polygon
+from shapely.geometry import Point, Polygon
 from shapely.ops import unary_union
+from shapely.prepared import prep
+
+from lib.pipeline import RAW_OSM_DIR
 
 
 def parse_poly_file(path):
@@ -55,3 +58,21 @@ def region_boundary(poly_paths):
     """Unions the (Multi)Polygons parsed from poly_paths into one boundary covering every
     region."""
     return unary_union([parse_poly_file(p) for p in poly_paths])
+
+
+def load_region_boundary(config):
+    """The AT+Bavaria boundary: region_boundary() over the downloaded .poly file of every region
+    in config["regions"]."""
+    return region_boundary([RAW_OSM_DIR / f"{r['name']}.poly" for r in config["regions"]])
+
+
+def filter_to_boundary(features, boundary, xy):
+    """Keeps the features whose point lies inside boundary, a (Multi)Polygon. xy(feature) returns
+    the feature's (lng, lat), or None for a feature with no geometry, which is dropped."""
+    prepared = prep(boundary)
+    kept = []
+    for feature in features:
+        point = xy(feature)
+        if point is not None and prepared.contains(Point(*point)):
+            kept.append(feature)
+    return kept

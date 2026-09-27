@@ -2,7 +2,7 @@
 """Standalone analysis module - not part of the doit task graph, not imported by any phase script.
 
 Rebuilds the raw (pre-contraction) node/edge arrays by un-contracting the already-persisted
-data/osm/base_graph/, so contraction cost can be measured at any graph size without re-running
+data/build/base-graph/, so contraction cost can be measured at any graph size without re-running
 stream_osm (914s per attempt). Each chain edge e is the raw path u -> interior[offset..offset+
 count) -> v; interior_offset is monotone in edge order, so raw node ids fall out as
 n_junctions + flat_interior_index with no bookkeeping.
@@ -12,13 +12,13 @@ granularity: which segments of a partially-road/ungraded/inferred chain carried 
 totals survive contraction; per-segment attribution does not, same reasoning as
 lib/contraction.py's docstring). This sets each per-segment flag from the corresponding chain
 total > 0, so reconstructed road_m/ungraded_m/inferred_m totals differ from the originals.
-constrained_ok is chain-level already (an AND-fold, not a sum), so it broadcasts exactly.
-Topology, coordinates, per-segment distances, sac_rank and via_ferrata are exact, which is
-everything contraction's cost depends on.
+constrained_ok and downgraded are chain-level folds, not sums; the reconstruction broadcasts each
+chain value to all its segments. Topology, coordinates, per-segment distances, sac_rank and
+via_ferrata are exact, which is everything contraction's cost depends on.
 
 See docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md.
 
-Usage: python pipeline/analysis/reconstruct_raw_graph.py [--base-graph data/osm/base_graph]
+Usage: python pipeline/analysis/reconstruct_raw_graph.py [--base-graph data/build/base-graph]
        (running it directly reconstructs the full graph and prints a size/consistency report)
 """
 
@@ -34,12 +34,12 @@ from lib import binfmt  # noqa: E402
 # same formula and earth radius as build_base_graph.py's haversine_m_vec (both import this same
 # shared function), so reconstructed segment distances sum back to the persisted chain distances
 from lib.geo import haversine_m_vec_pairs as _haversine_m_vec  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import BASE_GRAPH_DIR  # noqa: E402
 
 
 @dataclass
 class RawGraph:
-    """Exactly contract_structural's ten positional arguments, in order."""
+    """Exactly contract_structural's eleven positional arguments, in order."""
     coords: np.ndarray
     edges_i: np.ndarray
     edges_j: np.ndarray
@@ -50,11 +50,12 @@ class RawGraph:
     edges_sac_rank: np.ndarray
     edges_via_ferrata: np.ndarray
     edges_constrained_ok: np.ndarray
+    edges_downgraded: np.ndarray
 
     def as_args(self):
         return (self.coords, self.edges_i, self.edges_j, self.edges_dist, self.edges_road,
                 self.edges_ungraded, self.edges_inferred, self.edges_sac_rank,
-                self.edges_via_ferrata, self.edges_constrained_ok)
+                self.edges_via_ferrata, self.edges_constrained_ok, self.edges_downgraded)
 
 
 def select_edges_in_cells(nodes, edges, cell_ids) -> np.ndarray:
@@ -115,14 +116,16 @@ def reconstruct_raw(nodes, edges, interior, edge_ids) -> RawGraph:
     edges_sac_rank = np.asarray(sel["sac_rank"], dtype=np.int8)[eidx]
     edges_via_ferrata = np.asarray(sel["via_ferrata"], dtype=bool)[eidx]
     edges_constrained_ok = np.asarray(sel["constrained_ok"], dtype=bool)[eidx]
+    edges_downgraded = np.asarray(sel["downgraded"], dtype=bool)[eidx]
 
     return RawGraph(coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded,
-                    edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok)
+                    edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
+                    edges_downgraded)
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--base-graph", default=str(OSM_DIR / "base_graph"),
+    parser.add_argument("--base-graph", default=str(BASE_GRAPH_DIR),
                         help="directory holding the persisted base graph (build_base_graph.py's output)")
     args = parser.parse_args(argv)
 

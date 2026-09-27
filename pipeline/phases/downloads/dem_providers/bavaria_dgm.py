@@ -1,27 +1,24 @@
 """Bavaria DGM5 (5m grid, Bayerische Vermessungsverwaltung, CC BY 4.0) via geodaten.bayern.de.
 
-The brief this module was originally written from assumed a downloadable tile-index
-(shapefile/geojson) mapping bbox -> tile IDs via geometric intersection, plus Metalink-based bulk
-download. Hands-on research replaced that design:
+There is no downloadable tile index and no usable bulk download:
 
 - Bavaria's Metalink bulk download is organized per Regierungsbezirk (administrative district), not
   per-tile - each district's Metalink is ~14GB
   (https://geodaten.bayern.de/odd/a/dgm/dgm5xyz/meta/metalink/09.meta4, "09" = district code). Too
-  large and the wrong granularity for a small alpine-trail bbox - not used here.
+  large and the wrong granularity for the alpine trail area - not used here.
 - There is instead a direct per-1km-tile download at
   https://download1.bayernwolke.de/a/dgm/dgm5xyz/{tile_id}.zip, confirmed live via `curl -I`
   (HTTP 200, application/zip, ~200KB for tile 589_5256.zip).
 - The tile ID is `{easting_km}_{northing_km}`, a coordinate in EPSG:25832 (UTM32N) in whole
   kilometers - Germany's standard AdV 1km-grid tile-naming convention. That means tile IDs for any
-  bbox can be computed directly with no tile-index file at all: transform the bbox corners from
-  EPSG:4326 to EPSG:25832 and floor each corner to whole kilometers, then enumerate every tile
-  whose [e, e+1) x [n, n+1) cell the transformed bbox touches.
+  area can be computed directly with no tile-index file at all: transform the area from EPSG:4326
+  to EPSG:25832 and enumerate every tile whose [e, e+1) x [n, n+1) cell it touches.
 
 5m rather than DGM1's 1m: already well past the resolution needed to resolve trail switchbacks
 (see docs/osm-trail-pipeline.md), at a fraction of DGM1's storage/download volume.
 
-providerConfig: {"bbox": {...}} (bbox falls back to the top-level pipeline.config.json bbox if
-omitted, same as every other provider).
+providerConfig: {"area": <shapely (Multi)Polygon, EPSG:4326>} - the hub range clipped to Bayern,
+resolved by composite.fetch_regions().
 
 Coverage index, so candidate tiles aren't discovered by 404-probing the download server: Bayern
 publishes the DGM5 tile grid itself as a WMS layer ("dgm5xyz" on
@@ -51,7 +48,9 @@ from pathlib import Path
 
 import rasterio
 from rasterio.io import MemoryFile
-from rasterio.warp import transform_bounds, transform
+from rasterio.warp import transform_geom
+import shapely
+from shapely.geometry import box, mapping, shape
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent.parent))
 from lib.pipeline import safe_extractall  # noqa: E402
@@ -65,7 +64,7 @@ TILE_DOWNLOAD_RETRY_BACKOFF_S = 5
 GRID_WMS_URL = "https://geoservices.bayern.de/od/wms/grid/v1/opendatagrid"
 GRID_LAYER = "dgm5xyz"
 GRID_PX_PER_KM = 6  # matches the resolution hand-verified against known good/bad tiles above
-GRID_MAX_PX = 2400  # WMS request image dimension cap - chunk bbox requests to stay under this
+GRID_MAX_PX = 2400  # WMS request image dimension cap - chunk requests to stay under this
 
 
 def tile_url(tile_id: str) -> str:
@@ -101,7 +100,7 @@ def _fetch_grid_alpha(min_e_km: int, min_n_km: int, max_e_km: int, max_n_km: int
 
 
 def existing_tile_ids(tile_ids: list[str]) -> list[str]:
-    """Filters tile_ids (as produced by tiles_for_bbox()/tiles_for_points()) down to the ones that
+    """Filters tile_ids (as produced by tiles_for_area()) down to the ones that
     actually have DGM5 coverage, using the coverage-grid WMS layer instead of probing the download
     server per tile (see module docstring). Candidates are grouped into WMS-request-sized chunks
     covering their full extent, so a candidate set spanning all of Bavaria costs a handful of large
@@ -154,38 +153,20 @@ def tiles_for_utm_bounds(min_e: float, min_n: float, max_e: float, max_n: float)
     ]
 
 
-def tiles_for_bbox(bbox: dict) -> list[str]:
-    """bbox: {"minLng", "minLat", "maxLng", "maxLat"} in EPSG:4326. Transforms to EPSG:25832 and
-    delegates to tiles_for_utm_bounds()."""
-    min_e, min_n, max_e, max_n = transform_bounds(
-        "EPSG:4326", "EPSG:25832",
-        bbox["minLng"], bbox["minLat"], bbox["maxLng"], bbox["maxLat"],
-    )
-    return tiles_for_utm_bounds(min_e, min_n, max_e, max_n)
-
-
-def tiles_for_points(points: list[list[float]], buffer_km: float = 1.0) -> list[str]:
-    """points: list of [lng, lat] (EPSG:4326), e.g. huts. Returns the union of every 1km-tile ID
-    touched by a buffer_km-radius square around each point, instead of one rectangle enclosing
-    every point.
-
-    A single enclosing bbox (tiles_for_bbox) is the wrong shape when points cluster tightly with a
-    few far-flung outliers - e.g. Bavaria's Alpine-Verein huts are ~90% clustered at the southern
-    alpine fringe, with a handful of non-alpine AV huts up near the Bavarian Forest 300km north.
-    An enclosing rectangle over both would cover a huge swath of empty lowland with no huts or
-    trails, ballooning the tile count by two orders of magnitude and burying real hits under a long
-    run of 404s for terrain nobody needs. Per-point windows only fetch what's actually near a hut."""
-    lngs = [p[0] for p in points]
-    lats = [p[1] for p in points]
-    xs, ys = transform("EPSG:4326", "EPSG:25832", lngs, lats)
-
-    tile_ids = set()
-    for x, y in zip(xs, ys):
-        tile_ids.update(tiles_for_utm_bounds(
-            x - buffer_km * 1000, y - buffer_km * 1000,
-            x + buffer_km * 1000, y + buffer_km * 1000,
-        ))
-    return sorted(tile_ids, key=lambda t: (int(t.split("_")[1]), int(t.split("_")[0])))
+def tiles_for_area(area) -> list[str]:
+    """area: shapely (Multi)Polygon in EPSG:4326. Transforms it to EPSG:25832 and returns every
+    1km-tile ID whose cell intersects it (touching counts), in ascending northing-then-easting
+    order. Candidates come from the polygon's UTM bounds, so pieces far apart do not drag in the
+    empty space between them."""
+    utm_area = shape(transform_geom("EPSG:4326", "EPSG:25832", mapping(area)))
+    candidates = tiles_for_utm_bounds(*utm_area.bounds)
+    shapely.prepare(utm_area)
+    cells = []
+    for t in candidates:
+        e, n = (int(x) for x in t.split("_"))
+        cells.append(box(e * 1000, n * 1000, (e + 1) * 1000, (n + 1) * 1000))
+    hits = shapely.intersects(utm_area, cells)
+    return [t for t, hit in zip(candidates, hits) if hit]
 
 
 def _download_tile(tile_id: str, raw_dir: Path) -> Path | None:
@@ -233,14 +214,8 @@ def fetch(provider_config: dict, raw_dir: Path) -> list[Path]:
     raw_dir.mkdir(parents=True, exist_ok=True)
     socket.setdefaulttimeout(TILE_DOWNLOAD_TIMEOUT_S)
 
-    points = provider_config.get("points")
-    if points:
-        buffer_km = provider_config.get("bufferKm", 1.0)
-        tile_ids = tiles_for_points(points, buffer_km)
-        print(f"{len(tile_ids)} Bavaria DGM5 tiles cover {len(points)} points (+{buffer_km}km buffer)")
-    else:
-        tile_ids = tiles_for_bbox(provider_config["bbox"])
-        print(f"{len(tile_ids)} Bavaria DGM5 tiles cover the configured bbox")
+    tile_ids = tiles_for_area(provider_config["area"])
+    print(f"{len(tile_ids)} Bavaria DGM5 tiles intersect the area to cover")
 
     tile_ids = existing_tile_ids(tile_ids)
     print(f"{len(tile_ids)} of those confirmed to exist via the coverage-grid WMS")

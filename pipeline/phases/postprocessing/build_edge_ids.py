@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Packs hut_edges/records.npy + hut_edges/edge_ids.npy (build_hub_edges.py) into the client-
+"""Packs hut-edges/records.npy + hut-edges/edge-ids.npy (build_hub_edges.py) into the client-
 facing hut-edge-ids.bin/.json sibling of hut-edge-payload.bin - the trail-segment identity the
 "avoid overlapping tracks" search-time check needs (docs/superpowers/specs/
 2026-08-29-avoid-overlapping-tracks-design.md §2). Follows hut-edge-geometry.json's flat-counts-
@@ -18,14 +18,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import HUT_EDGES_DIR  # noqa: E402
 from lib.timing import phase  # noqa: E402
 
 K_TRAVERSAL = 8
 
 
 def pack_edge_ids(records: np.ndarray, flat_edge_ids: np.ndarray) -> tuple:
-    """flat_edge_ids: hut_edges/edge_ids.npy as-is - already the per-record sorted-ascending runs
+    """flat_edge_ids: hut-edges/edge-ids.npy as-is - already the per-record sorted-ascending runs
     concatenated in record order (build_hub_edges.py's _write_edge_output), so no re-gathering is
     needed here, just a straight-through byte copy."""
     rows = len(records)
@@ -49,17 +49,17 @@ def pack_edge_ids(records: np.ndarray, flat_edge_ids: np.ndarray) -> tuple:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--edges-dir", default=str(OSM_DIR / "hut_edges"),
-                        help="directory holding hut_edges/ records (build_hub_edges.py's output)")
-    parser.add_argument("--out-bin", default=str(OSM_DIR / "hut-edge-ids.bin"),
+    parser.add_argument("--edges-dir", default=str(HUT_EDGES_DIR),
+                        help="directory holding hut-edges/ records (build_hub_edges.py's output)")
+    parser.add_argument("--out-bin", default=str(HUT_EDGES_DIR / "ids.bin"),
                         help="path to write the packed hut-edge-id binary")
-    parser.add_argument("--out-manifest", default=str(OSM_DIR / "hut-edge-ids.json"),
+    parser.add_argument("--out-manifest", default=str(HUT_EDGES_DIR / "ids.json"),
                         help="path to write the hut-edge-id manifest")
     args = parser.parse_args()
 
     with phase("build_edge_ids.py", "build_edge_ids"):
         records = binfmt.load_array(Path(args.edges_dir) / "records.npy", mmap=False)
-        flat_edge_ids = binfmt.load_array(Path(args.edges_dir) / "edge_ids.npy", mmap=False)
+        flat_edge_ids = binfmt.load_array(Path(args.edges_dir) / "edge-ids.npy", mmap=False)
         payload, manifest = pack_edge_ids(records, flat_edge_ids)
 
         out_bin = Path(args.out_bin)

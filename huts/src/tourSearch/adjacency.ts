@@ -14,3 +14,20 @@ export function buildAdjacency(hutEdgesData: HutEdgesData, variant: number): Map
   }
   return adjacency
 }
+
+const adjacencyCache = new WeakMap<HutEdgesData, Map<number, Map<number, HutLeg[]>>>()
+
+/** buildAdjacency, memoised per payload object and variant (trip editing asks repeatedly). */
+export function getAdjacency(hutEdgesData: HutEdgesData, variant: number): Map<number, HutLeg[]> {
+  let byVariant = adjacencyCache.get(hutEdgesData)
+  if (!byVariant) {
+    byVariant = new Map()
+    adjacencyCache.set(hutEdgesData, byVariant)
+  }
+  let adjacency = byVariant.get(variant)
+  if (!adjacency) {
+    adjacency = buildAdjacency(hutEdgesData, variant)
+    byVariant.set(variant, adjacency)
+  }
+  return adjacency
+}

@@ -1,72 +1,15 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { readColumns } from './binaryColumns.js'
 import { buildAdjacency } from './adjacency.js'
 import { resolveVariant } from './resolveVariant.js'
 import { findTours } from './index.js'
-import type { ApproachesData, ApproachRecord, GraphData, HutEdgeRecord, HutEdgesData } from './types.js'
-
-const DATA_DIR = fileURLToPath(new URL('../../public/data/', import.meta.url))
-
-function loadHutEdgesFromDisk(): HutEdgesData {
-  const manifest = JSON.parse(readFileSync(`${DATA_DIR}hut-edge-payload.json`, 'utf-8'))
-  const buffer = readFileSync(`${DATA_DIR}hut-edge-payload.bin`).buffer as ArrayBuffer
-  const c = readColumns(buffer, manifest)
-  const records = new Array<HutEdgeRecord>(manifest.rows)
-  for (let i = 0; i < manifest.rows; i++) {
-    records[i] = {
-      fromIndex: c.from_id[i], toIndex: c.to_id[i], variant: c.variant[i],
-      distanceM: c.distance_m[i], ascentM: c.ascent_m[i], descentM: c.descent_m[i],
-      maxEleM: c.max_ele_m[i], sacRank: c.sac_rank[i], viaFerrata: c.via_ferrata[i] === 1,
-      roadM: c.road_m[i], ungradedM: c.ungraded_m[i], inferredM: c.inferred_m[i], snapM: c.snap_m[i],
-      edgeId: i,
-    }
-  }
-  return { hutIds: manifest.hut_ids, variantNames: manifest.variants, records }
-}
-
-function loadApproachesFromDisk(): ApproachesData {
-  const manifest = JSON.parse(readFileSync(`${DATA_DIR}approaches.json`, 'utf-8'))
-  const buffer = readFileSync(`${DATA_DIR}approaches.bin`).buffer as ArrayBuffer
-  const c = readColumns(buffer, manifest)
-  const records = new Array<ApproachRecord>(manifest.rows)
-  for (let i = 0; i < manifest.rows; i++) {
-    records[i] = {
-      hutIndex: c.hut_id[i], startId: c.start_id[i], sourceType: c.source_type[i] as ApproachRecord['sourceType'],
-      variant: c.variant[i],
-      accessUnknown: c.access_unknown[i] === 1, distanceM: c.distance_m[i],
-      ascentM: c.ascent_m[i], descentM: c.descent_m[i],
-      access: manifest.access_values ? manifest.access_values[i] : null,
-      // approaches.bin predating this plan's Task 2 has no edge_id column - guard until
-      // huts/public/data/ is rebuilt by a (separately gated) doit run.
-      edgeId: c.edge_id ? c.edge_id[i] : -1,
-    }
-  }
-  return { records, reverseIndex: manifest.reverse_index }
-}
+import { loadGraphDataFromDisk } from '@/testing/realDataFromDisk.js'
+import type { GraphData } from './types.js'
 
 describe('real shipped payload (huts/public/data)', () => {
   let graphData: GraphData
 
   beforeAll(() => {
-    graphData = {
-      hutEdges: loadHutEdgesFromDisk(), approaches: loadApproachesFromDisk(),
-      // hutEdgeIds/startEdgeIds are stubs until a confirmed pipeline run regenerates
-      // huts/public/data/{hut,start}-edge-ids.* (docs/superpowers/plans/
-      // 2026-09-04-approach-exit-overlap-avoidance.md) and this wires real
-      // loadHutEdgeIdsFromDisk()/loadStartEdgeIdsFromDisk() readers here.
-      hutEdgeIds: {
-        getSortedIds: () => new Int32Array(0),
-        getPrefixIds: () => new Int32Array(0),
-        getSuffixIds: () => new Int32Array(0),
-      },
-      startEdgeIds: {
-        getSortedIds: () => new Int32Array(0),
-        getPrefixIds: () => new Int32Array(0),
-        getSuffixIds: () => new Int32Array(0),
-      },
-    }
+    graphData = loadGraphDataFromDisk({ withEdgeIds: false })
   })
 
   it('resolves every difficulty ceiling to a variant the payload actually has', () => {

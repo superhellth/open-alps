@@ -3,13 +3,16 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "phases"))
 
 from lib import binfmt  # noqa: E402
+from lib.anchors import decode_row  # noqa: E402
 from postprocessing.build_approach_table import (  # noqa: E402
-    build_tables, bucket_index, gather_candidates, parse_duration_buckets,
+    approach_anchor_columns, build_tables, bucket_index,
+    exit_anchor_rows, gather_candidates, parse_duration_buckets,
     parse_variant_names, select_approaches,
 )
 
@@ -50,7 +53,7 @@ def test_absent_access_is_kept_and_marked_unknown():
 
 def test_restricted_access_start_points_are_surfaced_not_dropped():
     # private/gated/disused points are hard-dropped upstream, in filter_start_points.py's
-    # is_usable() (docs/backlog/access-node-coverage.md) - nothing reaching start_edges/
+    # is_usable() (docs/backlog/access-node-coverage.md) - nothing reaching start-edges/
     # records.npy can carry access="private" any more, but if id_table somehow did carry it,
     # this stage must not silently drop it a second time (that filtering logic lives in exactly
     # one place now).
@@ -268,3 +271,29 @@ def test_every_selected_row_carries_a_variant_ready_for_the_variant_column():
     )
     assert all(isinstance(r["variant"], int) for r in rows)
     assert rows[0]["variant"] == binfmt.VARIANT_FAST_ANY
+
+
+def test_approach_anchors_are_offsets_from_the_rows_hut_along_the_start_edge():
+    records = _records([_record(1, binfmt.TYPE_PARKING, 0, 1000.0, 0.0, 0.0)])
+    records["geom_offset"], records["geom_count"] = 0, 2
+    geometry = np.zeros(2, dtype=binfmt.COORD_DTYPE)
+    geometry["lon"], geometry["lat"] = [11.4, 11.0], [47.0, 47.0]  # parking -> hut
+    hut_lonlat = np.array([[11.0, 47.0]])
+
+    cols = approach_anchor_columns([{"edge_id": 0, "hut_id": 0}], records, geometry, hut_lonlat)
+
+    anchors = decode_row(cols, 0, hut_lonlat[0])
+    assert anchors[0, 0] == pytest.approx(11.2, abs=1e-4)
+
+
+def test_exit_anchor_rows_list_reverse_index_edges_no_approach_row_covers():
+    approaches = [{"edge_id": 5, "hut_id": 0}]
+    entry = lambda edge_id, hut_id: {"edge_id": edge_id, "hut_id": hut_id}  # noqa: E731
+    index = {
+        "hut_to_starts": {"0": [entry(5, 0), entry(9, 0), entry(7, 0)], "1": [entry(8, 1), entry(9, 0)]},
+        "start_to_huts": {},
+    }
+
+    assert exit_anchor_rows(approaches, index) == [
+        {"edge_id": 7, "hut_id": 0}, {"edge_id": 8, "hut_id": 1}, {"edge_id": 9, "hut_id": 0},
+    ]

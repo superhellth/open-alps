@@ -20,7 +20,7 @@ describe('reverseHutLeg', () => {
     expect(reversed.durationH).toBeCloseTo(3.8667, 3)
     expect(reversed.edgeId).toBe(42)
     expect(reversed.reversed).toBe(true)
-    const fields: (keyof HutEdgeRecord)[] = ['distanceM', 'roadM', 'sacRank', 'viaFerrata', 'maxEleM', 'ungradedM', 'inferredM']
+    const fields: ('distanceM' | 'roadM' | 'sacRank' | 'viaFerrata' | 'maxEleM' | 'ungradedM' | 'inferredM')[] = ['distanceM', 'roadM', 'sacRank', 'viaFerrata', 'maxEleM', 'ungradedM', 'inferredM']
     for (const field of fields) {
       expect(reversed[field]).toEqual(record[field])
     }

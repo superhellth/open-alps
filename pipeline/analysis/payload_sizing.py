@@ -8,7 +8,7 @@ docs/superpowers/specs/2026-08-22-tour-suggestion-backend.md leaves as estimates
      optimistic;
   2. the k-best-per-hut approach table (spec E1) - "< 100 KB", and, more usefully, how many huts
      actually get k approaches once the access rule deletes the private and gated trailheads;
-  3. the loop-closure reverse index (spec E2) - "bounded by start_edges/, ~1.9 MB raw", open
+  3. the loop-closure reverse index (spec E2) - "bounded by start-edges/, ~1.9 MB raw", open
      question 3.
 
 It builds each artifact for real - narrowing ids to u2, laying the columns out contiguously,
@@ -31,8 +31,8 @@ spec E1 is therefore evaluated on `access` alone, and the script reports how man
 carry no access tag at all - the `access_unknown` bucket the spec says to keep and mark. Widening
 keep_fields is a prerequisite for building E1, not for measuring it.
 
-Requires data/osm/hut_edges/records.npy, data/osm/start_edges/records.npy (build_hub_edges.py),
-data/osm/parking.geojson + stations.geojson (fetch_stations_parking.py).
+Requires data/build/hut-edges/records.npy, data/build/start-edges/records.npy (build_hub_edges.py),
+data/raw/parking.geojson + stations.geojson (fetch_stations_parking.py).
 Writes data/analysis/payload_sizing.json.
 
 Runtime: seconds. Reads records.npy and the two GeoJSON layers; never touches geometry.npy.
@@ -51,9 +51,8 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from lib import binfmt  # noqa: E402
-from lib.pipeline import OSM_DIR  # noqa: E402
+from lib.pipeline import DATA_DIR, HUT_EDGES_DIR, RAW_DIR, START_EDGES_DIR  # noqa: E402
 
-DATA_DIR = OSM_DIR.parent
 OUT_PATH = DATA_DIR / "analysis" / "payload_sizing.json"
 
 # Spec E1: hard-drop restricted access. `customers` and `permit` are reported separately rather
@@ -143,7 +142,7 @@ def load_access():
     access = {}
     counts = Counter()
     for layer in ("parking.geojson", "stations.geojson"):
-        path = OSM_DIR / layer
+        path = RAW_DIR / layer
         if not path.exists():
             print(f"  missing {path}, skipping", flush=True)
             continue
@@ -257,8 +256,8 @@ def main():
                     help="variant rows to price the hut-edge payload for (phase 1 is 3)")
     args = ap.parse_args()
 
-    hut_recs = binfmt.load_array(OSM_DIR / "hut_edges" / "records.npy", mmap=False)
-    st_recs = binfmt.load_array(OSM_DIR / "start_edges" / "records.npy", mmap=False)
+    hut_recs = binfmt.load_array(HUT_EDGES_DIR / "records.npy", mmap=False)
+    st_recs = binfmt.load_array(START_EDGES_DIR / "records.npy", mmap=False)
     print(f"loaded {len(hut_recs):,} hut edges, {len(st_recs):,} start edges\n", flush=True)
 
     result = {"params": {"k": args.k, "variants": args.variants}}

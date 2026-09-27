@@ -1,3 +1,4 @@
+import json
 import sys
 from collections import namedtuple
 from pathlib import Path
@@ -50,6 +51,16 @@ def test_way_handler_marks_implied_grade_as_inferred_and_passable():
     assert h.edges_constrained_ok == [True]
 
 
+def test_way_handler_marks_downgrade_tag_regardless_of_grade():
+    h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)], tags={"highway": "path"}))
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "path", "trail_visibility": "no"}))
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "path", "sac_scale": "hiking", "ladder": "yes"}))
+    assert h.edges_downgraded == [False, True, True]
+
+
 def test_via_ferrata_is_never_constrained_passable():
     h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
     h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
@@ -80,8 +91,8 @@ def test_way_handler_no_longer_takes_a_road_penalty_factor():
     assert "road_penalty_factor" not in inspect.signature(bbg.WayGraphHandler.__init__).parameters
 
 
-def test_contract_takes_the_ten_raw_arrays_so_main_can_free_the_handler_first(tmp_path,
-                                                                              monkeypatch):
+def test_contract_takes_the_raw_arrays_so_main_can_free_the_handler_first(tmp_path,
+                                                                          monkeypatch):
     # contract() must accept the already-converted arrays rather than the handler - that is what
     # lets main() drop the handler's ~12 GB of raw Python lists before contraction starts.
     import lib.timing as timing
@@ -99,6 +110,7 @@ def test_contract_takes_the_ten_raw_arrays_so_main_can_free_the_handler_first(tm
         np.array([1, 2], dtype=np.int8),
         np.array([False, False]),
         np.array([True, True]),
+        np.array([False, False]),
     )
     assert len(out.edges_u) == 1
     assert out.edges_dist[0] == 300.0
@@ -117,15 +129,15 @@ def _tiny_contracted():
         edges_sac_rank=np.array([2, -1], dtype=np.int8),
         edges_via_ferrata=np.array([False, True]),
         edges_constrained_ok=np.array([True, False]),
+        edges_downgraded=np.array([False, True]),
         interior_coords=[[(11.05, 47.05)], []],
     )
 
 
 def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
-    bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
-    bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
+    bbg.pack_and_write(_tiny_contracted(), 60.0, tmp_path)
 
-    for fname in ("nodes.npy", "cell_index.npy", "node_edge_index.npy", "node_edge_ids.npy",
+    for fname in ("nodes.npy", "cell-index.npy", "node-edge-index.npy", "node-edge-ids.npy",
                   "edges.npy", "interior.npy", "manifest.json"):
         assert (tmp_path / fname).exists(), f"{fname} not written"
 
@@ -141,6 +153,7 @@ def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
     assert interior["lon"][0] == pytest.approx(11.05)
     # time_s/ascent_m/descent_m are UNSET here - compute_edge_profiles.py fills them in a later pass
     assert (edges["time_s"] == binfmt.UNSET).all()
+    assert sorted(edges["downgraded"].tolist()) == [False, True]
 
 
 def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch):
@@ -166,6 +179,7 @@ def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch)
             self.edges_sac_rank = [1, 2]
             self.edges_via_ferrata = [False, False]
             self.edges_constrained_ok = [True, True]
+            self.edges_downgraded = [False, False]
 
     # the weakref is the only handle the test keeps - a strong ref here would defeat the check
     handler_ref = {}
@@ -194,22 +208,30 @@ def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch)
     )
 
 
+def test_pack_and_write_derives_grid_extent_from_nodes_snapped_outward(tmp_path):
+    bbg.pack_and_write(_tiny_contracted(), 60.0, tmp_path)
+
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    # nodes span lon 11.0-11.2, lat 47.0-47.2
+    assert manifest["bbox"] == {"minLng": 11.0, "maxLng": 12.0, "minLat": 47.0, "maxLat": 48.0}
+    nodes = binfmt.load_array(tmp_path / "nodes.npy")
+    assert (nodes["cell_id"] >= 0).all()
+
+
 def test_pack_and_write_invalidates_a_stale_edge_profiles_stamp(tmp_path):
     # pack_and_write resets time_s/ascent_m/descent_m to binfmt.UNSET, which makes any
-    # edge_profiles.stamp left over from a PREVIOUS base graph a lie - and the stamp is exactly
+    # edge-profiles.stamp left over from a PREVIOUS base graph a lie - and the stamp is exactly
     # what dodo's compute_edge_profiles keys "already done" off (dag/elevation.py's targets).
     # Leaving it in place is what shipped -1 time_s all the way into build_hub_edges' igraph
     # weights, where negative weights silently switch igraph from Dijkstra to Bellman-Ford.
-    bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
-    stamp = tmp_path / "edge_profiles.stamp"
+    stamp = tmp_path / "edge-profiles.stamp"
     stamp.write_text("smoothing_kernel_m=30.0\n", encoding="utf-8")
 
-    bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
+    bbg.pack_and_write(_tiny_contracted(), 60.0, tmp_path)
 
-    assert not stamp.exists(), "stale edge_profiles.stamp survived a base-graph rebuild"
+    assert not stamp.exists(), "stale edge-profiles.stamp survived a base-graph rebuild"
 
 
 def test_pack_and_write_without_a_stamp_is_not_an_error(tmp_path):
-    bbox = {"minLng": 8.9, "maxLng": 17.2, "minLat": 46.3, "maxLat": 50.6}
-    bbg.pack_and_write(_tiny_contracted(), bbox, 60.0, tmp_path)
-    assert not (tmp_path / "edge_profiles.stamp").exists()
+    bbg.pack_and_write(_tiny_contracted(), 60.0, tmp_path)
+    assert not (tmp_path / "edge-profiles.stamp").exists()

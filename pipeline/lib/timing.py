@@ -8,12 +8,17 @@ post-yield code on an exception, so a failed run leaves no (misleading, partial)
 """
 
 import json
+import os
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-TIMINGS_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "timings.jsonl"
+# OPEN_ALPS_TIMINGS_PATH redirects the file for child processes (tests that run a script via
+# subprocess cannot monkeypatch this module).
+TIMINGS_PATH = Path(os.environ.get(
+    "OPEN_ALPS_TIMINGS_PATH",
+    Path(__file__).resolve().parent.parent.parent / "data" / "timings.jsonl"))
 
 
 @contextmanager

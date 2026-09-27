@@ -15,6 +15,8 @@ export interface ApproachRecord {
   descentM: number
   access: string | null
   edgeId: number
+  /** Flat `[dlat, dlng, ...]` anchor offsets (1e-4° from the hut), null when the payload ships none. */
+  anchorOffsets?: number[] | null
 }
 
 export interface HutEdgeRecord {
@@ -32,6 +34,8 @@ export interface HutEdgeRecord {
   inferredM: number
   snapM: number
   edgeId: number
+  /** Flat `[dlat, dlng, ...]` anchor offsets (1e-4° from the from-hut), null when the payload ships none. */
+  anchorOffsets?: number[] | null
 }
 
 /** Fields legFilters.legPasses needs, present on every leg shape (hut-hut, approach, exit). */
@@ -62,6 +66,7 @@ export interface HutLeg extends LegBase {
 export interface StartLeg extends LegBase {
   startId: number
   sourceType: SourceType
+  variant?: number
   hutIndex?: number
   accessUnknown?: boolean
   access?: string | null
@@ -153,8 +158,16 @@ export interface HutEdgesData {
   records: HutEdgeRecord[]
 }
 
+/** Anchors of a start edge that has no approach row, keyed by edge id: exit legs walk these edges backwards. */
+export interface ExitAnchor {
+  hutIndex: number
+  anchorOffsets: number[]
+}
+
 export interface ApproachesData {
   records: ApproachRecord[]
+  /** Anchors of reverse-index edges without an approach row; absent when the payload ships none. */
+  exitAnchors?: ReadonlyMap<number, ExitAnchor>
   reverseIndex: {
     hut_to_starts: Record<string, ReverseIndexEntry[]>
     start_to_huts: Record<string, ReverseIndexEntry[]>
@@ -177,4 +190,10 @@ export interface GraphData {
 export interface SearchResult {
   chains: TourResult[]
   killCounters: KillCounters
+}
+
+/** The slice of the routing graph trip derivation and editing need; the overlap tables stay in the worker. */
+export interface TripGraph {
+  hutEdges: HutEdgesData
+  approaches: ApproachesData
 }

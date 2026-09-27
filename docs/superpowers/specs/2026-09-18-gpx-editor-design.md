@@ -25,7 +25,7 @@ endpoints snap, and repair the track by dragging vertices, writing the result ba
    feedback, then save to `pipeline/tours/<Tour>/<N>.gpx`.
 
 Non-goals: editing hub positions (when a gap is caused by a wrong or missing hub, editing the GPX
-is still the chosen fix, or the hub is fixed upstream by hand); splitting/merging legs; re-running
+is still the chosen fix, or the hub is fixed upstream by hand); re-running
 the pipeline from the UI (after saving, the user runs `doit` as today; the DAG already lists every
 `pipeline/tours/*/*.gpx` as a `file_dep` of `match_tour_edges`); shipping the tool in the
 production build.

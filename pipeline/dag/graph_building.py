@@ -11,7 +11,11 @@ import json
 
 from lib import binfmt
 from lib.doit_support import cli_param, pipeline_task, tracking_param
-from lib.pipeline import DEM_DIR, OSM_DIR, TOURS_DIR, load_config
+from lib.pipeline import (
+    ACCESS_EDGES_DIR, BASE_GRAPH_DIR, HUT_EDGES_DIR, RAW_DEM_DIR, RAW_DIR, ROUTE_SUBGRAPHS_DIR,
+    SNAPPING_DIR, START_EDGES_DIR, START_POINTS_DIR, TRAILS_DIR,
+    load_config,
+)
 
 CONFIG = load_config()
 
@@ -25,9 +29,6 @@ _RECORD_SCHEMA_VERSION_PARAM = tracking_param(
 _ACCESS_DISTANCE_SCHEMA_VERSION_PARAM = tracking_param(
     "access_distance_schema_version", int, binfmt.ACCESS_DISTANCE_SCHEMA_VERSION
 )
-_TOUR_LEG_SCHEMA_VERSION_PARAM = tracking_param(
-    "tour_leg_schema_version", int, binfmt.TOUR_LEG_SCHEMA_VERSION
-)
 
 
 def task_build_base_graph():
@@ -36,16 +37,14 @@ def task_build_base_graph():
         params=[cli_param("tile_size_km", "tile-size-km", float, CONFIG["graph"]["tileSizeKm"])],
         tracking_params=[
             # build_base_graph.py reads config["graph"]["roadHighwayTags"] (WayGraphHandler's
-            # is_road classification) and config["bbox"] (pack_and_write's Grid, which decides
-            # every node's cell_id) directly - without these, editing either would silently leave
+            # is_road classification) directly - without this, editing it would silently leave
             # the multi-hour rebuild un-triggered.
             tracking_param("road_highway_tags_json", str,
                             json.dumps(CONFIG["graph"]["roadHighwayTags"])),
-            tracking_param("bbox_json", str, json.dumps(CONFIG["bbox"], sort_keys=True)),
             _EDGE_SCHEMA_VERSION_PARAM,
         ],
-        file_dep=[OSM_DIR / "trails.osm.pbf"],
-        targets=[OSM_DIR / "base_graph" / "manifest.json"],
+        file_dep=[TRAILS_DIR / "trails.osm.pbf"],
+        targets=[BASE_GRAPH_DIR / "manifest.json"],
     )
 
 
@@ -61,20 +60,20 @@ def task_snap_hubs():
                       CONFIG["graph"]["maxSnapAscentM"]),
         ],
         tracking_params=[_SNAP_SCHEMA_VERSION_PARAM],
-        # compute_edge_profiles rewrites base_graph/edges.npy's time_s/ascent_m/descent_m in place
+        # compute_edge_profiles rewrites base-graph/edges.npy's time_s/ascent_m/descent_m in place
         # but doesn't declare it as a target (build_base_graph already owns it), so this needs the
-        # explicit task_dep - node_ele.npy alone wouldn't prove that in-place rewrite happened.
+        # explicit task_dep - node-ele.npy alone wouldn't prove that in-place rewrite happened.
         task_dep=["compute_edge_profiles"],
         file_dep=[
-            OSM_DIR / "base_graph" / "manifest.json", OSM_DIR / "base_graph" / "node_ele.npy",
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+            BASE_GRAPH_DIR / "manifest.json", BASE_GRAPH_DIR / "node-ele.npy",
+            RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy",
             # spec E3: hub elevation is sampled directly from the DEM (same raster as
-            # node_ele.npy/interior_ele.npy).
-            DEM_DIR / "dem.tif",
+            # node-ele.npy/interior-ele.npy).
+            RAW_DEM_DIR / "dem.tif",
         ],
         targets=[
-            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
-            OSM_DIR / "unsnapped_huts.json",
+            SNAPPING_DIR / "hub-snaps.npy", SNAPPING_DIR / "hub-snap-interior.npy",
+            SNAPPING_DIR / "unsnapped-huts.json",
         ],
     )
 
@@ -89,18 +88,18 @@ def task_gather_route_subgraphs():
         tracking_params=[_EDGE_SCHEMA_VERSION_PARAM],
         task_dep=["compute_edge_profiles"],  # same in-place-edit reasoning as snap_hubs above
         file_dep=[
-            OSM_DIR / "base_graph" / "manifest.json", OSM_DIR / "base_graph" / "node_ele.npy",
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
+            BASE_GRAPH_DIR / "manifest.json", BASE_GRAPH_DIR / "node-ele.npy",
+            RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy",
         ],
-        targets=[OSM_DIR / "route_subgraphs" / "manifest.json"],
+        targets=[ROUTE_SUBGRAPHS_DIR / "manifest.json"],
     )
 
 
 def task_build_hub_edges():
-    # B1/B3 of spec 2026-09-02-hub-edge-scaling-design.md: this task now writes hut_edges/ (full
-    # geometry, unchanged) and access_distances.npy (distance/time scalars only, no geometry) -
-    # start_edges/ is now build_access_edges' target, materialized only for the pairs
-    # select_approach_pairs.py selects out of access_distances.npy.
+    # B1/B3 of spec 2026-09-02-hub-edge-scaling-design.md: this task now writes hut-edges/ (full
+    # geometry, unchanged) and access-distances.npy (distance/time scalars only, no geometry) -
+    # start-edges/ is now build_access_edges' target, materialized only for the pairs
+    # select_approach_pairs.py selects out of access-distances.npy.
     return pipeline_task(
         "phases/graph_building/build_hub_edges.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
@@ -114,18 +113,18 @@ def task_build_hub_edges():
         ],
         task_dep=["snap_hubs", "gather_route_subgraphs"],
         file_dep=[
-            OSM_DIR / "base_graph" / "manifest.json",
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
-            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
-            OSM_DIR / "route_subgraphs" / "manifest.json",
+            BASE_GRAPH_DIR / "manifest.json",
+            RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy",
+            SNAPPING_DIR / "hub-snaps.npy", SNAPPING_DIR / "hub-snap-interior.npy",
+            ROUTE_SUBGRAPHS_DIR / "manifest.json",
         ],
-        targets=[OSM_DIR / "hut_edges" / "records.npy", OSM_DIR / "access_distances.npy"],
+        targets=[HUT_EDGES_DIR / "records.npy", ACCESS_EDGES_DIR / "access-distances.npy"],
     )
 
 
 def task_build_access_edges():
     # B5/B6: the second and final igraph pass, restricted to select_approach_pairs.py's survivor
-    # list - this is what writes the actual start_edges/ every downstream consumer reads.
+    # list - this is what writes the actual start-edges/ every downstream consumer reads.
     return pipeline_task(
         "phases/graph_building/build_access_edges.py",
         params=[cli_param("max_edge_km", "max-edge-km", float, CONFIG["graph"]["maxEdgeKm"])],
@@ -135,41 +134,11 @@ def task_build_access_edges():
         ],
         task_dep=["select_approach_pairs", "snap_hubs", "gather_route_subgraphs"],
         file_dep=[
-            OSM_DIR / "base_graph" / "manifest.json",
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy",
-            OSM_DIR / "hub_snaps.npy", OSM_DIR / "hub_snap_interior.npy",
-            OSM_DIR / "route_subgraphs" / "manifest.json",
-            OSM_DIR / "selected_access_pairs.npy",
+            BASE_GRAPH_DIR / "manifest.json",
+            RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy",
+            SNAPPING_DIR / "hub-snaps.npy", SNAPPING_DIR / "hub-snap-interior.npy",
+            ROUTE_SUBGRAPHS_DIR / "manifest.json",
+            ACCESS_EDGES_DIR / "selected-access-pairs.npy",
         ],
-        targets=[OSM_DIR / "start_edges" / "records.npy"],
-    )
-
-
-def task_match_tour_edges():
-    # Reads only huts.geojson, start_points.npy, the DEM and the GPX files: no base-graph task or
-    # file is a dependency, so tour iteration never triggers build_base_graph.
-    speed = CONFIG["graph"]["speedModel"]
-    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # computed at DAG-build time
-    return pipeline_task(
-        "phases/graph_building/match_tour_edges.py",
-        params=[
-            cli_param("max_snap_m", "max-snap-m", float, CONFIG["graph"]["maxSnapM"]),
-            cli_param("smoothing_kernel_m", "smoothing-kernel-m", float, CONFIG["dem"]["smoothingKernelM"]),
-            cli_param("min_slope_segment_m", "min-slope-segment-m", float, CONFIG["dem"]["minSlopeSegmentM"]),
-            cli_param("profile_points", "profile-points", int, CONFIG["dem"].get("profilePoints", 30)),
-            cli_param("speed_v0", "speed-v0", float, speed["v0"]),
-            cli_param("speed_k", "speed-k", float, speed["k"]),
-            cli_param("speed_s0", "speed-s0", float, speed["s0"]),
-            cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
-        ],
-        tracking_params=[_TOUR_LEG_SCHEMA_VERSION_PARAM],
-        file_dep=[
-            OSM_DIR / "huts.geojson", OSM_DIR / "start_points.npy", DEM_DIR / "dem.tif",
-            *tour_files,
-        ],
-        targets=[
-            OSM_DIR / "tour_edges" / "records.npy", OSM_DIR / "tour_edges" / "geometry.npy",
-            OSM_DIR / "tour_edges" / "profiles.npy",
-            OSM_DIR / "tours.json", OSM_DIR / "tour-match-gaps.json", OSM_DIR / "hubs.json",
-        ],
+        targets=[START_EDGES_DIR / "records.npy"],
     )
