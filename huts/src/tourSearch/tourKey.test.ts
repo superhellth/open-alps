@@ -10,9 +10,6 @@ describe('tourKey', () => {
   it('differs when only the exit point differs', () => {
     expect(tourKey(tour({ exitStartId: 1 }))).not.toBe(tourKey(tour({ exitStartId: 2 })))
   })
-  it('differs between an official tour and a search chain over the same huts', () => {
-    expect(tourKey(tour({ official: { tourId: 9, name: 'x' } } as Partial<PlannerTour>))).not.toBe(tourKey(tour()))
-  })
   it('is stable for equal tours', () => {
     expect(tourKey(tour())).toBe(tourKey(tour()))
   })

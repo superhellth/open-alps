@@ -39,12 +39,12 @@ from dag.elevation import (  # noqa: E402,F401
 )
 from dag.graph_building import (  # noqa: E402,F401
     task_build_access_edges, task_build_base_graph, task_build_hub_edges,
-    task_gather_route_subgraphs, task_match_tour_edges, task_snap_hubs,
+    task_gather_route_subgraphs, task_snap_hubs,
 )
 from dag.postprocessing import (  # noqa: E402,F401
     task_build_approach_table, task_build_edge_ids, task_build_edge_payload,
     task_build_hut_edge_tiles, task_build_start_edge_ids, task_build_start_edge_tiles,
-    task_build_tour_edge_tiles, task_build_trail_tiles,
+    task_build_trail_tiles,
     task_select_approach_pairs,
 )
 from dag.preprocessing import (  # noqa: E402,F401
@@ -53,12 +53,12 @@ from dag.preprocessing import (  # noqa: E402,F401
 )
 from dag.quality import (  # noqa: E402,F401
     task_check_elevation, task_check_graph_building, task_check_postprocessing,
-    task_check_preprocessing, task_check_tour_matching, task_quality_summary,
+    task_check_preprocessing, task_quality_summary,
 )
 from lib.doit_support import FlushingReporter, rel  # noqa: E402
 from lib.pipeline import (  # noqa: E402
     DATA_DIR, HUT_EDGES_DIR, PUBLIC_DATA_DIR, RAW_DIR, SNAPPING_DIR, START_EDGES_DIR,
-    TOUR_EDGES_DIR, TRAILS_DIR,
+    TRAILS_DIR,
 )
 from lib.timing import phase  # noqa: E402
 
@@ -91,12 +91,10 @@ DOIT_CONFIG = {
         "build_base_graph", "fetch_dem", "build_dem_vrt", "sample_base_elevation",
         "compute_edge_profiles", "snap_hubs", "gather_route_subgraphs", "build_hub_edges",
         "select_approach_pairs", "build_access_edges",
-        "match_tour_edges", "check_tour_matching",
         "build_profiles",
         "check_graph_building",
         "check_elevation",
         "build_trail_tiles", "build_hut_edge_tiles", "build_start_edge_tiles",
-        "build_tour_edge_tiles",
         "build_approach_table", "build_edge_payload", "build_edge_ids", "build_start_edge_ids",
         "copy_public_data",
         "check_postprocessing",
@@ -132,13 +130,6 @@ PUBLIC_FILES = [
     (START_EDGES_DIR / "ids.bin", "start-edge-ids.bin"),
     (START_EDGES_DIR / "ids.json", "start-edge-ids.json"),
     (RAW_DIR / "partner_betriebe.geojson", "partner_betriebe.geojson"),
-    (TOUR_EDGES_DIR / "tours.json", "tours.json"),
-    (TOUR_EDGES_DIR / "edges.pmtiles", "tour-edges.pmtiles"),
-    (TOUR_EDGES_DIR / "stats.json", "tour-edge-stats.json"),
-    (TOUR_EDGES_DIR / "geometry.bin", "tour-edge-geometry.bin"),
-    (TOUR_EDGES_DIR / "geometry.json", "tour-edge-geometry.json"),
-    (TOUR_EDGES_DIR / "elevation.bin", "tour-edge-elevation.bin"),
-    (TOUR_EDGES_DIR / "elevation.json", "tour-edge-elevation.json"),
 ]
 
 

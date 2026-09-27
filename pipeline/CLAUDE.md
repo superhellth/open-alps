@@ -89,28 +89,12 @@ graph.
 `huts.geojson`, `partner_betriebe.geojson`, `stations.geojson`, `parking.geojson`). Everything
 computed lives in one directory per graph component under `data/build/` (`lib/pipeline.py`'s
 `TRAILS_DIR`, `HUB_RANGE_DIR`, `START_POINTS_DIR`, `BASE_GRAPH_DIR`, `SNAPPING_DIR`,
-`ROUTE_SUBGRAPHS_DIR`, `ACCESS_EDGES_DIR`, `HUT_EDGES_DIR`, `START_EDGES_DIR`, `TOUR_EDGES_DIR`).
+`ROUTE_SUBGRAPHS_DIR`, `ACCESS_EDGES_DIR`, `HUT_EDGES_DIR`, `START_EDGES_DIR`).
 Naming inside `data/build/`: hyphens, not underscores; no entity prefix that repeats the directory
 name (`hut-edges/stats.json`, not `hut-edges/hut-edge-stats.json`); file extensions stay. A task
 declares its `file_dep`/`targets` with these constants, never with a hand-joined `data/...` string.
-The `layer_name` labels the quality checks and pmtiles layers use (`hut_edges`, `start_edges`,
-`tour_edges`) are identifiers; `lib/pipeline.py`'s `EDGE_LAYER_DIRNAMES` maps one to its directory.
-
-## Official tours
-
-Official tours (`pipeline/tours/<Name>/<N>.gpx`) are matched from their raw GPX trace + the DEM only
-(`phases/graph_building/match_tour_edges.py`): endpoints snap to the nearest hub within
-`graph.maxSnapM` (interior endpoints must be huts), and distance/ascent/descent/duration/`maxEleM`/
-geometry come straight from the trace — no OSM ways, no routing, no simplification. Outputs
-`data/build/tour-edges/{records,geometry,profiles}.npy`, `tours.json` (only complete tours: a tour with any
-unresolved endpoint is dropped from every output; each leg carries `edgeId` and both endpoints),
-`tour-match-gaps.json` (build-only quality input listing the unresolved endpoints of dropped tours,
-never published) and `hubs.json`. The tour tasks
-(`match_tour_edges`, `build_tour_edge_tiles`, `check_tour_matching`) have no dependency on any
-base-graph task, so they can be iterated without touching the free-routing outputs;
-`build_profiles` covers only `hut-edges`/`start-edges`. `tourId` is the sorted folder index (six
-folders). `tools/fetch_alpenvereinaktiv_tour.py` fetches a tour's GPX; the dev-only GPX editor
-(`docs/gpx-editor.md`) repairs traces. See `phases/graph_building/README.md`.
+The `layer_name` labels the quality checks and pmtiles layers use (`hut_edges`, `start_edges`) are
+identifiers; `lib/pipeline.py`'s `EDGE_LAYER_DIRNAMES` maps one to its directory.
 
 ## Timing pipeline phases
 

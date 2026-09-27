@@ -96,23 +96,6 @@ describe('loadLegElevation', () => {
     expect(binFetchCount).toBe(1)
   })
 
-  it('supports the tour_edges layer via tour-edge-elevation.bin/.json', async () => {
-    const fetchMock = vi.fn((url: string) => {
-      if (url === '/data/tour-edge-elevation.json') {
-        return Promise.resolve({ json: () => Promise.resolve(MANIFEST) } as Response)
-      }
-      if (url === '/data/tour-edge-elevation.bin') {
-        return Promise.resolve({ status: 206, arrayBuffer: () => Promise.resolve(BINARY.slice(0, 8)) } as Response)
-      }
-      throw new Error(`unexpected fetch ${url}`)
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    const values = await loadLegElevation('tour_edges', 0, false)
-
-    expect(values).toEqual(EDGE0)
-  })
-
   it('retries a leg whose fetch failed instead of caching the failure', async () => {
     let binFetchCount = 0
     vi.stubGlobal('fetch', vi.fn((url: string) => {

@@ -2,7 +2,6 @@ import { anchorCandidates, tourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { Bbox, TourAnchor } from '@/tourSearch/tourAnchor.js'
 import type { LegAnchorLookup } from '@/tourSearch/legAnchors.js'
 import { legLayer } from '@/tourSearch/loadLegGeometry.js'
-import type { OfficialTourView } from '@/tourSearch/officialTours.js'
 import type { TripLegs } from '@/trip/tripLegs.js'
 import type { Trip } from '@/trip/trip.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
@@ -13,7 +12,6 @@ import type { HutClass } from '@/data/hutClass.js'
 export interface RouteContext {
   hutCoordsById: Map<number, { lat: number; lng: number }>
   startById: Map<number, StartPoint>
-  officialById: Map<number, OfficialTourView>
   hutClassByIndex: Map<number, HutClass>
   /** Anchor points of a leg's edge, for placing a tour's signpost on its route. */
   legAnchors: LegAnchorLookup
@@ -40,12 +38,10 @@ function waypointsOf(startId: number, huts: number[], exitStartId: number, ctx: 
 export function tourToRoute(tour: PlannerTour, ctx: RouteContext): Route | null {
   const waypoints = waypointsOf(tour.startId, tour.huts, tour.exitStartId, ctx)
   if (!waypoints) return null
-  const official = tour.official !== undefined
   return {
     waypoints,
     legs: tour.legs.map((leg, i) => ({
-      edgeId: leg.edgeId, reversed: leg.reversed,
-      layer: official ? ('tour_edges' as const) : legLayer(i, tour.legs.length),
+      edgeId: leg.edgeId, reversed: leg.reversed, layer: legLayer(i, tour.legs.length),
     })),
   }
 }
@@ -81,8 +77,7 @@ export function tourWaypoints(tours: PlannerTour[], ctx: RouteContext): RouteWay
   return tours.flatMap((tour) => tourToRoute(tour, ctx)?.waypoints ?? [])
 }
 
-/** The active trip's route. An unedited official trip is drawn along the official GPX (tour-edge
- *  layer); any other trip along the legs re-derived from the hut graph. */
+/** The active trip's route, drawn along the legs re-derived from the hut graph. */
 export function tripToRoute(trip: Trip, tripLegs: TripLegs, ctx: RouteContext): Route | null {
   const startCoords = place(trip.start.startId, 'start', ctx)
   const exitCoords = place(trip.exit.startId, 'start', ctx)
@@ -90,10 +85,6 @@ export function tripToRoute(trip: Trip, tripLegs: TripLegs, ctx: RouteContext): 
   const points = [startCoords, ...hutCoords, exitCoords]
   if (!points.every((p): p is RouteWaypoint => p !== null)) return null
 
-  const view = trip.source ? ctx.officialById.get(trip.source.tourId) : undefined
-  if (view && view.legs.length === trip.huts.length + 1) {
-    return { waypoints: points, legs: view.legs.map((l) => ({ edgeId: l.edgeId, reversed: l.reversed, layer: 'tour_edges' as const })) }
-  }
   return {
     waypoints: points,
     legs: tripLegs.legs.map((leg, i) => ({

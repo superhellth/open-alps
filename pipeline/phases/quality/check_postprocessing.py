@@ -37,7 +37,6 @@ _SOURCE_TYPE_NAME = {
 EDGE_PAYLOAD_LAYERS = [
     ("hut_edges", "payload.json", "geometry.json", "geometry.bin"),
     ("start_edges", None, "geometry.json", "geometry.bin"),
-    ("tour_edges", None, "geometry.json", "geometry.bin"),
 ]
 
 
@@ -133,16 +132,6 @@ def check_manifest_agreement(layer_name: str, n_records: int, payload_rows: int,
         f"manifest_agreement_{layer_name}", {}, checked=n_records, flagged_rows=flagged,
         baseline=0, max_flagged_rows=max_flagged,
     )
-
-
-def check_tours_json_geometry(tours: list, point_counts: list, max_flagged: int) -> dict:
-    """tours.json's matched legs (edgeId != null) equal the tour geometry manifest's row count."""
-    matched = sum(1 for t in tours for leg in t["legs"] if leg.get("edgeId") is not None)
-    flagged = [] if matched == len(point_counts) else [{
-        "reason": "matched_legs_vs_geometry_rows", "matched_legs": matched,
-        "geometry_rows": len(point_counts)}]
-    return build_check("tours_json_geometry", {}, checked=matched, flagged_rows=flagged,
-                       baseline=0, max_flagged_rows=max_flagged)
 
 
 def check_shipped_straightness(layer_name: str, point_counts: list, geometry_points: list,
@@ -282,20 +271,6 @@ def main(argv=None):
                  for i in rows],
                 [_polyline(start_records, geom, int(approach_columns["edge_id"][i])) for i in rows])
 
-        tour_dir = build_dir / "tour-edges"
-        if (tour_dir / "tours.json").exists() and (tour_dir / "geometry.npy").exists() \
-                and (tour_dir / "records.npy").exists():
-            with open(tour_dir / "tours.json", encoding="utf-8") as f:
-                legs = [leg for t in json.load(f) for leg in t["legs"] if leg.get("anchors")]
-            if legs:
-                recs = binfmt.load_array(tour_dir / "records.npy", mmap=False)
-                geom = binfmt.load_array(tour_dir / "geometry.npy", mmap=False)
-                rows = _sample_rows(len(legs))
-                report_anchors(
-                    "tour_edges",
-                    [np.array([[lng, lat] for lat, lng in legs[i]["anchors"]]) for i in rows],
-                    [_polyline(recs, geom, legs[i]["edgeId"]) for i in rows])
-
         for layer_name, payload_manifest_name, geometry_manifest_name, geometry_bin_name in EDGE_PAYLOAD_LAYERS:
             layer_dir = build_dir / EDGE_LAYER_DIRNAMES[layer_name]
             records_path = layer_dir / "records.npy"
@@ -345,14 +320,6 @@ def main(argv=None):
             print(f"shipped_straightness[{layer_name}]: {c['summary']['flagged']:,} / "
                   f"{c['summary']['checked']:,} flagged", flush=True)
             checks.append(c)
-
-            if layer_name == "tour_edges" and (build_dir / "tour-edges" / "tours.json").exists():
-                with open(build_dir / "tour-edges" / "tours.json", encoding="utf-8") as f:
-                    tours = json.load(f)
-                c = check_tours_json_geometry(tours, point_counts, args.max_flagged_rows)
-                print(f"tours_json_geometry: {c['summary']['flagged']:,} / {c['summary']['checked']:,} flagged",
-                      flush=True)
-                checks.append(c)
 
         sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
         import dodo  # local import: avoids a module-load-order cycle with dag/quality.py at

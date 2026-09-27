@@ -2,7 +2,7 @@
 """Read-only checks over phases/graph_building/ output (spec docs/superpowers/specs/
 2026-09-02-data-quality-monitoring-design.md §4.3): hub snap health, per-variant hut-hut
 connectivity, range-cap violations and geometry sanity (check_vertex_gap/check_self_retrace/
-check_scalar_sanity). Tour matching is checked by check_tour_matching.py. Never mutates its inputs; always exits 0 (spec §3).
+check_scalar_sanity). Never mutates its inputs; always exits 0 (spec §3).
 
 Usage: python pipeline/phases/quality/check_graph_building.py
 """

@@ -113,11 +113,6 @@ Not a phase — code imported across phases:
   catalog to the union of every configured region's boundary instead of a bbox.
 - **`edge_output.py`** — `write_edge_records()`/`fold_endpoint_snaps()`, the record-packing shape
   (`binfmt.RECORD_DTYPE` + `geometry.npy`) used by `build_hub_edges.py`.
-- **`dem_sample.py`** / **`elevation_profile.py`** — DEM bilinear sampling of an arbitrary
-  (lon, lat) list, and the smoothing / slope-merge / ascent-descent / display-profile math;
-  `graph_building/match_tour_edges.py` uses both, with no base-graph dependency.
-- **`alpenvereinaktiv.py`** — parsing for `tools/fetch_alpenvereinaktiv_tour.py`, which fetches a
-  tour's GPX legs into `pipeline/tours/`.
 
 Full config reference, environment setup, and "reproducing from scratch" commands:
 **`pipeline/README.md`**. Design rationale for the graph-building rewrite:

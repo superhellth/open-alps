@@ -33,14 +33,12 @@ ROUTE_SUBGRAPHS_DIR = BUILD_DIR / "route-subgraphs"
 ACCESS_EDGES_DIR = BUILD_DIR / "access-edges"
 HUT_EDGES_DIR = BUILD_DIR / "hut-edges"
 START_EDGES_DIR = BUILD_DIR / "start-edges"
-TOUR_EDGES_DIR = BUILD_DIR / "tour-edges"
 # check_* reports label an edge set "hut_edges"; its directory under a build dir is the hyphenated name
 EDGE_LAYER_DIRNAMES = {
-    "hut_edges": "hut-edges", "start_edges": "start-edges", "tour_edges": "tour-edges",
+    "hut_edges": "hut-edges", "start_edges": "start-edges",
 }
 CONFIG_PATH = SCRIPTS_DIR / "pipeline.config.json"
 PUBLIC_DATA_DIR = REPO_ROOT / "huts" / "public" / "data"
-TOURS_DIR = SCRIPTS_DIR / "tours"
 QUALITY_DIR = DATA_DIR / "quality"
 
 

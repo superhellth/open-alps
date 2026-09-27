@@ -6,7 +6,7 @@ so wiring these into the default DAG never turns a heuristic threshold into a ha
 from lib.doit_support import cli_param, pipeline_task
 from lib.pipeline import (
     BASE_GRAPH_DIR, BUILD_DIR, HUT_EDGES_DIR, QUALITY_DIR, RAW_DEM_DIR, RAW_DIR, RAW_OSM_DIR, SNAPPING_DIR,
-    START_EDGES_DIR, START_POINTS_DIR, TOUR_EDGES_DIR, load_config,
+    START_EDGES_DIR, START_POINTS_DIR, load_config,
 )
 
 CONFIG = load_config()
@@ -60,18 +60,6 @@ def task_check_elevation():
     )
 
 
-def task_check_tour_matching():
-    return pipeline_task(
-        "phases/quality/check_tour_matching.py",
-        args=[f"--tour-edges-dir {TOUR_EDGES_DIR}", f"--out {QUALITY_DIR / 'tour_matching.json'}"],
-        params=[_max_flagged_param()],
-        task_dep=["match_tour_edges"],
-        file_dep=[TOUR_EDGES_DIR / "tours.json", TOUR_EDGES_DIR / "tour-match-gaps.json",
-                  TOUR_EDGES_DIR / "records.npy", TOUR_EDGES_DIR / "profiles.npy"],
-        targets=[QUALITY_DIR / "tour_matching.json"],
-    )
-
-
 def task_check_graph_building():
     return pipeline_task(
         "phases/quality/check_graph_building.py",
@@ -108,7 +96,7 @@ def task_check_postprocessing():
         # on quality output, but quality output reading the copy is fine and in fact the point).
         task_dep=[
             "build_approach_table", "build_edge_payload",
-            "build_hut_edge_tiles", "build_start_edge_tiles", "build_tour_edge_tiles",
+            "build_hut_edge_tiles", "build_start_edge_tiles",
             "copy_public_data",
         ],
         file_dep=[
@@ -118,11 +106,8 @@ def task_check_postprocessing():
             HUT_EDGES_DIR / "payload.json", HUT_EDGES_DIR / "geometry.json",
             HUT_EDGES_DIR / "geometry.bin",
             START_EDGES_DIR / "geometry.json", START_EDGES_DIR / "geometry.bin",
-            TOUR_EDGES_DIR / "tours.json", TOUR_EDGES_DIR / "geometry.json",
-            TOUR_EDGES_DIR / "geometry.bin",
             HUT_EDGES_DIR / "payload.bin", HUT_EDGES_DIR / "records.npy",
             HUT_EDGES_DIR / "geometry.npy", START_EDGES_DIR / "geometry.npy",
-            TOUR_EDGES_DIR / "records.npy", TOUR_EDGES_DIR / "geometry.npy",
         ],
         targets=[QUALITY_DIR / "postprocessing.json"],
     )
@@ -134,11 +119,11 @@ def task_quality_summary():
         args=[f"--quality-dir {QUALITY_DIR}", f"--out {QUALITY_DIR / 'summary.json'}"],
         task_dep=[
             "check_preprocessing", "check_elevation", "check_graph_building",
-            "check_tour_matching", "check_postprocessing",
+            "check_postprocessing",
         ],
         file_dep=[
             QUALITY_DIR / "preprocessing.json", QUALITY_DIR / "elevation.json",
-            QUALITY_DIR / "graph_building.json", QUALITY_DIR / "tour_matching.json",
+            QUALITY_DIR / "graph_building.json",
             QUALITY_DIR / "postprocessing.json",
         ],
         targets=[QUALITY_DIR / "summary.json"],

@@ -4,7 +4,7 @@ payload."""
 
 from lib.doit_support import cli_param, pipeline_task
 from lib.pipeline import (
-    ACCESS_EDGES_DIR, HUT_EDGES_DIR, RAW_DIR, START_EDGES_DIR, START_POINTS_DIR, TOUR_EDGES_DIR,
+    ACCESS_EDGES_DIR, HUT_EDGES_DIR, RAW_DIR, START_EDGES_DIR, START_POINTS_DIR,
     TRAILS_DIR, load_config,
 )
 
@@ -98,36 +98,6 @@ def task_build_start_edge_tiles():
             START_EDGES_DIR / "edges.pmtiles", START_EDGES_DIR / "stats.json",
             START_EDGES_DIR / "geometry.bin", START_EDGES_DIR / "geometry.json",
             START_EDGES_DIR / "elevation.bin", START_EDGES_DIR / "elevation.json",
-        ],
-    )
-
-
-def task_build_tour_edge_tiles():
-    # Tour geometry is every raw GPX point: no simplify tolerance. Tiles/stats only need
-    # match_tour_edges' outputs (profiles are written by match_tour_edges itself).
-    tiles_cfg = CONFIG.get("hutEdgeTiles", {})
-    return pipeline_task(
-        "phases/postprocessing/build_tour_tiles.py",
-        args=[
-            f"--edges-dir {TOUR_EDGES_DIR}",
-            f"--id-table {START_POINTS_DIR / 'start-points-id-table.json'}",
-            f"--out-tiles {TOUR_EDGES_DIR / 'edges.pmtiles'}",
-            f"--out-stats {TOUR_EDGES_DIR / 'stats.json'}",
-            f"--out-geometry-bin {TOUR_EDGES_DIR / 'geometry.bin'}",
-            f"--out-geometry-json {TOUR_EDGES_DIR / 'geometry.json'}",
-            f"--out-elevation-bin {TOUR_EDGES_DIR / 'elevation.bin'}",
-            f"--out-elevation-json {TOUR_EDGES_DIR / 'elevation.json'}",
-        ],
-        params=[
-            cli_param("min_zoom", "min-zoom", int, tiles_cfg.get("minZoom", 6)),
-            cli_param("max_zoom", "max-zoom", int, tiles_cfg.get("maxZoom", 14)),
-        ],
-        task_dep=["match_tour_edges"],
-        file_dep=[TOUR_EDGES_DIR / "records.npy", START_POINTS_DIR / "start-points-id-table.json"],
-        targets=[
-            TOUR_EDGES_DIR / "edges.pmtiles", TOUR_EDGES_DIR / "stats.json",
-            TOUR_EDGES_DIR / "geometry.bin", TOUR_EDGES_DIR / "geometry.json",
-            TOUR_EDGES_DIR / "elevation.bin", TOUR_EDGES_DIR / "elevation.json",
         ],
     )
 

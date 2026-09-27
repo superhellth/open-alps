@@ -6,12 +6,9 @@ import type { TripDraft } from './plannerState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { StartPoint } from '@/data/types.js'
 
-/** The name a trip gets without user input: the official tour's name, else "first hut – last hut". */
-export function autoTripName(
-  huts: { first: string; last: string },
-  official: { name: string } | undefined,
-): string {
-  return official ? official.name : `${huts.first} – ${huts.last}`
+/** The name a trip gets without user input: "first hut – last hut". */
+export function autoTripName(huts: { first: string; last: string }): string {
+  return `${huts.first} – ${huts.last}`
 }
 
 export function tripFromTour(tour: PlannerTour, ctx: {
@@ -26,17 +23,13 @@ export function tripFromTour(tour: PlannerTour, ctx: {
   if (!start || !exit) return null
   const first = ctx.hutNameById.get(tour.huts[0]) ?? '?'
   const last = ctx.hutNameById.get(tour.huts[tour.huts.length - 1]) ?? '?'
-  const official = tour.official
   return newTrip({
-    name: autoTripName({ first, last }, official),
+    name: autoTripName({ first, last }),
     startDate: ctx.draft.startDate || null,
     partySize: ctx.draft.partySize,
     start: { startId: tour.startId, sourceType: start.sourceType as SourceType },
     huts: tour.huts.map((h) => ctx.hutIds[h]),
     exit: { startId: tour.exitStartId, sourceType: exit.sourceType as SourceType },
-    variant: official
-      ? { sacCeiling: null, allowUngraded: true }
-      : { sacCeiling: ctx.form.sacCeiling === 'any' ? null : ctx.form.sacCeiling, allowUngraded: ctx.form.allowUngraded },
-    ...(official ? { source: { kind: 'official' as const, tourId: official.tourId } } : {}),
+    variant: { sacCeiling: ctx.form.sacCeiling === 'any' ? null : ctx.form.sacCeiling, allowUngraded: ctx.form.allowUngraded },
   })
 }

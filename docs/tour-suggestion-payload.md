@@ -222,7 +222,3 @@ onto it by array position, not by any new id scheme. `huts.geojson` itself gaine
 (`docs/superpowers/specs/2026-08-28-hut-classification-design.md`) — a separate, unrelated change
 from this backend, noted here only because a client reading this payload will likely also read
 those fields off the huts it joins onto.
-
-## 9. `tours.json` leg anchors
-
-Each official-tour leg carries `anchors: [[lat, lng]]` at 50 % of the leg's arc length (one pair per shipped fraction, in walking order), cut from the raw GPX trace (absolute coordinates, no offsets).

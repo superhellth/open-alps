@@ -107,7 +107,7 @@ export default function ResultsList({
           const chain = hutChain(tour, hutNameById)
           return (
             <ListItemButton
-              key={`${tour.startId}-${tour.official?.tourId ?? ''}-${tour.huts.join('.')}-${i}`}
+              key={`${tour.startId}-${tour.huts.join('.')}-${i}`}
               onMouseEnter={() => onPreview(tour)} onMouseLeave={() => onPreview(null)}
               onFocus={() => onPreview(tour)} onBlur={() => onPreview(null)}
               onClick={() => onPick(tour)}
@@ -132,11 +132,6 @@ export default function ResultsList({
                   <span>{formatDescent(tour.totalDescentM)}</span>
                 </StatLine>
               </Typography>
-              {tour.official && (
-                <Box sx={styles.officialRow}>
-                  <Chip size="small" label={`Offiziell: ${tour.official.name}`} />
-                </Box>
-              )}
             </ListItemButton>
           )
         })}

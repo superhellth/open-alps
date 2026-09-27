@@ -9,7 +9,6 @@ import { newTrip } from '@/trip/trip.js'
 const ctx: RouteContext = {
   hutCoordsById: new Map([[0, { lat: 47.1, lng: 11.1 }], [1, { lat: 47.2, lng: 11.2 }]]),
   startById: new Map([[100, { name: 'S', sourceType: 1, lat: 47.0, lng: 11.0 }]]),
-  officialById: new Map(),
   hutClassByIndex: new Map([[0, { operator: 'av', serviced: true }]]),
   legAnchors: () => null,
 }
@@ -23,11 +22,6 @@ describe('tourToRoute', () => {
     const r = tourToRoute(chain(), ctx)!
     expect(r.waypoints).toHaveLength(4)
     expect(r.legs.map((l) => l.layer)).toEqual(['start_edges', 'hut_edges', 'start_edges'])
-  })
-  it('uses the tour-edge layer for an official tour', () => {
-    const view = { tourId: 9, legs: [] } as never
-    const r = tourToRoute(chain({ official: { tourId: 9, name: 'x' } }), { ...ctx, officialById: new Map([[9, view]]) })!
-    expect(r.legs.every((l) => l.layer === 'tour_edges')).toBe(true)
   })
   it('tourAnchorOf runs the anchor choice over the route with the tour leg distances', () => {
     const tour = chain()

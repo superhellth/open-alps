@@ -13,7 +13,7 @@ from lib import binfmt
 from lib.doit_support import cli_param, pipeline_task, tracking_param
 from lib.pipeline import (
     ACCESS_EDGES_DIR, BASE_GRAPH_DIR, HUT_EDGES_DIR, RAW_DEM_DIR, RAW_DIR, ROUTE_SUBGRAPHS_DIR,
-    SNAPPING_DIR, START_EDGES_DIR, START_POINTS_DIR, TOUR_EDGES_DIR, TOURS_DIR, TRAILS_DIR,
+    SNAPPING_DIR, START_EDGES_DIR, START_POINTS_DIR, TRAILS_DIR,
     load_config,
 )
 
@@ -28,9 +28,6 @@ _RECORD_SCHEMA_VERSION_PARAM = tracking_param(
 )
 _ACCESS_DISTANCE_SCHEMA_VERSION_PARAM = tracking_param(
     "access_distance_schema_version", int, binfmt.ACCESS_DISTANCE_SCHEMA_VERSION
-)
-_TOUR_LEG_SCHEMA_VERSION_PARAM = tracking_param(
-    "tour_leg_schema_version", int, binfmt.TOUR_LEG_SCHEMA_VERSION
 )
 
 
@@ -144,35 +141,4 @@ def task_build_access_edges():
             ACCESS_EDGES_DIR / "selected-access-pairs.npy",
         ],
         targets=[START_EDGES_DIR / "records.npy"],
-    )
-
-
-def task_match_tour_edges():
-    # Reads only huts.geojson, start-points.npy, the DEM and the GPX files: no base-graph task or
-    # file is a dependency, so tour iteration never triggers build_base_graph.
-    speed = CONFIG["graph"]["speedModel"]
-    tour_files = sorted(TOURS_DIR.glob("*/*.gpx"))  # computed at DAG-build time
-    return pipeline_task(
-        "phases/graph_building/match_tour_edges.py",
-        params=[
-            cli_param("max_snap_m", "max-snap-m", float, CONFIG["graph"]["maxSnapM"]),
-            cli_param("smoothing_kernel_m", "smoothing-kernel-m", float, CONFIG["dem"]["smoothingKernelM"]),
-            cli_param("min_slope_segment_m", "min-slope-segment-m", float, CONFIG["dem"]["minSlopeSegmentM"]),
-            cli_param("profile_points", "profile-points", int, CONFIG["dem"].get("profilePoints", 30)),
-            cli_param("speed_v0", "speed-v0", float, speed["v0"]),
-            cli_param("speed_k", "speed-k", float, speed["k"]),
-            cli_param("speed_s0", "speed-s0", float, speed["s0"]),
-            cli_param("min_speed_ms", "min-speed-ms", float, speed["minSpeedMs"]),
-        ],
-        tracking_params=[_TOUR_LEG_SCHEMA_VERSION_PARAM],
-        file_dep=[
-            RAW_DIR / "huts.geojson", START_POINTS_DIR / "start-points.npy", RAW_DEM_DIR / "dem.tif",
-            *tour_files,
-        ],
-        targets=[
-            TOUR_EDGES_DIR / "records.npy", TOUR_EDGES_DIR / "geometry.npy",
-            TOUR_EDGES_DIR / "profiles.npy",
-            TOUR_EDGES_DIR / "tours.json", TOUR_EDGES_DIR / "tour-match-gaps.json",
-            TOUR_EDGES_DIR / "hubs.json",
-        ],
     )

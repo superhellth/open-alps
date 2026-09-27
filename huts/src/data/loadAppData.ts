@@ -1,5 +1,4 @@
 import { loadTripGraph } from '../tourSearch/index.js'
-import { loadOfficialTours } from '../tourSearch/loadOfficialTours.js'
 import { buildAppData } from './buildAppData.js'
 import type { AppData } from './buildAppData.js'
 
@@ -12,13 +11,12 @@ const emptyCollection = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollec
 
 export async function loadAppData(): Promise<AppData> {
   const json = (url: string) => fetch(url).then((r) => r.json() as Promise<GeoJSON.FeatureCollection>)
-  const [graph, huts, parking, stations, partner, tours] = await Promise.all([
+  const [graph, huts, parking, stations, partner] = await Promise.all([
     loadTripGraph(),
     json(HUTS_URL),
     json(PARKING_URL),
     json(STATIONS_URL),
     json(PARTNER_URL).catch(emptyCollection), // partner businesses are best-effort: a 404 degrades to none
-    loadOfficialTours(),
   ])
-  return buildAppData({ graph, huts, parking, stations, partner, tours })
+  return buildAppData({ graph, huts, parking, stations, partner })
 }

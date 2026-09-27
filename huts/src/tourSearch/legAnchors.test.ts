@@ -16,9 +16,6 @@ const lookup = createLegAnchorLookup({
   approaches: { records: [approach({ anchorOffsets: [1, 2] }), approach({ edgeId: 41 })], reverseIndex: { hut_to_starts: {}, start_to_huts: {} },
     exitAnchors: new Map([[55, { hutIndex: 0, anchorOffsets: [3, 4] }]]) },
   hutCoordsById,
-  officialTours: [{ tourId: 1, name: 't', totalDistanceM: 0, totalAscentM: 0, totalDescentM: 0, totalDurationH: 0, legs: [
-    { legIndex: 0, from: { type: 'hut', id: 0 }, to: { type: 'hut', id: 1 }, edgeId: 7, reversed: false, distanceM: 1, ascentM: 0, descentM: 0, durationH: 0, maxEleM: 0, anchors: [{ lat: 1, lng: 2 }] },
-  ] }],
 })
 
 describe('createLegAnchorLookup', () => {
@@ -38,14 +35,10 @@ describe('createLegAnchorLookup', () => {
     expect(a.lat).toBeCloseTo(47.0003, 9)
     expect(a.lng).toBeCloseTo(11.0004, 9)
   })
-  it('returns the official leg anchors as shipped', () => {
-    expect(lookup('tour_edges', 7)).toEqual([{ lat: 1, lng: 2 }])
-  })
   it('returns null when no anchors shipped, the edge is unknown, or the id is negative', () => {
     expect(lookup('hut_edges', 1)).toBeNull()
     expect(lookup('start_edges', 41)).toBeNull()
     expect(lookup('start_edges', 999)).toBeNull()
     expect(lookup('hut_edges', -1)).toBeNull()
-    expect(lookup('tour_edges', 1)).toBeNull()
   })
 })

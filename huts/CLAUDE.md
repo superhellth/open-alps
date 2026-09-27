@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Run from `huts/`:
 
-- `npm run dev` — Vite dev server (also serves `/gpx-editor.html`, see `docs/gpx-editor.md` at repo root)
+- `npm run dev` — Vite dev server
 - `npm run build` — production build
 - `npm run typecheck` — `tsc --noEmit`
 - `npm run lint` — `oxlint` (config: `.oxlintrc.json`)
@@ -24,10 +24,6 @@ The overall app structure, data sources, and the client-side tour search engine
 `CLAUDE.md` — read that first. This file covers only what's specific to working inside `huts/`.
 
 Imports that leave a top-level `src/` directory use the `@/` alias (`@/data/buildAppData.js`).
-
-`tools/` holds standalone Node scripts (e.g. `gpxEditorPlugin.ts`, the Vite plugin backing the
-dev-only GPX editor) that are outside `src/` because they run at build/dev-server time, not in
-the browser bundle.
 
 `public/data/` holds the pipeline's generated outputs (pmtiles, geojson, binary payloads) that
 `src/adminPage/` and `src/tourSearch/` fetch at runtime — these are copied in by the pipeline's

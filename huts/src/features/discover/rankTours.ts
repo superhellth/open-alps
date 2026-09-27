@@ -1,11 +1,7 @@
 import { rankFit } from '@/tourSearch/rankFit.js'
 import type { NightState, RankTargets } from '@/tourSearch/rankFit.js'
-import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '@/tourSearch/types.js'
 import type { FreeByOffset } from '@/availability/types.js'
-import { legTimeRangeFromCeiling } from './formState.js'
-import type { FormState } from './formState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
-import type { StartPoint } from '@/data/types.js'
 
 export type SortKey = 'fit' | 'duration' | 'ascent' | 'distance'
 
@@ -32,20 +28,6 @@ export function nightStateOf(
   const free = freeByOffset.get(night + 1)
   if (free === undefined || free === 'unknown') return 'unknown'
   return free.has(ohrsId) ? 'free' : 'full'
-}
-
-const MODE_SOURCE_TYPE = { transit: SOURCE_TYPE_STATION, car: SOURCE_TYPE_PARKING, village: SOURCE_TYPE_PARTNER } as const
-
-/** Official tours join the search results under the same hard limits the engine applies. */
-export function filterOfficial(
-  tours: PlannerTour[], form: FormState, legCountRange: [number, number], startById: Map<number, StartPoint>,
-): PlannerTour[] {
-  const [minLegs, maxLegs] = legCountRange
-  const [, maxLegTimeH] = legTimeRangeFromCeiling(form.legTimeCeilingH)
-  return tours.filter((t) =>
-    t.legs.length >= minLegs && t.legs.length <= maxLegs
-    && t.legs.every((l) => l.durationH <= maxLegTimeH)
-    && startById.get(t.startId)?.sourceType === MODE_SOURCE_TYPE[form.mode])
 }
 
 export type SortDir = 'asc' | 'desc'

@@ -35,7 +35,7 @@ is a share link that opens the planner with an import offer), and `#admin` rende
 search worker) with its own minimal title bar. There is no app bar on the planner — the map fills
 the full viewport height.
 Planen and Meine Touren share one provider stack above the router: `data/AppDataProvider.tsx`
-(`buildAppData.ts` joins huts/stations/parking/partner geojson, the routing graph and official tours),
+(`buildAppData.ts` joins huts/stations/parking/partner geojson and the routing graph),
 `search/SearchClientProvider.tsx` and `trip/TripsProvider.tsx` (autosave to `localStorage`).
 
 `huts/src/features/planner/PlannerPage.tsx` is the main page, a map-first Planner: Discover (filter bar,
@@ -111,9 +111,7 @@ Offline trail-graph precompute pipeline under `pipeline/` (code, orchestrated as
 raw/generated inputs+outputs), whose outputs (`huts.geojson`, `trails.pmtiles`, `hut-edges.pmtiles`,
 `hut-edge-stats.json`, `start-edges.pmtiles`, `start-edge-stats.json`, `stations.geojson`,
 `parking.geojson`, `unsnapped_huts.json`, `approaches.bin`, `approaches.json`,
-`hut-edge-payload.bin`, `hut-edge-payload.json`, plus the official-tour outputs `tours.json`,
-`tour-edges.pmtiles`, `tour-edge-stats.json`, `tour-edge-geometry.*`, `tour-edge-elevation.*`,
-`tour-match-gaps.json`) are copied into `huts/public/data/` by the
+`hut-edge-payload.bin`, `hut-edge-payload.json`) are copied into `huts/public/data/` by the
 pipeline's own `copy_public_data` task (a `(source, public name)` table, `PUBLIC_FILES` in `dodo.py`). `huts.geojson`, `trails.pmtiles`,
 `hut-edges.pmtiles`/`hut-edge-stats.json`, `stations.geojson`, `parking.geojson` are rendered by
 `adminPage/AdminPage.tsx`; `approaches.*` and `hut-edge-payload.*` (both with mid-route anchor offset columns) feed the client-side tour search engine
@@ -124,17 +122,10 @@ deliberately not shipped) is documented in `docs/tour-suggestion-payload.md` —
 
 `data/` has two tiers: `data/raw/` (fetched: `osm/`, `dem/`, the four geojson downloads) and
 `data/build/<component>/` (computed: `trails`, `hub-range`, `start-points`, `base-graph`,
-`snapping`, `route-subgraphs`, `access-edges`, `hut-edges`, `start-edges`, `tour-edges`). Inside
+`snapping`, `route-subgraphs`, `access-edges`, `hut-edges`, `start-edges`). Inside
 `data/build/` names use hyphens and drop the component prefix (`hut-edges/stats.json`).
 `data/analysis/`, `data/quality/`, `data/timings.jsonl` and `data/.doit.json.db` stay at the top
 level. Public file names in `huts/public/data/` are set by `dodo.py`'s `PUBLIC_FILES`.
-
-`pipeline/tours/` holds hand-curated official-tour reference data (one directory per tour, e.g.
-`Kaisertour/`, `Welser Höhenweg/`, each a set of per-leg `.gpx` tracks), tracked in git (unlike
-`data/`). Tours are matched from their raw GPX + DEM only, independent of the OSM base graph
-(`docs/superpowers/specs/2026-09-14-gpx-hut-snap-design.md`); the client reads their per-leg scalars
-from `tours.json`. The dev-only GPX editor (`npm run dev` in `huts/`, then `/gpx-editor.html`;
-`docs/gpx-editor.md`) edits those GPX files.
 
 `analysis/tour-huts/` (tracked, own pixi env, not part of the doit DAG) holds the tour-hut booking study
 (`docs/superpowers/specs/2026-09-23-tour-hut-booking-study-design.md`); outputs go to gitignored

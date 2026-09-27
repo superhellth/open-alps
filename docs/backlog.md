@@ -4,19 +4,9 @@ Cross-cutting data/pipeline/ui problems that don't belong to one spec. Short sum
 explanation, evidence and pointers live in the dedicated file under `docs/backlog/`. Newest-highest-
 priority first within each section. An item graduates out of here when it is resolved.
 
-## High
-
-### How to handle alpenvereinaktiv tours
-
-### Broken tour geometry in tour detail view
-
 ## Medium
 
 ### Explore: Snapping nodes to multiple trails, to avoid weird detours
-
-### Close tours that start / end in nearby locations
-
-### Avoid overlaps in displayed tours
 
 ### Surface data-quality signals to the frontend
 

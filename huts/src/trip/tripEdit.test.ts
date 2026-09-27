@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { newTrip } from './trip.js'
 import {
-  applyEndpoint, applyExtend, applySwap, applyTrim, endpointCandidates, extendCandidates,
+  applyEndpoint, applyExtend, applyTrim, endpointCandidates, extendCandidates,
   modeOfTrip, swapCandidates, trimAllowed,
 } from './tripEdit.js'
 import { makeTripGraph } from '@/testing/tripTestGraph.js'
@@ -39,12 +39,6 @@ describe('swapCandidates / applySwap', () => {
   })
   it('returns nothing when a neighbour no longer resolves', () => {
     expect(swapCandidates(graph, mk(['{A}', '{GONE}', '{C}']), 0)).toEqual([])
-  })
-  it('applySwap replaces the hut and drops the official source', () => {
-    const trip = { ...mk(['{A}', '{B}', '{C}']), source: { kind: 'official' as const, tourId: 1 } }
-    const next = applySwap(graph, trip, 1, 5)
-    expect(next.huts).toEqual(['{A}', '{X}', '{C}'])
-    expect(next.source).toBeUndefined()
   })
 })
 

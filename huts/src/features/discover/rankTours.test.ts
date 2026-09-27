@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { filterOfficial, nightStateOf, sortTours } from './rankTours.js'
+import { nightStateOf, sortTours } from './rankTours.js'
 import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import type { FreeByOffset } from '@/availability/types.js'
@@ -50,17 +50,5 @@ describe('sortTours', () => {
     const input = [balanced, short]
     sortTours(input, 'duration', 'asc', args)
     expect(input[0]).toBe(balanced)
-  })
-})
-
-describe('filterOfficial', () => {
-  const startById = new Map([[1, { name: 'S', sourceType: 1, lat: 0, lng: 0 }], [2, { name: 'P', sourceType: 2, lat: 0, lng: 0 }]])
-  const form = { ...DEFAULT_FORM, mode: 'transit' as const, legTimeCeilingH: 7 as const }
-  it('keeps official tours inside the leg-count range and the leg-time ceiling', () => {
-    const ok = tour([0], [5, 5], { official: { tourId: 1, name: 'a' } })
-    const tooManyLegs = tour([0, 1, 2, 3, 4], [5, 5, 5, 5, 5, 5], { official: { tourId: 2, name: 'b' } })
-    const tooLong = tour([0], [5, 9], { official: { tourId: 3, name: 'c' } })
-    const wrongMode = tour([0], [5, 5], { startId: 2, exitStartId: 2, official: { tourId: 4, name: 'd' } })
-    expect(filterOfficial([ok, tooManyLegs, tooLong, wrongMode], form, [2, 4], startById)).toEqual([ok])
   })
 })

@@ -60,8 +60,7 @@ export function connectEnds(
 }
 
 function edited(trip: Trip, patch: Partial<Trip>): Trip {
-  const { source: _dropped, ...rest } = trip
-  return { ...rest, ...patch }
+  return { ...trip, ...patch }
 }
 
 // ---- swap -------------------------------------------------------------------------------------

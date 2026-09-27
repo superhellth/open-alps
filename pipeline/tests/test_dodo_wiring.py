@@ -214,87 +214,6 @@ def test_filter_start_points_depends_on_partner_betriebe():
 
 
 
-def test_match_tour_edges_tracks_tour_gpx_files():
-    task = dodo.task_match_tour_edges()
-    file_deps = [str(d) for d in task["file_dep"]]
-    assert any(d.endswith(".gpx") for d in file_deps)
-
-
-
-
-
-
-
-GRAPH_TASKS = {"build_base_graph", "snap_hubs", "compute_edge_profiles", "sample_base_elevation",
-               "gather_route_subgraphs", "build_hub_edges", "build_access_edges", "build_profiles"}
-
-
-def test_match_tour_edges_has_no_base_graph_task_dependency():
-    task = dodo.task_match_tour_edges()
-    assert not (GRAPH_TASKS & set(task.get("task_dep", [])))
-    assert not any(str(d).endswith(("base-graph/nodes.npy", "hub-snaps.npy", "edges.npy"))
-                   for d in task["file_dep"])
-
-
-def test_match_tour_edges_declares_dem_huts_and_start_points():
-    deps = [str(d) for d in dodo.task_match_tour_edges()["file_dep"]]
-    for name in ("dem.tif", "huts.geojson", "start-points.npy"):
-        assert any(d.endswith(name) for d in deps), name
-
-
-def test_match_tour_edges_targets_include_profiles_and_hubs_json():
-    targets = [str(t) for t in dodo.task_match_tour_edges()["targets"]]
-    assert sorted(os.path.basename(t) for t in targets) == sorted(
-        ["records.npy", "geometry.npy", "profiles.npy",
-         "tours.json", "tour-match-gaps.json", "hubs.json"])
-    assert all("build/tour-edges/" in t for t in targets)
-
-
-def test_match_tour_edges_tracks_only_its_own_schema_version():
-    names = {p["name"] for p in dodo.task_match_tour_edges().get("params", [])}
-    assert "tour_leg_schema_version" in names
-    assert not names & {"record_schema_version", "edge_schema_version", "snap_schema_version"}
-    assert {"max_snap_m", "smoothing_kernel_m", "min_slope_segment_m", "profile_points",
-            "speed_v0", "speed_k", "speed_s0", "min_speed_ms"} <= names
-
-
-def test_build_profiles_no_longer_owns_tour_edges():
-    task = dodo.task_build_profiles()
-    assert "match_tour_edges" not in task["task_dep"]
-    assert not any("tour_edges" in str(x) for x in (*task["file_dep"], *task["targets"]))
-
-
-
-
-
-
-
-def test_public_files_includes_every_tour_output():
-    for name in [
-        "tours.json", "tour-edges.pmtiles", "tour-edge-stats.json",
-        "tour-edge-geometry.bin", "tour-edge-geometry.json",
-    ]:
-        assert name in _public_names(), name
-
-
-def test_public_files_does_not_include_tour_match_gaps():
-    # gap reports are data-quality only; tours.json ships complete tours.
-    assert "tour-match-gaps.json" not in _public_names()
-
-
-def test_public_files_does_not_include_internal_tour_traces():
-    # tour_traces.json is the ~3.5MB raw fragment file (spec §1) - internal only, never shipped.
-    assert "tour_traces.json" not in _public_names()
-
-
-def test_default_tasks_includes_the_new_tour_tasks_in_dag_order():
-    ordered = dodo.DOIT_CONFIG["default_tasks"]
-    for name in ["match_tour_edges", "build_tour_edge_tiles"]:
-        assert name in ordered, name
-    assert "fetch_tours" not in ordered
-    assert "fetch_tour_oa_geometry" not in ordered
-    assert ordered.index("match_tour_edges") < ordered.index("build_tour_edge_tiles")
-
 
 def test_compute_edge_profiles_is_gated_only_by_the_stamp_build_base_graph_deletes():
     # The stamp is the ONLY thing that can re-trigger this task after a base-graph rebuild:
@@ -322,9 +241,8 @@ def test_check_elevation_depends_on_compute_edge_profiles_and_build_profiles():
     assert any(t.endswith("data/quality/elevation.json") for t in task["targets"])
 
 
-def test_check_graph_building_depends_on_hub_edge_tasks_not_tour_matching():
+def test_check_graph_building_depends_on_hub_edge_tasks():
     task = dodo.task_check_graph_building()
-    assert "match_tour_edges" not in task["task_dep"]
     assert "build_hub_edges" in task["task_dep"]
     assert "build_access_edges" in task["task_dep"]
     assert any(t.endswith("data/quality/graph_building.json") for t in task["targets"])
@@ -383,42 +301,11 @@ def test_no_quality_task_is_hardcoded_into_copy_public_data_public_files():
     assert not any("quality" in name for name in _public_names())
 
 
-def test_build_tour_edge_tiles_depends_on_match_tour_edges_only():
-    task = dodo.task_build_tour_edge_tiles()
-    assert "match_tour_edges" in task["task_dep"]
-    assert "build_profiles" not in task["task_dep"]
-    assert any(str(d).endswith("tour-edges/records.npy") for d in task["file_dep"])
-    assert any(str(d).endswith("start-points-id-table.json") for d in task["file_dep"])
-    assert any("build_tour_tiles.py" in a for a in task["actions"])
-    assert not any("simplify" in a for a in task["actions"])
-    assert not any(p["name"].startswith("simplify") for p in task.get("params", []))
-
-
 def test_no_tour_edge_payload_task_or_public_file():
     assert not hasattr(dodo, "task_build_tour_edge_payload")
     assert "tour-edge-payload.bin" not in _public_names()
     assert "tour-edge-payload.json" not in _public_names()
     assert "build_tour_edge_payload" not in dodo.DOIT_CONFIG["default_tasks"]
-
-
-def test_check_tour_matching_depends_only_on_tour_outputs():
-    task = dodo.task_check_tour_matching()
-    assert task["task_dep"] == ["match_tour_edges"]
-    assert not any("base_graph" in str(d) for d in task["file_dep"])
-
-
-def test_graph_and_elevation_checks_no_longer_read_tour_outputs():
-    for name in ("task_check_graph_building", "task_check_elevation"):
-        task = getattr(dodo, name)()
-        assert "match_tour_edges" not in task["task_dep"]
-        assert not any("tour" in str(d) for d in task["file_dep"]), name
-
-
-def test_check_postprocessing_reads_tours_json_not_tour_payload():
-    task = dodo.task_check_postprocessing()
-    assert "build_tour_edge_payload" not in task["task_dep"]
-    assert any(str(d).endswith("tours.json") for d in task["file_dep"])
-    assert not any("tour-edge-payload" in str(d) for d in task["file_dep"])
 
 
 def _declared_data_paths():
@@ -446,7 +333,7 @@ def test_declared_data_paths_are_under_a_known_tier():
 
 
 def test_public_files_are_source_and_public_name_pairs():
-    assert len(dodo.PUBLIC_FILES) == 32
+    assert len(dodo.PUBLIC_FILES) == 25
     names = [name for _, name in dodo.PUBLIC_FILES]
     assert len(names) == len(set(names))
     for src, name in dodo.PUBLIC_FILES:
@@ -479,5 +366,5 @@ def test_build_approach_table_depends_on_start_edge_geometry_and_huts():
 
 def test_check_postprocessing_depends_on_the_geometry_it_samples_anchors_against():
     deps = [str(d) for d in dodo.task_check_postprocessing()["file_dep"]]
-    for name in ("hut-edges/geometry.npy", "start-edges/geometry.npy", "tour-edges/geometry.npy", "hut-edges/payload.bin"):
+    for name in ("hut-edges/geometry.npy", "start-edges/geometry.npy", "hut-edges/payload.bin"):
         assert any(d.endswith(name) for d in deps), name

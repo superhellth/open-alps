@@ -3,7 +3,6 @@ import type { AppData } from '@/data/buildAppData.js'
 import type { SearchClient } from '@/search/searchClient.js'
 import { groupByStart } from '@/tourSearch/groupByStart.js'
 import { NO_TOURS, tourKey } from '@/tourSearch/tourKey.js'
-import { officialToTour } from '@/tourSearch/plannerTour.js'
 import type { PlannerTour } from '@/tourSearch/plannerTour.js'
 import { inBbox } from '@/lib/viewport.js'
 import type { View } from '@/lib/viewport.js'
@@ -12,7 +11,7 @@ import { DEFAULT_FORM, rankTargetsFromForm } from './formState.js'
 import type { FormState } from './formState.js'
 import { DEFAULT_DRAFT, dayCountFromDraft, legCountRangeFromDraft } from './plannerState.js'
 import type { TripDraft } from './plannerState.js'
-import { filterOfficial, sortTours } from './rankTours.js'
+import { sortTours } from './rankTours.js'
 import type { SortDir, SortKey } from './rankTours.js'
 import { usePlannerSearch } from './usePlannerSearch.js'
 
@@ -43,11 +42,7 @@ export function useDiscover({ data, client, mapView, pointOf }: {
 
   const ohrsIdByHutIndex = useMemo(
     () => new Map([...data.hutOhrsByIndex].map(([i, v]) => [i, v.ohrsHutId] as const)), [data])
-  const officialTours = useMemo(
-    () => data.officialTours.map(officialToTour).filter((t): t is PlannerTour => t !== null), [data])
-  const tours = useMemo<PlannerTour[]>(
-    () => [...(search.chains ?? []), ...filterOfficial(officialTours, form, legCountRange, data.startById)],
-    [data, search.chains, officialTours, form, legCountRange])
+  const tours = useMemo<PlannerTour[]>(() => search.chains ?? [], [search.chains])
   const visibleTours = useMemo(
     () => filterByAvailability(tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset),
     [tours, form.onlyAvailable, ohrsIdByHutIndex, search.freeByOffset])

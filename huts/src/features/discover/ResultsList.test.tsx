@@ -13,18 +13,17 @@ const tour = (huts: number[], over: Partial<PlannerTour> = {}): PlannerTour => (
 })
 const hutNameById = new Map([[0, 'Hut A'], [1, 'Hut B'], [2, 'Hut C'], [3, 'Hut D'], [4, 'Hut E']])
 const props = () => ({
-  tours: [tour([0, 1]), tour([2], { official: { tourId: 3, name: 'Kaisertour' } })],
+  tours: [tour([0, 1]), tour([2])],
   totalCount: 2, onShowAll: vi.fn(), isHighlighted: () => false, noMatches: false, sortKey: 'fit' as const, sortDir: 'asc' as const,
   onSortChange: vi.fn(), onSortDirChange: vi.fn(), onPreview: vi.fn(), onPick: vi.fn(), onOpenFilters: vi.fn(),
   hutNameById,
 })
 
 describe('ResultsList', () => {
-  it('lists tours by their hut chain and signpost-style totals, official ones tagged', () => {
+  it('lists tours by their hut chain and signpost-style totals', () => {
     render(<ResultsList {...props()} />)
     expect(screen.getByText('Hut A – Hut B')).toBeInTheDocument()
     expect(screen.getAllByText(/10½ Std/).length).toBe(2)
-    expect(screen.getByText('Offiziell: Kaisertour')).toBeInTheDocument()
   })
   it('folds long hut chains to first – last plus a count chip', () => {
     render(<ResultsList {...props()} tours={[tour([0, 1, 2, 3, 4])]} />)

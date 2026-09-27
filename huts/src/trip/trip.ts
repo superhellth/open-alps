@@ -25,7 +25,6 @@ export interface Trip {
   huts: string[]
   exit: TripEndpoint
   variant: TripVariant
-  source?: { kind: 'official'; tourId: number }
 }
 
 export interface NewTripInput {
@@ -36,7 +35,6 @@ export interface NewTripInput {
   huts: string[]
   exit: TripEndpoint
   variant: TripVariant
-  source?: Trip['source']
 }
 
 const SOURCE_TYPES: readonly number[] = [SOURCE_TYPE_STATION, SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER]
@@ -48,7 +46,6 @@ export function newTrip(input: NewTripInput, now: Date = new Date(), id: string 
     id, name: input.name, createdAt: iso, updatedAt: iso,
     startDate: input.startDate, partySize: input.partySize,
     start: input.start, huts: [...input.huts], exit: input.exit, variant: input.variant,
-    ...(input.source ? { source: input.source } : {}),
   }
 }
 
@@ -66,7 +63,7 @@ function parseEndpoint(v: unknown): TripEndpoint | null {
 /** Validates untrusted JSON (localStorage, share link, backup file). Null means "not a usable trip". */
 export function parseTrip(value: unknown): Trip | null {
   if (!isRecord(value)) return null
-  const { id, name, createdAt, updatedAt, startDate, partySize, huts, variant, source } = value
+  const { id, name, createdAt, updatedAt, startDate, partySize, huts, variant } = value
   if (typeof id !== 'string' || typeof name !== 'string') return null
   if (typeof createdAt !== 'string' || typeof updatedAt !== 'string') return null
   if (startDate !== null && (typeof startDate !== 'string' || !ISO_DATE.test(startDate))) return null
@@ -77,14 +74,9 @@ export function parseTrip(value: unknown): Trip | null {
   const start = parseEndpoint(value.start)
   const exit = parseEndpoint(value.exit)
   if (!start || !exit) return null
-  const parsedSource =
-    isRecord(source) && source.kind === 'official' && typeof source.tourId === 'number'
-      ? { kind: 'official' as const, tourId: source.tourId }
-      : undefined
   return {
     id, name, createdAt, updatedAt, startDate, partySize, start, exit,
     huts: huts as string[],
     variant: { sacCeiling: variant.sacCeiling as number | null, allowUngraded: variant.allowUngraded },
-    ...(parsedSource ? { source: parsedSource } : {}),
   }
 }

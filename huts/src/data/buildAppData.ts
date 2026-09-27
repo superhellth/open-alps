@@ -1,7 +1,4 @@
 import { SOURCE_TYPE_PARKING, SOURCE_TYPE_PARTNER, SOURCE_TYPE_STATION } from '../tourSearch/types.js'
-import { buildOfficialTourViews } from '../tourSearch/officialTours.js'
-import type { OfficialTourView } from '../tourSearch/officialTours.js'
-import type { RawTour } from '../tourSearch/loadOfficialTours.js'
 import type { TripGraph } from '@/tourSearch/types.js'
 import type { HutClass } from './hutClass.js'
 import { idFromOsmFeatureId } from './labels.js'
@@ -20,7 +17,6 @@ export interface AppData {
   hutClassByIndex: Map<number, HutClass>
   hutOhrsByIndex: Map<number, HutOhrs>
   startById: Map<number, StartPoint>
-  officialTours: OfficialTourView[]
 }
 
 interface BuildInput {
@@ -29,7 +25,6 @@ interface BuildInput {
   parking: GeoJSON.FeatureCollection
   stations: GeoJSON.FeatureCollection
   partner: GeoJSON.FeatureCollection
-  tours: RawTour[]
 }
 
 function classOf(props: { hutType?: string; serviced?: boolean }): HutClass | null {
@@ -37,7 +32,7 @@ function classOf(props: { hutType?: string; serviced?: boolean }): HutClass | nu
   return { operator: props.hutType, serviced: props.serviced ?? true }
 }
 
-export function buildAppData({ graph, huts, parking, stations, partner, tours }: BuildInput): AppData {
+export function buildAppData({ graph, huts, parking, stations, partner }: BuildInput): AppData {
   const featureByGuid = new Map(huts.features.map((f) => [(f.properties as { id: string }).id, f]))
   const features = graph.hutEdges.hutIds.map((guid) => featureByGuid.get(guid) ?? null)
 
@@ -79,6 +74,5 @@ export function buildAppData({ graph, huts, parking, stations, partner, tours }:
 
   return {
     graph, hutNameById, hutCoordsById, hutsByIndex, hutClassByIndex, hutOhrsByIndex, startById,
-    officialTours: buildOfficialTourViews(tours),
   }
 }

@@ -82,18 +82,6 @@ directly.
   hut-edges/geometry.{bin,json}, hut-edges/elevation.{bin,json}]`
   (resp. the same files under `start-edges/`).
 
-## `build_tour_tiles.py` — official-tour legs as tiles + stats
-
-The tour counterpart of `build_edge_tiles.py`, over `tour-edges/` (`binfmt.TOUR_LEG_DTYPE`,
-written with its own profiles by `graph_building/match_tour_edges.py`). Geometry is every raw GPX
-point — no simplification, no `simplify-tolerance-deg` — shipped as `tour-edges/edges.pmtiles`,
-`tour-edges/stats.json`, `tour-edges/geometry.bin/json` and `tour-edges/elevation.bin/json`. Display
-ids of non-hut endpoints (station/parking/partner at a tour's start/end) resolve through
-`start-points-id-table.json`. **doit wiring**: `task_dep=[match_tour_edges]`,
-`file_dep=[tour-edges/records.npy, start-points-id-table.json]`, params `min_zoom`/`max_zoom`.
-The frontend reads per-leg scalars from `tours.json` (`edgeId` = the leg's `edge_id`), not from a
-payload file.
-
 ## `build_approach_table.py` — approach/exit table + loop-closure reverse index
 
 Reduces `start-edges/records.npy` (92,426 records over 27,261 parkings + 3,025 stations for

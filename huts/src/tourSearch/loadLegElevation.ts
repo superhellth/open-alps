@@ -22,7 +22,6 @@ const VALUE_BYTES = 4 // f4 elevation
 const LAYER_FILES: Record<GeometryLayer, { json: string; bin: string }> = {
   hut_edges: { json: 'hut-edge-elevation.json', bin: 'hut-edge-elevation.bin' },
   start_edges: { json: 'start-edge-elevation.json', bin: 'start-edge-elevation.bin' },
-  tour_edges: { json: 'tour-edge-elevation.json', bin: 'tour-edge-elevation.bin' },
 }
 
 let manifestCache = new Map<GeometryLayer, Promise<LayerState>>()

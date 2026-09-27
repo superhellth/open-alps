@@ -54,7 +54,7 @@ def test_elevation_profile_interpolates_onto_n_points():
 
 
 def test_main_processes_only_hut_and_start_edges(tmp_path, monkeypatch):
-    # tour-edges/ (written with its own profiles by match_tour_edges) is ignored even when present.
+    # an unrelated edge-set directory is ignored even when present.
     import build_profiles as bp_module
 
     processed = []

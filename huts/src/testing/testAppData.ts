@@ -16,6 +16,5 @@ export function makeTestAppData(): AppData {
       [100, { name: 'Bahnhof X', sourceType: 1, lat: 47.29, lng: 12.0 }],
       [101, { name: 'Bahnhof Y', sourceType: 1, lat: 47.28, lng: 12.0 }],
     ]),
-    officialTours: [],
   }
 }

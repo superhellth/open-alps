@@ -23,18 +23,11 @@ describe('tripFromTour', () => {
     expect(t.partySize).toBe(2)
     expect(t.variant).toEqual({ sacCeiling: 3, allowUngraded: true })
     expect(t.name).toBe('Hütte A – Hütte C')
-    expect(t.source).toBeUndefined()
   })
   it('an unset difficulty ceiling is stored as null; an empty date as null', () => {
     const t = tripFromTour(chain, { ...ctx, form: { sacCeiling: 'any', allowUngraded: false }, draft: { startDate: '', endDate: '', partySize: 1 } })!
     expect(t.variant).toEqual({ sacCeiling: null, allowUngraded: false })
     expect(t.startDate).toBeNull()
-  })
-  it('an official tour keeps its name and source and resolves its graph with the unconstrained variant', () => {
-    const t = tripFromTour({ ...chain, official: { tourId: 7, name: 'Kaisertour' } }, ctx)!
-    expect(t.name).toBe('Kaisertour')
-    expect(t.source).toEqual({ kind: 'official', tourId: 7 })
-    expect(t.variant).toEqual({ sacCeiling: null, allowUngraded: true })
   })
   it('is null when a start point is unknown', () => {
     expect(tripFromTour({ ...chain, startId: 5 }, ctx)).toBeNull()

@@ -15,7 +15,6 @@ const input = {
   stations: fc([{ type: 'Feature', id: 'n100', properties: { name: 'Bahnhof X' }, geometry: point(11, 46.9) }]),
   parking: fc([{ type: 'Feature', id: 'n200', properties: { name: 'P Tal' }, geometry: point(11.05, 46.95) }]),
   partner: fc([{ type: 'Feature', properties: { id: 11, name: 'Dorf' }, geometry: point(12, 46) }]),
-  tours: [],
 }
 
 describe('buildAppData', () => {

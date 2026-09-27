@@ -51,11 +51,10 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
 
   const routeCtx = useMemo<RouteContext>(() => ({
     hutCoordsById: data.hutCoordsById, startById: data.startById,
-    officialById: new Map(data.officialTours.map((t) => [t.tourId, t])),
     hutClassByIndex: data.hutClassByIndex,
     legAnchors: createLegAnchorLookup({
       hutEdges: data.graph.hutEdges, approaches: data.graph.approaches,
-      hutCoordsById: data.hutCoordsById, officialTours: data.officialTours,
+      hutCoordsById: data.hutCoordsById,
     }),
   }), [data])
   const tourPoint = useCallback((tour: PlannerTour) => tourMapPoint(tour, routeCtx), [routeCtx])
@@ -98,8 +97,7 @@ function Planner({ data, client, importHash }: { data: AppData; client: SearchCl
   function resetName(trip: Trip): string {
     const hutIds = data.graph.hutEdges.hutIds
     const nameOf = (guid: string) => data.hutNameById.get(hutIds.indexOf(guid)) ?? '?'
-    const official = trip.source ? data.officialTours.find((t) => t.tourId === trip.source?.tourId) : undefined
-    return autoTripName({ first: nameOf(trip.huts[0]), last: nameOf(trip.huts[trip.huts.length - 1]) }, official)
+    return autoTripName({ first: nameOf(trip.huts[0]), last: nameOf(trip.huts[trip.huts.length - 1]) })
   }
 
   function confirmDiscard() {

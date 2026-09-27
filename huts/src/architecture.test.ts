@@ -9,7 +9,7 @@ const LAYER: Record<string, number> = {
   lib: 0, ui: 0, format: 0, availability: 0, tourSearch: 0,
   trip: 1,
   data: 2, search: 2,
-  features: 3, adminPage: 3, gpxEditor: 3,
+  features: 3, adminPage: 3,
   app: 4,
 }
 

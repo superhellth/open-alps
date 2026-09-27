@@ -5,7 +5,7 @@ import { newTrip } from './trip.js'
 const trip = newTrip({
   name: 'Kaisertour – Süd', startDate: '2026-07-10', partySize: 3, start: { startId: 100, sourceType: 1 },
   huts: ['{593D0233-85B0-4086-B762-D4E94ED3B2CF}', '{B}'], exit: { startId: 101, sourceType: 1 },
-  variant: { sacCeiling: 3, allowUngraded: true }, source: { kind: 'official' as const, tourId: 4 },
+  variant: { sacCeiling: 3, allowUngraded: true },
 }, new Date('2026-06-01T00:00:00Z'), 'orig')
 
 describe('share link', () => {
@@ -16,7 +16,7 @@ describe('share link', () => {
     const back = decodeTripFromHash(hash, new Date('2026-07-01T00:00:00Z'), 'copy')!
     expect(back).toMatchObject({
       id: 'copy', name: 'Kaisertour – Süd', startDate: '2026-07-10', partySize: 3, huts: trip.huts,
-      start: trip.start, exit: trip.exit, variant: trip.variant, source: trip.source,
+      start: trip.start, exit: trip.exit, variant: trip.variant,
     })
     expect(back.createdAt).toBe('2026-07-01T00:00:00.000Z')
   })
