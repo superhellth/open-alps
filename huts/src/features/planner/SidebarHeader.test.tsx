@@ -24,7 +24,7 @@ describe('SidebarHeader', () => {
   it('calls the right handler for each control', () => {
     const onWordmark = vi.fn(); const onPlanen = vi.fn(); const onMeineTouren = vi.fn()
     render(<SidebarHeader view="discover" savedCount={0} onWordmark={onWordmark} onPlanen={onPlanen} onMeineTouren={onMeineTouren} />)
-    fireEvent.click(screen.getByText('Hüttentouren'))
+    fireEvent.click(screen.getByText('Wegweiser'))
     expect(onWordmark).toHaveBeenCalled()
     fireEvent.click(screen.getByText('Planen'))
     expect(onPlanen).toHaveBeenCalled()

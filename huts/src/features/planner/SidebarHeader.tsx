@@ -54,7 +54,8 @@ export default function SidebarHeader({ view, savedCount, onWordmark, onPlanen, 
         component="a" href="#" onClick={(e: React.MouseEvent) => { e.preventDefault(); onWordmark() }}
         sx={styles.wordmark}
       >
-        Hüttentouren
+        <Box component="img" src="/favicon.svg" alt="" sx={styles.brandIcon} />
+        Wegweiser
       </Box>
       <Box component="nav" sx={styles.nav}>
         {fingerpost('Planen', planenActive, 0, 2, onPlanen)}

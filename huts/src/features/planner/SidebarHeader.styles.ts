@@ -33,7 +33,8 @@ export const styles = {
     '&:hover': active ? undefined : { backgroundColor: tokens.signpost },
   }),
   root: { display: 'flex', alignItems: 'center', gap: space.group, height: 48, flexShrink: 0, px: space.inset, borderBottom: `2px solid ${tokens.ink}` },
-  wordmark: { fontFamily: SIGNPOST_FONT, fontWeight: 600, fontSize: rem(fontSize.lg), color: tokens.ink, textDecoration: 'none', flexShrink: 0 },
+  wordmark: { display: 'flex', alignItems: 'center', gap: space.item, fontFamily: SIGNPOST_FONT, fontWeight: 600, fontSize: rem(fontSize.lg), color: tokens.ink, textDecoration: 'none', flexShrink: 0 },
+  brandIcon: { width: 28, height: 28 },
   nav: {
     display: 'flex',
     marginLeft: 'auto', // design-exempt: pushes the nav to the right edge
