@@ -15,6 +15,7 @@ export interface StageNodeProps {
   /** Second line: the night's state and its booking link; omitted while nothing is known about it. */
   meta?: ReactNode
   changed: boolean
+  serviced: boolean
   /** Highlights the rail above the stop (the leg arriving here) and below it (the leg leaving). */
   railHighlight?: { above: boolean; below: boolean }
   /** Swap/remove controls; null outside edit mode or when the trip cannot be edited. */
@@ -24,9 +25,9 @@ export interface StageNodeProps {
 }
 
 /** One night on the timeline: the hut symbol on the rail, the hut, its date and its state. */
-export default function StageNode({ number, title, date, meta, changed, railHighlight, edit, children }: StageNodeProps) {
+export default function StageNode({ number, title, date, meta, changed, serviced, railHighlight, edit, children }: StageNodeProps) {
   return (
-    <RailRow node={{ type: 'hut', changed }} highlightedAbove={railHighlight?.above} highlighted={railHighlight?.below}>
+    <RailRow node={{ type: 'hut', changed, serviced }} highlightedAbove={railHighlight?.above} highlighted={railHighlight?.below}>
       <Box data-night={number - 1} data-variant={changed ? 'outline' : undefined} sx={styles.root}>
         <Box sx={styles.head}>
           <Box sx={styles.face}>

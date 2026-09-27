@@ -20,6 +20,7 @@ const trip = (huts: string[], startDate: string | null = '2026-07-10') => newTri
 function renderList(t = trip(['{D}', '{E}']), overrides: Partial<Parameters<typeof StageList>[0]> = {}) {
   const props = {
     trip: t, tripLegs: legsFromTrip(data.graph, t), hutNameById: data.hutNameById, hutOhrsByIndex: data.hutOhrsByIndex,
+    isServiced: () => true,
     startLabel: makeStartLabel(data.startById), nightViews: null, highlightedLeg: null, onHoverLeg: vi.fn(),
     editor: makeEditorStub(), editMode: false, onEditModeChange: vi.fn(), ...overrides,
   }

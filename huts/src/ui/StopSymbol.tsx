@@ -15,16 +15,26 @@ const TRANSIT_PATHS = renderToStaticMarkup(createElement(DirectionsTransitIcon))
 /** Placement inside a parent svg; omitted for a standalone symbol. */
 interface At { x?: number; y?: number }
 
-/** House shape for every hut; ink fill = serviced, ink outline = self-catering; selected =
- *  signpost-yellow fill with ink outline. */
+/** House shape for every hut: filled when serviced, unfilled (paper) when self-catering. Unselected huts are
+ *  ink; selected huts are signpost yellow with an ink edge (a yellow outline when self-catering). */
 export function HutSymbol({ serviced, selected = false, size = 18, x, y }:
   { serviced: boolean; selected?: boolean; size?: number } & At) {
+  const points = '9,1.5 16.5,8 14.5,8 14.5,16 3.5,16 3.5,8 1.5,8'
   return (
     <svg xmlns="http://www.w3.org/2000/svg" x={x} y={y} width={size} height={size} viewBox="0 0 18 18">
-      <polygon
-        points="9,1.5 16.5,8 14.5,8 14.5,16 3.5,16 3.5,8 1.5,8"
-        fill={selected ? signpost : serviced ? ink : paper} stroke={ink} strokeWidth={selected || !serviced ? 2 : 1}
-      />
+      {selected && !serviced
+        ? (
+            <>
+              <polygon points={points} fill={paper} stroke={ink} strokeWidth={3.5} strokeLinejoin="round" />
+              <polygon points={points} fill="none" stroke={signpost} strokeWidth={2} strokeLinejoin="round" />
+            </>
+          )
+        : (
+            <polygon
+              points={points}
+              fill={selected ? signpost : serviced ? ink : paper} stroke={ink} strokeWidth={selected || !serviced ? 2 : 1}
+            />
+          )}
     </svg>
   )
 }
@@ -44,11 +54,11 @@ export function StartSymbol({ sourceType, size = 16, x, y }: { sourceType: numbe
 }
 
 /** A stop of an open trip: a hut (outlined when it no longer resolves) or the start/exit point. */
-export type StopMark = { type: 'hut'; changed: boolean } | { type: 'end'; sourceType: number }
+export type StopMark = { type: 'hut'; changed: boolean; serviced: boolean } | { type: 'end'; sourceType: number }
 
 /** A trip stop as the map draws it: trip huts in signpost yellow, a changed hut as an outline. */
 export function StopSymbol({ mark, size = STOP_SYMBOL_SIZE, x, y }: { mark: StopMark; size?: number } & At) {
   return mark.type === 'hut'
-    ? <HutSymbol serviced={false} selected={!mark.changed} size={size} x={x} y={y} />
+    ? <HutSymbol serviced={mark.changed ? false : mark.serviced} selected={!mark.changed} size={size} x={x} y={y} />
     : <StartSymbol sourceType={mark.sourceType} size={size} x={x} y={y} />
 }

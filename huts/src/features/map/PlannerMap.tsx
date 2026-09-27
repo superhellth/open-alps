@@ -76,7 +76,7 @@ const PlannerMap = memo(function PlannerMap({ mode, commands }: PlannerMapProps)
           <FitBoundsCommand bounds={fitBounds} />
           {route && (
             <RouteLayer
-              route={route} highlightedLeg={highlightedLeg} cursor={cursor} fit={fitRoute}
+              route={route} highlightedLeg={highlightedLeg} cursor={cursor} fit={fitRoute} dots={mode.kind !== 'trip'}
               onHover={mode.kind === 'trip' ? (hovering, legIndex) => mode.onHoverLeg(hovering ? legIndex : null) : undefined}
             />
           )}

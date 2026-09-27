@@ -12,10 +12,16 @@ describe('hutSymbolSvg', () => {
     expect(outline).toContain('stroke="#23272B"')
   })
   it('a selected hut is a house, signpost-yellow fill, ink outline', () => {
-    const s = hutSymbolSvg({ serviced: false, selected: true })
+    const s = hutSymbolSvg({ serviced: true, selected: true })
     expect(s).toContain('<polygon')
     expect(s).toContain('fill="#F5B700"')
     expect(s).toContain('stroke="#23272B"')
+  })
+  it('a selected self-catering hut is unfilled with a signpost-yellow outline', () => {
+    const self = hutSymbolSvg({ serviced: false, selected: true })
+    expect(self).toContain('fill="#EDEFE9"')
+    expect(self).toContain('stroke="#F5B700"')
+    expect(self).not.toContain('fill="#F5B700"')
   })
 })
 

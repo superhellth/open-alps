@@ -41,9 +41,10 @@ export default function TripPanel({
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
   const elevation = useTripElevation(tripLegs)
+  const isServiced = (hutIndex: number | null) => hutIndex !== null && (data.hutClassByIndex.get(hutIndex)?.serviced ?? false)
   const marks: StopMark[] = [
     { type: 'end', sourceType: trip.start.sourceType },
-    ...tripLegs.changed.map((changed) => ({ type: 'hut' as const, changed })),
+    ...tripLegs.changed.map((changed, i) => ({ type: 'hut' as const, changed, serviced: isServiced(tripLegs.hutIndices[i]) })),
     { type: 'end', sourceType: trip.exit.sourceType },
   ]
   return (
@@ -58,6 +59,7 @@ export default function TripPanel({
       />
       <StageList
         trip={trip} tripLegs={tripLegs} hutNameById={data.hutNameById} hutOhrsByIndex={data.hutOhrsByIndex}
+        isServiced={isServiced}
         startLabel={startLabel} nightViews={nightViews} highlightedLeg={highlightedLeg} onHoverLeg={onHoverLeg}
         editor={editor} editMode={editMode} onEditModeChange={onEditModeChange} warnings={warnings}
       />

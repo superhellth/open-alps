@@ -19,7 +19,7 @@ const elevation: TripElevation = {
   loading: false,
 }
 const stops = ['Bahnhof X', 'Hütte A', 'Bahnhof X']
-const marks: StopMark[] = [{ type: 'end', sourceType: 1 }, { type: 'hut', changed: false }, { type: 'end', sourceType: 2 }]
+const marks: StopMark[] = [{ type: 'end', sourceType: 1 }, { type: 'hut', changed: false, serviced: true }, { type: 'end', sourceType: 2 }]
 const noop = () => {}
 const draw = (over: Partial<Parameters<typeof HeightProfile>[0]> = {}) =>
   render(<HeightProfile elevation={elevation} stops={stops} marks={marks} highlightedLeg={null} onHoverLeg={noop} onHoverPosition={noop} {...over} />)

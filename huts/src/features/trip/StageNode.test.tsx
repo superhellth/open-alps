@@ -8,7 +8,7 @@ import type { StageNodeProps } from './StageNode.js'
 afterEach(cleanup)
 
 const props = (over: Partial<StageNodeProps> = {}): StageNodeProps => ({
-  number: 2, title: 'Hütte B', date: 'Fr., 12.07.', meta: <span>12 Plätze frei</span>, changed: false,
+  number: 2, title: 'Hütte B', date: 'Fr., 12.07.', meta: <span>12 Plätze frei</span>, changed: false, serviced: true,
   edit: null, ...over,
 })
 

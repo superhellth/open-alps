@@ -19,6 +19,8 @@ export interface StageListProps {
   tripLegs: TripLegs
   hutNameById: Map<number, string>
   hutOhrsByIndex: Map<number, HutOhrs>
+  /** Whether the hut at a graph index is serviced; false for self-catering or unresolved huts. */
+  isServiced: (hutIndex: number | null) => boolean
   startLabel: (startId: number) => string
   nightViews: NightView[] | null
   /** The leg hovered in the list, on the map or on the profile; its rail from stop to stop turns yellow. */
@@ -37,7 +39,7 @@ const shortDate = (d: Date) => d.toLocaleDateString('de-DE', { weekday: 'short',
  *  the destination. Legs are the hover targets; each dated night carries its availability and booking link;
  *  editing controls appear only in edit mode. Leg i arrives at night i, leg `huts.length` is the exit. */
 export default function StageList({
-  trip, tripLegs, hutNameById, hutOhrsByIndex, startLabel, nightViews, highlightedLeg, onHoverLeg,
+  trip, tripLegs, hutNameById, hutOhrsByIndex, isServiced, startLabel, nightViews, highlightedLeg, onHoverLeg,
   editor, editMode, onEditModeChange, warnings = [],
 }: StageListProps) {
   const firstNight = trip.startDate ? new Date(trip.startDate) : null
@@ -96,7 +98,7 @@ export default function StageList({
                 {leg(i)}
                 <StageNode
                   number={i + 1}
-                  title={title} date={date && shortDate(date)} meta={meta} changed={changed}
+                  title={title} date={date && shortDate(date)} meta={meta} changed={changed} serviced={isServiced(hutIndex)}
                   railHighlight={{ above: highlightedLeg === i, below: highlightedLeg === i + 1 }}
                   edit={canEdit ? { trim: editor.trimAllowed(i), onSwap: () => editor.startSwap(i), onTrim: () => editor.trim(i) } : null}
                 >

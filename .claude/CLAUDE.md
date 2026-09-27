@@ -46,7 +46,7 @@ count markers) -> Customize (a picked tour becomes a `Trip`; `features/trip/Trip
 (`discover`, `saved`, `trip`) switched by a `SidebarHeader` wordmark + Planen/Meine Touren signpost;
 `saved` (`features/saved/SavedTripsList.tsx`) lists saved trips and draws them on the map (`features/map/SavedTripsLayer.tsx`).
 `features/discover/formState.ts` builds the `Query`; `features/discover/rankTours.ts`/`tourSearch/rankFit.ts` order results;
-`data/hutClass.ts` classifies each hut (marker shape = operator, fill = service).
+`data/hutClass.ts` classifies each hut (operator, serviced); `ui/StopSymbol.tsx`'s `HutSymbol` draws serviced huts filled and self-catering huts unfilled, in ink or (selected) signpost yellow.
 
 The planner UI is split into feature folders under `huts/src/features/`: `planner/` (page shell, sidebar,
 dialogs; composes the others), `discover/` (filter bar, search, results), `trip/` (trip panel and editor),
