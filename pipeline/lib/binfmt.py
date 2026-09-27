@@ -18,7 +18,7 @@ EDGE_DTYPE = np.dtype([
     ("u", "i8"), ("v", "i8"), ("dist", "f8"), ("road_m", "f8"),
     ("ungraded_m", "f8"), ("inferred_m", "f8"),
     ("time_s", "f8"), ("ascent_m", "f4"), ("descent_m", "f4"),
-    ("sac_rank", "i1"), ("via_ferrata", "bool"), ("constrained_ok", "bool"),
+    ("sac_rank", "i1"), ("via_ferrata", "bool"), ("constrained_ok", "bool"), ("downgraded", "bool"),
     ("interior_offset", "i8"), ("interior_count", "i4"), ("edge_id", "i8"),
 ])
 COORD_DTYPE = np.dtype([("lon", "f8"), ("lat", "f8")])
@@ -120,7 +120,7 @@ UNSET = -1.0  # sentinel for time_s/ascent_m/descent_m before compute_edge_profi
 
 # Split into three independent tracking params (one per dtype each cares about) so bumping one
 # doesn't force-rerun tasks that don't touch that dtype - see pipeline/dag/graph_building.py.
-EDGE_SCHEMA_VERSION = 2
+EDGE_SCHEMA_VERSION = 3
 SNAP_SCHEMA_VERSION = 2
 RECORD_SCHEMA_VERSION = 4  # bumped: start_edges records now populate edge_id/prefix/suffix cols too
 ACCESS_DISTANCE_SCHEMA_VERSION = 1  # new dtype (spec 2026-09-02-hub-edge-scaling-design.md, B3)

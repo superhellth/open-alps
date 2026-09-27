@@ -44,6 +44,7 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_dist = []
         self.edges_road, self.edges_ungraded, self.edges_inferred = [], [], []
         self.edges_sac_rank, self.edges_via_ferrata, self.edges_constrained_ok = [], [], []
+        self.edges_downgraded = []
         self.progress_every = progress_every
         self.n_ways = 0
 
@@ -74,10 +75,9 @@ class WayGraphHandler(osmium.SimpleHandler):
         is_road = highway in self.road_tags
         grade = grading.classify_way(tags)
         is_via_ferrata = highway == "via_ferrata" or "via_ferrata_scale" in tags
+        downgraded = grading.excluded_from_constrained(tags)
         constrained_ok = (
-            grade.tier != grading.TIER_UNGRADED
-            and not is_via_ferrata
-            and not grading.excluded_from_constrained(tags)
+            grade.tier != grading.TIER_UNGRADED and not is_via_ferrata and not downgraded
         )
         n_edges = len(nodes) - 1
         zeros = [0.0] * n_edges
@@ -92,6 +92,7 @@ class WayGraphHandler(osmium.SimpleHandler):
         self.edges_sac_rank.extend([grade.sac_rank] * n_edges)
         self.edges_via_ferrata.extend([is_via_ferrata] * n_edges)
         self.edges_constrained_ok.extend([constrained_ok] * n_edges)
+        self.edges_downgraded.extend([downgraded] * n_edges)
 
         self.n_ways += 1
         if self.progress_every and self.n_ways % self.progress_every == 0:
@@ -111,7 +112,7 @@ def stream_osm(trails_path, config):
 
 
 def handler_to_arrays(handler, timer: StepTimer = None):
-    """The ten numpy arrays contract_structural takes, in order. Split out from contract() so
+    """The eleven numpy arrays contract_structural takes, in order. Split out from contract() so
     main() can drop the handler - and with it ~12 GB of now-dead raw Python lists (40M coord
     tuples, 41M-element int/float lists) - BEFORE contraction starts rather than after. See
     docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md."""
@@ -128,6 +129,7 @@ def handler_to_arrays(handler, timer: StepTimer = None):
             np.array(handler.edges_sac_rank, dtype=np.int8),
             np.array(handler.edges_via_ferrata, dtype=bool),
             np.array(handler.edges_constrained_ok, dtype=bool),
+            np.array(handler.edges_downgraded, dtype=bool),
         )
 
 
@@ -206,6 +208,7 @@ def pack_and_write(contracted, tile_size_km, out_dir, timer: StepTimer = None):
         edges_arr["sac_rank"] = contracted.edges_sac_rank
         edges_arr["via_ferrata"] = contracted.edges_via_ferrata
         edges_arr["constrained_ok"] = contracted.edges_constrained_ok
+        edges_arr["downgraded"] = contracted.edges_downgraded
         edges_arr["interior_offset"] = interior_offsets
         edges_arr["interior_count"] = interior_counts
         edges_arr["edge_id"] = np.arange(n_edges, dtype=np.int64)  # stable: row position == edge_id

@@ -12,9 +12,9 @@ granularity: which segments of a partially-road/ungraded/inferred chain carried 
 totals survive contraction; per-segment attribution does not, same reasoning as
 lib/contraction.py's docstring). This sets each per-segment flag from the corresponding chain
 total > 0, so reconstructed road_m/ungraded_m/inferred_m totals differ from the originals.
-constrained_ok is chain-level already (an AND-fold, not a sum), so it broadcasts exactly.
-Topology, coordinates, per-segment distances, sac_rank and via_ferrata are exact, which is
-everything contraction's cost depends on.
+constrained_ok and downgraded are chain-level folds, not sums; the reconstruction broadcasts each
+chain value to all its segments. Topology, coordinates, per-segment distances, sac_rank and
+via_ferrata are exact, which is everything contraction's cost depends on.
 
 See docs/superpowers/plans/2026-08-20-contraction-measurement-spike.md.
 
@@ -39,7 +39,7 @@ from lib.pipeline import BASE_GRAPH_DIR  # noqa: E402
 
 @dataclass
 class RawGraph:
-    """Exactly contract_structural's ten positional arguments, in order."""
+    """Exactly contract_structural's eleven positional arguments, in order."""
     coords: np.ndarray
     edges_i: np.ndarray
     edges_j: np.ndarray
@@ -50,11 +50,12 @@ class RawGraph:
     edges_sac_rank: np.ndarray
     edges_via_ferrata: np.ndarray
     edges_constrained_ok: np.ndarray
+    edges_downgraded: np.ndarray
 
     def as_args(self):
         return (self.coords, self.edges_i, self.edges_j, self.edges_dist, self.edges_road,
                 self.edges_ungraded, self.edges_inferred, self.edges_sac_rank,
-                self.edges_via_ferrata, self.edges_constrained_ok)
+                self.edges_via_ferrata, self.edges_constrained_ok, self.edges_downgraded)
 
 
 def select_edges_in_cells(nodes, edges, cell_ids) -> np.ndarray:
@@ -115,9 +116,11 @@ def reconstruct_raw(nodes, edges, interior, edge_ids) -> RawGraph:
     edges_sac_rank = np.asarray(sel["sac_rank"], dtype=np.int8)[eidx]
     edges_via_ferrata = np.asarray(sel["via_ferrata"], dtype=bool)[eidx]
     edges_constrained_ok = np.asarray(sel["constrained_ok"], dtype=bool)[eidx]
+    edges_downgraded = np.asarray(sel["downgraded"], dtype=bool)[eidx]
 
     return RawGraph(coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded,
-                    edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok)
+                    edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
+                    edges_downgraded)
 
 
 def main(argv=None):

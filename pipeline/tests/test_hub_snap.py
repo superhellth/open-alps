@@ -22,7 +22,7 @@ def _line_subgraph(global_node_ids, edge_id):
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, edge_id)
+                False, 0, 0, edge_id)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array(global_node_ids), local_nodes=nodes, local_edges=edges,
@@ -44,7 +44,7 @@ def test_edge_snap_dz_uses_the_real_interior_elevation_not_an_endpoint_blend():
     interior[0] = (0.0045, 0.0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 1, 7)
+                False, 0, 1, 7)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
         interior=interior,
@@ -117,7 +117,7 @@ def test_reconstruct_local_snaps_survives_a_different_subgraph_ordering():
     nodes[2] = (0.009, 0.0, 0)   # global id 101
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (1, 2, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 7)
+                False, 0, 0, 7)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     large_subgraph = LocalSubgraph(
         global_node_ids=np.array([99, 100, 101]), local_nodes=nodes, local_edges=edges,

@@ -73,6 +73,23 @@ def test_fast_t3_ungraded_still_forbids_via_ferrata_and_t4_plus():
 def test_fast_t3_ungraded_still_forbids_a_graded_edge_excluded_by_downgrade_tag():
     # a KNOWN grade with a downgrade tag (e.g. trail_visibility=horrible) is still safety-excluded
     # - only the "we don't know the grade at all" case is relaxed by this row
-    edges = _edges(sac_rank=[2], constrained_ok=[False], via_ferrata=[False])
+    edges = _edges(sac_rank=[2], constrained_ok=[False], via_ferrata=[False], downgraded=[True])
+    mask = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
+    assert mask.tolist() == [False]
+
+
+def test_fast_t3_ungraded_permits_a_chain_mixing_graded_and_ungraded_segments():
+    # a contracted chain of a T2 segment plus an untagged segment: sac_rank folds to 2 and
+    # constrained_ok to False, yet every segment on it is allowed on this row
+    edges = _edges(sac_rank=[2], constrained_ok=[False], via_ferrata=[False], downgraded=[False],
+                   ungraded_m=[300.0])
+    t3 = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3])
+    t3u = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
+    assert t3.tolist() == [False]
+    assert t3u.tolist() == [True]
+
+
+def test_fast_t3_ungraded_forbids_an_ungraded_edge_with_a_downgrade_tag():
+    edges = _edges(sac_rank=[-1], constrained_ok=[False], via_ferrata=[False], downgraded=[True])
     mask = variants.edge_mask(edges, variants.VARIANTS[binfmt.VARIANT_FAST_T3_UNGRADED])
     assert mask.tolist() == [False]

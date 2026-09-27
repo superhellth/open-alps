@@ -1,10 +1,10 @@
 """Pure structural chain contraction: collapses every run of degree-2 nodes (pass-through, no
 route choice) into one edge carrying summed distance/road/ungraded/inferred length, the max
-sac_scale rank walked, an OR'd via_ferrata flag, an AND-folded constrained_ok flag, and the full
-interior polyline - lossless, since a degree-2 node has no alternate route through it. Unlike
-build_hut_graph.py's version, this has NO knowledge of hub-snap points: V2 defers hub snapping to
-lib/edge_split.py, which can split any contracted edge mid-chain, so the base graph this produces
-is reusable across arbitrary future hub sets without rebuilding.
+sac_scale rank walked, OR'd via_ferrata and downgraded flags, an AND-folded constrained_ok flag,
+and the full interior polyline - lossless, since a degree-2 node has no alternate route through
+it. Unlike build_hut_graph.py's version, this has NO knowledge of hub-snap points: V2 defers hub
+snapping to lib/edge_split.py, which can split any contracted edge mid-chain, so the base graph
+this produces is reusable across arbitrary future hub sets without rebuilding.
 
 constrained_ok is AND-folded (not OR'd, unlike via_ferrata): one ungraded/excluded/via-ferrata
 segment anywhere in the chain poisons the whole contracted edge for every constrained row (spec
@@ -27,13 +27,14 @@ class ContractedGraph:
     edges_sac_rank: np.ndarray
     edges_via_ferrata: np.ndarray
     edges_constrained_ok: np.ndarray
+    edges_downgraded: np.ndarray
     interior_coords: list = field(default_factory=list)  # list[list[(lon, lat)]]
     n_isolated_cycles: int = 0  # rings closed into self-loop edges - see contract_structural
 
 
 def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_ungraded,
                          edges_inferred, edges_sac_rank, edges_via_ferrata, edges_constrained_ok,
-                         progress_every: int = 0) -> ContractedGraph:
+                         edges_downgraded, progress_every: int = 0) -> ContractedGraph:
     """progress_every: print a progress line every N processed junction (keep) nodes - 0 (default)
     prints nothing, kept quiet for tests/callers that don't want console output. Junction-node
     count is much smaller than raw node count (the whole point of contraction), so a much smaller
@@ -61,7 +62,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
     visited_edge = np.zeros(n_edges, dtype=bool)
     c_u, c_v = [], []
     c_dist, c_road_m, c_ungraded_m, c_inferred_m = [], [], [], []
-    c_sac_rank, c_via_ferrata, c_constrained_ok = [], [], []
+    c_sac_rank, c_via_ferrata, c_constrained_ok, c_downgraded = [], [], [], []
     c_interior = []
 
     keep_idxs_list = np.flatnonzero(keep).tolist()
@@ -82,6 +83,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
             sac_max = int(edges_sac_rank[e])
             vf_any = bool(edges_via_ferrata[e])
             ok_all = bool(edges_constrained_ok[e])
+            downgraded_any = bool(edges_downgraded[e])
             interior = []
             cur = nb
             prev_edge = e
@@ -108,6 +110,8 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
                     vf_any = True
                 if not edges_constrained_ok[e2]:
                     ok_all = False
+                if edges_downgraded[e2]:
+                    downgraded_any = True
                 prev_edge, cur = e2, nb2
             c_u.append(k)
             c_v.append(cur)
@@ -118,6 +122,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
             c_sac_rank.append(sac_max)
             c_via_ferrata.append(vf_any)
             c_constrained_ok.append(ok_all)
+            c_downgraded.append(downgraded_any)
             c_interior.append(interior)
 
     # Any edge still unvisited here belongs to an isolated cycle with no keep-node anywhere on it
@@ -141,6 +146,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
         sac_max = int(edges_sac_rank[e])
         vf_any = bool(edges_via_ferrata[e])
         ok_all = bool(edges_constrained_ok[e])
+        downgraded_any = bool(edges_downgraded[e])
         interior = []
         cur, prev_edge = nb, e
         while cur != start:
@@ -159,6 +165,8 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
                 vf_any = True
             if not edges_constrained_ok[e2]:
                 ok_all = False
+            if edges_downgraded[e2]:
+                downgraded_any = True
             prev_edge, cur = e2, nb2
         c_u.append(start)
         c_v.append(start)
@@ -169,6 +177,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
         c_sac_rank.append(sac_max)
         c_via_ferrata.append(vf_any)
         c_constrained_ok.append(ok_all)
+        c_downgraded.append(downgraded_any)
         c_interior.append(interior)
         n_isolated_cycles += 1
     if n_isolated_cycles:
@@ -190,6 +199,7 @@ def contract_structural(coords, edges_i, edges_j, edges_dist, edges_road, edges_
         edges_sac_rank=np.array(c_sac_rank, dtype=np.int8),
         edges_via_ferrata=np.array(c_via_ferrata, dtype=bool),
         edges_constrained_ok=np.array(c_constrained_ok, dtype=bool),
+        edges_downgraded=np.array(c_downgraded, dtype=bool),
         interior_coords=c_interior,
         n_isolated_cycles=n_isolated_cycles,
     )

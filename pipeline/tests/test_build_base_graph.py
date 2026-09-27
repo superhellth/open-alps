@@ -51,6 +51,16 @@ def test_way_handler_marks_implied_grade_as_inferred_and_passable():
     assert h.edges_constrained_ok == [True]
 
 
+def test_way_handler_marks_downgrade_tag_regardless_of_grade():
+    h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)], tags={"highway": "path"}))
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "path", "trail_visibility": "no"}))
+    h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
+                    tags={"highway": "path", "sac_scale": "hiking", "ladder": "yes"}))
+    assert h.edges_downgraded == [False, True, True]
+
+
 def test_via_ferrata_is_never_constrained_passable():
     h = bbg.WayGraphHandler(road_tags=["service"], progress_every=0)
     h.way(_fake_way(coords=[(0.0, 0.0), (0.001, 0.0)],
@@ -81,8 +91,8 @@ def test_way_handler_no_longer_takes_a_road_penalty_factor():
     assert "road_penalty_factor" not in inspect.signature(bbg.WayGraphHandler.__init__).parameters
 
 
-def test_contract_takes_the_ten_raw_arrays_so_main_can_free_the_handler_first(tmp_path,
-                                                                              monkeypatch):
+def test_contract_takes_the_raw_arrays_so_main_can_free_the_handler_first(tmp_path,
+                                                                          monkeypatch):
     # contract() must accept the already-converted arrays rather than the handler - that is what
     # lets main() drop the handler's ~12 GB of raw Python lists before contraction starts.
     import lib.timing as timing
@@ -100,6 +110,7 @@ def test_contract_takes_the_ten_raw_arrays_so_main_can_free_the_handler_first(tm
         np.array([1, 2], dtype=np.int8),
         np.array([False, False]),
         np.array([True, True]),
+        np.array([False, False]),
     )
     assert len(out.edges_u) == 1
     assert out.edges_dist[0] == 300.0
@@ -118,6 +129,7 @@ def _tiny_contracted():
         edges_sac_rank=np.array([2, -1], dtype=np.int8),
         edges_via_ferrata=np.array([False, True]),
         edges_constrained_ok=np.array([True, False]),
+        edges_downgraded=np.array([False, True]),
         interior_coords=[[(11.05, 47.05)], []],
     )
 
@@ -141,6 +153,7 @@ def test_pack_and_write_emits_the_seven_base_graph_files(tmp_path):
     assert interior["lon"][0] == pytest.approx(11.05)
     # time_s/ascent_m/descent_m are UNSET here - compute_edge_profiles.py fills them in a later pass
     assert (edges["time_s"] == binfmt.UNSET).all()
+    assert sorted(edges["downgraded"].tolist()) == [False, True]
 
 
 def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch):
@@ -166,6 +179,7 @@ def test_main_drops_the_handler_before_contraction_starts(tmp_path, monkeypatch)
             self.edges_sac_rank = [1, 2]
             self.edges_via_ferrata = [False, False]
             self.edges_constrained_ok = [True, True]
+            self.edges_downgraded = [False, False]
 
     # the weakref is the only handle the test keeps - a strong ref here would defeat the check
     handler_ref = {}

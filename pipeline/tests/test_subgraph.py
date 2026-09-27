@@ -27,9 +27,9 @@ def _write_fixture_base_graph(tmp_path, grid):
     # `order` here (fixture already sorted node array to match cell_id ascending order below)
     edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     edges[1] = (0, 2, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 1)
+                False, 0, 0, 1)
     doubled_nodes = np.concatenate([edges["u"], edges["v"]])
     doubled_edge_ids = np.concatenate([edges["edge_id"], edges["edge_id"]])
     order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=3)
@@ -77,9 +77,9 @@ def _write_fixture_base_graph_with_interior(tmp_path, grid):
     edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
     # interior_offset=0, count=2
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 2, 0)
+                False, 0, 2, 0)
     edges[1] = (0, 2, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 1)
+                False, 0, 0, 1)
     doubled_nodes = np.concatenate([edges["u"], edges["v"]])
     doubled_edge_ids = np.concatenate([edges["edge_id"], edges["edge_id"]])
     order, node_edge_index = binfmt.build_csr_index(doubled_nodes, n_groups=3)

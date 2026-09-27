@@ -29,7 +29,9 @@ re-streaming/re-contracting the OSM extract every run. Params: `--tile-size-km` 
    edge's ungraded terrain is a summable fact rather than lost under `sac_rank`'s max), a
    `constrained_ok` boolean (`excluded_from_constrained() OR via_ferrata OR ungraded`, precomputed
    once here so Task 13's filtered-graph build per variant per cell is a boolean mask, not a
-   re-derivation), and a `via_ferrata` boolean (`highway=via_ferrata` or a `via_ferrata_scale` tag
+   re-derivation), a `downgraded` boolean (`excluded_from_constrained()` alone, whatever the grade:
+   `FAST_T3_UNGRADED` needs it because `constrained_ok` can't tell an ungraded segment from a
+   downgrade tag), and a `via_ferrata` boolean (`highway=via_ferrata` or a `via_ferrata_scale` tag
    present). `time_s`/`ascent_m`/`descent_m` are left at `binfmt.UNSET` here — they're filled later,
    per base edge, by `phases/elevation/compute_edge_profiles.py` (see that phase's README), not by
    this streaming pass. There is no routing "weight" column any more (spec A3): a road is no longer
@@ -39,7 +41,7 @@ re-streaming/re-contracting the OSM extract every run. Params: `--tile-size-km` 
 2. **`contract_structural`** (`lib/contraction.py`) — collapses every maximal run of degree-2
    nodes (a pure pass-through chain, no junction) into a single chain edge. This is a lossless
    transform: a degree-2 node has no alternate route, so summing distance/road-length/`ungraded_m`/
-   `inferred_m` along the chain, AND-folding `constrained_ok`, and taking the max `sac_rank` walked
+   `inferred_m` along the chain, AND-folding `constrained_ok`, OR-folding `downgraded`, and taking the max `sac_rank` walked
    preserves every shortest-path cost *exactly*, while shrinking node/edge count by (measured) an
    order of magnitude or more (~40M raw nodes/edges → far fewer chain edges for AT+Bavaria). Unlike
    an earlier version, contraction here is **structural only** — no hub-snap-point exception, since
@@ -63,7 +65,7 @@ memory-mappable via `np.load(..., mmap_mode="r")`):
 | `cell-index.npy` | `CELL_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per grid cell → slice into `nodes.npy` |
 | `node_edge_index.npy` | `NODE_EDGE_INDEX_DTYPE = (start_offset i8, count i4)` | one entry per node → slice into `node_edge_ids.npy` (adjacency) |
 | `node_edge_ids.npy` | `i8` | flat adjacency list, CSR-indexed by `node_edge_index.npy` |
-| `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, road_m f8, ungraded_m f8, inferred_m f8, time_s f8, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, constrained_ok bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row. `time_s`/`ascent_m`/`descent_m` sit at `binfmt.UNSET` until `phases/elevation/compute_edge_profiles.py` runs |
+| `edges.npy` | `EDGE_DTYPE = (u i8, v i8, dist f8, road_m f8, ungraded_m f8, inferred_m f8, time_s f8, ascent_m f4, descent_m f4, sac_rank i1, via_ferrata bool, constrained_ok bool, downgraded bool, interior_offset i8, interior_count i4, edge_id i8)` | one contracted chain edge per row. `time_s`/`ascent_m`/`descent_m` sit at `binfmt.UNSET` until `phases/elevation/compute_edge_profiles.py` runs |
 | `interior.npy` | `COORD_DTYPE = (lon f8, lat f8)` | flat polyline vertex pool for every chain edge's interior geometry, sliced via `interior_offset`/`interior_count` |
 | `manifest.json` | — | grid params (bbox = node extent, `tileSizeKm`) needed to reconstruct the same `Grid` at query time, plus array shapes |
 

@@ -22,7 +22,7 @@ def _line_subgraph():
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -39,9 +39,9 @@ def _two_edge_line_subgraph():
     nodes[2] = (0.009, 0.0, 0)
     edges = np.zeros(2, dtype=binfmt.EDGE_DTYPE)
     edges[0] = (0, 1, 500.0, 0.0, 0.0, 0.0, 500.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 0)
+                False, 0, 0, 0)
     edges[1] = (1, 2, 500.0, 0.0, 0.0, 0.0, 500.0, binfmt.UNSET, binfmt.UNSET, -1, False, True,
-                0, 0, 1)
+                False, 0, 0, 1)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     return LocalSubgraph(
         global_node_ids=np.array([100, 101, 102]), local_nodes=nodes, local_edges=edges,
@@ -123,7 +123,7 @@ def test_ascent_descent_are_swapped_relative_to_the_hut_sourced_walk():
     nodes[0] = (0.0, 0.0, 0)
     nodes[1] = (0.009, 0.0, 0)
     edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
-    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 80.0, 0.0, -1, False, True, 0, 0, 0)
+    edges[0] = (0, 1, 1000.0, 0.0, 0.0, 0.0, 1000.0, 80.0, 0.0, -1, False, True, False, 0, 0, 0)
     interior = np.zeros(0, dtype=binfmt.COORD_DTYPE)
     subgraph = LocalSubgraph(
         global_node_ids=np.array([100, 101]), local_nodes=nodes, local_edges=edges,
@@ -164,7 +164,7 @@ def test_unreachable_selected_target_is_skipped_not_emitted_as_zero_distance():
     island_edges = np.zeros(1, dtype=binfmt.EDGE_DTYPE)
     # u=2, v=3: the island's own local node indices once concatenated after the 2-node line above.
     island_edges[0] = (2, 3, 1000.0, 0.0, 0.0, 0.0, 1000.0, binfmt.UNSET, binfmt.UNSET, -1, False,
-                        True, 0, 0, 1)
+                        True, False, 0, 0, 1)
     island = {"id": 3, "type": binfmt.TYPE_STATION, "lon": 1.0001, "lat": 0.0}
     nodes = np.concatenate([subgraph.local_nodes, island_nodes])
     edges = np.concatenate([subgraph.local_edges, island_edges])
