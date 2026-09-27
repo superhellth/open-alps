@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hutSymbolSvg, startSymbolSvg } from './hutSymbol.js'
+import { hutSymbolSvg, startSymbolSvg } from './stopSymbolSvg.js'
 
 describe('hutSymbolSvg', () => {
   it('uses a house polygon for every hut', () => {

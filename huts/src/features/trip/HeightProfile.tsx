@@ -2,10 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import type { MouseEvent, RefObject } from 'react'
 import { Box, Typography } from '@mui/material'
 import { tokens } from '@/ui/theme.js'
+import { STOP_SYMBOL_SIZE, StopSymbol } from '@/ui/StopSymbol.js'
+import type { StopMark } from '@/ui/StopSymbol.js'
 import { fontSize, rem } from '@/ui/tokens.js'
 import type { ProfilePosition } from '@/trip/tripLegs.js'
 import {
-  ELEVATION_LABEL_GAP, PROFILE_HEIGHT, STOP_DOT_R, STOP_DOT_REACH, STOP_DOT_STROKE, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, profileCaption,
+  ELEVATION_LABEL_GAP, PROFILE_HEIGHT, STOP_SYMBOL_REACH, formatKm, fractionInLeg, legAtKm, makeScales, nearestPoint, profileCaption,
 } from './profileScale.js'
 import type { ElevationPoint, TripElevation } from './useTripElevation.js'
 import { styles } from './HeightProfile.styles.js'
@@ -36,13 +38,15 @@ function useWidth(ref: RefObject<HTMLElement | null>): number {
 }
 
 /** The whole trip as one elevation line over a baseline, split per leg so the hovered leg can be
- *  filled in signpost yellow. Every stop is a dot on the line, the stage list's rail dot, with its km
+ *  filled in signpost yellow. Every stop sits on the line as its map symbol, as on the stage rail, with its km
  *  below. A caption line above names start and destination, or reads out the cursor while hovering;
  *  the component keeps one height in every state. Hovering reports the leg and position along it. */
-export default function HeightProfile({ elevation, stops, highlightedLeg, onHoverLeg, onHoverPosition }: {
+export default function HeightProfile({ elevation, stops, marks, highlightedLeg, onHoverLeg, onHoverPosition }: {
   elevation: TripElevation
   /** Names at the night boundaries: start, each hut, exit (legs + 1 entries). */
   stops: string[]
+  /** Symbols at the night boundaries, parallel to `stops`. */
+  marks: StopMark[]
   highlightedLeg: number | null
   onHoverLeg: (index: number | null) => void
   onHoverPosition: (position: ProfilePosition | null) => void
@@ -78,7 +82,7 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
   const cursorPoint = cursorKm === null ? null : nearestPoint(points, cursorKm)
   const cursorLeg = cursorKm === null ? null : legAtKm(bounds, cursorKm)
 
-  const stopDots = bounds.map((km) => ({ x: s.x(km), y: s.y(nearestPoint(points, km).elevationM) }))
+  const stopPoints = bounds.map((km) => ({ x: s.x(km), y: s.y(nearestPoint(points, km).elevationM) }))
   const extremes = s.y(s.minM) - s.y(s.maxM) < MIN_LABEL_SPACING_PX ? [s.maxM] : [s.maxM, s.minM]
   let lastKmX = -Infinity
   const kmLabels = bounds.flatMap((km, i) => {
@@ -111,7 +115,7 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
       <Typography variant="caption" noWrap data-testid="profile-caption" sx={styles.caption}>{caption}</Typography>
       <svg data-testid="profile-svg" width={width} height={PROFILE_HEIGHT} onMouseMove={handleMove} onMouseLeave={handleLeave}>
         {extremes.map((m) => (
-          <text key={m} data-testid="elevation-label" x={s.plotLeft - STOP_DOT_REACH - ELEVATION_LABEL_GAP} y={s.y(m)} textAnchor="end" dominantBaseline="middle" fontSize={TEXT_SIZE} fill={tokens.ink}>
+          <text key={m} data-testid="elevation-label" x={s.plotLeft - STOP_SYMBOL_REACH - ELEVATION_LABEL_GAP} y={s.y(m)} textAnchor="end" dominantBaseline="middle" fontSize={TEXT_SIZE} fill={tokens.ink}>
             {Math.round(m).toLocaleString('de-DE')}
           </text>
         ))}
@@ -127,14 +131,13 @@ export default function HeightProfile({ elevation, stops, highlightedLeg, onHove
             />
           )
         })}
-        {stopDots.slice(1, -1).map((d, i) => (
+        {stopPoints.slice(1, -1).map((d, i) => (
           <line key={i} data-testid="night-separator" x1={d.x} x2={d.x} y1={d.y} y2={s.plotBottom} stroke={tokens.ink} strokeWidth={1} />
         ))}
-        {stopDots.map((d, i) => (
-          <circle
-            key={i} data-testid="stop-dot" cx={d.x} cy={d.y} r={STOP_DOT_R}
-            fill={tokens.ink} stroke={tokens.ink} strokeWidth={STOP_DOT_STROKE}
-          />
+        {stopPoints.map((d, i) => marks[i] && (
+          <g key={i} data-testid="stop-symbol">
+            <StopSymbol mark={marks[i]} x={d.x - STOP_SYMBOL_SIZE / 2} y={d.y - STOP_SYMBOL_SIZE / 2} />
+          </g>
         ))}
         {kmLabels.map((l) => (
           <text key={l.i} data-testid="km-label" x={l.x} y={PROFILE_HEIGHT - 6} textAnchor={l.anchor} fontSize={TEXT_SIZE} fill={tokens.ink}>

@@ -1,6 +1,6 @@
 import L from 'leaflet'
 import { Marker, useMap } from 'react-leaflet'
-import { hutSymbolSvg, startSymbolSvg } from './hutSymbol.js'
+import { hutSymbolSvg, startSymbolSvg } from '@/ui/stopSymbolSvg.js'
 import { HIT_PANE, ensureRoutePanes, paneName } from './routePanes.js'
 import type { WaypointStop } from './types.js'
 import type { WaypointSymbol } from './waypointSymbols.js'

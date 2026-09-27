@@ -21,7 +21,7 @@ export interface StageListProps {
   hutOhrsByIndex: Map<number, HutOhrs>
   startLabel: (startId: number) => string
   nightViews: NightView[] | null
-  /** The leg hovered in the list, on the map or on the profile; its rail from dot to dot turns yellow. */
+  /** The leg hovered in the list, on the map or on the profile; its rail from stop to stop turns yellow. */
   highlightedLeg: number | null
   onHoverLeg: (index: number | null) => void
   editor: TripEditor
@@ -66,7 +66,7 @@ export default function StageList({
         </Box>
 
         <Box>
-          <RailRow node="dot" rail="from-dot" highlighted={highlightedLeg === 0}>
+          <RailRow node={{ type: 'end', sourceType: trip.start.sourceType }} rail="from-stop" highlighted={highlightedLeg === 0}>
             <Box data-node="start" sx={styles.endLine}>
               <Typography variant="body2" sx={styles.endLabel}>Start: {startLabel(trip.start.startId)}</Typography>
               {canEdit && <Button size="small" color="secondary" aria-label="Start ändern" onClick={() => editor.startEndpoint('start')}>ändern</Button>}
@@ -109,7 +109,7 @@ export default function StageList({
           {addButton('last', '+ Etappe anhängen')}
           {leg(nights)}
 
-          <RailRow node="dot" rail="to-dot" highlightedAbove={highlightedLeg === nights}>
+          <RailRow node={{ type: 'end', sourceType: trip.exit.sourceType }} rail="to-stop" highlightedAbove={highlightedLeg === nights}>
             <Box data-node="exit" sx={styles.endLine}>
               <Typography variant="body2" sx={styles.endLabel}>
                 {editor.car ? 'Zurück am Start' : `Ziel: ${startLabel(trip.exit.startId)}`}

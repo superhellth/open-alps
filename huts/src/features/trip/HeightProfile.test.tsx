@@ -5,6 +5,8 @@ import '@testing-library/jest-dom/vitest'
 import HeightProfile from './HeightProfile.js'
 import { PROFILE_MARGINS } from './profileScale.js'
 import type { TripElevation } from './useTripElevation.js'
+import { STOP_SYMBOL_SIZE } from '@/ui/StopSymbol.js'
+import type { StopMark } from '@/ui/StopSymbol.js'
 
 afterEach(cleanup)
 
@@ -17,9 +19,10 @@ const elevation: TripElevation = {
   loading: false,
 }
 const stops = ['Bahnhof X', 'Hütte A', 'Bahnhof X']
+const marks: StopMark[] = [{ type: 'end', sourceType: 1 }, { type: 'hut', changed: false }, { type: 'end', sourceType: 2 }]
 const noop = () => {}
 const draw = (over: Partial<Parameters<typeof HeightProfile>[0]> = {}) =>
-  render(<HeightProfile elevation={elevation} stops={stops} highlightedLeg={null} onHoverLeg={noop} onHoverPosition={noop} {...over} />)
+  render(<HeightProfile elevation={elevation} stops={stops} marks={marks} highlightedLeg={null} onHoverLeg={noop} onHoverPosition={noop} {...over} />)
 
 // The jsdom svg is laid out at the fallback width of 600 px with a zero-based bounding rect.
 const plotPx = (fractionOfTrip: number) => PROFILE_MARGINS.left + fractionOfTrip * (600 - PROFILE_MARGINS.left - PROFILE_MARGINS.right)
@@ -42,13 +45,18 @@ describe('HeightProfile', () => {
     expect(screen.queryByText('Höhenprofil lädt …')).not.toBeInTheDocument()
   })
 
-  it('marks the start, each hut and the exit with a dot on the line', () => {
+  it('marks the start, each hut and the exit with its map symbol centred on the line', () => {
     draw()
-    const dots = screen.getAllByTestId('stop-dot')
-    expect(dots).toHaveLength(3)
+    const symbols = screen.getAllByTestId('stop-symbol')
+    expect(symbols).toHaveLength(3)
+    expect(symbols[0].querySelector('rect')).not.toBeNull()
+    expect(symbols[1].querySelector('polygon')).not.toBeNull()
+    expect(symbols[2]).toHaveTextContent('P')
     const separator = screen.getByTestId('night-separator')
-    expect(dots[1]).toHaveAttribute('cx', separator.getAttribute('x1'))
-    expect(dots[1]).toHaveAttribute('cy', separator.getAttribute('y1'))
+    const hut = symbols[1].querySelector('svg')!
+    const centre = (attr: string) => Number(hut.getAttribute(attr)) + STOP_SYMBOL_SIZE / 2
+    expect(centre('x')).toBeCloseTo(Number(separator.getAttribute('x1')))
+    expect(centre('y')).toBeCloseTo(Number(separator.getAttribute('y1')))
   })
 
   it('names start and destination in the caption while idle, without stop labels in the chart', () => {
@@ -78,8 +86,8 @@ describe('HeightProfile', () => {
   })
 
   it('draws no fill without a highlighted leg', () => {
-    const { container } = draw()
-    expect(container.querySelector('polygon')).toBeNull()
+    draw()
+    expect(screen.queryByTestId(/^leg-area-/)).not.toBeInTheDocument()
   })
 
   it('hovering reports the leg and the fraction along it, leaving clears both', () => {

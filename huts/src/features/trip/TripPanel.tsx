@@ -2,6 +2,7 @@ import { Box } from '@mui/material'
 import type { AppData } from '@/data/buildAppData.js'
 import type { Trip } from '@/trip/trip.js'
 import type { ProfilePosition, TripLegs } from '@/trip/tripLegs.js'
+import type { StopMark } from '@/ui/StopSymbol.js'
 import HeightProfile from './HeightProfile.js'
 import StageList from './StageList.js'
 import TripHeader from './TripHeader.js'
@@ -40,6 +41,11 @@ export default function TripPanel({
 }: TripPanelProps) {
   const nightViews = useTripAvailability(trip, tripLegs.hutIndices, data.hutOhrsByIndex)
   const elevation = useTripElevation(tripLegs)
+  const marks: StopMark[] = [
+    { type: 'end', sourceType: trip.start.sourceType },
+    ...tripLegs.changed.map((changed) => ({ type: 'hut' as const, changed })),
+    { type: 'end', sourceType: trip.exit.sourceType },
+  ]
   return (
     <Box sx={styles.root}>
       <TripHeader
@@ -47,7 +53,7 @@ export default function TripPanel({
         onChange={onChange} onSave={onSave} onUnsave={onUnsave} onBack={onBack} backLabel={backLabel} onShare={onShare}
       />
       <HeightProfile
-        elevation={elevation} stops={stopNames} highlightedLeg={highlightedLeg}
+        elevation={elevation} stops={stopNames} marks={marks} highlightedLeg={highlightedLeg}
         onHoverLeg={onHoverLeg} onHoverPosition={onHoverProfile}
       />
       <StageList

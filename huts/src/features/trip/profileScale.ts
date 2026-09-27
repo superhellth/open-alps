@@ -1,16 +1,16 @@
 import { formatMeters } from '@/format/meters.js'
+import { STOP_SYMBOL_SIZE } from '@/ui/StopSymbol.js'
 import type { ElevationPoint } from './useTripElevation.js'
 
 export const PROFILE_HEIGHT = 140
-/** Stop dot radius and stroke: 12 px across, the stage list's rail dot. */
-export const STOP_DOT_R = 5
-export const STOP_DOT_STROKE = 2
-/** How far a stop dot reaches past its centre. */
-export const STOP_DOT_REACH = STOP_DOT_R + STOP_DOT_STROKE / 2
-/** Gap between the elevation labels and the reach of the start dot. */
+/** How far a stop symbol reaches past its centre. */
+export const STOP_SYMBOL_REACH = STOP_SYMBOL_SIZE / 2
+/** Gap between the elevation labels and the reach of the start symbol. */
 export const ELEVATION_LABEL_GAP = 4
-/** Room for the min/max elevation labels (left, clear of the start dot), the stop dots (top, right) and km labels (bottom). */
-export const PROFILE_MARGINS = { left: 36 + ELEVATION_LABEL_GAP + STOP_DOT_REACH, right: 8, top: 8, bottom: 22 }
+/** Room for the min/max elevation labels (left, clear of the start symbol), the stop symbols (top, right) and km labels (bottom). */
+export const PROFILE_MARGINS = {
+  left: 36 + ELEVATION_LABEL_GAP + STOP_SYMBOL_REACH, right: STOP_SYMBOL_REACH, top: STOP_SYMBOL_REACH, bottom: 22,
+}
 
 export interface ElevationAxis {
   lo: number

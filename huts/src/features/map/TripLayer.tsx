@@ -3,7 +3,7 @@ import { Marker, Tooltip } from 'react-leaflet'
 import { formatSignpostTime } from '@/format/signpostTime.js'
 import type { HutOperator } from '@/data/hutClass.js'
 import type { SourceType } from '@/tourSearch/types.js'
-import { hutSymbolSvg, startSymbolSvg } from './hutSymbol.js'
+import { hutSymbolSvg, startSymbolSvg } from '@/ui/stopSymbolSvg.js'
 import './map.css'
 
 export interface TripHutMarker { hutIndex: number; name: string; operator: HutOperator; serviced: boolean }

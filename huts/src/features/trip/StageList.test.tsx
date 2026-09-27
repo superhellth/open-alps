@@ -38,6 +38,10 @@ describe('StageList view mode', () => {
     expect(screen.getByText('Ziel: Bahnhof X')).toBeInTheDocument()
     expect(screen.getAllByText(/Std$/).length).toBe(2)
   })
+  it('draws the map symbols on the rail: start and exit by their type, a hut per night', () => {
+    const { container } = renderList(trip(['{A}', '{B}']))
+    expect([...container.querySelectorAll('[data-stop]')].map((el) => el.getAttribute('data-stop'))).toEqual(['end', 'hut', 'hut', 'end'])
+  })
   it('names a car trip destination "Zurück am Start"', () => {
     renderList(trip(['{A}']), { editor: makeEditorStub({ car: true }) })
     expect(screen.getByText('Zurück am Start')).toBeInTheDocument()
@@ -57,12 +61,14 @@ describe('StageList view mode', () => {
     expect(screen.getByText('Plätze unbekannt')).toBeInTheDocument()
     expect(screen.queryByText('ausgebucht')).not.toBeInTheDocument()
   })
-  it('marks a night that no longer resolves with a hollow node and the notice, without a booking link', () => {
+  it('marks a night that no longer resolves with an outlined hut symbol and the notice, without a booking link', () => {
     const { container } = renderList(trip(['{D}', '{GONE}']), {
       nightViews: [{ loading: false, availability: { kind: 'free', places: 3 } }, { loading: false, availability: { kind: 'unknown' } }],
     })
     expect(screen.getByText('Seit dem Speichern geändert – nicht mehr im Wegenetz')).toBeInTheDocument()
     expect(container.querySelectorAll('[data-variant="outline"]').length).toBeGreaterThanOrEqual(1)
+    const fills = [...container.querySelectorAll('[data-stop="hut"] polygon')].map((el) => el.getAttribute('fill'))
+    expect(new Set(fills).size).toBe(2)
     expect(container.querySelector('[data-night="1"]')!.querySelector('a')).toBeNull()
   })
   it('shows the booking link inline next to the availability of each dated bookable night', () => {
@@ -92,7 +98,7 @@ describe('StageList view mode', () => {
 })
 
 describe('StageList hover', () => {
-  it('a highlighted leg lights its whole rail from dot to dot, nothing else', () => {
+  it('a highlighted leg lights its whole rail from stop to stop, nothing else', () => {
     const { container } = renderList(trip(['{D}', '{E}']), { highlightedLeg: 1 })
     const row = (i: number) => container.querySelector(`[data-night="${i}"]`)!.parentElement!.parentElement!
     const night = (i: number, part: string) => row(i).querySelector(`[data-rail="${part}"]`)!
