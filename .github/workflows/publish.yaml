@@ -1,0 +1,63 @@
+name: Publish to GHCR
+
+on:
+  push:
+    branches: [main]
+    paths: &paths
+      - huts/**
+      - .github/workflows/publish.yaml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: huts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: huts/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test -- --exclude '**/*.smoke.test.ts'
+      - run: npm run build
+
+  publish:
+    needs: check
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: huts
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ghcr.io/superhellth/open-alps:latest
+            ghcr.io/superhellth/open-alps:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
