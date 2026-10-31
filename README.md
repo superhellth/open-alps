@@ -59,8 +59,6 @@ Other scripts: `npm test` (Vitest), `npm run typecheck`, `npm run lint` (oxlint)
 The tests include architecture and design-token checks that enforce import direction and forbid
 hardcoded colors/spacing.
 
-The `#admin` route is an internal debugging view of the raw routing graph, not part of the product.
-
 ## Building the data
 
 The pipeline downloads everything it needs from public sources and is fully reproducible:
@@ -93,19 +91,14 @@ every config key and the native-Windows setup.
 
 | Data | Source |
 | --- | --- |
-| Hut master data and coordinates | Alpenverein ArcGIS feature layer (public, no auth) |
+| Hut master data and coordinates | Alpenverein ArcGIS feature layer |
 | Bed availability (live, in the browser) | Alpenverein online booking system (OHRS) |
 | Trails, train stations, parking | [OpenStreetMap](https://www.openstreetmap.org/copyright) via Geofabrik extracts (ODbL) |
 | Elevation | Copernicus GLO-30, BEV DGM (Austria), Bavarian DGM5 |
 | Base map | [OpenTopoMap](https://opentopomap.org) (CC-BY-SA) |
-
-API details and gotchas: `docs/alpenverein-api.md`. Payload format the app reads:
-`docs/tour-suggestion-payload.md`.
 
 ## Further reading
 
 - `pipeline/README.md` — pipeline tasks, config and setup
 - `docs/backlog.md` — open cross-cutting problems
 - `docs/known-data-issues.md` — known data quality issues
-- `docs/superpowers/STATUS.md` — index of design specs and their status
-- `.claude/CLAUDE.md` — detailed app architecture
