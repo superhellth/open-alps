@@ -2,7 +2,7 @@
 
 # Wegweiser
 
-`open-alps` · a map-first planner for multi-day hut tours in the Austrian and Bavarian Alps. Say how you get
+`open-alps` a map-first planner for multi-day hut tours in the Austrian and Bavarian Alps. Say how you get
 there, how many nights and how long you want to walk each day; Wegweiser suggests hut-to-hut tours over
 real trails, lets you reshape them stage by stage, checks bed availability for your dates and hands
 you a share link.
@@ -15,15 +15,15 @@ public booking API.
 
 ## What it does
 
-- **Discover** — say how you arrive (train, car, or from a village), how many stages, how long each
+- **Discover:** Say how you arrive (train, car, or from a Bergsteigerdorf), how many stages, how long each
   day may be, and optionally cap SAC grade, ascent per stage, maximum elevation, via ferratas and
   hut type (serviced/self-catering). Results appear as signposts on the map and as a ranked list.
-- **Customize** — turn a suggestion into a trip, then swap huts, extend or trim either end, or change
+- **Customize:** Turn a suggestion into a trip, then swap huts, extend or trim either end, or change
   the start and exit points. Each stage shows walking time, distance, ascent/descent and a height
   profile of the whole tour.
-- **Plan nights** — choose an arrival day and see, per night, whether the hut has beds free, with a
+- **Plan nights:** Choose an arrival day and see, per night, whether the hut has beds free, with a
   booking link for each hut. Huts that only take direct bookings are marked as such.
-- **Take along** — trips autosave locally ("Meine Touren") and can be shared as a link.
+- **Take along:** Trips autosave locally ("Meine Touren") and can be shared as a link.
 
 <p>
   <img src="docs/images/discover-filters.png" alt="Filter panel with matching tours clustered across the Alps" width="49%" />
