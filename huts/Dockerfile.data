@@ -1,0 +1,8 @@
+FROM alpine:3.22 AS compress
+COPY . /data
+RUN cd /data \
+    && chmod 0444 * \
+    && gzip -k9 *.json *.geojson *-ids.bin hut-edge-payload.bin approaches.bin
+
+FROM scratch
+COPY --from=compress /data/ /
