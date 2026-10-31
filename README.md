@@ -11,6 +11,8 @@ Everything runs in the browser off static files. There is no backend: tour searc
 Worker over a precomputed routing graph, and bed availability comes live from the Alpine Clubs'
 public booking API.
 
+![Trip view: route on the topo map, height profile and stage list](docs/images/trip-detail.png)
+
 ## What it does
 
 - **Discover** — say how you arrive (train, car, or from a village), how many stages, how long each
@@ -22,6 +24,11 @@ public booking API.
 - **Plan nights** — choose an arrival day and see, per night, whether the hut has beds free, with a
   booking link for each hut. Huts that only take direct bookings are marked as such.
 - **Take along** — trips autosave locally ("Meine Touren") and can be shared as a link.
+
+<p>
+  <img src="docs/images/discover-filters.png" alt="Filter panel with matching tours clustered across the Alps" width="49%" />
+  <img src="docs/images/discover-results.png" alt="Ranked tour list with signposts on the map" width="49%" />
+</p>
 
 Coverage: the trail network of Austria and Bavaria, with the huts from the Alpenverein hut
 directory (ÖAV/DAV and other operators) that lie inside it.

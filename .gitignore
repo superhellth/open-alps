@@ -3,6 +3,7 @@
 # dirs below are excluded.
 /data/
 .superpowers/
+docs/DEPLOY.md
 
 # Generated pipeline output, copied here by the pipeline's copy_public_data doit task -
 # regenerated, not source
