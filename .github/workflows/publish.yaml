@@ -36,8 +36,27 @@ jobs:
       - run: npm run test -- --exclude '**/*.smoke.test.ts'
       - run: npm run build
 
-  publish:
+  version:
     needs: check
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      is_new: ${{ steps.read.outputs.is_new }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: read
+        run: |
+          version=$(jq -r .version huts/package.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null; then
+            echo "is_new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  publish:
+    needs: version
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     permissions:
@@ -59,5 +78,6 @@ jobs:
           tags: |
             ghcr.io/superhellth/open-alps:latest
             ghcr.io/superhellth/open-alps:sha-${{ github.sha }}
+            ghcr.io/superhellth/open-alps:${{ needs.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
