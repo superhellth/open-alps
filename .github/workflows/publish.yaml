@@ -58,7 +58,7 @@ jobs:
   publish:
     needs: version
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: needs.version.outputs.is_new == 'true'
     permissions:
       contents: read
       packages: write
